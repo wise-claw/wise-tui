@@ -23,7 +23,9 @@ incremental = true
 [profile.release]
 codegen-units = 1
 lto = "thin"
-panic = "abort"
+# PTY/VT 解析吃的是不受信任的 shell 输出；alacritty_terminal 在异常序列上可能 panic。
+# 必须用 unwind，才能在 reader 线程里 catch_unwind，避免单个终端会话拖垮整个进程。
+panic = "unwind"
 strip = "debuginfo"
 
 [build-dependencies]

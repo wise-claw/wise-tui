@@ -409,6 +409,7 @@ mod tests {
     use alacritty_terminal::vte::ansi;
 
     #[test]
+
     fn serialize_frame_empty_grid_has_expected_dims() {
         let size = TermSize::new(40, 12);
         let term = Term::new(Config::default(), &size, VoidListener);

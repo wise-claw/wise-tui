@@ -4,6 +4,7 @@ use portable_pty::{ChildKiller, CommandBuilder, NativePtySystem, PtySize, PtySys
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
+use std::panic::{self, AssertUnwindSafe};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -158,6 +159,16 @@ fn session_key(workspace_id: &str, terminal_id: &str) -> String {
     format!("{}:{}", workspace_id, terminal_id)
 }
 
+fn panic_payload_message(payload: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        return (*s).to_string();
+    }
+    if let Some(s) = payload.downcast_ref::<String>() {
+        return s.clone();
+    }
+    "unknown panic".to_string()
+}
+
 fn replay_output(
     output_buffer: &str,
     buffer_start_cursor: usize,
@@ -259,6 +270,25 @@ impl EmulatorState {
         self.parser.advance(&mut self.term, bytes);
     }
 
+    /// VT 解析吃的是 PTY 原始字节；alacritty 在异常序列上可能 panic。
+    /// 捕获后让会话优雅退出，而不是在 `panic=abort`/未捕获时拖垮整进程。
+    fn try_advance(&mut self, bytes: &[u8]) -> Result<(), String> {
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        let term = &mut self.term;
+        let parser = &mut self.parser;
+        panic::catch_unwind(AssertUnwindSafe(|| {
+            parser.advance(term, bytes);
+        }))
+        .map_err(|payload| {
+            format!(
+                "VT emulator panicked: {}",
+                panic_payload_message(payload)
+            )
+        })
+    }
+
     fn resize(&mut self, cols: u16, rows: u16) {
         self.term
             .resize(TermSize::new(cols as usize, rows as usize));
@@ -274,6 +304,17 @@ impl EmulatorState {
 
     fn frame(&self) -> TerminalFrameDto {
         serialize_frame(&self.term)
+    }
+
+    fn try_frame(&self) -> Result<TerminalFrameDto, String> {
+        panic::catch_unwind(AssertUnwindSafe(|| serialize_frame(&self.term))).map_err(
+            |payload| {
+                format!(
+                    "VT frame panicked: {}",
+                    panic_payload_message(payload)
+                )
+            },
+        )
     }
 }
 
@@ -315,8 +356,9 @@ impl TerminalSession {
         let frame = self
             .emulator
             .lock()
-            .map(|emu| emu.frame())
-            .unwrap_or_else(|_| TerminalFrameDto {
+            .ok()
+            .and_then(|emu| emu.try_frame().ok())
+            .unwrap_or_else(|| TerminalFrameDto {
                 cols: self.info.cols,
                 rows: self.info.rows,
                 cursor: frame::TerminalCursorDto {
@@ -405,16 +447,17 @@ impl TerminalManager {
             let mut exit_reason: Option<String> = None;
 
             let emit_frame = |emulator: &Arc<Mutex<EmulatorState>>,
-                              last_fingerprint: &mut Option<u64>| {
+                              last_fingerprint: &mut Option<u64>|
+             -> Result<(), String> {
                 let frame = match emulator.lock() {
-                    Ok(emu) => emu.frame(),
-                    Err(_) => return,
+                    Ok(emu) => emu.try_frame()?,
+                    Err(_) => return Ok(()),
                 };
                 // 画面没变就别推：整屏 JSON 的序列化和前端反序列化是长会话里
                 // 最持续的一笔开销，而 shell 输出字节不等于可视网格有变化。
                 let fingerprint = frame.fingerprint();
                 if *last_fingerprint == Some(fingerprint) {
-                    return;
+                    return Ok(());
                 }
                 *last_fingerprint = Some(fingerprint);
                 let _ = app.emit_to(
@@ -426,15 +469,17 @@ impl TerminalManager {
                         "frame": frame,
                     }),
                 );
+                Ok(())
             };
 
             let flush_pending = |pending: &mut String,
                                  last_flush: &mut Instant,
                                  dirty: &mut bool,
                                  emulator: &Arc<Mutex<EmulatorState>>,
-                                 last_fingerprint: &mut Option<u64>| {
+                                 last_fingerprint: &mut Option<u64>|
+             -> Result<(), String> {
                 if pending.is_empty() && !*dirty {
-                    return;
+                    return Ok(());
                 }
                 if !pending.is_empty() {
                     let chunk = pending.as_str();
@@ -455,17 +500,23 @@ impl TerminalManager {
                     pending.clear();
                 }
                 if *dirty {
-                    emit_frame(emulator, last_fingerprint);
+                    emit_frame(emulator, last_fingerprint)?;
                     *dirty = false;
                 }
                 *last_flush = Instant::now();
+                Ok(())
             };
 
             loop {
                 match rx.recv_timeout(TERMINAL_EMIT_FLUSH_INTERVAL) {
                     Ok(PtyReaderEvent::Bytes(bytes)) => {
-                        if let Ok(mut emu) = emulator.lock() {
-                            emu.advance(&bytes);
+                        let advance_result = match emulator.lock() {
+                            Ok(mut emu) => emu.try_advance(&bytes),
+                            Err(_) => Err("emulator lock poisoned".to_string()),
+                        };
+                        if let Err(message) = advance_result {
+                            exit_reason = Some(message);
+                            break;
                         }
                         dirty = true;
                         carry.extend_from_slice(&bytes);
@@ -478,13 +529,16 @@ impl TerminalManager {
                             last_flush.elapsed(),
                             false,
                         ) {
-                            flush_pending(
+                            if let Err(message) = flush_pending(
                                 &mut pending,
                                 &mut last_flush,
                                 &mut dirty,
                                 &emulator,
                                 &mut last_fingerprint,
-                            );
+                            ) {
+                                exit_reason = Some(message);
+                                break;
+                            }
                         }
                     }
                     Ok(PtyReaderEvent::Error(message)) => {
@@ -499,13 +553,16 @@ impl TerminalManager {
                             last_flush.elapsed(),
                             true,
                         ) {
-                            flush_pending(
+                            if let Err(message) = flush_pending(
                                 &mut pending,
                                 &mut last_flush,
                                 &mut dirty,
                                 &emulator,
                                 &mut last_fingerprint,
-                            );
+                            ) {
+                                exit_reason = Some(message);
+                                break;
+                            }
                         }
                     }
                     Err(RecvTimeoutError::Disconnected) => break,
@@ -514,14 +571,22 @@ impl TerminalManager {
             if !carry.is_empty() {
                 pending.push_str(&String::from_utf8_lossy(&carry));
             }
-            flush_pending(
+            if let Err(message) = flush_pending(
                 &mut pending,
                 &mut last_flush,
                 &mut dirty,
                 &emulator,
                 &mut last_fingerprint,
-            );
+            ) {
+                if exit_reason.is_none() {
+                    exit_reason = Some(message);
+                }
+            }
 
+            // VT panic / 读错误时 shell 可能还活着；先杀再 wait，避免处理线程永久卡住。
+            if exit_reason.is_some() {
+                let _ = child.kill();
+            }
             let exit_code = child
                 .wait()
                 .ok()
@@ -886,13 +951,16 @@ impl TerminalManager {
             let Ok(emu) = session.emulator.lock() else {
                 continue;
             };
+            let Ok(frame) = emu.try_frame() else {
+                continue;
+            };
             let _ = app.emit_to(
                 TERMINAL_EVENT_WINDOW,
                 "terminal-frame",
                 serde_json::json!({
                     "workspaceId": session.info.workspace_id,
                     "terminalId": session.info.terminal_id,
-                    "frame": emu.frame(),
+                    "frame": frame,
                 }),
             );
         }
@@ -945,16 +1013,17 @@ impl TerminalManager {
         }
         if snapped_to_bottom {
             if let Ok(emu) = session.emulator.lock() {
-                let frame = emu.frame();
-                let _ = app.emit_to(
-                    TERMINAL_EVENT_WINDOW,
-                    "terminal-frame",
-                    serde_json::json!({
-                        "workspaceId": workspace_id,
-                        "terminalId": terminal_id,
-                        "frame": frame,
-                    }),
-                );
+                if let Ok(frame) = emu.try_frame() {
+                    let _ = app.emit_to(
+                        TERMINAL_EVENT_WINDOW,
+                        "terminal-frame",
+                        serde_json::json!({
+                            "workspaceId": workspace_id,
+                            "terminalId": terminal_id,
+                            "frame": frame,
+                        }),
+                    );
+                }
             }
         }
 
@@ -1009,7 +1078,7 @@ impl TerminalManager {
             if delta_lines != 0 {
                 emu.scroll_display(Scroll::Delta(delta_lines));
             }
-            emu.frame()
+            emu.try_frame()?
         };
         let _ = app.emit_to(
             TERMINAL_EVENT_WINDOW,
@@ -1269,6 +1338,36 @@ mod tests {
         let chunks = drain_valid_utf8_chunks(&mut carry);
         assert_eq!(chunks, vec!["a".to_string()]);
         assert!(carry.is_empty());
+    }
+
+    #[test]
+    fn panic_payload_message_reads_str_and_string() {
+        assert_eq!(
+            panic_payload_message(Box::new("static")),
+            "static"
+        );
+        assert_eq!(
+            panic_payload_message(Box::new("owned".to_string())),
+            "owned"
+        );
+        assert_eq!(panic_payload_message(Box::new(42u32)), "unknown panic");
+    }
+
+    #[test]
+    fn try_advance_and_try_frame_accept_normal_output() {
+        let writer: Arc<Mutex<Box<dyn Write + Send>>> =
+            Arc::new(Mutex::new(Box::new(std::io::sink())));
+        let (emulator, _, _) = TerminalManager::create_emulator(40, 12, writer);
+        let mut emu = emulator.lock().expect("lock");
+        emu.try_advance(b"hello\n").expect("advance");
+        let frame = emu.try_frame().expect("frame");
+        assert_eq!(frame.cols, 40);
+        assert_eq!(frame.rows, 12);
+        let first = frame.lines[0]
+            .iter()
+            .map(|run| run.text.as_str())
+            .collect::<String>();
+        assert!(first.starts_with("hello"), "got {first:?}");
     }
 
     #[test]
