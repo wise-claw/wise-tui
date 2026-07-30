@@ -13,7 +13,7 @@ import {
 } from "../../utils/assistantTextParts";
 import { isSkillToolPart, skillToolDisplayName } from "../../utils/skillToolPart";
 import { LinkifiedPre } from "./LinkifiedPre";
-import { Markdown, StreamingReplyHint, ThinkingHintIcon, usePacedText } from "./Markdown";
+import { Markdown, StreamingReplyHint, ThinkingHintIcon } from "./Markdown";
 import { ToolFileEditCard } from "./ToolFileEditCard";
 import { WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL } from "../../constants/workflowUiEvents";
 import {
@@ -95,7 +95,7 @@ const TextPartDisplay = memo(function TextPartDisplay({
   streaming: boolean;
   showPendingHint: boolean;
 }) {
-  const text = usePacedText(part.text, streaming);
+  const text = part.text;
   // 流式期 text 每 token 变化，但 class 仅在结构边界（summary / 长文 / 新段落）变化。
   // 桶 = 长度分档 + 段数：第二段一出现就重算 chat-prose，避免末段仍用 0.45em 紧凑间距。
   const paragraphCount = countAssistantTextParagraphs(text);
@@ -146,7 +146,7 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
   showPendingHint: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const text = usePacedText(part.text, streaming);
+  const text = part.text;
   const charCount = part.text.trim().length;
   const hasBody = text.trim().length > 0;
   // Cursor 风格：默认只显示一行「思考了」；展开后才看正文。

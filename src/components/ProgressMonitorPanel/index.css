@@ -1856,12 +1856,6 @@
 }
 
 .app-monitor-panel__subagent-detail-session:not(.app-monitor-panel__subagent-detail-session--chat-layout)
-  .app-claude-message-text {
-  font-size: 11.5px;
-  line-height: 1.4;
-}
-
-.app-monitor-panel__subagent-detail-session:not(.app-monitor-panel__subagent-detail-session--chat-layout)
   .app-claude-messages-end-thinking {
   padding-left: 22px;
 }

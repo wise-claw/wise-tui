@@ -3738,8 +3738,6 @@
   overflow-anchor: none;
   /* 贴底跟随由 JS 缓动驱动；避免与原生 smooth 叠加产生迟滞 */
   scroll-behavior: auto;
-  /* 与底部输入区交界（固定在消息视口底缘，不随内容滚动） */
-  box-shadow: inset 0 -1px 0 0 var(--ant-color-split);
 }
 
 /* 组间距：wrapper 不命中 .app-claude-message 相邻选择器。
@@ -3851,12 +3849,42 @@
   padding-left: 30px;
 }
 
+/* 新消息入场：只动 opacity/transform（合成层属性），不改行高与 scrollHeight，
+   否则会与贴底跟随的 JS 缓动互相打架。
+   仅命中 :last-child —— 消息行是滚动容器的直接子元素，新消息追加时只有它是新节点；
+   加载更早消息在顶部插入、流式 token 复用同一节点，都不会重播动画。 */
+@keyframes app-claude-message-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-claude-messages > .app-claude-messages-virtual-row:last-child {
+  animation: app-claude-message-row-in var(--wise-motion-base) var(--wise-ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-claude-messages > .app-claude-messages-virtual-row:last-child {
+    animation: none;
+  }
+}
+
 .app-claude-messages--scrolling .app-claude-message,
 .app-claude-messages--scrolling .app-claude-messages-virtual-row,
 .app-claude-messages--scrolling .app-message-part,
 .app-claude-messages--scrolling .app-message-part-header,
 .app-claude-messages--scrolling .app-claude-message-floating-actions {
   transition: none !important;
+}
+
+/* 快速滑动期间不播入场动画：滑动本身已提供位移反馈，叠加动画只增重绘。 */
+.app-claude-messages--scrolling > .app-claude-messages-virtual-row:last-child {
+  animation: none;
 }
 
 .app-claude-messages--scrolling .app-claude-message,
@@ -4175,18 +4203,6 @@
 
 .app-claude-message:not(.app-claude-message--merged) .app-claude-message-floating-actions {
   right: 40px;
-}
-
-.app-claude-message-text {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--ant-color-text);
-  font-family: inherit;
-  background: transparent;
-  padding: 0;
 }
 
 /* ── System message（裸展示：不加外框 / 工具栏；仅保留错误态文字色） ── */
@@ -4553,21 +4569,25 @@
   color: var(--ant-color-text);
 }
 
-/* 主会话助手普通 text part（未被识别为 summary/long-prose 时）的 p/ul/li 基础呼吸感。
-   比 chat-prose/summary 的 0.65em/0.35em 更紧凑，避免与 summary/long-prose 重叠覆盖。 */
+/* 主会话助手 text part 的段落节奏：与下方 chat-prose/summary 取同一组数值。
+   这里曾用更紧凑的 0.45em/0.25em，而 chat-prose 用 0.65em/0.35em，二者由
+   looksLikeLongFormChatMarkdown 启发式切换 —— 流式期文本还短、启发式不命中走紧凑值，
+   落盘后整段命中走宽松值，同一条回复在流式与刷新后段间距差近 1.5×，被反复报为
+   「最后几段挤到一起」。统一数值后段落节奏与启发式解耦，启发式只再影响字距、
+   标题与表格等排版增强。 */
 .app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown p {
-  margin: 0 0 0.45em;
+  margin: 0 0 0.65em;
 }
 .app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown p:last-child {
   margin-bottom: 0;
 }
 .app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown ul,
 .app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown ol {
-  margin: 0.25em 0 0.55em;
+  margin: 0.35em 0 0.75em;
   padding-left: 1.35em;
 }
 .app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown li {
-  margin: 0.2em 0;
+  margin: 0.35em 0;
   padding-left: 0.12em;
 }
 
@@ -4608,26 +4628,8 @@
   line-height: 22px;
 }
 
-/* 用户消息：块级浅色底 + 左侧主色条。
-   助手回复保持裸排版（长文阅读优先），用户输入给一层底色，长会话才能快速扫出「我问了什么」。
+/* 用户 / 助手正文共用裸排版：无气泡底色与描边，靠头像区分发送者。
    仍保持 display:block / width:auto —— 用 shrink-to-fit 宽度会在 WKWebView 里塌缩。 */
-.app-claude-messages .app-claude-message--user .app-message-part--text {
-  display: block;
-  width: auto;
-  max-width: none;
-  min-width: 0;
-  padding: 7px 11px;
-  border: none;
-  border-left: 2px solid color-mix(in srgb, var(--ant-color-primary) 45%, transparent);
-  border-radius: 0 var(--wise-radius-lg) var(--wise-radius-lg) 0;
-  background: color-mix(in srgb, var(--ant-color-primary) 6%, var(--ant-color-fill-quaternary));
-  box-sizing: border-box;
-}
-
-.app-claude-messages .app-claude-message--assistant .app-message-part--text {
-  background: transparent;
-  border: none;
-}
 
 .app-claude-user-message-display {
   min-width: 0;
@@ -4694,8 +4696,7 @@
   word-break: break-word;
 }
 
-.app-claude-user-message-collapsible:not(.app-claude-user-message-collapsible--expanded)
-  .app-claude-user-message-collapsible__body {
+.app-claude-user-message-collapsible--truncated .app-claude-user-message-collapsible__body {
   -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
   mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
 }
@@ -6533,7 +6534,6 @@ button.app-message-part-header:disabled:hover {
 
 .app-markdown a,
 .app-markdown-link,
-.app-claude-message-text .app-markdown-link,
 .app-background-invocation-drawer__pre-linkified .app-markdown-link,
 .app-markdown-code--prose-linkified .app-markdown-link,
 .app-tool-output .app-markdown-link {
@@ -6547,7 +6547,6 @@ button.app-message-part-header:disabled:hover {
 
 .app-markdown a:hover,
 .app-markdown-link:hover,
-.app-claude-message-text .app-markdown-link:hover,
 .app-background-invocation-drawer__pre-linkified .app-markdown-link:hover,
 .app-markdown-code--prose-linkified .app-markdown-link:hover,
 .app-tool-output .app-markdown-link:hover {

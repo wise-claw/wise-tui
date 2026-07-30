@@ -1,5 +1,5 @@
 import type { ClaudeMessage, MessagePart, ToolUsePart } from "../types";
-import { joinAssistantTextPartBodies } from "./assistantTextParts";
+import { joinAssistantTextPartBodies, sameAssistantTextIgnoringWhitespace } from "./assistantTextParts";
 
 const CLI_TOOL_NAMES = new Set(["bash", "exec", "run_command"]);
 
@@ -12,11 +12,6 @@ export function looksLikeStructuredMarkdownSummary(text: string): boolean {
   if (/总结|功能\s*[—\-–]|改动/.test(t)) return true;
   if (/\|.+\|.+\|/m.test(t)) return true;
   return false;
-}
-
-/** @deprecated 使用 {@link looksLikeStructuredMarkdownSummary} */
-export function looksLikeAssistantCompletionSummary(text: string): boolean {
-  return looksLikeStructuredMarkdownSummary(text);
 }
 
 /** 主会话中长段 Markdown（含 ## 标题、**小节**、多段列表等），用于增强排版与卡片容器。 */
@@ -182,9 +177,14 @@ export function assistantOrphanMarkdownText(msg: ClaudeMessage): string {
   // Partial 守卫：parts 还没有任何 text part 时（典型 partial 状态），不拆 orphan，
   // 避免把磁盘快照的整段 content 提前渲染成"总结"。
   if (partTexts.length === 0) return "";
-  const joinedParts = partTexts.join("\n\n").trim();
-  if (!joinedParts) return content;
-  if (content === joinedParts) return "";
+  // 必须与 content 的构建方式同源（joinAssistantTextPartBodies）：曾用朴素 join("\n\n")，
+  // 而 content 走碎片感知拼接，两者在「流式碎片无分隔拼接」时必然失配 ->
+  // 前缀判定落空、真实尾巴被当作不连续丢弃（流式缺尾、刷新后才有）。
+  const joinedParts = joinAssistantTextPartBodies(partTexts).trim();
+  if (!joinedParts) return "";
+  // 分段位置差异（result 全文 vs delta 分段）会让严格相等失配，进而把整段 content
+  // 当成 orphan 再渲染一遍 -> 同一条回复上屏两次。按忽略空白比对消除这种误判。
+  if (sameAssistantTextIgnoringWhitespace(content, joinedParts)) return "";
   if (content.startsWith(joinedParts)) {
     return content.slice(joinedParts.length).trim();
   }

@@ -51,6 +51,34 @@ describe("joinAssistantTextPartBodies", () => {
   test("trims inter-part whitespace like buildMergedTextGroups", () => {
     expect(joinAssistantTextPartBodies(["intro  ", "\n\n  总结"])).toBe("intro\n\n总结");
   });
+
+  test("drops a whole body that repeats what is already accumulated", () => {
+    // 上游多条路径（result 全文 / complete 兜底 preview / 内存与磁盘合并）可能把同一段
+    // 正文塞进 parts 两次；分段位置不同会让严格相等失配，整段翻倍上屏。
+    const streamed = "你好！我是你的 AI 开发助手。\n\n**当前会话状态：**\n- 开发者身份：claude-agent\n- 当前任务：无";
+    const authoritative = "你好！我是你的 AI 开发助手。\n\n**当前会话状态：**\n- 开发者身份：claude-agent\n- 当前任务：无";
+    expect(joinAssistantTextPartBodies([streamed, authoritative])).toBe(authoritative);
+  });
+
+  test("prefers the authoritative body when an earlier split corrupted separators", () => {
+    // 分段位置不同（加粗标记被 \n\n 拆断）时忽略空白仍判为同一内容，取后到的规整版本。
+    const corrupted = "你好！我是你的 AI 开发助手。\n\n**当前会话状态：\n\n**\n- 开发者身份：claude-agent";
+    const clean = "你好！我是你的 AI 开发助手。\n\n**当前会话状态：**\n- 开发者身份：claude-agent";
+    expect(joinAssistantTextPartBodies([corrupted, clean])).toBe(clean);
+  });
+
+  test("replaces accumulated bodies when a later body is their superset", () => {
+    const intro = "先看一下当前仓库的目录结构，确认改动范围落在哪一层，再决定从哪个模块开始动手，避免一次改动牵扯过多文件。";
+    const full = `${intro}\n\n随后再补齐对应的回归测试，避免同类问题复发。`;
+    expect(joinAssistantTextPartBodies([intro, full])).toBe(full);
+  });
+
+  test("keeps repeated bodies shorter than the dedupe threshold", () => {
+    // 去重只对成段正文生效：确认语、表格单元等短段允许合法重复，不能被吃掉。
+    expect(joinAssistantTextPartBodies(["好的。", "好的。"])).toBe("好的。\n\n好的。");
+    const short = "改动已就绪，等你确认。";
+    expect(joinAssistantTextPartBodies([short, short])).toBe(`${short}\n\n${short}`);
+  });
 });
 
 describe("isLikelyStreamTextFragment", () => {
@@ -87,6 +115,19 @@ describe("shouldStartNewAssistantTextPart", () => {
 
   test("allows delta continuation within same block", () => {
     expect(shouldStartNewAssistantTextPart("你好", "世界")).toBe(false);
+  });
+
+  test("does not split when the block marker only appears on a later line", () => {
+    // 只有 next 的**开头**是块级结构才算新段。曾用 `m` 标志令 `^` 匹配任意行首，
+    // 于是「首行是加粗收尾标记、次行才是列表」的 delta 被误拆，
+    // 在 `**当前会话状态：` / `**` 之间插入 \n\n，加粗标记断开渲染成裸 `**`。
+    expect(
+      shouldStartNewAssistantTextPart("**当前会话状态：", "**\n- 开发者身份：claude-agent\n- 当前任务：无"),
+    ).toBe(false);
+  });
+
+  test("still splits when the incoming body itself starts a markdown block", () => {
+    expect(shouldStartNewAssistantTextPart("工具已执行完毕：", "- 改动一\n- 改动二")).toBe(true);
   });
 });
 

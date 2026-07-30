@@ -46,7 +46,7 @@ export function UserMessageCollapsibleBody({ children, collapsible = true }: Pro
     <div
       className={`app-claude-user-message-collapsible${
         effectiveExpanded ? " app-claude-user-message-collapsible--expanded" : ""
-      }`}
+      }${collapsible && overflows && !expanded ? " app-claude-user-message-collapsible--truncated" : ""}`}
     >
       <div ref={bodyRef} className="app-claude-user-message-collapsible__body">
         {children}

@@ -5,7 +5,6 @@ import {
   assistantOrphanMarkdownText,
   cliToolOutputForExpandedBody,
   extractBashEmbeddedMarkdownSummary,
-  looksLikeAssistantCompletionSummary,
   looksLikeLongFormChatMarkdown,
   looksLikeStructuredMarkdownSummary,
   chatAssistantTextPartClassNames,
@@ -139,10 +138,6 @@ describe("looksLikeStructuredMarkdownSummary", () => {
       looksLikeStructuredMarkdownSummary("零错误。全部改动已就绪，以下是总结：\n\n## ✅ 大屏视频播放功能 — 完成"),
     ).toBe(true);
     expect(looksLikeStructuredMarkdownSummary("plain text")).toBe(false);
-  });
-
-  test("keeps legacy alias in sync", () => {
-    expect(looksLikeAssistantCompletionSummary("已完成！\n\n## 总结")).toBe(true);
   });
 });
 

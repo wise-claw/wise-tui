@@ -55,6 +55,22 @@ function joinFragmentBodies(prev: string, next: string): string {
   return prev + next;
 }
 
+/** 去重比对键：抹掉全部空白，使「分段位置不同但正文相同」的两份判为同一内容。 */
+function textDedupeKey(text: string): string {
+  return text.replace(/\s+/g, "");
+}
+
+/**
+ * 触发幂等去重的最小键长。短段（"好的。"、表格单元格）允许合法重复，
+ * 只对成段正文做去重，避免把有意重复的短句吃掉。
+ */
+const TEXT_DEDUPE_MIN_KEY_LENGTH = 40;
+
+/** 两段正文是否在忽略空白后完全相同。 */
+export function sameAssistantTextIgnoringWhitespace(a: string, b: string): boolean {
+  return textDedupeKey(a) === textDedupeKey(b);
+}
+
 /**
  * 多 text part 正文拼接：规则与 {@link buildMergedTextGroups} 的 joinedText 对齐，
  * 供 content 字段、result 前缀对齐、orphan 检测等复用。
@@ -63,6 +79,12 @@ function joinFragmentBodies(prev: string, next: string): string {
  * 避免「一词一行」竖排。
  *
  * 碎片判定对「相邻原始段」进行，不用累积 out——防止误插的 `\n\n` 污染后续判定。
+ *
+ * 幂等去重（最后一道防线）：上游有多条路径可能让同一段正文进入 parts 两次
+ * （result 整轮全文与 delta 累积、complete 兜底 preview、内存态与磁盘态合并）。
+ * 这些路径各自的前缀对齐一旦因分段位置不同而失配，就会整段翻倍上屏。此处以
+ * 「抹掉空白后的键」判定覆盖关系：已被覆盖的段丢弃，超集段整体取代已累积结果
+ * （后到者通常来自 result 全文 / 磁盘快照等更权威来源，分段也更规整）。
  */
 export function joinAssistantTextPartBodies(bodies: readonly string[]): string {
   const segments = bodies
@@ -76,14 +98,29 @@ export function joinAssistantTextPartBodies(bodies: readonly string[]): string {
   if (segments.length === 1) return segments[0]!;
 
   let out = segments[0]!;
+  let outKey = textDedupeKey(out);
   for (let i = 1; i < segments.length; i += 1) {
     const prevSeg = segments[i - 1]!;
     const next = segments[i]!;
+    const nextKey = textDedupeKey(next);
+    if (
+      outKey.length >= TEXT_DEDUPE_MIN_KEY_LENGTH
+      && nextKey.length >= TEXT_DEDUPE_MIN_KEY_LENGTH
+    ) {
+      // 相等也走这支：后到者更权威、分段更规整，整体取代已累积结果。
+      if (nextKey.includes(outKey)) {
+        out = next;
+        outKey = nextKey;
+        continue;
+      }
+      if (outKey.includes(nextKey)) continue;
+    }
     if (isLikelyStreamTextFragment(prevSeg, next)) {
       out = joinFragmentBodies(out, next);
     } else {
       out = `${out.replace(/\n+$/g, "")}\n\n${next.replace(/^\n+/g, "")}`;
     }
+    outKey = textDedupeKey(out);
   }
   return out;
 }
@@ -96,6 +133,9 @@ export function assistantTextJoinedFromParts(parts: readonly MessagePart[]): str
 export function countAssistantTextParagraphs(text: string): number {
   return text.split(/\n\s*\n/).filter((block) => block.trim()).length;
 }
+
+/** 块级 Markdown 起始结构（标题 / 列表 / 有序列表 / 独立加粗小节标题）。 */
+const BLOCK_MARKDOWN_HEAD_RE = /^(#{1,6}\s|[-*+]\s|\d+\.\s|\*\*[^*\n]{2,64}\*\*)/;
 
 /**
  * 单条 incoming text 是否应另起 part（而非与末条 text 无分隔拼接）。
@@ -112,11 +152,11 @@ export function shouldStartNewAssistantTextPart(
   const next = incoming.trimStart();
   if (!prev || !next) return false;
 
-  // 上一块已结束于句读/冒号/换行，incoming 以块级 Markdown 结构开头 → 新段
-  if (
-    /[\n.!?。！？:：]$/.test(prev)
-    && /^(\#{1,6}\s|[-*+]\s|\d+\.\s|\*\*[^*\n]{2,64}\*\*)/m.test(next)
-  ) {
+  // 上一块已结束于句读/冒号/换行，incoming 以块级 Markdown 结构开头 → 新段。
+  // 必须锚定在 next 的**字符串开头**：曾用 `m` 标志，致 `^` 匹配任意行首，于是
+  // "**\n- 开发者身份：…" 这类「首行是加粗收尾标记、次行才是列表」的 delta 被判成新段，
+  // 在 `**当前会话状态：` / `**` 之间插入 `\n\n`，加粗标记被拆断渲染成裸 `**`。
+  if (/[\n.!?。！？:：]$/.test(prev) && BLOCK_MARKDOWN_HEAD_RE.test(next)) {
     return true;
   }
 

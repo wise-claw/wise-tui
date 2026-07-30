@@ -1,5 +1,6 @@
 import type { ClaudeMessage, ClaudeSession, SessionExecutionEngine } from "../types";
 import { assistantMessagePostToolTextParts } from "../utils/assistantOrphanMarkdown";
+import { joinAssistantTextPartBodies } from "../utils/assistantTextParts";
 import { isToolOnlyUserMessage, systemMessagePlainText, userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
 import { sessionHadRecentClaudeTurnFailureNotice } from "../utils/claudeSessionTurnFailure";
 import { CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT } from "../utils/claudeTurnCompleteGate";
@@ -33,7 +34,9 @@ export function assistantMessageVisiblePlainText(msg: ClaudeMessage): string {
       if (t.length > 0) chunks.push(t);
     }
   }
-  return chunks.join("\n\n").trim();
+  // 与渲染层同源拼接：朴素 join("\n\n") 会把流式 token 碎片拼成「一词一段」，
+  // 令通知正文 / previewRaw 与屏幕上的内容不一致，也让重复段无法被去掉。
+  return joinAssistantTextPartBodies(chunks).trim();
 }
 
 /** 会话中最近一条助手可见文本（与 App 侧验收解析同源，供完成回调兜底）。 */

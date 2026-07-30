@@ -4,8 +4,14 @@ export const CHAT_MESSAGE_LIST_RENDER_MODE = "full-dom" as const;
 /** 超过该行数启用尾部窗口（仅渲染最近 N 条） */
 export const CHAT_MESSAGE_LIST_WINDOW_THRESHOLD = 50;
 
-/** 初次展示最近消息条数 */
-export const CHAT_MESSAGE_LIST_INITIAL_VISIBLE = 48;
+/**
+ * 初次展示最近消息条数。
+ *
+ * 必须 > {@link CHAT_MESSAGE_LIST_WINDOW_THRESHOLD}：窗口刚启用（行数 = 阈值 + 1）时
+ * 初始窗口应能覆盖全部行，否则一进入窗口化就冒出「加载更早消息（还有 3 条）」这种
+ * 无意义按钮。历次 DOM 预算下调（100→72→56）都守住了该关系，48 是调优时漏掉的。
+ */
+export const CHAT_MESSAGE_LIST_INITIAL_VISIBLE = 52;
 
 /** 每次加载更早消息的条数 */
 export const CHAT_MESSAGE_LIST_LOAD_STEP = 28;

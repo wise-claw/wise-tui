@@ -103,8 +103,3 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
     </div>
   );
 }
-
-/** @deprecated 流式期间曾用于打字机效果；现直接返回全文以避免叠加 setState 与 Markdown 重绘。 */
-export function usePacedText(text: string, _streaming?: boolean): string {
-  return text;
-}
