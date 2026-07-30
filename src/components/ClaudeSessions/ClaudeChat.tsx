@@ -571,6 +571,8 @@ export function ClaudeChatInner({
     ) {
       return;
     }
+    // 内置终端表面自己管焦点；不要抢到 chatRoot，否则 Claude Code CLI 无法继续接收按键。
+    if (hit.closest(".terminal-shell, .terminal-surface, .terminal-input")) return;
     if (hit.closest(".app-session-quick-actions")) return;
     if (hit.closest("[data-wise-composer-root]")) return;
     if (hit.closest(".monaco-editor, .milkdown")) return;
@@ -608,6 +610,12 @@ export function ClaudeChatInner({
       // （关闭查找、多光标归一、浮层收起等），不要再冒泡为「取消会话」。
       if (isEditableSurfaceElement(e.target as Element | null)) return;
       if (ae instanceof Element && isEditableSurfaceElement(ae)) return;
+
+      // 内置终端里跑的是 Claude Code CLI：Esc 必须交给 PTY，不能在此取消会话并吞掉按键。
+      const inTerminal =
+        (t instanceof Element && Boolean(t.closest(".terminal-shell, .terminal-input"))) ||
+        (ae instanceof Element && Boolean(ae.closest(".terminal-shell, .terminal-input")));
+      if (inTerminal) return;
 
       e.preventDefault();
       e.stopImmediatePropagation();

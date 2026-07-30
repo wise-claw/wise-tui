@@ -302,10 +302,6 @@ impl EmulatorState {
         self.term.grid().display_offset()
     }
 
-    fn frame(&self) -> TerminalFrameDto {
-        serialize_frame(&self.term)
-    }
-
     fn try_frame(&self) -> Result<TerminalFrameDto, String> {
         panic::catch_unwind(AssertUnwindSafe(|| serialize_frame(&self.term))).map_err(
             |payload| {

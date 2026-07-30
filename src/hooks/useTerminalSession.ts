@@ -33,6 +33,7 @@ import {
   terminalTextFromCompositionEnd,
   terminalTextFromNonImeInput,
 } from "../utils/terminalImeInput";
+import { isTerminalInputArmed } from "../utils/terminalInputArmed";
 import { shouldIgnoreTerminalError } from "../utils/terminalErrors";
 import {
   expandTerminalSelectionToAll,
@@ -138,6 +139,8 @@ export function useTerminalSession({
   const focusInput = useCallback(() => {
     const input = inputRef.current;
     if (!input) return;
+    // 父级 inert / is-hidden 时 focus 会静默失败；切回终端视图后再试。
+    if (!isTerminalInputArmed(input)) return;
     try {
       input.focus({ preventScroll: true });
     } catch {
@@ -535,6 +538,13 @@ export function useTerminalSession({
           input.value = "";
         };
 
+        // 焦点被 inert / 切视图 / 打开文件抢走时，compositionend 常丢失，
+        // imeComposing 会卡在 true，之后所有 keydown 被吞掉 →「无法输入」。
+        const onBlur = () => {
+          imeComposing = false;
+          if (input.value) input.value = "";
+        };
+
         // 组字期间保留 textarea 内容供 IME 候选；提交由 compositionend 写入 PTY。
         // 非组字 insertText（含中文标点、以及 deferred 的 ASCII 标点）写入 PTY 后清空。
         const onInput = (event: Event) => {
@@ -573,6 +583,11 @@ export function useTerminalSession({
         const onPointerDown = (event: PointerEvent) => {
           if (event.button !== 0) return;
           focusInput();
+          // WebKit/Tauri：对未聚焦控件 preventDefault(pointerdown) 可能导致
+          // 同步 focus 未粘住；再补一帧，避免「点了终端仍无法输入」。
+          requestAnimationFrame(() => {
+            if (!cancelled && !sessionEnded) focusInput();
+          });
           const point = pointFromClient(event.clientX, event.clientY);
           if (!point || !latestFrame) return;
 
@@ -644,6 +659,7 @@ export function useTerminalSession({
         input.addEventListener("compositionstart", onCompositionStart);
         input.addEventListener("compositionend", onCompositionEnd);
         input.addEventListener("compositioncancel", onCompositionCancel);
+        input.addEventListener("blur", onBlur);
         input.addEventListener("input", onInput);
         input.addEventListener("pointerdown", onPointerDown);
         input.addEventListener("pointermove", onPointerMove);
@@ -655,11 +671,54 @@ export function useTerminalSession({
         window.addEventListener("pointercancel", onWindowPointerUp);
         window.addEventListener("blur", onWindowPointerUp);
 
+        // 中栏切回「终端」时父级去掉 inert/is-hidden，但 collapsed 未变 →
+        // 旧逻辑不会 focus；Claude Code 打开文件再返回终端时就会无法输入。
+        const pane =
+          container.closest(".app-claude-chat-center-pane") ?? container;
+        let lastArmed = isTerminalInputArmed(input);
+        const syncArmedFocus = () => {
+          if (cancelled || sessionEnded) return;
+          const armed = isTerminalInputArmed(input);
+          if (armed && !lastArmed) {
+            imeComposing = false;
+            requestAnimationFrame(() => {
+              if (!cancelled && !sessionEnded) focusInput();
+            });
+          }
+          if (!armed) {
+            imeComposing = false;
+          }
+          lastArmed = armed;
+        };
+        const paneObserver = new MutationObserver(() => {
+          syncArmedFocus();
+        });
+        paneObserver.observe(pane, {
+          attributes: true,
+          attributeFilter: ["inert", "class", "aria-hidden"],
+        });
+
         // 内存压力下 WebView 可能回收 canvas backing store；回到前台时强制重绘。
+        // 焦点落在「空地」或本终端时才恢复输入，避免从底部 composer / Monaco 抢焦点。
         const onVisibilityOrPageShow = () => {
           if (cancelled || sessionEnded) return;
           if (typeof document !== "undefined" && document.hidden) return;
           schedulePaint();
+          if (!isTerminalInputArmed(input)) return;
+          const ae = document.activeElement;
+          const shouldRestore =
+            !ae ||
+            ae === document.body ||
+            ae === document.documentElement ||
+            ae === input ||
+            (ae instanceof Element &&
+              (ae.classList.contains("app-claude-chat") ||
+                container.contains(ae)));
+          if (!shouldRestore) return;
+          imeComposing = false;
+          requestAnimationFrame(() => {
+            if (!cancelled && !sessionEnded) focusInput();
+          });
         };
         document.addEventListener("visibilitychange", onVisibilityOrPageShow);
         window.addEventListener("pageshow", onVisibilityOrPageShow);
@@ -799,6 +858,7 @@ export function useTerminalSession({
             cancelAnimationFrame(scrollRaf);
           }
           resizeObserver.disconnect();
+          paneObserver.disconnect();
           themeUnsub();
           document.removeEventListener("visibilitychange", onVisibilityOrPageShow);
           window.removeEventListener("pageshow", onVisibilityOrPageShow);
@@ -808,6 +868,7 @@ export function useTerminalSession({
           input.removeEventListener("compositionstart", onCompositionStart);
           input.removeEventListener("compositionend", onCompositionEnd);
           input.removeEventListener("compositioncancel", onCompositionCancel);
+          input.removeEventListener("blur", onBlur);
           input.removeEventListener("input", onInput);
           input.removeEventListener("pointerdown", onPointerDown);
           input.removeEventListener("pointermove", onPointerMove);
