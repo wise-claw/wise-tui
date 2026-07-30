@@ -796,7 +796,7 @@
 }
 
 .app-topbar-btn.active:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ant-color-primary) 18%, transparent);
+  background: color-mix(in srgb, var(--ant-color-primary) 24%, transparent);
   color: var(--ant-color-primary);
 }
 

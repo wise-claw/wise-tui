@@ -10,7 +10,7 @@ export type WorkspaceSessionRowLiveStatus =
   | "in_progress"
   | "failed";
 
-export type WorkspaceSessionRowVisualStatus = "running" | "completed" | "error";
+export type WorkspaceSessionRowVisualStatus = "running" | "completed" | "error" | "idle";
 
 export function isWorkspaceSessionLiveRunning(status: WorkspaceSessionRowLiveStatus): boolean {
   return status === "running" || status === "connecting" || status === "in_progress";
@@ -110,9 +110,19 @@ function ErrorIcon() {
   );
 }
 
+/** 未运行过的会话：中性占位，既补齐状态列对齐，也避免读成「已成功」。 */
+function IdleIcon() {
+  return (
+    <svg className="app-workspace-session-status__svg" viewBox="0 0 16 16" aria-hidden>
+      <circle className="app-workspace-session-status__dot--idle" cx="8" cy="8" r="2.5" />
+    </svg>
+  );
+}
+
 function statusLabel(status: WorkspaceSessionRowVisualStatus): string {
   if (status === "running") return "运行中";
   if (status === "completed") return "已完成";
+  if (status === "idle") return "未运行";
   return "已失败";
 }
 
@@ -131,6 +141,7 @@ export const WorkspaceSessionRowStatus = memo(function WorkspaceSessionRowStatus
       {status === "running" ? <RunningIcon /> : null}
       {status === "completed" ? <CompletedIcon /> : null}
       {status === "error" ? <ErrorIcon /> : null}
+      {status === "idle" ? <IdleIcon /> : null}
     </span>
   );
 });
@@ -142,6 +153,5 @@ export const WorkspaceSessionRowStatusSlot = memo(function WorkspaceSessionRowSt
   liveStatus: WorkspaceSessionRowLiveStatus;
 }) {
   const visual = useWorkspaceSessionRowVisualStatus(liveStatus);
-  if (!visual) return null;
-  return <WorkspaceSessionRowStatus status={visual} />;
+  return <WorkspaceSessionRowStatus status={visual ?? "idle"} />;
 });

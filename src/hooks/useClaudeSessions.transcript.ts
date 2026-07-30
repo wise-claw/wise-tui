@@ -11,8 +11,11 @@ import { CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT } from "../utils/claudeTurnComplet
 import type { SessionExecutionEngine } from "../types";
 import {
   resolveDiskTranscriptSessionKey,
+  resolveDiskTranscriptSource,
+  resolveDiskTranscriptSourceCandidates,
   sessionHasDiskTranscript,
   usesWiseTabIdForDiskTranscript,
+  type DiskTranscriptSource,
 } from "../utils/sessionExecutionEngine";
 import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
 import { userMessagePlainTextForDisplay, systemMessagePlainText } from "../utils/claudeChatMessageDisplay";
@@ -20,6 +23,19 @@ import { findSessionByTabOrClaudeId } from "../utils/claudeSessionSelection";
 import { deriveSessionListPreviewFromMessages } from "../utils/sessionListPreview";
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
+
+/** transcript 落盘目录 + 该目录下的文件名 key。 */
+export interface DiskTranscriptCandidate {
+  source: DiskTranscriptSource;
+  key: string;
+}
+
+type LoadSessionTranscriptLines = (
+  session: ClaudeSession,
+  sessionId: string,
+  tailLines: number | null,
+  source?: DiskTranscriptSource,
+) => Promise<string[]>;
 
 /** 主会话 claudeSessionId 与 Wise tab id 不一致时，依次尝试多个磁盘 key。 */
 export function resolveDiskTranscriptKeyCandidates(
@@ -46,26 +62,58 @@ export function resolveDiskTranscriptKeyCandidates(
   return out;
 }
 
+/**
+ * 会话的落盘目录不由当前执行引擎唯一决定：Claude 磁盘扫描出的历史会话会出现在
+ * executionEngine 已改成 cursor 的仓库下，反之亦然。先按当前引擎对应目录找，
+ * 找不到再到另一个目录兜底，避免历史消息读不出来只显示空状态。
+ */
+export function resolveDiskTranscriptCandidates(
+  session: { id: string; claudeSessionId?: string | null },
+  engine: SessionExecutionEngine,
+): DiskTranscriptCandidate[] {
+  const primarySource = resolveDiskTranscriptSource(engine);
+  const out: DiskTranscriptCandidate[] = [];
+  const seen = new Set<string>();
+  for (const source of resolveDiskTranscriptSourceCandidates(engine)) {
+    // 兜底目录用该目录自身的 key 规则，避免拿 Wise tab id 去撞 Claude 目录里的无关 jsonl。
+    const keyEngine = source === primarySource ? engine : source;
+    for (const key of resolveDiskTranscriptKeyCandidates(session, keyEngine)) {
+      const dedupeKey = `${source}:${key}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      out.push({ source, key });
+    }
+  }
+  return out;
+}
+
 async function loadSessionTranscriptLinesWithKeyFallback(
   session: ClaudeSession,
   engine: SessionExecutionEngine,
   tailLines: number | null,
-  loadSessionTranscriptLines: (
-    session: ClaudeSession,
-    sessionId: string,
-    tailLines: number | null,
-  ) => Promise<string[]>,
+  loadSessionTranscriptLines: LoadSessionTranscriptLines,
 ): Promise<{ lines: string[]; diskKey: string }> {
-  const candidates = resolveDiskTranscriptKeyCandidates(session, engine);
+  const candidates = resolveDiskTranscriptCandidates(session, engine);
   if (candidates.length === 0) return { lines: [], diskKey: "" };
   let lastLines: string[] = [];
-  let lastKey = candidates[0]!;
-  for (const diskKey of candidates) {
-    lastKey = diskKey;
-    const lines = await loadSessionTranscriptLines(session, diskKey, tailLines);
+  let lastKey = candidates[0]!.key;
+  for (const candidate of candidates) {
+    lastKey = candidate.key;
+    let lines: string[] = [];
+    try {
+      lines = await loadSessionTranscriptLines(
+        session,
+        candidate.key,
+        tailLines,
+        candidate.source,
+      );
+    } catch {
+      // 单个来源不可读（路径校验失败等）不应中断其余候选。
+      continue;
+    }
     lastLines = lines;
     if (lines.length > 0) {
-      return { lines, diskKey };
+      return { lines, diskKey: candidate.key };
     }
   }
   return { lines: lastLines, diskKey: lastKey };
@@ -297,11 +345,7 @@ export async function reloadFullDiskTranscriptByKey(params: {
   setSessions: SetSessions;
   diskTailLinesBySession: Map<string, number>;
   resolveSessionExecutionEngine: (session: ClaudeSession) => SessionExecutionEngine;
-  loadSessionTranscriptLines: (
-    session: ClaudeSession,
-    sessionId: string,
-    tailLines: number | null,
-  ) => Promise<string[]>;
+  loadSessionTranscriptLines: LoadSessionTranscriptLines;
 }): Promise<boolean> {
   const raw = params.sessionKey.trim();
   if (!raw) return false;
@@ -373,11 +417,7 @@ export async function applyDiskTranscriptTail(params: {
   setSessions: SetSessions;
   diskTailLinesBySession: Map<string, number>;
   resolveSessionExecutionEngine: (session: ClaudeSession) => SessionExecutionEngine;
-  loadSessionTranscriptLines: (
-    session: ClaudeSession,
-    sessionId: string,
-    tailLines: number | null,
-  ) => Promise<string[]>;
+  loadSessionTranscriptLines: LoadSessionTranscriptLines;
 }): Promise<boolean> {
   const repositoryPath = params.session.repositoryPath?.trim();
   const engine = params.resolveSessionExecutionEngine(params.session);
@@ -402,7 +442,11 @@ export async function applyDiskTranscriptTail(params: {
     : sanitizedDisk;
   if (!nextMessages || nextMessages.length === 0) return false;
   params.diskTailLinesBySession.set(params.session.id, params.tailLines);
-  const previewFromMessages = deriveSessionListPreviewFromMessages(nextMessages);
+  // 尾部窗口的首条用户消息不是会话开头，拿它改写 diskPreview 会把长 prompt 的中段
+  // （例如代码审查 harness 里的 diff 片段）当成侧栏标题。只有读到完整 transcript 才对齐标题。
+  const previewFromMessages = diskTranscriptPartial
+    ? ""
+    : deriveSessionListPreviewFromMessages(nextMessages);
   params.setSessions((prev) =>
     prev.map((row) =>
       row.id === params.session.id

@@ -5,6 +5,7 @@ import type {
   SessionConversationTaskItem,
   TeamMonitorItem,
 } from "../types";
+import { isCodeReviewPromptHistorySession } from "./codeReviewPromptSession";
 import { isConventionalCommitPromptHistorySession } from "./conventionalCommitMessage";
 import { repositoryPathsMatch } from "./repositoryMainSessionBinding";
 import { isSessionFeedbackLoopHistorySession } from "./sessionFeedbackLoopDispatch";
@@ -25,6 +26,7 @@ function excludeUtilityHistorySessions(sessions: ClaudeSession[]): ClaudeSession
   return sessions.filter(
     (session) =>
       !isConventionalCommitPromptHistorySession(session) &&
+      !isCodeReviewPromptHistorySession(session) &&
       !isSessionFeedbackLoopHistorySession(session),
   );
 }

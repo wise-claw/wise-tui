@@ -15,9 +15,13 @@ export function capSessionMessagesForMemory(
   return messages.slice(-max);
 }
 
-function capPartText(text: string, max: number = IN_MEMORY_MESSAGE_PART_TEXT_MAX): string {
+function capPartText(
+  text: string,
+  max: number = IN_MEMORY_MESSAGE_PART_TEXT_MAX,
+  keep: "head" | "tail" = "tail",
+): string {
   if (text.length <= max) return text;
-  return text.slice(-max);
+  return keep === "head" ? text.slice(0, max) : text.slice(-max);
 }
 
 /** 截断单条消息内过大的 text / reasoning / tool 输出，避免少数巨型 part 占满堆。 */
@@ -29,11 +33,15 @@ export function trimMessagePartsForMemory(
   const next = messages.map((message) => {
     if (!message.parts?.length) return message;
     let partsChanged = false;
+    // 用户消息靠开头识别：侧栏标题、代码审查等 harness prompt 的前缀判定都读 parts 文本。
+    // 从尾部截断超长 prompt（例如整段 diff）会丢掉开头，标题退化成正文中段。
+    // 助手正文与工具输出相反，最新的尾部才是有用的。
+    const keep = message.role === "user" ? "head" : "tail";
     const parts = message.parts.map((part) => {
       if (part.type === "text" || part.type === "reasoning") {
         if (part.text.length <= partTextMax) return part;
         partsChanged = true;
-        return { ...part, text: capPartText(part.text, partTextMax) };
+        return { ...part, text: capPartText(part.text, partTextMax, keep) };
       }
       if (part.type === "tool_use") {
         let nextPart: MessagePart = part;

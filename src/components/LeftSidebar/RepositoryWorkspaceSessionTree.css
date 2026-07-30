@@ -34,22 +34,24 @@
 }
 
 .app-workspace-session-tree__row:hover {
-  background: var(--wise-row-hover-bg);
   color: var(--ant-color-text);
 }
 
 .app-workspace-session-tree__row--active {
-  background: var(--wise-row-selected-bg);
-  color: var(--ant-color-text);
-  font-weight: 500;
+  /* primary-bg 是不透明主色浅底，比 18% tint 在侧栏里清晰得多 */
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary);
+  font-weight: 600;
 }
 
 .app-workspace-session-tree__row--active .app-workspace-session-tree__title {
-  color: var(--ant-color-text);
+  color: var(--ant-color-primary);
+  font-weight: 600;
 }
 
 .app-workspace-session-tree__row--active .app-workspace-session-tree__time {
-  color: var(--ant-color-text-secondary);
+  color: var(--ant-color-primary);
+  opacity: 0.72;
 }
 
 .app-workspace-session-tree__kind {
@@ -137,6 +139,11 @@
 
 .app-workspace-session-status__fill--error {
   fill: var(--ant-color-error);
+}
+
+/* 中性占位不参与 fill-pop 动画：滚动复用行时不应反复弹跳。 */
+.app-workspace-session-status__dot--idle {
+  fill: var(--ant-color-text-quaternary);
 }
 
 .app-workspace-session-status__check {

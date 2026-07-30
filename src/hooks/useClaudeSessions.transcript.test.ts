@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
 import {
+  applyDiskTranscriptTail,
   latestTurnHasInFlightToolUse,
   latestTurnHasVisibleAssistantContent,
   ONESHOT_DEFERRED_COMPLETE_FORCE_MS,
   reloadFullDiskTranscriptByKey,
+  resolveDiskTranscriptCandidates,
   resolveDiskTranscriptKeyCandidates,
   resolveTerminalWorkerMessagesAfterDiskLoad,
   shouldDeferOneshotTurnComplete,
@@ -406,6 +408,177 @@ describe("resolveDiskTranscriptKeyCandidates", () => {
         "cursor",
       ),
     ).toEqual(["wise-tab-1", "claude-sid-1"]);
+  });
+});
+
+describe("resolveDiskTranscriptCandidates", () => {
+  test("cursor engine falls back to claude directory for claude-scanned session", () => {
+    expect(
+      resolveDiskTranscriptCandidates(
+        { id: "claude-sid-1", claudeSessionId: "claude-sid-1" },
+        "cursor",
+      ),
+    ).toEqual([
+      { source: "cursor", key: "claude-sid-1" },
+      { source: "claude", key: "claude-sid-1" },
+    ]);
+  });
+
+  test("claude engine falls back to cursor directory using wise tab id", () => {
+    expect(
+      resolveDiskTranscriptCandidates(
+        { id: "session_1_abc", claudeSessionId: "agent-uuid-1" },
+        "claude",
+      ),
+    ).toEqual([
+      { source: "claude", key: "agent-uuid-1" },
+      { source: "cursor", key: "session_1_abc" },
+      { source: "cursor", key: "agent-uuid-1" },
+    ]);
+  });
+
+  test("never probes claude directory with a wise tab id", () => {
+    const candidates = resolveDiskTranscriptCandidates(
+      { id: "session_1_abc", claudeSessionId: "agent-uuid-1" },
+      "cursor",
+    );
+    expect(candidates.filter((item) => item.source === "claude")).toEqual([
+      { source: "claude", key: "agent-uuid-1" },
+    ]);
+  });
+});
+
+describe("applyDiskTranscriptTail sidebar preview", () => {
+  const diffFragmentLine = JSON.stringify({
+    type: "user",
+    message: {
+      role: "user",
+      content: "LT_CHANGED,\n   WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED,",
+    },
+  });
+  const assistantLine = JSON.stringify({
+    type: "assistant",
+    message: { role: "assistant", content: [{ type: "text", text: "结论" }] },
+  });
+
+  function reviewSession(): ClaudeSession {
+    return terminalWorker({
+      repositoryName: "wise-tui",
+      status: "completed",
+      messages: [],
+      diskPreview: "你是 Wise 内置的代码审查引擎（对标 Cursor Bugbot 的本地审查体验）。",
+    });
+  }
+
+  test("keeps existing preview when the tail window starts mid-transcript", async () => {
+    const session = reviewSession();
+    let nextSessions: ClaudeSession[] = [session];
+    await applyDiskTranscriptTail({
+      session,
+      tailLines: 2,
+      setSessions: (updater) => {
+        nextSessions = updater(nextSessions);
+      },
+      diskTailLinesBySession: new Map(),
+      resolveSessionExecutionEngine: () => "claude",
+      loadSessionTranscriptLines: async () => [diffFragmentLine, assistantLine],
+    });
+    const updated = nextSessions.find((item) => item.id === session.id);
+    expect(updated?.messages).toHaveLength(2);
+    expect(updated?.diskPreview).toBe(session.diskPreview);
+  });
+
+  test("realigns preview once the whole transcript fits in the window", async () => {
+    const session = reviewSession();
+    let nextSessions: ClaudeSession[] = [session];
+    await applyDiskTranscriptTail({
+      session,
+      tailLines: 200,
+      setSessions: (updater) => {
+        nextSessions = updater(nextSessions);
+      },
+      diskTailLinesBySession: new Map(),
+      resolveSessionExecutionEngine: () => "claude",
+      loadSessionTranscriptLines: async () => [
+        JSON.stringify({ type: "user", message: { role: "user", content: "你在干什么" } }),
+        assistantLine,
+      ],
+    });
+    const updated = nextSessions.find((item) => item.id === session.id);
+    expect(updated?.diskPreview).toBe("你在干什么");
+  });
+});
+
+describe("reloadFullDiskTranscriptByKey disk source fallback", () => {
+  test("loads claude transcript for a session sitting in a cursor repository", async () => {
+    const session = terminalWorker({
+      id: "claude-sid-1",
+      claudeSessionId: "claude-sid-1",
+      repositoryName: "wise-tui",
+      status: "completed",
+      messages: [],
+    });
+    const sessions = [session];
+    let nextSessions: ClaudeSession[] = sessions;
+    const attempts: { source?: string; key: string }[] = [];
+    await reloadFullDiskTranscriptByKey({
+      sessionKey: "claude-sid-1",
+      sessions,
+      setSessions: (updater) => {
+        nextSessions = updater(nextSessions);
+      },
+      diskTailLinesBySession: new Map(),
+      resolveSessionExecutionEngine: () => "cursor",
+      loadSessionTranscriptLines: async (_session, key, _tail, source) => {
+        attempts.push({ source, key });
+        // ~/.wise/cursor-runs 下没有该会话，只有 ~/.claude/projects 里有。
+        if (source !== "claude") return [];
+        return [
+          JSON.stringify({ type: "user", message: { role: "user", content: "你在干什么" } }),
+          JSON.stringify({
+            type: "assistant",
+            message: { role: "assistant", content: [{ type: "text", text: "在读代码" }] },
+          }),
+        ];
+      },
+    });
+    expect(attempts.map((item) => item.source)).toEqual(["cursor", "claude"]);
+    const recovered = nextSessions.find((item) => item.id === "claude-sid-1");
+    expect(recovered?.messages).toHaveLength(2);
+    expect(recovered?.messages[1]?.content).toBe("在读代码");
+  });
+
+  test("keeps trying other sources when one loader rejects", async () => {
+    const session = terminalWorker({
+      id: "claude-sid-1",
+      claudeSessionId: "claude-sid-1",
+      repositoryName: "wise-tui",
+      status: "completed",
+      messages: [],
+    });
+    const sessions = [session];
+    let nextSessions: ClaudeSession[] = sessions;
+    await reloadFullDiskTranscriptByKey({
+      sessionKey: "claude-sid-1",
+      sessions,
+      setSessions: (updater) => {
+        nextSessions = updater(nextSessions);
+      },
+      diskTailLinesBySession: new Map(),
+      resolveSessionExecutionEngine: () => "cursor",
+      loadSessionTranscriptLines: async (_session, _key, _tail, source) => {
+        if (source === "cursor") throw new Error("tabSessionId 含非法字符");
+        return [
+          JSON.stringify({ type: "user", message: { role: "user", content: "你在干什么" } }),
+          JSON.stringify({
+            type: "assistant",
+            message: { role: "assistant", content: [{ type: "text", text: "在读代码" }] },
+          }),
+        ];
+      },
+    });
+    const recovered = nextSessions.find((item) => item.id === "claude-sid-1");
+    expect(recovered?.messages).toHaveLength(2);
   });
 });
 

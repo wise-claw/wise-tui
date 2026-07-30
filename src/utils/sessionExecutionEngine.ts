@@ -265,6 +265,26 @@ export function usesWiseTabIdForDiskTranscript(engine: SessionExecutionEngine): 
   return engine === "cursor" || engine === "codex" || engine === "opencode" || engine === "qoder";
 }
 
+/**
+ * transcript 落盘位置：`cursor` 指 `~/.wise/cursor-runs`，`claude` 指 `~/.claude/projects`。
+ * 会话可能先由某个引擎写盘、之后仓库执行引擎被改成另一个，故来源与当前引擎不是一一绑定。
+ */
+export type DiskTranscriptSource = "cursor" | "claude";
+
+export function resolveDiskTranscriptSource(
+  engine: SessionExecutionEngine,
+): DiskTranscriptSource {
+  return engine === "cursor" ? "cursor" : "claude";
+}
+
+/** 当前引擎对应的落盘目录优先，另一目录兜底（仓库切换执行引擎后历史仍可读）。 */
+export function resolveDiskTranscriptSourceCandidates(
+  engine: SessionExecutionEngine,
+): DiskTranscriptSource[] {
+  const primary = resolveDiskTranscriptSource(engine);
+  return primary === "cursor" ? ["cursor", "claude"] : ["claude", "cursor"];
+}
+
 export function resolveDiskTranscriptSessionKey(
   session: { id: string; claudeSessionId?: string | null },
   engine: SessionExecutionEngine,

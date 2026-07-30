@@ -51,6 +51,14 @@ describe("sessionListPreview", () => {
     expect(deriveSessionListPreviewFromMessages([msg])).toBe("来自 parts 的标题");
   });
 
+  test("代码审查 harness prompt 不上屏，改用工具会话标签", () => {
+    const prompt = "你是 Wise 内置的代码审查引擎（对标 Cursor Bugbot 的本地审查体验）。\n只审查真实缺陷";
+    expect(deriveSessionListPreviewFromMessages([userMsg(prompt)])).toBe("代码审查");
+    expect(
+      resolveSessionListPreviewSource(session({ messages: [], diskPreview: prompt })),
+    ).toBe("代码审查");
+  });
+
   test("resolveSessionListPreviewSource falls back to diskPreview", () => {
     expect(
       resolveSessionListPreviewSource(
@@ -70,5 +78,16 @@ describe("sessionListPreview", () => {
         session({ messages: [userMsg("忽略")], diskPreview: "已有预览" }),
       ),
     ).toBe("已有预览");
+  });
+
+  test("retainSessionListPreviewOnMessageDrop 不把尾部窗口的中段消息当标题", () => {
+    expect(
+      retainSessionListPreviewOnMessageDrop(
+        session({
+          messages: [userMsg("LT_CHANGED,\n  WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED,")],
+          diskTranscriptPartial: true,
+        }),
+      ),
+    ).toBeUndefined();
   });
 });

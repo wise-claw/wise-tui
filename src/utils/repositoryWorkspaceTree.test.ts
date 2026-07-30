@@ -73,6 +73,20 @@ describe("listWorkspaceSidebarHistorySessions", () => {
     expect(listed.map((s) => s.id)).toEqual(["new", "old"]);
   });
 
+  test("隐藏代码审查工具会话，且不让它成为默认激活项", () => {
+    const sessions = [
+      makeSession("review", "/work/a", {
+        createdAt: 300,
+        content: "你是 Wise 内置的代码审查引擎（对标 Cursor Bugbot 的本地审查体验）。",
+      }),
+      makeSession("real", "/work/a", { createdAt: 200, content: "你好" }),
+    ];
+    expect(listWorkspaceSidebarHistorySessions(sessions, "/work/a").map((s) => s.id)).toEqual([
+      "real",
+    ]);
+    expect(pickFirstWorkspaceSidebarHistorySession(sessions, "/work/a")?.id).toBe("real");
+  });
+
   test("pickFirstWorkspaceSidebarHistorySession returns list head", () => {
     const sessions = [
       makeSession("old", "/work/a", { createdAt: 100, content: "old" }),

@@ -23,6 +23,35 @@ describe("sessionMessagesMemory", () => {
     expect(capped.map((m) => m.id)).toEqual(["7", "8", "9"]);
   });
 
+  test("trimMessagePartsForMemory 保留用户消息开头、助手消息结尾", () => {
+    const head = "你是 Wise 内置的代码审查引擎";
+    const tail = "WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED";
+    const long = `${head}${"d".repeat(200)}${tail}`;
+    const [user, assistant] = trimMessagePartsForMemory(
+      [
+        {
+          id: 1,
+          role: "user",
+          content: long,
+          parts: [{ type: "text", text: long }],
+          timestamp: 1,
+        },
+        {
+          id: 2,
+          role: "assistant",
+          content: long,
+          parts: [{ type: "text", text: long }],
+          timestamp: 2,
+        },
+      ],
+      60,
+    );
+    const userText = user?.parts?.[0];
+    const assistantText = assistant?.parts?.[0];
+    expect(userText?.type === "text" && userText.text.startsWith(head)).toBe(true);
+    expect(assistantText?.type === "text" && assistantText.text.endsWith(tail)).toBe(true);
+  });
+
   test("sessionMessagesFromJsonlLines marks partial when tail saturated", () => {
     const lines = ['{"type":"user","message":{"role":"user","content":"hi"}}'];
     const result = sessionMessagesFromJsonlLines(lines, {

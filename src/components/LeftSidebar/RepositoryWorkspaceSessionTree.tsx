@@ -6,6 +6,7 @@ import type {
   TeamMonitorItem,
 } from "../../types";
 import { useWorkspaceSidebarRowPreviewLimit } from "../../hooks/useWorkspaceSidebarRowPreviewLimit";
+import { useMinuteTick } from "../../stores/minuteTickStore";
 import { getSessionPreview } from "../ProgressMonitorPanel/historySessionDrawerChrome";
 import { canStopSessionConversationTask } from "../../utils/sessionConversationTasks";
 import {
@@ -106,6 +107,9 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
   const visibleRows = allRows.slice(0, rowLimit);
   const hasMoreRows = allRows.length > rowLimit;
   const hasAny = allRows.length > 0;
+
+  // 行内相对时间在渲染期计算，需分钟级心跳推动，否则会一直停在首次渲染的值。
+  useMinuteTick();
 
   const handleMore = () => {
     void props.onRefreshHistorySessions?.({

@@ -1,4 +1,5 @@
 import type { CodeReviewDiffPayload } from "../../types/codeReview";
+import { CODE_REVIEW_PROMPT_SIGNATURE } from "../../utils/codeReviewPromptSession";
 import type { CodeReviewFileSetDelta } from "./diffFileSetDelta";
 
 export type BuildCodeReviewPromptOptions = {
@@ -74,7 +75,7 @@ export function buildCodeReviewPrompt(
       : "";
 
   return [
-    "你是 Wise 内置的代码审查引擎（对标 Cursor Bugbot 的本地审查体验）。",
+    `${CODE_REVIEW_PROMPT_SIGNATURE}（对标 Cursor Bugbot 的本地审查体验）。`,
     "只审查给定 diff 中的真实缺陷、安全与正确性问题；忽略纯格式/命名偏好。",
     "高召回发现后自行做一轮验证，去掉不确定或无影响的噪音。",
     "",

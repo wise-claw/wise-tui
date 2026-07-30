@@ -123,8 +123,9 @@
   /* ═══ 可交互行的三态底色（侧栏、列表、Hub 卡片共用）═══ */
   --wise-row-hover-bg: color-mix(in srgb, var(--ant-color-text) 6%, transparent);
   --wise-row-active-bg: color-mix(in srgb, var(--ant-color-text) 9%, transparent);
-  --wise-row-selected-bg: color-mix(in srgb, var(--ant-color-primary) 11%, transparent);
-  --wise-row-selected-border: color-mix(in srgb, var(--ant-color-primary) 34%, transparent);
+  /* 11% 在浅色侧栏几乎看不见；提到 18% 才能和 hover/透明底立刻区分 */
+  --wise-row-selected-bg: color-mix(in srgb, var(--ant-color-primary) 18%, transparent);
+  --wise-row-selected-border: color-mix(in srgb, var(--ant-color-primary) 42%, transparent);
 }
 
 /* ═══════════════════════════════════════════════
@@ -144,8 +145,8 @@
 
   --wise-row-hover-bg: color-mix(in srgb, #ffffff 6%, transparent);
   --wise-row-active-bg: color-mix(in srgb, #ffffff 10%, transparent);
-  --wise-row-selected-bg: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
-  --wise-row-selected-border: color-mix(in srgb, var(--ant-color-primary) 46%, transparent);
+  --wise-row-selected-bg: color-mix(in srgb, var(--ant-color-primary) 26%, transparent);
+  --wise-row-selected-border: color-mix(in srgb, var(--ant-color-primary) 52%, transparent);
 
   --app-workspace-glass-base: color-mix(in srgb, var(--ant-color-bg-container) 88%, transparent);
   --app-workspace-glass-border: color-mix(in srgb, var(--ant-color-border) 55%, transparent);
@@ -3557,7 +3558,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-item--project.app-repository-item--project-active:hover {
-  background: color-mix(in srgb, var(--ant-color-primary) 17%, transparent) !important;
+  background: color-mix(in srgb, var(--ant-color-primary) 24%, transparent) !important;
 }
 
 /* 当前仓库：同上，主色 tint 才能和 hover 区分开 */
@@ -3580,7 +3581,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-item--repo.app-repository-item--repo-active:hover {
-  background: color-mix(in srgb, var(--ant-color-primary) 18%, transparent) !important;
+  background: color-mix(in srgb, var(--ant-color-primary) 24%, transparent) !important;
 }
 
 .app-repository-item--repo.app-repository-item--repo-active .app-repository-name {

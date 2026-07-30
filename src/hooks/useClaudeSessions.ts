@@ -148,7 +148,9 @@ import { isExecutionEnvironmentWorkerRepositoryName } from "../utils/executionEn
 import { isFeedbackLoopWorkerRepositoryName } from "../utils/sessionFeedbackLoopDispatch";
 import {
   resolveDiskTranscriptSessionKey,
+  resolveDiskTranscriptSource,
   sessionHasDiskTranscript,
+  type DiskTranscriptSource,
 } from "../utils/sessionExecutionEngine";
 import { findSessionByTabOrClaudeId } from "../utils/claudeSessionSelection";
 import { retainSessionListPreviewOnMessageDrop } from "../utils/sessionListPreview";
@@ -665,10 +667,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       session: ClaudeSession,
       diskKey: string,
       tailLines?: number | null,
+      source?: DiskTranscriptSource,
     ): Promise<string[]> => {
       const rp = session.repositoryPath?.trim();
       if (!rp || !diskKey.trim()) return [];
-      if (resolveSessionExecutionEngine(session) === "cursor") {
+      const target =
+        source ?? resolveDiskTranscriptSource(resolveSessionExecutionEngine(session));
+      if (target === "cursor") {
         return loadCursorSessionJsonl(rp, diskKey, {
           tailLines: tailLines ?? null,
         });
