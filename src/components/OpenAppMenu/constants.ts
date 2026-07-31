@@ -17,7 +17,7 @@ export const DEFAULT_OPEN_APP_ID = isMacPlatform() ? "vscode" : "finder";
 export const MAC_BASE_OPEN_APP_TARGETS: OpenAppTarget[] = [
   { id: "vscode", label: "VS Code", kind: "app", appName: "Visual Studio Code", args: [] },
   { id: "cursor", label: "Cursor", kind: "app", appName: "Cursor", args: [] },
-  { id: "codefuse", label: "CodeFuse", kind: "app", appName: "CodeFuse IDE", args: [] },
+  { id: "codefuse", label: "CodeFuse", kind: "app", appName: "CodeFuse", args: [] },
   { id: "finder", label: fileManagerName(), kind: "finder", args: [] },
   { id: "intellij", label: "IntelliJ IDEA", kind: "app", appName: "IntelliJ IDEA", args: [] },
   { id: "qoder", label: "Qoder", kind: "app", appName: "Qoder", args: [] },
