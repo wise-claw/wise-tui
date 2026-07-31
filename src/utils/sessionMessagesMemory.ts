@@ -5,6 +5,7 @@ import {
 } from "../constants/claudeMessageListWindow";
 import type { ClaudeMessage, ClaudeSession, MessagePart } from "../types";
 import { parseClaudeSessionJsonlLines } from "./claudeSessionJsonl";
+import { bumpSessionCreatedAtForSortActivity } from "../components/ClaudeSessions/sessionGrouping";
 import { retainSessionListPreviewOnMessageDrop } from "./sessionListPreview";
 
 export function capSessionMessagesForMemory(
@@ -202,6 +203,8 @@ function enforceGlobalMessagesBudget(
             ...session,
             // 全局预算清空正文后，侧栏仍依赖 diskPreview 显示真实标题（否则回落「新会话」）。
             diskPreview: retainSessionListPreviewOnMessageDrop(session),
+            // 锁住排序活跃时间，避免 messages 清空后回落更早 createdAt 导致侧栏跳动。
+            createdAt: bumpSessionCreatedAtForSortActivity(session),
             messages: [],
             diskTranscriptPartial:
               Boolean(session.claudeSessionId?.trim()) ||

@@ -279,14 +279,18 @@ export function resolveDiskTranscriptSource(
   return "claude";
 }
 
-/** 当前引擎对应的落盘目录优先，其余目录兜底（仓库切换执行引擎后历史仍可读）。 */
+/**
+ * 当前引擎对应的落盘目录优先，其余目录兜底。
+ *
+ * Composer 可临时切到 Codex RPC / Cursor，而仓库 `executionEngine` 仍是另一引擎；
+ * 刷新后若只探主目录会读不到 `~/.wise/codex-runs` 等已写入的 jsonl。
+ */
 export function resolveDiskTranscriptSourceCandidates(
   engine: SessionExecutionEngine,
 ): DiskTranscriptSource[] {
   const primary = resolveDiskTranscriptSource(engine);
-  if (primary === "cursor") return ["cursor", "claude"];
-  if (primary === "codex_rpc") return ["codex_rpc", "claude"];
-  return ["claude", "cursor"];
+  const all: DiskTranscriptSource[] = ["cursor", "codex_rpc", "claude"];
+  return [primary, ...all.filter((source) => source !== primary)];
 }
 
 export function resolveDiskTranscriptSessionKey(

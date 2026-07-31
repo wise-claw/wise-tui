@@ -6,6 +6,7 @@ import type {
   SessionConversationTaskItem,
   TeamMonitorItem,
 } from "../types";
+import { bumpSessionCreatedAtForSortActivity } from "../components/ClaudeSessions/sessionGrouping";
 import {
   buildWorkspaceSidebarTreeRows,
   collectFlatWorkspaceRepositories,
@@ -95,6 +96,27 @@ describe("listWorkspaceSidebarHistorySessions", () => {
     expect(pickFirstWorkspaceSidebarHistorySession(sessions, "/work/a")?.id).toBe("new");
     expect(pickFirstWorkspaceSidebarHistorySession(sessions, "/work/missing")).toBeNull();
   });
+
+  test("recycled hello session stays above empty draft after sort-activity bump", () => {
+    const t0 = 1_700_000_000_000;
+    const hello = makeSession("hello", "/work/a", { createdAt: t0, content: "你好" });
+    hello.messages = [
+      { id: "u1", role: "user", content: "你好", timestamp: t0 + 5_000 },
+      { id: "a1", role: "assistant", content: "hi", timestamp: t0 + 6_000 },
+    ];
+    const draft = makeSession("draft", "/work/a", { createdAt: t0 + 4_000 });
+    const before = listWorkspaceSidebarHistorySessions([hello, draft], "/work/a");
+    expect(before.map((s) => s.id)).toEqual(["hello", "draft"]);
+
+    const recycled: ClaudeSession = {
+      ...hello,
+      createdAt: bumpSessionCreatedAtForSortActivity(hello),
+      messages: [],
+      diskPreview: "你好",
+    };
+    const after = listWorkspaceSidebarHistorySessions([recycled, draft], "/work/a");
+    expect(after.map((s) => s.id)).toEqual(["hello", "draft"]);
+  });
 });
 
 describe("filter monitor items by repository", () => {
@@ -159,9 +181,10 @@ describe("filter monitor items by repository", () => {
 
 describe("buildWorkspaceSidebarTreeRows", () => {
   test("mixes sessions and run items by updatedAt, newest first (dispatch not pinned)", () => {
+    const t0 = 1_700_000_000_000;
     const sessions = [
-      makeSession("sess-new", "/work/a", { createdAt: 300, content: "latest chat" }),
-      makeSession("sess-old", "/work/a", { createdAt: 50, content: "old chat" }),
+      makeSession("sess-new", "/work/a", { createdAt: t0 + 300, content: "latest chat" }),
+      makeSession("sess-old", "/work/a", { createdAt: t0 + 50, content: "old chat" }),
     ];
     const dispatches: SessionConversationTaskItem[] = [
       {
@@ -169,7 +192,7 @@ describe("buildWorkspaceSidebarTreeRows", () => {
         label: "派发任务",
         status: "running",
         previewText: "",
-        updatedAt: 200,
+        updatedAt: t0 + 200,
         source: "execution_environment",
         repositoryPath: "/work/a",
       },
@@ -181,7 +204,7 @@ describe("buildWorkspaceSidebarTreeRows", () => {
         agentType: "general",
         status: "in_progress",
         previewText: "",
-        updatedAt: 100,
+        updatedAt: t0 + 100,
         repositoryPath: "/work/a",
       },
     ];
@@ -194,7 +217,7 @@ describe("buildWorkspaceSidebarTreeRows", () => {
     });
 
     expect(rows.map((r) => r.kind)).toEqual(["session", "dispatch", "employee", "session"]);
-    expect(rows.map((r) => r.updatedAt)).toEqual([300, 200, 100, 50]);
+    expect(rows.map((r) => r.updatedAt)).toEqual([t0 + 300, t0 + 200, t0 + 100, t0 + 50]);
     expect(rows[0]!.kind === "session" && rows[0].item.id).toBe("sess-new");
     expect(rows[1]!.kind === "dispatch" && rows[1].item.key).toBe("dispatch-mid");
   });

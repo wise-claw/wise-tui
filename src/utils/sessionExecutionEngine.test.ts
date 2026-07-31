@@ -10,6 +10,8 @@ import {
   resolveRepositoryPathForSessionSpawn,
   resolveSessionPaneContextRepository,
   resolveDiskTranscriptSessionKey,
+  resolveDiskTranscriptSource,
+  resolveDiskTranscriptSourceCandidates,
   sessionHasDiskTranscript,
   sessionMessagesSafeToDropForDiskReload,
   usesWiseTabIdForDiskTranscript,
@@ -365,6 +367,25 @@ describe("disk transcript session keys", () => {
         "claude",
       ),
     ).toBe(true);
+  });
+
+  test("transcript source candidates always include codex_rpc for cross-engine reopen", () => {
+    expect(resolveDiskTranscriptSource("codex-rpc")).toBe("codex_rpc");
+    expect(resolveDiskTranscriptSourceCandidates("codex-rpc")).toEqual([
+      "codex_rpc",
+      "cursor",
+      "claude",
+    ]);
+    expect(resolveDiskTranscriptSourceCandidates("cursor")).toEqual([
+      "cursor",
+      "codex_rpc",
+      "claude",
+    ]);
+    expect(resolveDiskTranscriptSourceCandidates("claude")).toEqual([
+      "claude",
+      "cursor",
+      "codex_rpc",
+    ]);
   });
 });
 

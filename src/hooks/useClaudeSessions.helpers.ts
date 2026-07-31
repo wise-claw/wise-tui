@@ -421,6 +421,10 @@ export function pruneGhostRepositorySessions(
     if (!claudeId) return true;
     if (diskIds.has(claudeId) || diskIds.has(s.id)) return true;
     if (s.messages.length > 0) return true;
+    // Wise 标签 id ≠ 外部 agent/thread id：transcript 落在 cursor-runs / codex-runs 等，
+    // 不在 ~/.claude/projects 索引里。内存回收后 messages 为空时绝不能当 Claude 幽灵删掉，
+    // 否则刷新后标签消失、磁盘 jsonl 也无法再 hydrate。
+    if (s.id.trim() !== claudeId) return true;
     // 多屏额外窗格正在引用的 companion 会话：即使消息尚未到达内存、磁盘索引也未收录，
     // 也必须保留。否则 stream 刚设置 claudeSessionId 的窗口期会被误删，
     // 进而触发 extraPanes slot 失效、刷新后第二屏无法恢复。

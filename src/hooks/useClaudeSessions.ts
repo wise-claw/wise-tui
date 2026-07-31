@@ -154,6 +154,7 @@ import {
   type DiskTranscriptSource,
 } from "../utils/sessionExecutionEngine";
 import { findSessionByTabOrClaudeId } from "../utils/claudeSessionSelection";
+import { bumpSessionCreatedAtForSortActivity } from "../components/ClaudeSessions/sessionGrouping";
 import { retainSessionListPreviewOnMessageDrop } from "../utils/sessionListPreview";
 import {
   findSessionForMonitorDrawerResume,
@@ -2422,6 +2423,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           ...s,
           // 丢弃正文前锁住侧栏标题，避免未选中项回落「新会话」或与真实话题脱节。
           diskPreview: retainSessionListPreviewOnMessageDrop(s),
+          // 锁住排序活跃时间，避免切会话清空 messages 后「新会话」短暂插到前面再跳回。
+          createdAt: bumpSessionCreatedAtForSortActivity(s),
           messages: [],
           diskTranscriptPartial: true,
           transcriptMemoryUnlimited: false,

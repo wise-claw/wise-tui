@@ -34,6 +34,8 @@
 }
 
 .app-workspace-session-tree__row:hover {
+  /* 比仓库行略深一点：会话行更密，6% tint 几乎看不见 */
+  background: color-mix(in srgb, var(--ant-color-text) 10%, transparent);
   color: var(--ant-color-text);
 }
 
@@ -42,6 +44,11 @@
   background: var(--ant-color-primary-bg);
   color: var(--ant-color-primary);
   font-weight: 600;
+}
+
+.app-workspace-session-tree__row--active:hover {
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary);
 }
 
 .app-workspace-session-tree__row--active .app-workspace-session-tree__title {

@@ -101,4 +101,28 @@ describe("pruneGhostRepositorySessions", () => {
     expect(withCompanion).toHaveLength(1);
     expect(withCompanion[0]?.id).toBe(companionId);
   });
+
+  test("keeps Codex RPC / Cursor wise tab after memory recycle even when Claude disk lacks thread id", () => {
+    const disk: ClaudeDiskSessionItem[] = [
+      { sessionId: "fedcba9876543210fedcba9876543210", updatedAtMs: 1, preview: "" },
+    ];
+    const codexRpcTab = session({
+      id: "session_1785537573277_5xpjlf",
+      claudeSessionId: "019fba5c-25c7-7972-8424-10ac7ec823d4",
+      messages: [],
+      status: "completed",
+    });
+    const cursorTab = session({
+      id: "session_1785510555885_mdnml1",
+      claudeSessionId: "bc-agent-uuid-not-in-claude-disk",
+      messages: [],
+      status: "idle",
+    });
+
+    const next = pruneGhostRepositorySessions([codexRpcTab, cursorTab], REPO, disk);
+    expect(next.map((s) => s.id)).toEqual([
+      "session_1785537573277_5xpjlf",
+      "session_1785510555885_mdnml1",
+    ]);
+  });
 });

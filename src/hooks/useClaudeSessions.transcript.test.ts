@@ -412,7 +412,7 @@ describe("resolveDiskTranscriptKeyCandidates", () => {
 });
 
 describe("resolveDiskTranscriptCandidates", () => {
-  test("cursor engine falls back to claude directory for claude-scanned session", () => {
+  test("cursor engine falls back to codex_rpc then claude for cross-engine history", () => {
     expect(
       resolveDiskTranscriptCandidates(
         { id: "claude-sid-1", claudeSessionId: "claude-sid-1" },
@@ -420,11 +420,12 @@ describe("resolveDiskTranscriptCandidates", () => {
       ),
     ).toEqual([
       { source: "cursor", key: "claude-sid-1" },
+      { source: "codex_rpc", key: "claude-sid-1" },
       { source: "claude", key: "claude-sid-1" },
     ]);
   });
 
-  test("claude engine falls back to cursor directory using wise tab id", () => {
+  test("claude engine falls back to cursor and codex_rpc using wise tab id", () => {
     expect(
       resolveDiskTranscriptCandidates(
         { id: "session_1_abc", claudeSessionId: "agent-uuid-1" },
@@ -434,7 +435,17 @@ describe("resolveDiskTranscriptCandidates", () => {
       { source: "claude", key: "agent-uuid-1" },
       { source: "cursor", key: "session_1_abc" },
       { source: "cursor", key: "agent-uuid-1" },
+      { source: "codex_rpc", key: "session_1_abc" },
+      { source: "codex_rpc", key: "agent-uuid-1" },
     ]);
+  });
+
+  test("cursor engine can recover Codex RPC transcript written under wise tab id", () => {
+    const candidates = resolveDiskTranscriptCandidates(
+      { id: "session_1_abc", claudeSessionId: "019fba5c-thread" },
+      "cursor",
+    );
+    expect(candidates).toContainEqual({ source: "codex_rpc", key: "session_1_abc" });
   });
 
   test("never probes claude directory with a wise tab id", () => {
@@ -542,10 +553,47 @@ describe("reloadFullDiskTranscriptByKey disk source fallback", () => {
         ];
       },
     });
-    expect(attempts.map((item) => item.source)).toEqual(["cursor", "claude"]);
+    expect(attempts.map((item) => item.source)).toEqual(["cursor", "codex_rpc", "claude"]);
     const recovered = nextSessions.find((item) => item.id === "claude-sid-1");
     expect(recovered?.messages).toHaveLength(2);
     expect(recovered?.messages[1]?.content).toBe("在读代码");
+  });
+
+  test("loads codex_rpc transcript when repository engine is still cursor", async () => {
+    const session = terminalWorker({
+      id: "session_1_abc",
+      claudeSessionId: "019fba5c-thread",
+      repositoryName: "wise-tui",
+      status: "completed",
+      messages: [],
+    });
+    const sessions = [session];
+    let nextSessions: ClaudeSession[] = sessions;
+    const attempts: { source?: string; key: string }[] = [];
+    await reloadFullDiskTranscriptByKey({
+      sessionKey: "session_1_abc",
+      sessions,
+      setSessions: (updater) => {
+        nextSessions = updater(nextSessions);
+      },
+      diskTailLinesBySession: new Map(),
+      resolveSessionExecutionEngine: () => "cursor",
+      loadSessionTranscriptLines: async (_session, key, _tail, source) => {
+        attempts.push({ source, key });
+        if (source !== "codex_rpc" || key !== "session_1_abc") return [];
+        return [
+          JSON.stringify({ type: "user", message: { role: "user", content: "你好" } }),
+          JSON.stringify({
+            type: "assistant",
+            message: { role: "assistant", content: [{ type: "text", text: "Codex RPC 回复" }] },
+          }),
+        ];
+      },
+    });
+    expect(attempts.map((item) => item.source)).toEqual(["cursor", "cursor", "codex_rpc"]);
+    const recovered = nextSessions.find((item) => item.id === "session_1_abc");
+    expect(recovered?.messages).toHaveLength(2);
+    expect(recovered?.messages[1]?.content).toBe("Codex RPC 回复");
   });
 
   test("keeps trying other sources when one loader rejects", async () => {

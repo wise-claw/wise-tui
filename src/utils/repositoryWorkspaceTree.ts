@@ -9,6 +9,7 @@ import { isCodeReviewPromptHistorySession } from "./codeReviewPromptSession";
 import { isConventionalCommitPromptHistorySession } from "./conventionalCommitMessage";
 import { repositoryPathsMatch } from "./repositoryMainSessionBinding";
 import { isSessionFeedbackLoopHistorySession } from "./sessionFeedbackLoopDispatch";
+import { getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGrouping";
 import { listSessionsForRepositoryPath, dedupeClaudeSessionsByIdentity } from "./sessionHistoryScope";
 import { sortRepositoriesByWorkspaceOrder } from "./workspaceRepositoryOrder";
 import { WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_DEFAULT } from "../constants/workspaceSidebarLayout";
@@ -32,9 +33,7 @@ function excludeUtilityHistorySessions(sessions: ClaudeSession[]): ClaudeSession
 }
 
 function sessionUpdatedAtMs(session: ClaudeSession): number {
-  const last = session.messages[session.messages.length - 1]?.timestamp;
-  if (typeof last === "number" && Number.isFinite(last) && last > 0) return last;
-  return session.createdAt;
+  return getSessionUpdatedAt(session);
 }
 
 /** 主侧栏：仓库即工作区，扁平去重后按自定义顺序（无顺序则按显示名）。 */
