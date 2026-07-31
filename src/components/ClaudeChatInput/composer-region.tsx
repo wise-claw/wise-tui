@@ -2507,7 +2507,8 @@ function ComposerInner({
 
   const semiUploadProps = useMemo(
     () => ({
-      // 不设 accept：避免 Semi Upload 在 beforeUpload 前按 accept 丢掉截图 File
+      // beforeUpload 恒 false：不实际上传，仅借 Upload 承接 Semi 粘贴；action 为类型必填占位
+      action: "",
       showUploadList: false as const,
       beforeUpload: handleSemiBeforeUpload,
     }),
