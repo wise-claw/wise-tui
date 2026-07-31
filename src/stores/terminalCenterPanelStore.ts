@@ -8,7 +8,6 @@ import {
   clearWorkspaceTerminalsClosing,
   markWorkspaceTerminalsClosing,
 } from "./terminalWorkspaceTabsStore";
-import { closeWorkspaceMemoPanel } from "./workspaceMemoPanelStore";
 
 /**
  * 内置终端中栏面板开关（独立 slot：`panelBelowTerminal` + CenterView「terminal」）。
@@ -161,10 +160,7 @@ export function openTerminalCenterPanel(paneIndex: number = 0): void {
   const target = normalizePaneIndex(paneIndex);
   // 重新打开时撤销尚未被消费的关闭标记，避免误杀刚建立的会话。
   clearWorkspaceTerminalsClosing(paneTerminalWorkspaceId(target));
-  // 备忘录仅占 pane 0：仅当终端挂到 pane 0 时才收起备忘录。
-  if (target === 0) {
-    closeWorkspaceMemoPanel();
-  }
+  // 需求 / 快捷操作 / 文件 / 终端各自独立 slot，打开终端不再关闭其它中栏面板。
   const prev = paneFlags.get(target);
   if (isPaneVisible(prev)) {
     lastHostPaneIndex = target;

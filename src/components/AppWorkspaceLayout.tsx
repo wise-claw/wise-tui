@@ -72,6 +72,7 @@ import { claudeSessionsShellPropsEqual } from "./ClaudeSessions/claudeSessionsPr
 import { CenterViewControlContext, useCenterView } from "./ClaudeSessions/claudeChatHelpers";
 import { registerPaneCenterViewSetter, syncPaneCenterView } from "../stores/paneCenterViewControlStore";
 import { useWorkspaceMemoPanelOpen } from "../stores/workspaceMemoPanelStore";
+import { useWorkspaceQuickActionsPanelOpen } from "../stores/workspaceQuickActionsPanelStore";
 import { openTerminalCenterPanel, useTerminalCenterPanelState } from "../stores/terminalCenterPanelStore";
 import {
   setRepositoryRunCommandAutoFixHandler,
@@ -79,6 +80,8 @@ import {
 import { setPageMonitorAutoFixHandler } from "../stores/chromeDevtoolsMonitorRuntimeStore";
 import type { CenterView } from "./ClaudeSessions/ClaudeChat";
 import { WORKSPACE_MEMO_PANEL_NODE } from "./WorkspaceMemoPanel";
+import { WorkspaceRequirementCreateModal } from "./WorkspaceMemoPanel/WorkspaceRequirementCreateModal";
+import { WORKSPACE_QUICK_ACTIONS_PANEL_NODE } from "./WorkspaceQuickActionsCenterPanel";
 import { TERMINAL_CENTER_SLOT_SENTINEL } from "./TerminalPanel/terminalCenterSlot";
 import { WorkspaceFileTreeRail } from "./WorkspaceFileTreeRail";
 import type { WorkspaceFileTreeRailContext } from "./WorkspaceFileTreeRail/types";
@@ -498,8 +501,10 @@ interface ConnectedClaudeSessionsProps {
   centerAuxPanelsNodeByPaneVersion: number;
   /** 单屏中栏「消息/文件」视图值（由 layout 壳层提升持有，透传给 ClaudeSessions）。 */
   centerView?: CenterView;
-  /** 全局备忘录面板是否打开（由 layout 壳层持有；影响 pane 0 的 editor slot）。 */
+  /** 全局需求面板是否打开（由 layout 壳层持有；独立 CenterView slot）。 */
   memoOpen: boolean;
+  /** 全局快捷操作中栏面板是否打开（独立 CenterView slot，可与需求同开）。 */
+  quickActionsOpen: boolean;
 }
 
 function connectedClaudeSessionsPropsEqual(
@@ -510,6 +515,7 @@ function connectedClaudeSessionsPropsEqual(
   if (prev.centerAuxPanelsNodeByPaneVersion !== next.centerAuxPanelsNodeByPaneVersion) return false;
   if (prev.centerView !== next.centerView) return false;
   if (prev.memoOpen !== next.memoOpen) return false;
+  if (prev.quickActionsOpen !== next.quickActionsOpen) return false;
   return claudeSessionsShellPropsEqual(prev.claudeSessionsProps, next.claudeSessionsProps);
 }
 
@@ -520,42 +526,50 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
   centerAuxPanelsNodeByPaneVersion,
   centerView,
   memoOpen,
+  quickActionsOpen,
 }: ConnectedClaudeSessionsProps) {
   const terminalCenter = useTerminalCenterPanelState();
-  // resolvePaneAuxLayout 被 shell memo 的 skipFunctions 忽略；终端/备忘录开闭必须 bump 版本号，
-  // 否则第二屏及以后收不到最新 panelBelowMessages（按钮亮了但面板不挂）。
+  // resolvePaneAuxLayout 被 shell memo 的 skipFunctions 忽略；终端/需求/快捷操作开闭必须 bump 版本号，
+  // 否则第二屏及以后收不到最新 panelBelow*（按钮亮了但面板不挂）。
   const auxLayoutVersion =
     ((centerAuxPanelsNodeByPaneVersion & 0xffff) << 16) |
     ((memoOpen ? 1 : 0) << 15) |
-    (terminalCenter.revision & 0x7fff);
+    ((quickActionsOpen ? 1 : 0) << 14) |
+    (terminalCenter.revision & 0x3fff);
   const resolvePaneAuxLayout = useCallback(
     (paneIndex: number): PaneAuxLayout => {
       // 多 pane 下各 pane 独立判断自己是否挂文件编辑器。
       // 挂了编辑器时也不再隐藏消息列表：由 ClaudeChat 内的 Segmented 切换器在
-      // 「消息」与「文件」视图间互斥切换，当前视图占满整个主区，无需关文件即可查看消息。
+      // 「消息」与各 aux 视图间互斥切换，当前视图占满整个主区，无需关文件即可查看消息。
       // 离屏 pane 的性能护栏由 deferHeavySubtree 在下游保留
       // （hidePaneMessages = hideMessages || deferHeavySubtree）。
-      // 全局备忘录优先占 pane 0 的同一 slot（与打开文件一致）；
-      // editor 与 terminal 是两个独立 slot（DOM 并存，靠 centerView 显隐），
-      // 不再让 terminal 抢占 editor 的 ReactNode。
-      const panel =
-        paneIndex === 0 && memoOpen
-          ? WORKSPACE_MEMO_PANEL_NODE
-          : centerAuxPanelsNodeByPane.get(paneIndex);
+      // 需求 / 快捷操作 / 文件 / 终端各自独立 slot（DOM 可并存，靠 centerView 显隐）。
+      const filePanel = centerAuxPanelsNodeByPane.get(paneIndex);
+      const requirementsPanel =
+        paneIndex === 0 && memoOpen ? WORKSPACE_MEMO_PANEL_NODE : undefined;
+      const quickActionsPanel =
+        paneIndex === 0 && quickActionsOpen ? WORKSPACE_QUICK_ACTIONS_PANEL_NODE : undefined;
       const terminalPanel = terminalCenter.mountedPaneIndexes.includes(paneIndex)
         ? TERMINAL_CENTER_SLOT_SENTINEL
         : null;
-      if (panel == null && terminalPanel == null) {
+      if (
+        filePanel == null &&
+        requirementsPanel == null &&
+        quickActionsPanel == null &&
+        terminalPanel == null
+      ) {
         return { hideMessages: false, hideSessionTools: false };
       }
       return {
-        panelBelowMessages: panel,
+        panelBelowMessages: filePanel,
+        panelBelowRequirements: requirementsPanel,
+        panelBelowQuickActions: quickActionsPanel,
         panelBelowTerminal: terminalPanel,
         hideMessages: false,
         hideSessionTools: false,
       };
     },
-    [centerAuxPanelsNodeByPane, memoOpen, terminalCenter.mountedPaneIndexes],
+    [centerAuxPanelsNodeByPane, memoOpen, quickActionsOpen, terminalCenter.mountedPaneIndexes],
   );
 
   const primaryAux = resolvePaneAuxLayout(0);
@@ -566,6 +580,8 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
         hideMessages={primaryAux.hideMessages}
         hideSessionTools={primaryAux.hideSessionTools}
         panelBelowMessages={primaryAux.panelBelowMessages}
+        panelBelowRequirements={primaryAux.panelBelowRequirements}
+        panelBelowQuickActions={primaryAux.panelBelowQuickActions}
         resolvePaneAuxLayout={resolvePaneAuxLayout}
         centerAuxPanelsNodeByPaneVersion={auxLayoutVersion}
         centerView={centerView}
@@ -1133,33 +1149,31 @@ export function AppWorkspaceLayout({
     setCenterAuxPanelsNodeByPaneVersion((v) => v + 1);
   }, []);
 
-  // 单屏中栏「消息/文件」视图切换：状态提升到 layout 壳层，使 1 屏全局 Topbar（下方
+  // 单屏中栏视图切换：状态提升到 layout 壳层，使 1 屏全局 Topbar（下方
   // `<LazyTopbar>`）与 ClaudeSessions 内的 ClaudeChat 共享同一份 centerView。多屏（paneCount>1）
   // 不渲染全局 Topbar，各 pane 在 ClaudeMultiPaneGrid 内独立 useCenterView；此处 primary 的
-  // panelBelowMessages 取自 `centerAuxPanelsNodeByPane.get(0)`，与 ConnectedClaudeSessions 的
-  // resolvePaneAuxLayout(0) 同源（备忘录 / 终端打开时优先占同一 slot）。放在
+  // slot 有无与 ConnectedClaudeSessions 的 resolvePaneAuxLayout(0) 同源。放在
   // centerAuxPanelsNodeByPane 定义之后以避开 TDZ。
   const memoOpen = useWorkspaceMemoPanelOpen();
+  const quickActionsOpen = useWorkspaceQuickActionsPanelOpen();
   const terminalCenter = useTerminalCenterPanelState();
-  // 三态切换（消息 / 文件 / 终端）：editor 与 terminal 是两个独立 slot，
-  // DOM 中并存，由 `centerView` 互斥显隐——避免打开终端时把文件 tab 挤掉。
-  // memo（备忘录）独占 pane 0 的 editor slot（与打开文件行为一致）。
+  // 五态切换：文件 / 需求 / 快捷操作 / 终端各自独立 slot，DOM 可并存，由 centerView 互斥显隐。
   // 终端用 mounted（含收起保活）作为 slot 信号，与多屏一致；收起时仍保留
   // Segmented「终端」入口，点选时由 handleCenterViewChange uncollapse。
-  const primaryPanelBelowMessages = memoOpen
-    ? WORKSPACE_MEMO_PANEL_NODE
-    : centerAuxPanelsNodeByPane.get(0);
-  const primaryPanelBelowTerminal = terminalCenter.mountedPaneIndexes.includes(0)
-    ? TERMINAL_CENTER_SLOT_SENTINEL
-    : null;
+  const primaryHasFiles = Boolean(centerAuxPanelsNodeByPane.get(0));
+  const primaryHasTerminal = terminalCenter.mountedPaneIndexes.includes(0);
   const {
     centerView,
     setCenterView,
     requestCenterView,
     visible: centerSwitcherVisible,
   } = useCenterView(
-    primaryPanelBelowMessages,
-    primaryPanelBelowTerminal,
+    {
+      hasFiles: primaryHasFiles,
+      hasRequirements: memoOpen,
+      hasQuickActions: quickActionsOpen,
+      hasTerminal: primaryHasTerminal,
+    },
     false, // 单屏 primary 的 hideMessages 恒为 false
   );
   const handleCenterViewChange = useCallback(
@@ -1171,21 +1185,27 @@ export function AppWorkspaceLayout({
     },
     [setCenterView],
   );
-  // 三态 Segmented 选项：消息恒有；文件当 editor（或 memo）可见；终端当 pane 0 终端已挂载。
+  // Segmented 选项：消息恒有；各 aux slot 打开时各自占一个 tab（可同时存在）。
   const layoutLevelCenterSwitcherOptions = useMemo<Array<{ label: string; value: CenterView }>>(
     () => {
       const opts: Array<{ label: string; value: CenterView }> = [
         { label: "消息", value: "messages" },
       ];
-      if (primaryPanelBelowMessages) {
-        opts.push({ label: memoOpen ? "需求" : "文件", value: "files" });
+      if (primaryHasFiles) {
+        opts.push({ label: "文件", value: "files" });
       }
-      if (primaryPanelBelowTerminal) {
+      if (memoOpen) {
+        opts.push({ label: "需求", value: "requirements" });
+      }
+      if (quickActionsOpen) {
+        opts.push({ label: "快捷操作", value: "quickActions" });
+      }
+      if (primaryHasTerminal) {
         opts.push({ label: "终端", value: "terminal" });
       }
       return opts;
     },
-    [primaryPanelBelowMessages, primaryPanelBelowTerminal, memoOpen],
+    [primaryHasFiles, primaryHasTerminal, memoOpen, quickActionsOpen],
   );
 
   // 单屏下把 pane 0 的 requestCenterView 注册到跨层控制通道，供
@@ -1815,6 +1835,7 @@ export function AppWorkspaceLayout({
                             centerAuxPanelsNodeByPane={centerAuxPanelsNodeByPane}
                             centerAuxPanelsNodeByPaneVersion={centerAuxPanelsNodeByPaneVersion}
                             memoOpen={memoOpen}
+                            quickActionsOpen={quickActionsOpen}
                           />
                           </CenterViewControlContext.Provider>
                         </Suspense>
@@ -1945,6 +1966,8 @@ export function AppWorkspaceLayout({
               <Suspense fallback={null}>
                 <ConnectedRepositoryFilePreviewModal />
               </Suspense>
+
+              <WorkspaceRequirementCreateModal />
 
               <Suspense fallback={null}>
                 <LazyProgressMonitorDrawer {...progressMonitorDrawerProps} />

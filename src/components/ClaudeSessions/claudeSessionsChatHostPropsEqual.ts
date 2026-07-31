@@ -57,6 +57,8 @@ export function claudeSessionsChatHostPropsEqual(
   if (prev.hideMessages !== next.hideMessages) return false;
   if (prev.hideSessionTools !== next.hideSessionTools) return false;
   if (prev.panelBelowMessages !== next.panelBelowMessages) return false;
+  if (prev.panelBelowRequirements !== next.panelBelowRequirements) return false;
+  if (prev.panelBelowQuickActions !== next.panelBelowQuickActions) return false;
   if (prev.panelBelowTerminal !== next.panelBelowTerminal) return false;
   if (prev.centerAuxPanelsNodeByPaneVersion !== next.centerAuxPanelsNodeByPaneVersion) return false;
   if (prev.omcBatchPipelineActive !== next.omcBatchPipelineActive) return false;
@@ -83,6 +85,8 @@ export function claudeSessionsChatHostPropsEqual(
       "paneRepoTreeData",
       "projectsById",
       "panelBelowMessages",
+      "panelBelowRequirements",
+      "panelBelowQuickActions",
       "panelBelowTerminal",
     ],
     skipFunctions: true,

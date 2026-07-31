@@ -11,6 +11,9 @@ import {
 /** 全局需求列表（SQLite app_settings） */
 export const WORKSPACE_REQUIREMENTS_SETTING_KEY = "wise.workspaceRequirements.v1";
 
+/** 需求列表落库后广播，供需求面板刷新（全局新增弹窗与面板列表解耦）。 */
+export const WISE_WORKSPACE_REQUIREMENTS_CHANGED = "wise:workspace-requirements-changed";
+
 /** 是否已尝试从旧备忘录 Markdown 迁移一次 */
 const WORKSPACE_REQUIREMENTS_MEMO_MIGRATED_KEY = "wise.workspaceRequirements.memoMigrated.v1";
 
@@ -51,5 +54,12 @@ export async function saveWorkspaceRequirements(
 ): Promise<WorkspaceRequirementsPayloadV1> {
   const next = mergeWorkspaceRequirementsPayload(items);
   await setAppSetting(WORKSPACE_REQUIREMENTS_SETTING_KEY, JSON.stringify(next));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent<WorkspaceRequirementsPayloadV1>(WISE_WORKSPACE_REQUIREMENTS_CHANGED, {
+        detail: next,
+      }),
+    );
+  }
   return next;
 }

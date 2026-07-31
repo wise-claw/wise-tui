@@ -15,11 +15,44 @@ import {
   messageTextLooksLikeOmcDispatch,
   parseOmcSlashCommandFromUserText,
 } from "../../utils/omcUserMessageText";
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { buildConventionalCommitFallback } from "../../utils/conventionalCommitMessage";
 import { isDisplayNoiseUserMessageText } from "../../utils/claudeChatMessageDisplay";
 import { resolveSessionListPreviewSource } from "../../utils/sessionListPreview";
 import type { CenterView } from "./ClaudeChat";
+
+export type CenterViewSlotPresence = {
+  hasFiles: boolean;
+  hasRequirements: boolean;
+  hasQuickActions: boolean;
+  hasTerminal: boolean;
+};
+
+function isCenterViewSlotAvailable(view: CenterView, slots: CenterViewSlotPresence): boolean {
+  switch (view) {
+    case "messages":
+      return true;
+    case "files":
+      return slots.hasFiles;
+    case "requirements":
+      return slots.hasRequirements;
+    case "quickActions":
+      return slots.hasQuickActions;
+    case "terminal":
+      return slots.hasTerminal;
+    default:
+      return false;
+  }
+}
+
+/** slot 关闭时的回退优先级：文件 → 需求 → 快捷操作 → 终端 → 消息。 */
+export function fallbackCenterView(slots: CenterViewSlotPresence): CenterView {
+  if (slots.hasFiles) return "files";
+  if (slots.hasRequirements) return "requirements";
+  if (slots.hasQuickActions) return "quickActions";
+  if (slots.hasTerminal) return "terminal";
+  return "messages";
+}
 
 /**
  * 中栏视图在 slot 有无变化后的解析结果（纯函数，供 useCenterView 与单测共用）。
@@ -30,47 +63,48 @@ import type { CenterView } from "./ClaudeChat";
 export function resolveCenterViewAfterSlotChange(input: {
   centerView: CenterView;
   hasFiles: boolean;
+  hasRequirements?: boolean;
+  hasQuickActions?: boolean;
   hasTerminal: boolean;
   userChosen: boolean;
   pending: CenterView | null;
 }): { centerView: CenterView; pending: CenterView | null } {
+  const slots: CenterViewSlotPresence = {
+    hasFiles: input.hasFiles,
+    hasRequirements: Boolean(input.hasRequirements),
+    hasQuickActions: Boolean(input.hasQuickActions),
+    hasTerminal: input.hasTerminal,
+  };
+
   let pending = input.pending;
-  if (pending === "files" && input.hasFiles) pending = null;
-  else if (pending === "terminal" && input.hasTerminal) pending = null;
+  if (pending != null && pending !== "messages" && isCenterViewSlotAvailable(pending, slots)) {
+    pending = null;
+  }
 
   let centerView = input.centerView;
-  if (centerView === "files" && !input.hasFiles) {
-    if (pending !== "files") {
-      centerView = input.hasTerminal ? "terminal" : "messages";
-    }
-  } else if (centerView === "terminal" && !input.hasTerminal) {
-    if (pending !== "terminal") {
-      centerView = input.hasFiles ? "files" : "messages";
+  if (centerView !== "messages" && !isCenterViewSlotAvailable(centerView, slots)) {
+    // pending 指向当前视图时保持（目标 panel 尚未挂上）。
+    if (pending !== centerView) {
+      centerView = fallbackCenterView(slots);
     }
   }
 
   // 冷启动跟随：仅 messages 且无用户闩、无 pending 时。
-  if (
-    !input.userChosen &&
-    pending == null &&
-    centerView === "messages"
-  ) {
-    if (input.hasFiles) centerView = "files";
-    else if (input.hasTerminal) centerView = "terminal";
+  if (!input.userChosen && pending == null && centerView === "messages") {
+    const cold = fallbackCenterView(slots);
+    if (cold !== "messages") centerView = cold;
   }
 
   return { centerView, pending };
 }
 
 /**
- * 中栏「消息/文件/终端」视图切换状态：有编辑器时默认「文件」，无编辑器但有
- * 终端时默认「终端」，都没有回「消息」。状态提升到 pane 组件 / 会话壳层，供顶栏
+ * 中栏「消息/文件/需求/快捷操作/终端」视图切换状态。有任一 aux slot 时默认跟到
+ * 优先级最高的可用 slot，都没有回「消息」。状态提升到 pane 组件 / 会话壳层，供顶栏
  * Segmented 与 ClaudeChat 共享同一份视图。effect 只依赖「下方面板有无」布尔，
- * 不依赖 ReactNode identity：终端/文件节点重渲换引用时不应把用户已选的视图
- * 强行拽回其它项。
+ * 不依赖 ReactNode identity：节点重渲换引用时不应把用户已选的视图强行拽回其它项。
  *
- * editor 与 terminal 是两个独立 slot（`panelBelowMessages` / `panelBelowTerminal`），
- * DOM 中并存；effect 仅在「某 slot 卸载」时把视图回退到另一个可用 slot 或 messages。
+ * 各 slot 独立并存；effect 仅在「某 slot 卸载」时把视图回退到另一个可用 slot 或 messages。
  *
  * 两套 setter：
  * - `setCenterView`：顶栏 Segmented 用户点击；置位 userChosen，阻止 slot 抖动拽回。
@@ -79,8 +113,7 @@ export function resolveCenterViewAfterSlotChange(input: {
  *   的竞态（表现为点 git/文件树打开文件后仍停在消息 tab）。
  */
 export function useCenterView(
-  panelBelowMessages: ReactNode,
-  panelBelowTerminal: ReactNode,
+  slots: CenterViewSlotPresence,
   hideMessages: boolean,
 ): {
   centerView: CenterView;
@@ -90,13 +123,12 @@ export function useCenterView(
 } {
   const [centerView, setCenterViewRaw] = useState<CenterView>("messages");
   // 用户从未在顶栏 Segmented 显式选过视图时，才允许 effect 在 slot 变化时自动跟随；
-  // 一旦用户点过任何视图（包括「消息」），就不再被 effect 强行拽回 files/terminal，
+  // 一旦用户点过任何视图（包括「消息」），就不再被 effect 强行拽回其它 slot，
   // 避免「打开 git diff → 切到消息 → 立刻被 effect 拽回文件视图」的回归。
   const userChosenViewRef = useRef(false);
   // 程序化切视图时目标 panel 可能尚未挂载；fallback 不得在 pending 期间打回 messages。
   const pendingProgrammaticViewRef = useRef<CenterView | null>(null);
-  const hasFiles = Boolean(panelBelowMessages);
-  const hasTerminal = Boolean(panelBelowTerminal);
+  const { hasFiles, hasRequirements, hasQuickActions, hasTerminal } = slots;
   const setCenterView = useCallback((view: CenterView) => {
     userChosenViewRef.current = true;
     pendingProgrammaticViewRef.current = null;
@@ -112,6 +144,8 @@ export function useCenterView(
     const next = resolveCenterViewAfterSlotChange({
       centerView,
       hasFiles,
+      hasRequirements,
+      hasQuickActions,
       hasTerminal,
       userChosen: userChosenViewRef.current,
       pending: pendingProgrammaticViewRef.current,
@@ -120,12 +154,13 @@ export function useCenterView(
     if (next.centerView !== centerView) {
       setCenterViewRaw(next.centerView);
     }
-  }, [centerView, hasFiles, hasTerminal]);
+  }, [centerView, hasFiles, hasRequirements, hasQuickActions, hasTerminal]);
   return {
     centerView,
     setCenterView,
     requestCenterView,
-    visible: !hideMessages && (hasFiles || hasTerminal),
+    visible:
+      !hideMessages && (hasFiles || hasRequirements || hasQuickActions || hasTerminal),
   };
 }
 

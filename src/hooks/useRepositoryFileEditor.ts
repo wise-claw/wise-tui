@@ -38,7 +38,6 @@ import {
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { setRepositoryEditorDirtyPaths } from "../stores/repositoryEditorDirtyPathsStore";
 import { requestPaneCenterView } from "../stores/paneCenterViewControlStore";
-import { closeWorkspaceMemoPanel } from "../stores/workspaceMemoPanelStore";
 import { refreshGitRepositoryUi } from "../services/gitRepositoryUiRefresh";
 
 /** 外部变更触发磁盘重读的合并节流间隔（毫秒）。git-changed、窗口聚焦、轮询共用。 */
@@ -991,11 +990,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
       // 切到「文件」视图。binary / external 已提前 return；editorVisible 未翻转时
       // ClaudeChat 渲染守卫仍显示消息视图，无空白。paneIndex 为目标 pane（hook 由
       // 对应 PaneEditorHost 持有，恒等于文件实际显示的 pane）。
-      // 备忘录与终端已是独立 slot（panelBelowMessages / panelBelowTerminal），
-      // 不再 collapse 终端——否则 Segmented「终端」仍可选但面板被收起，中栏白屏。
-      if (paneIndex === 0) {
-        closeWorkspaceMemoPanel();
-      }
+      // 需求 / 快捷操作 / 终端已是独立 CenterView slot，打开文件不再关闭它们。
       requestPaneCenterView(paneIndex, "files");
       if (opts?.fromCommitCompare) {
         void loadCommitCompareDiffFile(

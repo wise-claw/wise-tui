@@ -181,4 +181,30 @@ describe("claudeChatHelpers", () => {
       }),
     ).toEqual({ centerView: "files", pending: null });
   });
+
+  test("resolveCenterViewAfterSlotChange keeps requirements and quickActions as peer slots", () => {
+    expect(
+      resolveCenterViewAfterSlotChange({
+        centerView: "requirements",
+        hasFiles: false,
+        hasRequirements: true,
+        hasQuickActions: true,
+        hasTerminal: false,
+        userChosen: true,
+        pending: null,
+      }),
+    ).toEqual({ centerView: "requirements", pending: null });
+
+    expect(
+      resolveCenterViewAfterSlotChange({
+        centerView: "requirements",
+        hasFiles: false,
+        hasRequirements: false,
+        hasQuickActions: true,
+        hasTerminal: false,
+        userChosen: true,
+        pending: null,
+      }),
+    ).toEqual({ centerView: "quickActions", pending: null });
+  });
 });

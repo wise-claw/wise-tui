@@ -56,7 +56,8 @@ import { Topbar, type PaneTopbarSharedProps } from "./Topbar";
 import { CenterViewControlContext, useCenterView } from "./claudeChatHelpers";
 import { registerPaneCenterViewSetter, syncPaneCenterView } from "../../stores/paneCenterViewControlStore";
 import { useWorkspaceMemoPanelOpen } from "../../stores/workspaceMemoPanelStore";
-  import {
+import { useWorkspaceQuickActionsPanelOpen } from "../../stores/workspaceQuickActionsPanelStore";
+import {
   closeTerminalCenterPanelOnPane,
   collapseTerminalCenterPanelOnPane,
   openTerminalCenterPanel,
@@ -65,6 +66,7 @@ import { useWorkspaceMemoPanelOpen } from "../../stores/workspaceMemoPanelStore"
 } from "../../stores/terminalCenterPanelStore";
 import { TERMINAL_CENTER_SLOT_SENTINEL } from "../TerminalPanel/terminalCenterSlot";
 import { WORKSPACE_MEMO_PANEL_NODE } from "../WorkspaceMemoPanel";
+import { WORKSPACE_QUICK_ACTIONS_PANEL_NODE } from "../WorkspaceQuickActionsCenterPanel";
 import type { CenterView } from "./ClaudeChat";
 
 const TerminalPanelLazy = lazy(() =>
@@ -355,13 +357,18 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   );
 
   const memoOpen = useWorkspaceMemoPanelOpen();
+  const quickActionsOpen = useWorkspaceQuickActionsPanelOpen();
   const { terminalVisible, terminalMounted, terminalPanel } = usePaneLocalTerminalPanel(
     0,
     activeRepository,
   );
-  // editor / memo / terminal 是三个独立 slot，DOM 中并存，由 centerView 三态互斥显隐。
-  // 不再让 terminal 抢占 editor 的 panelBelowMessages（避免打开终端时把文件 tab 挤掉）。
-  const panelBelowMessages = memoOpen ? WORKSPACE_MEMO_PANEL_NODE : paneAuxLayout.panelBelowMessages;
+  // 文件 / 需求 / 快捷操作 / terminal：各自独立 slot，DOM 可并存，由 centerView 互斥显隐。
+  const panelBelowMessages = paneAuxLayout.panelBelowMessages;
+  const panelBelowRequirements =
+    paneAuxLayout.panelBelowRequirements ?? (memoOpen ? WORKSPACE_MEMO_PANEL_NODE : undefined);
+  const panelBelowQuickActions =
+    paneAuxLayout.panelBelowQuickActions ??
+    (quickActionsOpen ? WORKSPACE_QUICK_ACTIONS_PANEL_NODE : undefined);
   // 用 terminalMounted 布尔值作为 useCenterView 的信号（避免 ReactNode identity 变化触发自动切换），
   // 用 terminalPanel（实际终端面板）作为渲染内容（替代 sentinel 隐藏 div）。
   const {
@@ -370,15 +377,25 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
     requestCenterView,
     visible: centerSwitcherVisible,
   } = useCenterView(
-    panelBelowMessages,
-    terminalMounted ? TERMINAL_CENTER_SLOT_SENTINEL : null,
+    {
+      hasFiles: Boolean(panelBelowMessages),
+      hasRequirements: Boolean(panelBelowRequirements),
+      hasQuickActions: Boolean(panelBelowQuickActions),
+      hasTerminal: terminalMounted,
+    },
     paneAuxLayout.hideMessages,
   );
   const centerSwitcherOptions: Array<{ label: string; value: CenterView }> = [
     { label: "消息", value: "messages" },
   ];
   if (panelBelowMessages) {
-    centerSwitcherOptions.push({ label: memoOpen ? "需求" : "文件", value: "files" });
+    centerSwitcherOptions.push({ label: "文件", value: "files" });
+  }
+  if (panelBelowRequirements) {
+    centerSwitcherOptions.push({ label: "需求", value: "requirements" });
+  }
+  if (panelBelowQuickActions) {
+    centerSwitcherOptions.push({ label: "快捷操作", value: "quickActions" });
   }
   if (terminalMounted) {
     centerSwitcherOptions.push({ label: "终端", value: "terminal" });
@@ -500,6 +517,8 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         workflowGraphStatusByWorkflowId={shared.workflowGraphStatusByWorkflowId}
             onOpenTaskDetail={shared.onOpenTaskDetail}
             panelBelowMessages={panelBelowMessages}
+            panelBelowRequirements={panelBelowRequirements}
+            panelBelowQuickActions={panelBelowQuickActions}
             panelBelowTerminal={terminalPanel}
             hideMessages={paneAuxLayout.hideMessages}
             hideSessionTools={paneAuxLayout.hideSessionTools}
@@ -649,7 +668,7 @@ const MultiPaneExtraPaneCell = memo(
       absolutePaneIndex,
       resolvedRepo,
     );
-    // editor / terminal 是两个独立 slot，DOM 中并存，由 centerView 三态互斥显隐。
+    // 文件 / 终端独立 slot；需求/快捷操作仅挂 pane 0，extra pane 不展示。
     const panelBelowMessages = paneAuxLayout.panelBelowMessages;
     const {
       centerView,
@@ -657,8 +676,12 @@ const MultiPaneExtraPaneCell = memo(
       requestCenterView,
       visible: centerSwitcherVisible,
     } = useCenterView(
-      panelBelowMessages,
-      terminalMounted ? TERMINAL_CENTER_SLOT_SENTINEL : null,
+      {
+        hasFiles: Boolean(panelBelowMessages),
+        hasRequirements: false,
+        hasQuickActions: false,
+        hasTerminal: terminalMounted,
+      },
       hidePaneMessages,
     );
     const centerSwitcherOptions: Array<{ label: string; value: CenterView }> = [
@@ -1073,6 +1096,8 @@ const MultiPaneExtraPaneCell = memo(
     prev.paneRepoTreeData === next.paneRepoTreeData &&
     prev.projectsById === next.projectsById &&
     prev.paneAuxLayout.panelBelowMessages === next.paneAuxLayout.panelBelowMessages &&
+    prev.paneAuxLayout.panelBelowRequirements === next.paneAuxLayout.panelBelowRequirements &&
+    prev.paneAuxLayout.panelBelowQuickActions === next.paneAuxLayout.panelBelowQuickActions &&
     prev.paneAuxLayout.hideMessages === next.paneAuxLayout.hideMessages &&
     prev.paneAuxLayout.hideSessionTools === next.paneAuxLayout.hideSessionTools,
 );

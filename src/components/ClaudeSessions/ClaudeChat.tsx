@@ -268,11 +268,15 @@ interface Props {
   workflowGraphStatusByWorkflowId?: Record<string, string>;
   onOpenTaskDetail?: (taskId: string) => void;
   panelBelowMessages?: React.ReactNode;
-  /** 内置终端节点；与 panelBelowMessages 在 DOM 中并存，由 centerView 互斥显隐。 */
+  /** 需求管理中栏节点；与文件/快捷操作/终端在 DOM 中可并存，由 centerView 互斥显隐。 */
+  panelBelowRequirements?: React.ReactNode;
+  /** 快捷操作中栏节点；与文件/需求/终端在 DOM 中可并存，由 centerView 互斥显隐。 */
+  panelBelowQuickActions?: React.ReactNode;
+  /** 内置终端节点；与其它中栏 slot 在 DOM 中并存，由 centerView 互斥显隐。 */
   panelBelowTerminal?: React.ReactNode;
   hideMessages?: boolean;
   hideSessionTools?: boolean;
-  /** 中栏当前视图（由顶栏切换器控制）：messages=消息列表，files=文件编辑器。无编辑器时忽略。 */
+  /** 中栏当前视图（由顶栏切换器控制）。无对应 panel 时忽略。 */
   centerView?: CenterView;
   /**
    * 中栏「消息通知」浮层；默认关闭（有未读也不展示）。顶栏铃铛收件箱不受影响。
@@ -424,6 +428,8 @@ export function ClaudeChatInner({
   workflowGraphStatusByWorkflowId = {},
   onOpenTaskDetail,
   panelBelowMessages,
+  panelBelowRequirements,
+  panelBelowQuickActions,
   panelBelowTerminal,
   hideMessages = false,
   hideSessionTools = false,
@@ -1861,27 +1867,37 @@ export function ClaudeChatInner({
     }
   }, [session.id]);
 
-  // 防御：centerView 指向某 slot 但对应 panel 已卸挂时，不得三栏全隐成白屏
+  // 防御：centerView 指向某 slot 但对应 panel 已卸挂时，不得全隐成白屏
   // （典型：终端被 collapse 后 Segmented 仍停在 terminal）。
-  const effectiveCenterView: CenterView =
-    centerView === "terminal" && !panelBelowTerminal
-      ? panelBelowMessages
-        ? "files"
-        : "messages"
-      : centerView === "files" && !panelBelowMessages
-        ? panelBelowTerminal
-          ? "terminal"
-          : "messages"
-        : centerView;
+  const hasFilesPanel = Boolean(panelBelowMessages);
+  const hasRequirementsPanel = Boolean(panelBelowRequirements);
+  const hasQuickActionsPanel = Boolean(panelBelowQuickActions);
+  const hasTerminalPanel = Boolean(panelBelowTerminal);
+  const hasAnyAuxPanel =
+    hasFilesPanel || hasRequirementsPanel || hasQuickActionsPanel || hasTerminalPanel;
+  const effectiveCenterView: CenterView = (() => {
+    if (centerView === "messages") return "messages";
+    if (centerView === "files" && hasFilesPanel) return "files";
+    if (centerView === "requirements" && hasRequirementsPanel) return "requirements";
+    if (centerView === "quickActions" && hasQuickActionsPanel) return "quickActions";
+    if (centerView === "terminal" && hasTerminalPanel) return "terminal";
+    if (hasFilesPanel) return "files";
+    if (hasRequirementsPanel) return "requirements";
+    if (hasQuickActionsPanel) return "quickActions";
+    if (hasTerminalPanel) return "terminal";
+    return "messages";
+  })();
 
   const messagesPaneVisible =
-    !hideMessages &&
-    (!panelBelowMessages || effectiveCenterView === "messages") &&
-    (!panelBelowTerminal || effectiveCenterView === "messages");
+    !hideMessages && (!hasAnyAuxPanel || effectiveCenterView === "messages");
   const filesPaneVisible =
-    Boolean(panelBelowMessages) && (hideMessages || effectiveCenterView === "files");
+    hasFilesPanel && (hideMessages || effectiveCenterView === "files");
+  const requirementsPaneVisible =
+    hasRequirementsPanel && (hideMessages || effectiveCenterView === "requirements");
+  const quickActionsPaneVisible =
+    hasQuickActionsPanel && (hideMessages || effectiveCenterView === "quickActions");
   const terminalPaneVisible =
-    Boolean(panelBelowTerminal) && (hideMessages || effectiveCenterView === "terminal");
+    hasTerminalPanel && (hideMessages || effectiveCenterView === "terminal");
 
   return (
     <div
@@ -1923,8 +1939,7 @@ export function ClaudeChatInner({
             hideMessagesScroll={
               hideMessages ||
               deferHeavySubtree ||
-              (Boolean(panelBelowMessages) && effectiveCenterView === "files") ||
-              (Boolean(panelBelowTerminal) && effectiveCenterView === "terminal")
+              (hasAnyAuxPanel && effectiveCenterView !== "messages")
             }
             fullTranscriptLoading={fullTranscriptLoading}
             onReloadFullDiskTranscript={onReloadFullDiskTranscript}
@@ -1953,6 +1968,12 @@ export function ClaudeChatInner({
        */}
       {panelBelowMessages && filesPaneVisible ? (
         <div className="app-claude-chat-center-pane">{panelBelowMessages}</div>
+      ) : null}
+      {panelBelowRequirements && requirementsPaneVisible ? (
+        <div className="app-claude-chat-center-pane">{panelBelowRequirements}</div>
+      ) : null}
+      {panelBelowQuickActions && quickActionsPaneVisible ? (
+        <div className="app-claude-chat-center-pane">{panelBelowQuickActions}</div>
       ) : null}
       {panelBelowTerminal ? (
         <div

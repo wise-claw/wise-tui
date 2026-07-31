@@ -126,18 +126,19 @@ describe("terminalCenterPanelStore", () => {
     expect(getTerminalCenterPanelState().mountedPaneIndexes).toEqual([0]);
   });
 
-  test("open on pane 0 closes memo; open memo does not collapse terminal (independent slots)", () => {
+  test("open terminal and memo stay independent peer slots", () => {
     openWorkspaceMemoPanel();
     expect(getWorkspaceMemoPanelOpen()).toBe(true);
 
     openTerminalCenterPanel(0);
-    expect(getWorkspaceMemoPanelOpen()).toBe(false);
+    // 需求与终端各自独立 slot，打开终端不再关闭需求面板
+    expect(getWorkspaceMemoPanelOpen()).toBe(true);
     expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
+    expect(getPaneCenterView(0)).toBe("terminal");
 
     openTerminalCenterPanel(1);
     openWorkspaceMemoPanel();
     expect(getWorkspaceMemoPanelOpen()).toBe(true);
-    // 备忘录与终端独立 slot，打开备忘录不再收起任一屏终端
     expect(isTerminalCenterPanelVisibleOnPane(1)).toBe(true);
     expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
   });

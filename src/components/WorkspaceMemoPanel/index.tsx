@@ -28,14 +28,20 @@ import { readComposerImageAsDataUrl } from "../../services/readComposerImage";
 import {
   loadWorkspaceRequirements,
   saveWorkspaceRequirements,
+  WISE_WORKSPACE_REQUIREMENTS_CHANGED,
 } from "../../services/workspaceRequirementsStore";
-import { closeWorkspaceMemoPanel } from "../../stores/workspaceMemoPanelStore";
+import {
+  closeWorkspaceMemoPanel,
+  requestWorkspaceRequirementCreate,
+} from "../../stores/workspaceMemoPanelStore";
+import { ErrorBoundary } from "../ErrorBoundary";
 import type { MilkdownEditorHandle } from "../MilkdownViewer";
 import { MilkdownSyntaxToolbar } from "../MilkdownViewer/MilkdownSyntaxToolbar";
 import {
   createWorkspaceRequirementItem,
   deriveRequirementTitle,
   type WorkspaceRequirementItem,
+  type WorkspaceRequirementsPayloadV1,
 } from "../../types/workspaceRequirements";
 import "./index.css";
 
@@ -222,6 +228,8 @@ export function WorkspaceMemoPanel() {
   itemsRef.current = items;
   const draftBodyRef = useRef("");
   const editorRef = useRef<MilkdownEditorHandle | null>(null);
+  const editorOpenRef = useRef(editorOpen);
+  editorOpenRef.current = editorOpen;
 
   const persist = useCallback(async (next: WorkspaceRequirementItem[]) => {
     setSaving(true);
@@ -262,12 +270,22 @@ export function WorkspaceMemoPanel() {
     };
   }, []);
 
+  // 全局新增弹窗保存后同步列表（不依赖本面板是否打开过 create）。
+  useEffect(() => {
+    function onRequirementsChanged(event: Event) {
+      const detail = (event as CustomEvent<WorkspaceRequirementsPayloadV1>).detail;
+      if (!detail || !Array.isArray(detail.items)) return;
+      if (!mountedRef.current) return;
+      setItems(detail.items);
+    }
+    window.addEventListener(WISE_WORKSPACE_REQUIREMENTS_CHANGED, onRequirementsChanged);
+    return () => {
+      window.removeEventListener(WISE_WORKSPACE_REQUIREMENTS_CHANGED, onRequirementsChanged);
+    };
+  }, []);
+
   const openCreate = useCallback(() => {
-    setEditingId(null);
-    setDraftBody("");
-    draftBodyRef.current = "";
-    setEditorKey((k) => k + 1);
-    setEditorOpen(true);
+    requestWorkspaceRequirementCreate();
   }, []);
 
   const openEdit = useCallback((item: WorkspaceRequirementItem) => {
@@ -405,14 +423,13 @@ export function WorkspaceMemoPanel() {
     closeWorkspaceMemoPanel();
   }, []);
 
-  // ⌘W / Ctrl+W：需求面板打开时关闭（与文件/终端 tab 关闭一致）。
-  // 列表多为不可聚焦节点，不要求焦点在面板内；编辑弹窗打开或焦点在终端内时不抢键。
+  // ⌘W / Ctrl+W：关闭需求面板。新增走 AppImpl 全局 ⌘A（仅弹窗，不切 tab）。
   useEffect(() => {
     function handleCloseShortcut(event: KeyboardEvent) {
       const mod = event.metaKey || event.ctrlKey;
       if (!mod || event.shiftKey || event.altKey) return;
       if (event.key !== "w" && event.key !== "W" && event.code !== "KeyW") return;
-      if (editorOpen) return;
+      if (editorOpenRef.current) return;
 
       const target = event.target;
       if (target instanceof Element && target.closest(".terminal-panel")) return;
@@ -423,15 +440,15 @@ export function WorkspaceMemoPanel() {
     }
     window.addEventListener("keydown", handleCloseShortcut, { capture: true });
     return () => window.removeEventListener("keydown", handleCloseShortcut, { capture: true });
-  }, [handleClose, editorOpen]);
+  }, [handleClose]);
 
   const openItems = items.filter((item) => item.status === "open");
   const doneItems = items.filter((item) => item.status === "done");
   const draftImageCount = countMarkdownImages(draftBody);
-  const closeShortcutLabel =
-    typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform)
-      ? "⌘W"
-      : "Ctrl+W";
+  const isMacShortcut =
+    typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform);
+  const closeShortcutLabel = isMacShortcut ? "⌘W" : "Ctrl+W";
+  const createShortcutLabel = isMacShortcut ? "⌘A" : "Ctrl+A";
 
   return (
     <div
@@ -453,7 +470,14 @@ export function WorkspaceMemoPanel() {
             <span className="app-workspace-memo-panel__save-status">
               {saving ? "保存中…" : `${openItems.length} 项待办`}
             </span>
-            <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
+            <Button
+              type="primary"
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={openCreate}
+              title={`新增需求（${createShortcutLabel}）`}
+              aria-label={`新增需求（${createShortcutLabel}）`}
+            >
               新增
             </Button>
             <Button
@@ -478,9 +502,15 @@ export function WorkspaceMemoPanel() {
             {items.length === 0 ? (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="暂无需求，点击「新增」编写图文需求后再派发"
+                description={`暂无需求，点击「新增」或按 ${createShortcutLabel} 编写图文需求后再派发`}
               >
-                <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={openCreate}
+                  title={`新增需求（${createShortcutLabel}）`}
+                  aria-label={`新增需求（${createShortcutLabel}）`}
+                >
                   新增需求
                 </Button>
               </Empty>
@@ -518,8 +548,8 @@ export function WorkspaceMemoPanel() {
       </div>
 
       <Modal
-        title={editingId ? "编辑需求" : "新增需求"}
-        open={editorOpen}
+        title="编辑需求"
+        open={editorOpen && editingId != null}
         onOk={() => void saveEditor()}
         onCancel={() => {
           setEditorOpen(false);
@@ -530,35 +560,47 @@ export function WorkspaceMemoPanel() {
         confirmLoading={saving}
         destroyOnHidden
         width={720}
-        mask={{ closable: true }}
+        centered
+        zIndex={10000}
+        getContainer={() => document.body}
+        mask={{ closable: false }}
+        keyboard
         className="app-workspace-requirements-edit-modal"
+        rootClassName="app-workspace-requirements-edit-modal-root"
       >
         <Typography.Paragraph type="secondary" className="app-workspace-requirements-panel__edit-hint">
           支持粘贴 / 拖入图片。保存后图片会落到本地 `~/.wise/composer-images/`，派发时以
           `@当前执行环境` + 文字 + 本地路径开 worker，不占主会话。
           {draftImageCount > 0 ? ` 当前草稿含 ${draftImageCount} 张图。` : null}
         </Typography.Paragraph>
-        <Suspense
-          fallback={
-            <div className="app-file-editor-loading">
-              <Spin size="small" />
-            </div>
-          }
-        >
-          <RequirementMilkdownEditor
-            editorRef={editorRef}
-            editorKey={editorKey}
-            initialBody={draftBody}
-            onChange={(md) => {
-              draftBodyRef.current = md;
-              setDraftBody(md);
-            }}
-          />
-        </Suspense>
+        <ErrorBoundary type="local" fallbackTitle="需求编辑器加载失败">
+          <Suspense
+            fallback={
+              <div className="app-file-editor-loading">
+                <Spin size="small" />
+              </div>
+            }
+          >
+            <RequirementMilkdownEditor
+              editorRef={editorRef}
+              editorKey={editorKey}
+              initialBody={draftBody}
+              onChange={(md) => {
+                draftBodyRef.current = md;
+                setDraftBody(md);
+              }}
+            />
+          </Suspense>
+        </ErrorBoundary>
       </Modal>
     </div>
   );
 }
 
+/** Host 包装：稳定节点 identity 不变，HMR 时仍渲染最新 WorkspaceMemoPanel。 */
+function WorkspaceMemoPanelHost() {
+  return <WorkspaceMemoPanel />;
+}
+
 /** 稳定节点：写入 `panelBelowMessages` 时 identity 不随 layout 重渲变化。 */
-export const WORKSPACE_MEMO_PANEL_NODE = <WorkspaceMemoPanel />;
+export const WORKSPACE_MEMO_PANEL_NODE = <WorkspaceMemoPanelHost />;

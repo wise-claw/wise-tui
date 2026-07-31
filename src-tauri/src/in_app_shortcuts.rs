@@ -152,7 +152,12 @@ pub fn register_search_shortcuts(app: &AppHandle) -> Result<(), String> {
                 if !main_window_focused(&app_for_new_session) {
                     return;
                 }
-                let _ = app_for_new_session.emit("global-create-new-session", ());
+                // 只发给当前聚焦主窗，避免多窗/HMR 下事件落到未开需求面板的 webview。
+                crate::main_window::emit_to_focused_main_workspace_window(
+                    &app_for_new_session,
+                    "global-create-new-session",
+                    (),
+                );
             })
             .map_err(|e| e.to_string())?;
 

@@ -104,6 +104,7 @@ import { WISE_UI_EVENT_NAVIGATE, type WiseUiNavigationDetail } from "./constants
 import { requestClaudePluginHubTab } from "./stores/claudePluginHubNavStore";
 import { getActivePaneIndex } from "./stores/activePaneIndexStore";
 import { requestPaneCenterView } from "./stores/paneCenterViewControlStore";
+import { requestWorkspaceRequirementCreate } from "./stores/workspaceMemoPanelStore";
 import { reloadAppWindow } from "./services/window";
 import {
   getCurrentMainWorkspaceWindowLabel,
@@ -2460,9 +2461,29 @@ export default function App() {
         void wiseMascotShow().catch(() => {});
         return;
       }
+      // ⌘A / Ctrl+A：弹出「新增需求」弹窗（不打开 / 不切换需求 tab）。
+      // 输入框 / contentEditable 内保留系统「全选」，不拦截。
+      if (
+        mod &&
+        !e.shiftKey &&
+        !e.altKey &&
+        (e.code === "KeyA" || e.key === "a" || e.key === "A")
+      ) {
+        const target = e.target;
+        if (target instanceof Element) {
+          if (target.closest(".terminal-panel")) return;
+          const tag = target.tagName;
+          if (tag === "INPUT" || tag === "TEXTAREA" || target.closest("[contenteditable=\"true\"], [contenteditable=\"\"]")) {
+            return;
+          }
+        }
+        e.preventDefault();
+        requestWorkspaceRequirementCreate();
+        return;
+      }
       // Cmd/Ctrl+R：捕获阶段处理，避免焦点在 contentEditable / AntD 内部时冒泡不到 window；
       // 用 code===KeyR 对齐物理 R 键（与系统刷新一致）
-      if (mod && (e.code === "KeyR" || e.key === "r" || e.key === "R")) {
+      if (mod && !e.shiftKey && (e.code === "KeyR" || e.key === "r" || e.key === "R")) {
         e.preventDefault();
         void reloadAppWindow();
       }

@@ -47,6 +47,10 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
         description: "为当前仓库新建一个对话会话。",
       },
       {
+        keys: "⌘A · Ctrl+A",
+        description: "弹出「新增需求」弹窗（不切换需求 tab）。焦点在输入框内时仍为系统全选。",
+      },
+      {
         keys: "Esc",
         description: "焦点在会话输入框内且无 @ / 补全菜单时：撤销上一步编辑（与 Ctrl+Z 同一栈）。",
       },
@@ -57,7 +61,7 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
       {
         keys: "⌘W · Ctrl+W",
         description:
-          "焦点在终端面板内时：关闭当前终端标签；仅剩一个时同时关闭面板。需求面板打开且未在编辑弹窗时：关闭需求面板。",
+          "焦点在终端面板内时：关闭当前终端标签；仅剩一个时同时关闭面板。需求面板打开且未在编辑弹窗时：关闭需求面板。快捷操作面板打开且未在编辑弹窗时：关闭快捷操作面板。",
       },
       {
         keys: "⌘F · Ctrl+F",

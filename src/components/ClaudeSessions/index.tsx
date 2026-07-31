@@ -206,6 +206,8 @@ export interface ClaudeSessionsProps {
   workflowGraphStatusByWorkflowId?: Record<string, string>;
   onOpenTaskDetail?: (taskId: string) => void;
   panelBelowMessages?: React.ReactNode;
+  panelBelowRequirements?: React.ReactNode;
+  panelBelowQuickActions?: React.ReactNode;
   hideMessages?: boolean;
   hideSessionTools?: boolean;
   /** 中栏「消息/文件」视图当前值（由 layout 壳层提升持有，全局 Topbar 的 Segmented
@@ -343,6 +345,8 @@ function ClaudeSessionsShell({
   workflowGraphStatusByWorkflowId = {},
   onOpenTaskDetail,
   panelBelowMessages,
+  panelBelowRequirements,
+  panelBelowQuickActions,
   centerView,
   hideMessages = false,
   hideSessionTools = false,
@@ -770,6 +774,14 @@ function ClaudeSessionsShell({
   );
 
   const effectivePanelBelowMessages = resolveCenterPanel(panelBelowMessages, 0);
+  const effectivePanelBelowRequirements = resolveCenterPanel(
+    panelBelowRequirements ?? resolvePaneAuxLayout?.(0)?.panelBelowRequirements,
+    0,
+  );
+  const effectivePanelBelowQuickActions = resolveCenterPanel(
+    panelBelowQuickActions ?? resolvePaneAuxLayout?.(0)?.panelBelowQuickActions,
+    0,
+  );
   const effectivePanelBelowTerminal = resolveCenterPanel(
     resolvePaneAuxLayout?.(0)?.panelBelowTerminal,
     0,
@@ -787,6 +799,16 @@ function ClaudeSessionsShell({
       return {
         ...base,
         panelBelowMessages: resolveCenterPanel(base.panelBelowMessages, paneIndex),
+        panelBelowRequirements: resolveCenterPanel(
+          base.panelBelowRequirements ??
+            (paneIndex === 0 ? panelBelowRequirements : undefined),
+          paneIndex,
+        ),
+        panelBelowQuickActions: resolveCenterPanel(
+          base.panelBelowQuickActions ??
+            (paneIndex === 0 ? panelBelowQuickActions : undefined),
+          paneIndex,
+        ),
         panelBelowTerminal: resolveCenterPanel(base.panelBelowTerminal, paneIndex),
       };
     },
@@ -794,6 +816,8 @@ function ClaudeSessionsShell({
       hideMessages,
       hideSessionTools,
       panelBelowMessages,
+      panelBelowRequirements,
+      panelBelowQuickActions,
       resolveCenterPanel,
       resolvePaneAuxLayout,
     ],
@@ -913,6 +937,8 @@ function ClaudeSessionsShell({
           workflowGraphStatusByWorkflowId={workflowGraphStatusByWorkflowId}
           onOpenTaskDetail={onOpenTaskDetail}
           panelBelowMessages={effectivePanelBelowMessages}
+          panelBelowRequirements={effectivePanelBelowRequirements}
+          panelBelowQuickActions={effectivePanelBelowQuickActions}
           panelBelowTerminal={effectivePanelBelowTerminal}
           centerView={centerView}
           hideMessages={hideMessages}
