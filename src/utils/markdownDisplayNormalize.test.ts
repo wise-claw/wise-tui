@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   breakCollapsedPipeTableOnLine,
+  repairLoosePipeTableSyntax,
   containsStreamingHtmlMarkup,
   htmlDocumentToMarkdown,
   isBareShellCommandLine,
@@ -247,6 +248,67 @@ describe("recoverSplitPipeTableBlocks", () => {
     ].join("\n");
     const out = recoverSplitPipeTableBlocks(input);
     expect(out).toBe(input);
+  });
+});
+
+describe("repairLoosePipeTableSyntax", () => {
+  test("repairs missing leading pipes and bare --------------| separators", () => {
+    const input = [
+      "| 视图 | 干什么 |",
+      "--------------|",
+      "**chat** | 默认主屏：Claude 多屏会话、Composer、文件编辑 |",
+      "**cockpit** | 驾驶舱：助手 Hub、MCP、Skills、自动化 |",
+      "**author** | 配置中心：工作区/Agent/工作流/通道等 20 个子页 |",
+      "**inspect** | 叠层：MCP Hub / Skills Hub 快捷入口 |",
+    ].join("\n");
+    const out = repairLoosePipeTableSyntax(input);
+    expect(out).toContain("| --- | --- |");
+    expect(out).not.toContain("--------------|");
+    expect(out).toContain("| **chat** | 默认主屏：Claude 多屏会话、Composer、文件编辑 |");
+    expect(out).toContain("| **cockpit** | 驾驶舱：助手 Hub、MCP、Skills、自动化 |");
+    expect(out).toContain("| **author** | 配置中心：工作区/Agent/工作流/通道等 20 个子页 |");
+    expect(out).toContain("| **inspect** | 叠层：MCP Hub / Skills Hub 快捷入口 |");
+  });
+
+  test("end-to-end prepares module overview table as GFM <table>", async () => {
+    const { parseMarkdownSourceToHtml } = await import("./markdownRenderPipeline");
+    const input = [
+      "应用用 **ViewMode** 状态机切换四大视图：",
+      "",
+      "| 视图 | 干什么 |",
+      "--------------|",
+      "**chat** | 默认主屏：Claude 多屏会话、Composer、文件编辑 |",
+      "**cockpit** | 驾驶舱：助手 Hub、MCP、Skills、自动化 |",
+      "**author** | 配置中心：工作区/Agent/工作流/通道等 20 个子页 |",
+      "**inspect** | 叠层：MCP Hub / Skills Hub 快捷入口 |",
+    ].join("\n");
+    const prepared = prepareMarkdownForDisplay(input);
+    expect(prepared).toContain("| **chat** | 默认主屏：Claude 多屏会话、Composer、文件编辑 |");
+    expect(prepared).not.toMatch(/^\*\*chat\*\*\s*$/m);
+    expect(prepared).not.toContain("--------------|");
+
+    const html = parseMarkdownSourceToHtml(input, { streaming: false });
+    expect(html).toContain("<table");
+    expect(html).toContain("<th>视图</th>");
+    expect(html).toContain("<th>干什么</th>");
+    expect(html).toContain("<strong>chat</strong>");
+    expect(html).toContain("<strong>cockpit</strong>");
+    expect(html).toContain("默认主屏");
+    expect(html).not.toMatch(/<p>\| 视图/);
+  });
+
+  test("does not rewrite isolated prose that merely ends with a pipe", () => {
+    const input = "价格区间见说明 A | B |";
+    expect(repairLoosePipeTableSyntax(input)).toBe(input);
+  });
+
+  test("does not rewrite mid-cell notes that lack a trailing pipe", () => {
+    const input = [
+      "| ID | TITLE |",
+      "435528714 | 备注",
+      "| 1 | a |",
+    ].join("\n");
+    expect(repairLoosePipeTableSyntax(input)).toBe(input);
   });
 });
 

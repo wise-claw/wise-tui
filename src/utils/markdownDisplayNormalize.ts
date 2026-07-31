@@ -804,6 +804,107 @@ export function normalizePipeTables(text: string): string {
   return out.join("\n");
 }
 
+/**
+ * 缺前导 `|` 的 pipe 行：`**chat** | 默认主屏：… |`
+ * 模型常这样写数据行；若直接交给 ensureBlankLineBeforePipeTables，会把首格拆成段落、
+ * 其余 `| … |` 裸显，整表崩坏。
+ */
+function isLoosePipeRow(trimmed: string): boolean {
+  if (!trimmed || trimmed.startsWith("|") || trimmed.startsWith("```")) return false;
+  if (!trimmed.endsWith("|")) return false;
+  // 至少两格：text|text|
+  return trimmed.slice(0, -1).includes("|");
+}
+
+/**
+ * 裸分隔行：`--------------|` / `--------------` / `---|---|---`（无完整首尾 `|`）。
+ * 已是 `| --- | --- |` 形态的交给 normalizeTableSeparatorRows。
+ */
+function isBareSeparatorLine(trimmed: string): boolean {
+  if (!trimmed) return false;
+  if (PIPE_TABLE_SEPARATOR_RE.test(trimmed)) return false;
+  if (/^:?-{3,}\|?$/.test(trimmed)) return true;
+  return /^:?-{3,}(?:\s*\|\s*:?-{3,})+\|?$/.test(trimmed) && !trimmed.startsWith("|");
+}
+
+function peekNonEmptyLine(lines: readonly string[], from: number, dir: -1 | 1): string | null {
+  let i = from + dir;
+  while (i >= 0 && i < lines.length) {
+    const trimmed = lines[i]!.trim();
+    if (trimmed) return trimmed;
+    i += dir;
+  }
+  return null;
+}
+
+function isPipeTableBoundaryLine(trimmed: string): boolean {
+  return (
+    PIPE_TABLE_ROW_RE.test(trimmed)
+    || PIPE_TABLE_SEPARATOR_RE.test(trimmed)
+    || isBareSeparatorLine(trimmed)
+    || isLoosePipeRow(trimmed)
+  );
+}
+
+function isInPipeTableContext(lines: readonly string[], index: number): boolean {
+  const prev = peekNonEmptyLine(lines, index, -1);
+  const next = peekNonEmptyLine(lines, index, 1);
+  return Boolean(
+    (prev && isPipeTableBoundaryLine(prev)) || (next && isPipeTableBoundaryLine(next)),
+  );
+}
+
+function countLooseOrPipeColumns(row: string): number {
+  const trimmed = row.trim();
+  if (PIPE_TABLE_ROW_RE.test(trimmed)) return countPipeColumns(trimmed);
+  if (isLoosePipeRow(trimmed)) return countPipeColumns(`| ${trimmed}`);
+  return 0;
+}
+
+function findPrecedingHeaderCols(lines: readonly string[], sepIndex: number): number {
+  for (let j = sepIndex - 1; j >= 0; j -= 1) {
+    const prev = lines[j]!.trim();
+    if (!prev) continue;
+    if (PIPE_TABLE_SEPARATOR_RE.test(prev) || isBareSeparatorLine(prev)) continue;
+    const cols = countLooseOrPipeColumns(prev);
+    if (cols >= 2) return cols;
+    break;
+  }
+  return 0;
+}
+
+/**
+ * 修复 LLM 常见的残缺 pipe 表语法，须在 ensureBlankLineBeforePipeTables 之前运行：
+ * 1. `--------------|` → `| --- | --- |`（按表头列数）
+ * 2. `**chat** | 说明 |` → `| **chat** | 说明 |`
+ */
+export function repairLoosePipeTableSyntax(text: string): string {
+  const lines = normalizePipeChars(text).split("\n");
+  const out: string[] = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]!;
+    const trimmed = line.trim();
+
+    if (isBareSeparatorLine(trimmed)) {
+      const headerCols = findPrecedingHeaderCols(lines, i);
+      if (headerCols >= 2) {
+        out.push(buildSeparatorRow(headerCols));
+        continue;
+      }
+    }
+
+    if (isLoosePipeRow(trimmed) && isInPipeTableContext(lines, i)) {
+      out.push(`| ${trimmed}`);
+      continue;
+    }
+
+    out.push(line);
+  }
+
+  return out.join("\n");
+}
+
 /** 确保 GFM 表格块前有空行，避免被解析器吸进段落或列表项。 */
 function ensureBlankLineBeforePipeTables(text: string): string {
   return text
@@ -886,6 +987,9 @@ export function normalizeMarkdownForDisplay(
   markdown = normalizeInlineMarkdownStructures(markdown);
   markdown = demoteNumberedMarkdownHeadings(markdown);
   markdown = wrapBareShellCommandLines(markdown);
+  // 先补全缺前导 `|` 的数据行 / 裸分隔行，再插入表前空行——否则
+  // ensureBlankLineBeforePipeTables 会把 `**chat** | 说明 |` 拆成段落 + 裸 `|`。
+  markdown = repairLoosePipeTableSyntax(markdown);
   markdown = ensureBlankLineBeforePipeTables(markdown);
   markdown = removeOrphanPipeLines(markdown);
   markdown = recoverSplitPipeTableBlocks(markdown);
