@@ -62,6 +62,13 @@ export function resolveDiskTranscriptKeyCandidates(
   return out;
 }
 
+/** Map a disk transcript source back to a representative engine for key resolution. */
+function diskSourceToKeyEngine(source: DiskTranscriptSource): SessionExecutionEngine {
+  if (source === "cursor") return "cursor";
+  if (source === "codex_rpc") return "codex-rpc";
+  return "claude";
+}
+
 /**
  * 会话的落盘目录不由当前执行引擎唯一决定：Claude 磁盘扫描出的历史会话会出现在
  * executionEngine 已改成 cursor 的仓库下，反之亦然。先按当前引擎对应目录找，
@@ -76,7 +83,7 @@ export function resolveDiskTranscriptCandidates(
   const seen = new Set<string>();
   for (const source of resolveDiskTranscriptSourceCandidates(engine)) {
     // 兜底目录用该目录自身的 key 规则，避免拿 Wise tab id 去撞 Claude 目录里的无关 jsonl。
-    const keyEngine = source === primarySource ? engine : source;
+    const keyEngine = source === primarySource ? engine : diskSourceToKeyEngine(source);
     for (const key of resolveDiskTranscriptKeyCandidates(session, keyEngine)) {
       const dedupeKey = `${source}:${key}`;
       if (seen.has(dedupeKey)) continue;

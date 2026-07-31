@@ -10,19 +10,29 @@ use crate::claude_events::{
 use crate::codex_commands::strip_benign_noise;
 use crate::codex_rpc_types::{ServerNotification, ServerRequest};
 
+/// Adapt a single [`ServerNotification`] into stream lines (without emitting).
+/// Exposed so the caller can persist lines to disk alongside emitting.
+pub fn adapt_notification_to_stream_lines(
+    notification: &ServerNotification,
+    session_id: &str,
+) -> Vec<String> {
+    map_notification_to_stream_lines(notification, session_id)
+}
+
 /// Adapt a single [`ServerNotification`] and emit it to the frontend.
 ///
 /// The produced JSON lines use the same envelope structure as
 /// [`codex_stream_adapter`](crate::codex_stream_adapter) /
 /// [`claude_events`](crate::claude_events), so the existing frontend
 /// `claudeStreamParser.ts` can consume them without changes.
+#[allow(dead_code)]
 pub fn adapt_and_emit_notification(
     notification: &ServerNotification,
     app: &tauri::AppHandle,
     invocation_key: Option<&str>,
     session_id: &str,
 ) {
-    let lines = map_notification_to_stream_lines(notification, session_id);
+    let lines = adapt_notification_to_stream_lines(notification, session_id);
     for line in lines {
         emit_adapted_stream_payload(app, CLAUDE_STREAM_EVENT_OUTPUT, session_id, &line, invocation_key);
     }

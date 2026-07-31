@@ -27,6 +27,20 @@ export async function loadClaudeSessionJsonl(
   });
 }
 
+export async function loadCodexRpcSessionJsonl(
+  repositoryPath: string,
+  tabSessionId: string,
+  options?: LoadClaudeSessionJsonlOptions,
+): Promise<string[]> {
+  const tailLines =
+    typeof options?.tailLines === "number" && options.tailLines > 0 ? Math.floor(options.tailLines) : null;
+  return invoke<string[]>("load_codex_rpc_session_jsonl_command", {
+    projectPath: repositoryPath,
+    tabSessionId,
+    tailLines,
+  });
+}
+
 /**
  * 物理删除 `~/.claude/projects/<encoded>/<sessionId>.jsonl`。
  *

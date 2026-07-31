@@ -18,7 +18,7 @@ use crate::claude_events::{
 };
 use crate::codex_binary::find_codex_binary;
 use crate::codex_rpc_session::CodexRpcSession;
-use crate::codex_rpc_stream_adapter::{adapt_and_emit_notification, emit_approval_request, emit_dynamic_tool_request, emit_mcp_elicitation_request, emit_rpc_complete};
+use crate::codex_rpc_stream_adapter::{adapt_notification_to_stream_lines, emit_approval_request, emit_dynamic_tool_request, emit_mcp_elicitation_request, emit_rpc_complete};
 use crate::codex_rpc_types::{ApprovalDecision, CommandExecParams, CommandExecResponse, ServerNotification, ServerRequest};
 use crate::wise_db::WiseDb;
 
@@ -266,6 +266,14 @@ pub(crate) async fn execute_codex_rpc(
         return Err(msg);
     }
 
+    // Persist user prompt to disk transcript.
+    let user_line = crate::cursor_disk::build_cursor_user_turn_line(trimmed_prompt, None);
+    let _ = crate::codex_rpc_disk::append_codex_rpc_session_line(
+        &params.project_path,
+        &session_id,
+        &user_line,
+    );
+
     // Store the session for potential interrupt/shutdown.
     let session_arc = Arc::new(TokioMutex::new(session));
     {
@@ -290,6 +298,7 @@ pub(crate) async fn execute_codex_rpc(
     let app_loop = app.clone();
     let session_id_loop = session_id.clone();
     let invocation_key_loop = invocation_key.clone();
+    let project_path_loop = params.project_path.clone();
 
     tokio::spawn(async move {
         let mut success = true;
@@ -336,12 +345,22 @@ pub(crate) async fn execute_codex_rpc(
                             "request_id": request_id,
                         }));
                     }
-                    adapt_and_emit_notification(
-                        &notification,
-                        &app_loop,
-                        invocation_key_loop.as_deref(),
-                        &session_id_loop,
-                    );
+                    // Persist adapted lines to disk, then emit to frontend.
+                    let lines = adapt_notification_to_stream_lines(&notification, &session_id_loop);
+                    for line in &lines {
+                        let _ = crate::codex_rpc_disk::append_codex_rpc_session_line(
+                            &project_path_loop,
+                            &session_id_loop,
+                            line,
+                        );
+                        emit_adapted_stream_payload(
+                            &app_loop,
+                            crate::claude_events::CLAUDE_STREAM_EVENT_OUTPUT,
+                            &session_id_loop,
+                            line,
+                            invocation_key_loop.as_deref(),
+                        );
+                    }
                 }
                 PollResult::Notification(None) => {
                     // Channel closed — subprocess likely exited.

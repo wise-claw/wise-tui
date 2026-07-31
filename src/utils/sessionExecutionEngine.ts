@@ -266,23 +266,27 @@ export function usesWiseTabIdForDiskTranscript(engine: SessionExecutionEngine): 
 }
 
 /**
- * transcript 落盘位置：`cursor` 指 `~/.wise/cursor-runs`，`claude` 指 `~/.claude/projects`。
+ * transcript 落盘位置：`cursor` 指 `~/.wise/cursor-runs`，`codex_rpc` 指 `~/.wise/codex-runs`，`claude` 指 `~/.claude/projects`。
  * 会话可能先由某个引擎写盘、之后仓库执行引擎被改成另一个，故来源与当前引擎不是一一绑定。
  */
-export type DiskTranscriptSource = "cursor" | "claude";
+export type DiskTranscriptSource = "cursor" | "codex_rpc" | "claude";
 
 export function resolveDiskTranscriptSource(
   engine: SessionExecutionEngine,
 ): DiskTranscriptSource {
-  return engine === "cursor" ? "cursor" : "claude";
+  if (engine === "cursor") return "cursor";
+  if (engine === "codex-rpc") return "codex_rpc";
+  return "claude";
 }
 
-/** 当前引擎对应的落盘目录优先，另一目录兜底（仓库切换执行引擎后历史仍可读）。 */
+/** 当前引擎对应的落盘目录优先，其余目录兜底（仓库切换执行引擎后历史仍可读）。 */
 export function resolveDiskTranscriptSourceCandidates(
   engine: SessionExecutionEngine,
 ): DiskTranscriptSource[] {
   const primary = resolveDiskTranscriptSource(engine);
-  return primary === "cursor" ? ["cursor", "claude"] : ["claude", "cursor"];
+  if (primary === "cursor") return ["cursor", "claude"];
+  if (primary === "codex_rpc") return ["codex_rpc", "claude"];
+  return ["claude", "cursor"];
 }
 
 export function resolveDiskTranscriptSessionKey(

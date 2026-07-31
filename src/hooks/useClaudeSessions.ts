@@ -53,7 +53,7 @@ import {
 } from "../constants/claudeConnection";
 import type { ClaudeSpawnCliExtras } from "../services/claudeSpawnExtras";
 import { claudeSpawnExtrasForNativeSlashCommand } from "../services/claudeSpawnExtras";
-import { deleteClaudeDiskSession, loadClaudeSessionJsonl } from "../services/claudeDisk";
+import { deleteClaudeDiskSession, loadClaudeSessionJsonl, loadCodexRpcSessionJsonl } from "../services/claudeDisk";
 import { loadCursorSessionJsonl } from "../services/cursorDisk";
 import {
   collectInvocationSnapshotMemoryKeys,
@@ -675,6 +675,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         source ?? resolveDiskTranscriptSource(resolveSessionExecutionEngine(session));
       if (target === "cursor") {
         return loadCursorSessionJsonl(rp, diskKey, {
+          tailLines: tailLines ?? null,
+        });
+      }
+      if (target === "codex_rpc") {
+        return loadCodexRpcSessionJsonl(rp, diskKey, {
           tailLines: tailLines ?? null,
         });
       }
