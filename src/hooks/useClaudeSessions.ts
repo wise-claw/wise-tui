@@ -521,7 +521,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         const stallMessage =
           engine === "cursor"
             ? "Cursor CLI 长时间无可见输出。请点「结束」后重试，或检查 API Key / agent login 与网络连接。"
-            : engine === "codex"
+            : engine === "codex" || engine === "codex-rpc"
               ? "Codex 子进程长时间无可见输出。请点「结束」后重试。"
               : "Claude 子进程长时间无可见输出。请点「结束」后重试；若反复出现，可暂时关闭 Cockpit 助手 MCP 或在终端用 stream-json 自检。";
         commitSessions((prev) =>
@@ -544,7 +544,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const stallMs =
         engine === "cursor"
           ? CURSOR_STREAM_STALL_MS
-          : engine === "codex"
+          : engine === "codex" || engine === "codex-rpc"
             ? CODEX_STREAM_STALL_MS
             : CLAUDE_STREAM_STALL_MS;
       const timer = window.setTimeout(fireStallCheck, stallMs);
@@ -1408,7 +1408,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       };
 
       const resolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
-      if (resolver?.(session) === "codex") {
+      if (resolver?.(session) === "codex" || resolver?.(session) === "codex-rpc") {
         const contextExecutionEngine =
           params.codexContextExecutionEngine ?? resolver(session);
         if (params.forceNewClaudeConversation) {

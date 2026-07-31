@@ -11,7 +11,7 @@ import {
   executeClaudeCode,
   type ClaudeInvocationResult,
 } from "./claude";
-import { executeCodexCode } from "./codex";
+import { executeCodexCode, executeCodexRpcCode } from "./codex";
 import { executeCursorCode } from "./cursorAgentExecution";
 import { executeOpencodeCode } from "./opencode";
 import { executeQoderCode } from "./qoder";
@@ -21,6 +21,7 @@ export function supportsSessionEngineOneshotWait(engine: SessionExecutionEngine)
   return (
     engine === "claude" ||
     engine === "codex" ||
+    engine === "codex-rpc" ||
     engine === "cursor" ||
     engine === "opencode" ||
     engine === "qoder"
@@ -33,8 +34,9 @@ async function spawnSessionEngineOneshot(input: {
   prompt: string;
   model?: string;
   invocationKey: string;
+  tabSessionId?: string;
 }): Promise<void> {
-  const { engine, repositoryPath, prompt, model, invocationKey } = input;
+  const { engine, repositoryPath, prompt, model, invocationKey, tabSessionId } = input;
   switch (engine) {
     case "codex":
       await executeCodexCode(
@@ -45,6 +47,15 @@ async function spawnSessionEngineOneshot(input: {
         undefined,
         undefined,
         true,
+      );
+      return;
+    case "codex-rpc":
+      await executeCodexRpcCode(
+        repositoryPath,
+        prompt,
+        model,
+        invocationKey,
+        tabSessionId,
       );
       return;
     case "cursor":

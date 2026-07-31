@@ -33,6 +33,7 @@ const ASSISTANT_DISPLAY_NOISE_TEXT = new Set(["no response requested.", "no resp
 const SYSTEM_MESSAGE_DISPLAY_NOISE = [
   /^Claude 系统错误:\s*unknown\s*$/i,
   /^Claude Hook 启动中/,
+  /执行中[（(]/,
 ];
 
 export function isSystemMessageDisplayNoiseText(text: string): boolean {

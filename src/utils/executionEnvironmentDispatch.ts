@@ -130,7 +130,7 @@ export function isExecutionEnvironmentEngineAvailable(
     qoderAvailable: boolean;
   },
 ): boolean {
-  if (engine === "codex") return availability.codexAvailable;
+  if (engine === "codex" || engine === "codex-rpc") return availability.codexAvailable;
   if (engine === "cursor") return availability.cursorAvailable;
   if (engine === "gemini") return availability.geminiAvailable;
   if (engine === "opencode") return availability.opencodeAvailable;

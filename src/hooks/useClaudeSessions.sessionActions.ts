@@ -186,6 +186,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     const skipClaudeSidBootstrapWait =
       executionEngine === "cursor" ||
       executionEngine === "codex" ||
+      executionEngine === "codex-rpc" ||
       executionEngine === "opencode" ||
       executionEngine === "qoder";
     const bubblePrompt = opts?.userBubblePrompt?.trim()
@@ -321,6 +322,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
       spawnEngine === "opencode" ||
       spawnEngine === "cursor" ||
       spawnEngine === "codex" ||
+      spawnEngine === "codex-rpc" ||
       spawnEngine === "qoder"
         ? sessionModelTrimmed
         : resolveClaudeExecModelId({

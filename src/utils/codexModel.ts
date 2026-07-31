@@ -32,7 +32,7 @@ export function resolveCodexExecModelId(input: ResolveCodexExecModelInput): stri
   const codexProfileModel = resolveCodexProfileModelFromStore(input.store);
   if (codexProfileModel) return codexProfileModel;
 
-  if (input.contextExecutionEngine === "codex") {
+  if (input.contextExecutionEngine === "codex" || input.contextExecutionEngine === "codex-rpc") {
     const session = input.sessionModel?.trim();
     if (session) return session;
   }

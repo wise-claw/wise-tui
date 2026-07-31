@@ -2,6 +2,8 @@
 
 use serde_json::{json, Value};
 
+use crate::codex_commands::strip_benign_noise;
+
 /// Result of mapping one Codex stdout line for session streaming.
 #[derive(Debug, PartialEq, Eq)]
 pub enum CodexStdoutMap {
@@ -104,7 +106,10 @@ fn map_codex_msg_envelope(value: &Value) -> Vec<String> {
             if content.trim().is_empty() {
                 vec![]
             } else {
-                vec![assistant_text_line(content)]
+                match strip_benign_noise(content) {
+                    Some(cleaned) => vec![assistant_text_line(&cleaned)],
+                    None => vec![],
+                }
             }
         }
         "reasoning" | "thinking" => {
@@ -130,7 +135,10 @@ fn map_codex_msg_envelope(value: &Value) -> Vec<String> {
                         .map(str::to_string)
                 })
                 .unwrap_or_else(|| "Codex 执行出错".to_string());
-            vec![assistant_text_line(&message)]
+            match strip_benign_noise(&message) {
+                Some(cleaned) => vec![assistant_text_line(&cleaned)],
+                None => vec![],
+            }
         }
         _ => vec![],
     }
@@ -244,14 +252,20 @@ fn map_agent_message_item(item: &Value) -> Vec<String> {
     let Some(text) = codex_item_text(item) else {
         return vec![];
     };
-    vec![assistant_text_line(&text)]
+    match strip_benign_noise(&text) {
+        Some(cleaned) => vec![assistant_text_line(&cleaned)],
+        None => vec![],
+    }
 }
 
 fn map_error_item(item: &Value) -> Vec<String> {
     let message = extract_codex_error_text(item)
         .or_else(|| codex_item_text(item))
         .unwrap_or_else(|| "Codex 执行出错".to_string());
-    vec![assistant_text_line(&message)]
+    match strip_benign_noise(&message) {
+        Some(cleaned) => vec![assistant_text_line(&cleaned)],
+        None => vec![],
+    }
 }
 
 fn map_command_execution_item(event_type: &str, item: &Value) -> Vec<String> {
@@ -340,7 +354,11 @@ fn map_generic_item_summary(kind: &str, item: &Value) -> Vec<String> {
     if detail.trim().is_empty() {
         vec![assistant_text_line(&format!("**{label}**"))]
     } else {
-        vec![assistant_text_line(&format!("**{label}**\n\n{detail}"))]
+        let full = format!("**{label}**\n\n{detail}");
+        match strip_benign_noise(&full) {
+            Some(cleaned) => vec![assistant_text_line(&cleaned)],
+            None => vec![],
+        }
     }
 }
 

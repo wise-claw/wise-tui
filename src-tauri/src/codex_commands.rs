@@ -266,9 +266,26 @@ fn stderr_line_is_actionable(line: &str) -> bool {
 /// 2. `Model metadata for <model> not found. Defaulting to fallback metadata` —— codex
 ///    未识别该模型元数据，回退后仍可运行，属一次性非致命警告。
 /// 两者既不该作为正文展示，也不该计入失败诊断（避免遮蔽真实错误），统一过滤。
-fn codex_line_is_benign_noise(line: &str) -> bool {
+pub(crate) fn codex_line_is_benign_noise(line: &str) -> bool {
     let lower = line.to_lowercase();
-    lower.contains("without active item") || lower.contains("defaulting to fallback metadata")
+    lower.contains("without active item")
+        || lower.contains("defaulting to fallback metadata")
+        || lower.contains("is deprecated")
+        || lower.contains("deprecated")
+}
+
+/// Strip benign-noise lines from a multi-line text block.
+/// Returns `None` if all lines were noise (nothing meaningful remains).
+pub(crate) fn strip_benign_noise(text: &str) -> Option<String> {
+    let remaining: Vec<&str> = text
+        .lines()
+        .filter(|line| !codex_line_is_benign_noise(line))
+        .collect();
+    if remaining.is_empty() {
+        None
+    } else {
+        Some(remaining.join("\n"))
+    }
 }
 
 fn validate_codex_project_path(project_path: &str) -> Result<(), String> {

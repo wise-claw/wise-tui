@@ -56,6 +56,7 @@ import {
   EMPTY_MODEL_PROFILE_QUICK_CONFIG,
   ModelProfileQuickConfigFields,
 } from "./ModelProfileQuickConfigFields";
+import { SESSION_EXECUTION_ENGINE_LABELS, type SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { ModelProfileSortableList } from "./ModelProfileSortableList";
 import { OpencodeSettingsEditor } from "./OpencodeSettingsEditor";
 import {
@@ -628,7 +629,9 @@ export function ClaudeModelTopbarPanel({
 
   const activeProfileId = resolveActiveModelProfileId(panelEngine, store);
   const currentDisplayLabel = resolveActiveModelProfileDisplayLabel(panelEngine, store);
-  const engineLabel = modelProfileEngineLabel(panelEngine);
+  const engineLabel =
+    SESSION_EXECUTION_ENGINE_LABELS[panelEngine as SessionExecutionEngine]?.title ??
+    modelProfileEngineLabel(panelEngine);
   const editingCodexProfile =
     configProfile != null && normalizeModelProfileEngine(configProfile.engine) === "codex";
 

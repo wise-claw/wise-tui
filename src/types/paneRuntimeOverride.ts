@@ -2,7 +2,7 @@ import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine
 import { SESSION_EXECUTION_ENGINE_LABELS } from "../constants/sessionExecutionEngine";
 
 /** 多屏窗格预设已覆盖 Claude / Codex，其余引擎在弹窗中单独列出。 */
-export const PANE_EXTRA_EXECUTION_ENGINES = ["cursor", "gemini", "opencode", "qoder"] as const satisfies readonly SessionExecutionEngine[];
+export const PANE_EXTRA_EXECUTION_ENGINES = ["codex-rpc", "cursor", "gemini", "opencode", "qoder"] as const satisfies readonly SessionExecutionEngine[];
 
 /** 多屏窗格当前实际生效的执行引擎（含 Cursor / Gemini / OpenCode 等覆盖）。 */
 export function resolvePaneEffectiveEngine(
@@ -15,6 +15,8 @@ export function resolvePaneEffectiveEngine(
   const preset = resolvePaneRuntimePreset(override, fallbackEngine);
   if (preset === "codex") return "codex";
   if (preset === "claude-direct" || preset === "claude-proxy") return "claude";
+  // No explicit override – derive from fallback engine
+  if (fallbackEngine === "codex-rpc") return "codex-rpc";
   return fallbackEngine;
 }
 
@@ -97,7 +99,7 @@ export function resolvePaneRuntimePreset(
   if (isPaneRuntimeOverrideEmpty(override)) return null;
   const resolved = override!;
   const engine = resolved.executionEngine ?? resolvedEngine;
-  if (engine === "codex") return "codex";
+  if (engine === "codex" || engine === "codex-rpc") return "codex";
   if (engine === "claude") {
     return resolved.claudeProxyRoute === "bypass" ? "claude-direct" : "claude-proxy";
   }

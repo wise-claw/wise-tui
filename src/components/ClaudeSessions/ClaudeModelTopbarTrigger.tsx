@@ -3,6 +3,7 @@ import { HoverHint } from "../shared/HoverHint";
 import { Suspense, useCallback, useMemo, useState } from "react";
 import { useModelProfileSwitcher } from "../../hooks/useClaudeModelProfileStore";
 import { pickBadgeEffectiveModel } from "../../types/claudeModelProfile";
+import type { ModelProfileEngine } from "../../types/claudeModelProfile";
 import { ClaudeModelTopbarPanelLazy } from "./ClaudeModelTopbarPanel.lazy";
 import "./ClaudeModelTopbarTrigger.css";
 
@@ -31,9 +32,11 @@ function IconClaudeModel() {
 interface Props {
   /** 左栏顶栏与主会话顶栏按钮样式 */
   variant?: "sidebar" | "chat";
+  /** 当前会话执行环境对应的引擎（用于面板标题与档案过滤）。 */
+  preferredEngine?: ModelProfileEngine;
 }
 
-export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
+export function ClaudeModelTopbarTrigger({ variant = "chat", preferredEngine }: Props) {
   const [open, setOpen] = useState(false);
   const [panelMounted, setPanelMounted] = useState(false);
   const { effectiveModels, store, setStore, loading } = useModelProfileSwitcher(open);
@@ -85,6 +88,7 @@ export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
               store={store}
               setStore={setStore}
               loading={loading}
+              preferredEngine={preferredEngine}
               onApplied={() => setOpen(false)}
             />
           </Suspense>

@@ -33,7 +33,7 @@ function isEngineAvailable(
   opencodeAvailable: boolean,
   qoderAvailable: boolean,
 ): boolean {
-  if (key === "codex") return codexAvailable;
+  if (key === "codex" || key === "codex-rpc") return codexAvailable;
   if (key === "cursor") return cursorAvailable;
   if (key === "gemini") return geminiAvailable;
   if (key === "opencode") return opencodeAvailable;
@@ -87,7 +87,7 @@ export function buildSessionExecutionEngineMenuItems({
                 <polyline points="4 17 10 11 4 5" />
                 <line x1="12" y1="19" x2="20" y2="19" />
               </svg>
-            ) : key === "codex" ? (
+            ) : key === "codex" || key === "codex-rpc" ? (
               <svg className="app-claude-connection-kind-menu-item__icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="12 2 2 7 12 12 22 7 12 2" />
                 <polyline points="2 17 12 22 22 17" />
@@ -108,7 +108,7 @@ export function buildSessionExecutionEngineMenuItems({
               {key === "claude" ? (
                 <span className="app-claude-connection-kind-menu-item__badge">默认</span>
               ) : null}
-              {key === "codex" ? (
+              {key === "codex" || key === "codex-rpc" ? (
                 <span className="app-claude-connection-kind-menu-item__badge app-claude-connection-kind-menu-item__badge--codex">本地</span>
               ) : null}
               {key === "cursor" ? (

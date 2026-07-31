@@ -1,6 +1,7 @@
 export type SessionExecutionEngine =
   | "claude"
   | "codex"
+  | "codex-rpc"
   | "cursor"
   | "gemini"
   | "opencode"
@@ -19,6 +20,11 @@ export const SESSION_EXECUTION_ENGINE_LABELS: Record<
     title: "Codex CLI",
     short: "Codex",
     description: "OpenAI Codex CLI（codex exec）",
+  },
+  "codex-rpc": {
+    title: "Codex RPC",
+    short: "Codex RPC",
+    description: "OpenAI Codex App-Server JSON-RPC",
   },
   cursor: {
     title: "Cursor CLI",
@@ -45,6 +51,7 @@ export const SESSION_EXECUTION_ENGINE_LABELS: Record<
 export const SESSION_EXECUTION_ENGINES = [
   "claude",
   "codex",
+  "codex-rpc",
   "cursor",
   "gemini",
   "opencode",
@@ -56,6 +63,7 @@ export function normalizeSessionExecutionEngine(
 ): SessionExecutionEngine {
   const normalized = raw?.trim().toLowerCase();
   if (normalized === "codex") return "codex";
+  if (normalized === "codex-rpc") return "codex-rpc";
   if (normalized === "cursor") return "cursor";
   if (normalized === "gemini") return "gemini";
   if (normalized === "opencode") return "opencode";
@@ -67,6 +75,7 @@ export function isSessionExecutionEngine(value: string): value is SessionExecuti
   return (
     value === "claude" ||
     value === "codex" ||
+    value === "codex-rpc" ||
     value === "cursor" ||
     value === "gemini" ||
     value === "opencode" ||

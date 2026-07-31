@@ -262,7 +262,7 @@ export function resolveExecutionRepositoryPath(
 
 /** Cursor / Codex / OpenCode 以 Wise 标签 id 作为磁盘 transcript 与 cancel 的 session key。 */
 export function usesWiseTabIdForDiskTranscript(engine: SessionExecutionEngine): boolean {
-  return engine === "cursor" || engine === "codex" || engine === "opencode" || engine === "qoder";
+  return engine === "cursor" || engine === "codex" || engine === "codex-rpc" || engine === "opencode" || engine === "qoder";
 }
 
 /**

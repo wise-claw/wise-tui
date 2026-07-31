@@ -89,7 +89,7 @@ export function resolveComposerActiveProxyRoute(
   const view = resolveAnthropicProxyConflict(opencodeGo, llmProxy, fcc);
   const modelLabel = options?.modelLabel ?? null;
 
-  if (engine === "codex") {
+  if (engine === "codex" || engine === "codex-rpc") {
     if (!view.opencodeGoActive || !opencodeGo) {
       return null;
     }

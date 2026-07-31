@@ -655,7 +655,7 @@ export function resolveNoReplyFailureMessage(
   if (executionEngine === "cursor") {
     return "Cursor CLI 本轮未产出可见回复。请检查 API Key / `agent login`、网络与模型，或在工作台配置 → 执行环境中重新探测。";
   }
-  if (executionEngine === "codex") {
+  if (executionEngine === "codex" || executionEngine === "codex-rpc") {
     return "Codex 本轮未产出可见回复。请检查 API Key 与 Codex CLI 配置。";
   }
   if (executionEngine === "opencode") {

@@ -20,3 +20,24 @@ export async function executeCodexCode(
     forceNewSession: forceNewSession === true,
   });
 }
+
+export async function executeCodexRpcCode(
+  repositoryPath: string,
+  prompt: string,
+  model?: string,
+  invocationKey?: string,
+  tabSessionId?: string,
+  codexResumeSessionId?: string,
+): Promise<void> {
+  const normalizedResumeId = codexResumeSessionId?.trim() || null;
+  return invoke("execute_codex_rpc", {
+    params: {
+      projectPath: repositoryPath,
+      prompt,
+      model,
+      invocationKey,
+      tabSessionId,
+      codexResumeSessionId: normalizedResumeId,
+    },
+  });
+}

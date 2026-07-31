@@ -186,7 +186,7 @@ export function ComposerModelPicker({
   const isSelectOnlyEngine = isCursorEngine || isOpencodeEngine || isQoderEngine;
   const profileEngine: ModelProfileEngine | null = isSelectOnlyEngine
     ? null
-    : sessionExecutionEngine === "codex"
+    : sessionExecutionEngine === "codex" || sessionExecutionEngine === "codex-rpc"
       ? "codex"
       : "claude";
 

@@ -1,7 +1,7 @@
 use crate::{
     agent_registry, app_state_commands, assistants, at_mention_shortcuts, cc_switch_import,
     chrome_devtools_monitor, in_app_shortcuts,
-    claude_code_line_edits, claude_code_usage, claude_commands, codex_commands, opencode_commands,
+    claude_code_line_edits, claude_code_usage, claude_commands, codex_commands, codex_rpc_commands, opencode_commands,
     qoder_commands, claude_config_dir,
     claude_llm_proxy, claude_model_profiles,
     cursor_agent, fcc_traces, free_claude_code, opencode_go_proxy,
@@ -242,6 +242,7 @@ pub fn run() {
         .manage(Mutex::new(claude_commands::TerminalManager::new()))
         .manage(claude_commands::ClaudeProcessState::default())
         .manage(claude_commands::ClaudeSessionRegistry::new())
+        .manage(codex_rpc_commands::CodexRpcSessionStore::default())
         .manage(chrome_devtools_monitor::ChromeDevtoolsMonitorState::default());
     #[cfg(target_os = "macos")]
     let builder = builder.manage(crate::macos_speech_stream::MacosStreamingSpeechState::default());
@@ -556,6 +557,37 @@ pub fn run() {
             claude_llm_proxy::set_claude_llm_proxy_config,
             claude_commands::execute_claude_code,
             codex_commands::execute_codex_code,
+            codex_rpc_commands::execute_codex_rpc,
+            codex_rpc_commands::interrupt_codex_rpc,
+            codex_rpc_commands::shutdown_codex_rpc,
+            codex_rpc_commands::respond_codex_rpc_approval,
+            codex_rpc_commands::list_codex_rpc_mcp_servers,
+            codex_rpc_commands::call_codex_rpc_mcp_tool,
+            codex_rpc_commands::start_codex_rpc_mcp_oauth,
+            codex_rpc_commands::respond_codex_rpc_mcp_elicitation,
+            codex_rpc_commands::exec_codex_rpc_command,
+            codex_rpc_commands::terminate_codex_rpc_command,
+            codex_rpc_commands::write_codex_rpc_command_stdin,
+            codex_rpc_commands::resize_codex_rpc_command,
+            codex_rpc_commands::codex_rpc_fs_read_file,
+            codex_rpc_commands::codex_rpc_fs_write_file,
+            codex_rpc_commands::codex_rpc_fs_create_directory,
+            codex_rpc_commands::codex_rpc_fs_get_metadata,
+            codex_rpc_commands::codex_rpc_fs_read_directory,
+            codex_rpc_commands::codex_rpc_fs_remove,
+            codex_rpc_commands::codex_rpc_fs_copy,
+            codex_rpc_commands::codex_rpc_fs_watch,
+            codex_rpc_commands::codex_rpc_fs_unwatch,
+            codex_rpc_commands::list_codex_rpc_threads,
+            codex_rpc_commands::archive_codex_rpc_thread,
+            codex_rpc_commands::unarchive_codex_rpc_thread,
+            codex_rpc_commands::delete_codex_rpc_thread,
+            codex_rpc_commands::fork_codex_rpc_thread,
+            codex_rpc_commands::read_codex_rpc_thread,
+            codex_rpc_commands::steer_codex_rpc_turn,
+            codex_rpc_commands::start_codex_rpc_review,
+            codex_rpc_commands::list_codex_rpc_skills,
+            codex_rpc_commands::respond_codex_rpc_dynamic_tool,
             opencode_commands::execute_opencode_code,
             opencode_commands::opencode_list_models,
             qoder_commands::execute_qoder_code,

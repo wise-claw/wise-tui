@@ -6283,7 +6283,22 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-thinking-hint-icon--active {
-  color: var(--ant-color-text-tertiary);
+  animation: app-thinking-bulb-pulse 2s ease-in-out infinite;
+}
+
+@keyframes app-thinking-bulb-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-thinking-hint-icon--active {
+    animation: none;
+  }
 }
 
 @keyframes app-markdown-hint-in {

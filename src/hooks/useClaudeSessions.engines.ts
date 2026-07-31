@@ -8,7 +8,7 @@ import {
   sendStreamingUserMessage,
   closeStreamingSession,
 } from "../services/claude";
-import { executeCodexCode } from "../services/codex";
+import { executeCodexCode, executeCodexRpcCode } from "../services/codex";
 import { executeOpencodeCode } from "../services/opencode";
 import { executeQoderCode } from "../services/qoder";
 import { executeCursorCode } from "../services/cursorAgentExecution";
@@ -288,6 +288,77 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         tabSessionId,
         codexResumeSessionId ?? undefined,
         forceNewClaudeConversation === true,
+      );
+    } catch (e) {
+      detach?.();
+      throw e;
+    }
+  };
+
+  const runCodexRpcOneshotWithInvocation = async (params: {
+    tabSessionId: string;
+    turnNonce: number;
+    repositoryPath: string;
+    prompt: string;
+    modelArg: string | undefined;
+    contextExecutionEngine: SessionExecutionEngine;
+    codexResumeSessionId?: string | null;
+  }) => {
+    const {
+      tabSessionId,
+      turnNonce,
+      repositoryPath,
+      prompt,
+      modelArg,
+      contextExecutionEngine,
+      codexResumeSessionId,
+    } = params;
+    await waitForStreamRuntime(streamRuntimeRef);
+    notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
+    const rt = streamRuntimeRef.current;
+    let detach: (() => void) | null = null;
+    const inv = crypto.randomUUID();
+    if (rt) {
+      try {
+        detach = await attachClaudeInvocationStream(
+          inv,
+          tabSessionId,
+          rt,
+          turnNonce,
+          () => {
+            claudeInvocationInflightRef.current.delete(inv);
+          },
+          (tabId, bound) => expectedTurnNonceByTabIdRef.current.get(tabId) ?? bound,
+          keepInvocationStreamAfterTurnComplete,
+        );
+        claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
+      } catch {
+        detach = null;
+      }
+    }
+    const invocationKey = detach ? inv : undefined;
+    const codexModel = resolveCodexExecModelId({
+      sessionModel: modelArg,
+      contextExecutionEngine,
+      store: getCachedModelProfileStore(),
+    });
+    const codexModelLabel = codexModel?.trim() || "默认";
+    const resumeLabel = codexResumeSessionId?.trim() ? "续接会话" : "新会话";
+    commitSessions((prev) =>
+      appendSystemMessageBySessionId(
+        prev,
+        tabSessionId,
+        `Codex RPC 执行中（${resumeLabel}，模型：${codexModelLabel}）…`,
+      ),
+    );
+    try {
+      await executeCodexRpcCode(
+        repositoryPath,
+        prompt,
+        codexModel,
+        invocationKey,
+        tabSessionId,
+        codexResumeSessionId ?? undefined,
       );
     } catch (e) {
       detach?.();
@@ -662,6 +733,24 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       });
       return;
     }
+    if (engine === "codex-rpc") {
+      const contextExecutionEngine =
+        params.codexContextExecutionEngine ?? (session && resolver ? resolver(session) : "claude");
+      const codexResumeSessionId =
+        params.forceNewClaudeConversation || !session
+          ? null
+          : resolveCodexResumeSessionId(session, params.tabSessionId, sessionIdMapRef.current);
+      await runCodexRpcOneshotWithInvocation({
+        tabSessionId: params.tabSessionId,
+        turnNonce: params.turnNonce,
+        repositoryPath: params.repositoryPath,
+        prompt: params.prompt,
+        modelArg: params.modelArg,
+        contextExecutionEngine,
+        codexResumeSessionId,
+      });
+      return;
+    }
     if (engine === "cursor") {
       const cursorAgentId = session
         ? resolveCursorResumeAgentId(session, params.tabSessionId, sessionIdMapRef.current)
@@ -721,6 +810,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
   return {
     runClaudeOneshotWithInvocation,
     runCodexOneshotWithInvocation,
+    runCodexRpcOneshotWithInvocation,
     runOpencodeOneshotWithInvocation,
     runQoderOneshotWithInvocation,
     runCursorOneshotWithInvocation,

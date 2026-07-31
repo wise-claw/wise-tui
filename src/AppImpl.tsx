@@ -237,6 +237,7 @@ import type { ReconcileProjectMode } from "./constants/reconcileProjectMode";
 import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbound";
 import { useCodeReviewFixDispatch } from "./hooks/useCodeReviewFixDispatch";
 import { CodeReviewHost } from "./components/CodeReviewPanel";
+import { CodexApprovalOverlay } from "./components/CodexApprovalOverlay";
 import { useOmcPluginInstalled } from "./hooks/useOmcPluginInstalled";
 import { useOmcRuntime } from "./hooks/useOmcRuntime";
 import { useWorkflowTeamAutomation } from "./hooks/useWorkflowTeamAutomation";
@@ -3305,6 +3306,7 @@ export default function App() {
         });
       }}
     />
+    <CodexApprovalOverlay />
     </>
   );
 }

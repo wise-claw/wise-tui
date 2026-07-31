@@ -72,7 +72,7 @@ export function dispatchModelProfileStoreChanged(
   const appliedProfileId =
     options?.engine === "claude"
       ? store.activeProfileId
-      : options?.engine === "codex"
+      : options?.engine === "codex" || options?.engine === "codex-rpc"
         ? store.activeCodexProfileId
         : options?.engine === "opencode"
           ? store.activeOpencodeProfileId
