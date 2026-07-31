@@ -14,6 +14,7 @@ import { AIChatInput, ConfigProvider as SemiConfigProvider } from "@douyinfe/sem
 import semiLocaleZhCN from "@douyinfe/semi-ui/lib/es/locale/source/zh_CN";
 import "./composer-semi-tokens.css";
 import type { Content } from "@douyinfe/semi-ui/lib/es/aiChatInput/interface";
+import type { BeforeUploadProps } from "@douyinfe/semi-ui/lib/es/upload/interface";
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
 import type {
   ClaudeComposerExecuteBubbleOptions,
@@ -2492,13 +2493,8 @@ function ComposerInner({
   addImageFilesFromListRef.current = addImageFilesFromList;
 
   /** Semi Upload.beforeUpload：粘贴走 manualUpload→insert，必须挂载 Upload 才能进这里。 */
-  const handleSemiBeforeUpload = useCallback((file: File | { fileInstance?: File; name?: string }) => {
-    const raw =
-      file instanceof File
-        ? file
-        : file?.fileInstance instanceof File
-          ? file.fileInstance
-          : null;
+  const handleSemiBeforeUpload = useCallback((args: BeforeUploadProps) => {
+    const raw = args.file?.fileInstance instanceof File ? args.file.fileInstance : null;
     if (raw && isImageFile(raw)) {
       addImageFilesFromListRef.current([raw]);
     }
