@@ -87,6 +87,10 @@ import {
   subscribeMainThreadCongestion,
 } from "../../stores/mainThreadCongestionStore";
 import { sessionContextRefreshFingerprint } from "../../utils/sessionContextRefreshFingerprint";
+import {
+  collectClipboardImageFiles,
+  isImageFile,
+} from "../../utils/collectClipboardImageFiles";
 import { ComposerCommonPhrasesManageTrigger } from "./ComposerCommonPhrasesManageTrigger";
 import { ImageThumbnails } from "./attachment-manager";
 import { QuestionDock } from "./dock/question-dock";
@@ -411,12 +415,6 @@ function dedupeComposerImages(images: ImageAttachmentPart[]): ImageAttachmentPar
     out.push(img);
   }
   return out;
-}
-
-function isImageFile(file: File): boolean {
-  if (file.type.startsWith("image/")) return true;
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  return ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif", "heic", "heif"].includes(ext);
 }
 
 /**
@@ -768,6 +766,8 @@ function ComposerInner({
   const [images, setImages] = useComposerImageDraft(draftBucketKey);
   const imagesRef = useRef(images);
   imagesRef.current = images;
+  const setImagesRef = useRef(setImages);
+  setImagesRef.current = setImages;
   const canSendComposerRef = useRef(false);
   const [canSendComposer, setCanSendComposer] = useState(false);
   const debouncedPromptSyncRef = useRef(
@@ -2459,11 +2459,11 @@ function ComposerInner({
 
   const removeImage = useCallback((id: string) => {
     setImages((prev) => prev.filter((img) => img.id !== id));
-  }, []);
+  }, [setImages]);
 
   const replaceImage = useCallback((id: string, next: ImageAttachmentPart) => {
     setImages((prev) => prev.map((img) => (img.id === id ? next : img)));
-  }, []);
+  }, [setImages]);
 
   const addImageFilesFromList = useCallback((fileList: FileList | File[]) => {
     for (const file of Array.from(fileList)) {
@@ -2473,13 +2473,13 @@ function ComposerInner({
         console.error("[composer] FileReader.readAsDataURL failed:", file.name, reader.error);
       };
       reader.onload = () => {
-        setImages((prev) => [
+        setImagesRef.current((prev) => [
           ...prev,
           {
             type: "image" as const,
             id: `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-            filename: file.name,
-            mime: file.type || "application/octet-stream",
+            filename: file.name || "pasted-image.png",
+            mime: file.type || "image/png",
             dataUrl: reader.result as string,
           },
         ]);
@@ -2487,6 +2487,32 @@ function ComposerInner({
       reader.readAsDataURL(file);
     }
   }, []);
+
+  const addImageFilesFromListRef = useRef(addImageFilesFromList);
+  addImageFilesFromListRef.current = addImageFilesFromList;
+
+  /** Semi Upload.beforeUpload：粘贴走 manualUpload→insert，必须挂载 Upload 才能进这里。 */
+  const handleSemiBeforeUpload = useCallback((file: File | { fileInstance?: File; name?: string }) => {
+    const raw =
+      file instanceof File
+        ? file
+        : file?.fileInstance instanceof File
+          ? file.fileInstance
+          : null;
+    if (raw && isImageFile(raw)) {
+      addImageFilesFromListRef.current([raw]);
+    }
+    return false;
+  }, []);
+
+  const semiUploadProps = useMemo(
+    () => ({
+      // 不设 accept：避免 Semi Upload 在 beforeUpload 前按 accept 丢掉截图 File
+      showUploadList: false as const,
+      beforeUpload: handleSemiBeforeUpload,
+    }),
+    [handleSemiBeforeUpload],
+  );
 
   /**
    * 文件树 / 系统文件名插入 `@路径`：优先 Tiptap 增量 insertContent，避免整篇 setContent；
@@ -2662,27 +2688,35 @@ function ComposerInner({
     [handleNativeFilesDropped],
   );
 
+  /**
+   * Semi AIChatInput 在 showUploadButton=false 时不挂载 Upload，
+   * 其内部 paste→manualUpload 会静默丢图；React 冒泡 onPaste 也不够稳（TipTap 先吃事件）。
+   * 在输入区 capture 阶段拦截图片，写入 ImageThumbnails 用的 draft store。
+   */
   const handleInputAreaPaste = useCallback(
-    (e: React.ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-
-      const imageFiles: File[] = [];
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.type.startsWith("image/")) {
-          const file = item.getAsFile();
-          if (file) imageFiles.push(file);
-        }
-      }
-
-      if (imageFiles.length > 0) {
-        e.preventDefault();
-        addImageFilesFromList(imageFiles);
-      }
+    (e: ClipboardEvent | React.ClipboardEvent) => {
+      const imageFiles = collectClipboardImageFiles(e.clipboardData);
+      if (imageFiles.length === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      addImageFilesFromList(imageFiles);
     },
     [addImageFilesFromList],
   );
+
+  const inputAreaRef = useRef<HTMLDivElement>(null);
+  const handleInputAreaPasteRef = useRef(handleInputAreaPaste);
+  handleInputAreaPasteRef.current = handleInputAreaPaste;
+
+  useEffect(() => {
+    const el = inputAreaRef.current;
+    if (!el) return;
+    const onPasteCapture = (e: ClipboardEvent) => {
+      handleInputAreaPasteRef.current(e);
+    };
+    el.addEventListener("paste", onPasteCapture, true);
+    return () => el.removeEventListener("paste", onPasteCapture, true);
+  }, []);
 
   const handleFileAttach = useCallback(() => {
     const input = document.createElement("input");
@@ -2817,7 +2851,8 @@ function ComposerInner({
     const result = await captureScreenshot();
     if (!result) return;
     const part = screenshotResultToImagePart(result);
-    setImages((prev) => [...prev, part]);
+    // 必须走 ref：await screencapture 期间 draftBucketKey/setImages 可能已换新
+    setImagesRef.current((prev) => [...prev, part]);
     // screencapture 结束后系统焦点在别处：先置顶主窗，再在下一帧聚焦输入框（WKWebView 上更稳）
     try {
       await wiseMainWindowFocus();
@@ -3219,7 +3254,7 @@ function ComposerInner({
   /** F3 仅注册一次全局监听；双栏时避免两次 screencapture 争用导致松手后无图 */
   useEffect(() => {
     return registerGlobalScreenshotRecipient(session.id, (part) => {
-      setImages((prev) => [...prev, part]);
+      setImagesRef.current((prev) => [...prev, part]);
       void wiseMainWindowFocus().catch(() => {});
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -3360,14 +3395,14 @@ function ComposerInner({
         </div>
       ) : null}
 
-      {/* Input area：整区（含底栏）支持从外部拖入文件 */}
+      {/* Input area：整区（含底栏）支持从外部拖入文件；图片粘贴见 inputAreaRef capture 监听 */}
       <div
+        ref={inputAreaRef}
         className="app-claude-input-area"
         onDragOver={handleInputAreaDragOver}
         onDragLeave={handleInputAreaDragLeave}
         onDropCapture={handleInputAreaDropCapture}
         onDrop={handleInputAreaDrop}
-        onPaste={handleInputAreaPaste}
       >
         <div
           className={`app-claude-input-container${dragOverNativeFiles ? " app-claude-input-container--drop-target" : ""}`}
@@ -3385,7 +3420,7 @@ function ComposerInner({
           {/* Revert dock */}
           <RevertDock items={revertItems} onRestore={onRestoreRevert} onClose={onClearRevertItems} />
 
-          {/* Image thumbnails */}
+          {/* 附图缩略图：放在 Semi 外，避免误用 topSlot / renderTopSlot 导致永不挂载 */}
           <ImageThumbnails images={images} onRemove={removeImage} onReplace={replaceImage} />
 
           {/* Context items (file chips) */}
@@ -3419,10 +3454,12 @@ function ComposerInner({
                   extensions={SEMI_COMPOSER_TOKEN_HIGHLIGHT_EXTENSIONS}
                   placeholder="@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条"
                   keepSkillAfterSend={false}
-                  showUploadButton={false}
+                  // 必须挂载 Upload：Semi paste→manualUpload 依赖 uploadRef；纸夹按钮 CSS 隐藏，改走我们的 +
+                  showUploadButton
                   showUploadFile={false}
                   showReference={false}
                   showTemplateButton={false}
+                  uploadProps={semiUploadProps}
                   renderConfigureArea={renderSemiComposerConfigureArea}
                   renderActionArea={renderSemiComposerActionArea}
                   clearContentOnGenerating={false}
