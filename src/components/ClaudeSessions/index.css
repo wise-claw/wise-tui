@@ -5005,7 +5005,7 @@
   white-space: nowrap;
 }
 
-/* 执行中 / 思考中：从左到右光波划过 */
+/* 执行中 / 思考中：从左到右光波划过（略慢，避免抢视线） */
 .app-status-text-shimmer {
   color: transparent;
   background-image: linear-gradient(
@@ -5020,7 +5020,7 @@
   background-position: 100% 0;
   -webkit-background-clip: text;
   background-clip: text;
-  animation: app-status-text-shimmer 1.7s linear infinite;
+  animation: app-status-text-shimmer 2.6s linear infinite;
 }
 
 @keyframes app-status-text-shimmer {

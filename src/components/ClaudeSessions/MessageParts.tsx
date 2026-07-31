@@ -798,8 +798,11 @@ function hasExpandableToolBody(
 
 const ToolGroupDisplay = memo(function ToolGroupDisplay({
   parts,
+  /** 流式末段工具组：即便工具已结束，仍在摘要行播光波（承接原「思考中」提示）。 */
+  shimmerActive = false,
 }: {
   parts: { part: ToolUsePart; originalIndex: number }[];
+  shimmerActive?: boolean;
 }) {
   const toolParts = useMemo(() => parts.map(({ part }) => part), [parts]);
   const summary = useMemo(() => buildToolGroupActivitySummary(toolParts), [toolParts]);
@@ -810,6 +813,7 @@ const ToolGroupDisplay = memo(function ToolGroupDisplay({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
   const { onPointerDown, consumeHadTextSelection } = useClickAfterSelectionGuard();
+  const showShimmer = summary.running || shimmerActive;
 
   useEffect(() => {
     setExpandedMap((prev) => {
@@ -830,9 +834,10 @@ const ToolGroupDisplay = memo(function ToolGroupDisplay({
       <button
         type="button"
         className={`app-message-parts__tool-group-summary${
-          summary.running ? " app-message-parts__tool-group-summary--running" : ""
+          showShimmer ? " app-message-parts__tool-group-summary--running" : ""
         }`}
         aria-expanded={detailsOpen}
+        aria-busy={showShimmer || undefined}
         onPointerDown={onPointerDown}
         onClick={() => {
           if (consumeHadTextSelection()) return;
@@ -842,7 +847,7 @@ const ToolGroupDisplay = memo(function ToolGroupDisplay({
         <span className="app-message-parts__tool-group-summary__text">
           <span
             className={`app-message-parts__tool-group-summary__label${
-              summary.running ? " app-status-text-shimmer" : ""
+              showShimmer ? " app-status-text-shimmer" : ""
             }`}
           >
             {summary.label}
@@ -1015,12 +1020,26 @@ export const MessagePartsDisplay = memo(function MessagePartsDisplay({
   // "末段是否含原 parts 末条" 用于 inlinePendingHint：合并段里只要 lastOriginalIndex === lastOriginalIdx，就视为末段。
   const lastGroup = groups[groups.length - 1];
 
+  const toolGroupPending =
+    streaming
+    && inlinePendingHint
+    && lastGroup?.type === "tool_group"
+    && lastGroup.parts[lastGroup.parts.length - 1]?.originalIndex === lastOriginalIdx;
+
   return (
     <div className="app-message-parts">
       {groups.map((group, groupIdx) => {
         if (group.type === "tool_group") {
-          // 仅工具组：bottom hint 由最后 inlinePendingHint 行决定。
-          return <ToolGroupDisplay key={`tool-group-${groupIdx}`} parts={group.parts} />;
+          // 流式末段工具组：光波落在摘要行，不再叠底部「思考中」提示。
+          const isPendingTail =
+            toolGroupPending && groupIdx === groups.length - 1;
+          return (
+            <ToolGroupDisplay
+              key={`tool-group-${groupIdx}`}
+              parts={group.parts}
+              shimmerActive={isPendingTail}
+            />
+          );
         }
         if (group.type === "merged_text") {
           // 多 text part 合并为单段：复用 TextPartDisplay，content 用 joinedText（已带段间 \n\n）。
@@ -1051,12 +1070,6 @@ export const MessagePartsDisplay = memo(function MessagePartsDisplay({
             return null;
         }
       })}
-      {streaming &&
-        inlinePendingHint &&
-        lastGroup?.type === "tool_group" &&
-        lastGroup.parts[lastGroup.parts.length - 1]?.originalIndex === lastOriginalIdx && (
-          <StreamingReplyHint />
-        )}
     </div>
   );
 }, messagePartsDisplayEqual);
