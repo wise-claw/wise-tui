@@ -67,10 +67,10 @@ export async function deleteCursorApiKeySetting(): Promise<void> {
 
 export function describeCursorAgentStatus(status: CursorAgentStatus): string {
   if (status.available) {
-    return "Cursor CLI 已就绪";
+    return "Cursor Agent 已就绪";
   }
   if (!status.cliAvailable) {
-    return status.failureReason ?? "未找到 Cursor Agent CLI（agent）";
+    return status.failureReason ?? "未找到 Cursor Agent（agent）";
   }
   if (status.authenticated === false) {
     return status.failureReason ?? "请运行 agent login，或在设置中配置 API Key";
@@ -78,5 +78,5 @@ export function describeCursorAgentStatus(status: CursorAgentStatus): string {
   if (!status.apiKeyConfigured && status.authenticated !== true) {
     return "请运行 agent login，或在设置中配置 Cursor API Key";
   }
-  return status.failureReason ?? "Cursor CLI 暂不可用";
+  return status.failureReason ?? "Cursor Agent 暂不可用";
 }

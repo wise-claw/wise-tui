@@ -26,7 +26,7 @@ function session(messages: ClaudeSession["messages"]): ClaudeSession {
 
 describe("resolveNoReplyFailureMessage", () => {
   test("uses cursor-specific hint for cursor engine", () => {
-    expect(resolveNoReplyFailureMessage("cursor", false)).toContain("Cursor CLI");
+    expect(resolveNoReplyFailureMessage("cursor", false)).toContain("Cursor Agent");
     expect(resolveNoReplyFailureMessage("claude", false)).toContain("Hook");
   });
 });

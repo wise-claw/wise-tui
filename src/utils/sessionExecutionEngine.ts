@@ -306,6 +306,24 @@ export function sessionHasDiskTranscript(
   return Boolean(resolveDiskTranscriptSessionKey(session, engine));
 }
 
+/**
+ * 非活动/全局预算丢弃正文前：是否已有可恢复的磁盘证据。
+ *
+ * `sessionHasDiskTranscript` 对 Cursor/Codex RPC 等仅凭 tab id 即为 true，
+ * 但 jsonl 可能尚未写入；此时清空内存会导致重开会话永久空白。
+ * 仅在已有 Claude session id，或曾以磁盘窗口/截断标记 `diskTranscriptPartial` 时才允许丢弃。
+ */
+export function sessionMessagesSafeToDropForDiskReload(
+  session: {
+    claudeSessionId?: string | null;
+    diskTranscriptPartial?: boolean;
+  },
+  _engine: SessionExecutionEngine,
+): boolean {
+  if (session.diskTranscriptPartial === true) return true;
+  return Boolean(session.claudeSessionId?.trim());
+}
+
 /** 主会话消息区空状态：与 Composer 执行引擎选择一致。 */
 export function buildSessionEmptyChatPrompt(engine: SessionExecutionEngine): string {
   return `发送消息开始与 ${SESSION_EXECUTION_ENGINE_LABELS[engine].title} 对话`;

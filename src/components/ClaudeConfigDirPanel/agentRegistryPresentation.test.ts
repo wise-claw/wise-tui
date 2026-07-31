@@ -104,7 +104,7 @@ describe("agent registry presentation helpers", () => {
     expect(getAgentKindLabel("gemini")).toBe("Gemini");
     expect(getAgentKindLabel("opencode")).toBe("OpenCode");
     expect(getAgentKindLabel("qoder")).toBe("Qoder CLI");
-    expect(getAgentKindLabel("cursor")).toBe("Cursor CLI");
+    expect(getAgentKindLabel("cursor")).toBe("Cursor Agent");
     expect(getAgentKindLabel("custom")).toBe("自定义");
     expect(getBuiltinInstallCommand("opencode")).toBe("npm install -g opencode-ai@latest");
     expect(getBuiltinInstallCommand("qoder")).toBe("npm install -g @qoder-ai/qodercli");

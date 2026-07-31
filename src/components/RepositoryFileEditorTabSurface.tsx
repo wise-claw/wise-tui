@@ -37,7 +37,9 @@ import { useMonacoGitModifiedLineDecorations } from "../hooks/useMonacoGitModifi
 import { MarkdownBody } from "./ClaudeSessions/MarkdownElements";
 import rehypeRaw from "rehype-raw";
 
-const MonacoEditor = lazy(() => import("@monaco-editor/react"));
+const MonacoEditor = lazy(() =>
+  import("../utils/preloadMonacoEditor").then((m) => m.loadMonacoEditorReact()),
+);
 
 export interface RepositoryFileEditorTabSurfaceProps {
   tab: FileEditorTab;

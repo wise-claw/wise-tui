@@ -11,6 +11,7 @@ import {
   resolveSessionPaneContextRepository,
   resolveDiskTranscriptSessionKey,
   sessionHasDiskTranscript,
+  sessionMessagesSafeToDropForDiskReload,
   usesWiseTabIdForDiskTranscript,
 } from "./sessionExecutionEngine";
 
@@ -340,13 +341,39 @@ describe("disk transcript session keys", () => {
       sessionHasDiskTranscript({ id: "tab-1", claudeSessionId: null }, "claude"),
     ).toBe(false);
   });
+
+  test("codex-rpc tab id alone is not enough to drop in-memory messages", () => {
+    expect(usesWiseTabIdForDiskTranscript("codex-rpc")).toBe(true);
+    expect(
+      sessionHasDiskTranscript({ id: "session_1_abc", claudeSessionId: null }, "codex-rpc"),
+    ).toBe(true);
+    expect(
+      sessionMessagesSafeToDropForDiskReload(
+        { claudeSessionId: null, diskTranscriptPartial: false },
+        "codex-rpc",
+      ),
+    ).toBe(false);
+    expect(
+      sessionMessagesSafeToDropForDiskReload(
+        { claudeSessionId: null, diskTranscriptPartial: true },
+        "codex-rpc",
+      ),
+    ).toBe(true);
+    expect(
+      sessionMessagesSafeToDropForDiskReload(
+        { claudeSessionId: "claude-uuid", diskTranscriptPartial: false },
+        "claude",
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("buildSessionEmptyChatPrompt", () => {
   test("uses execution engine title in empty chat prompt", () => {
     expect(buildSessionEmptyChatPrompt("claude")).toBe("发送消息开始与 Claude Code 对话");
-    expect(buildSessionEmptyChatPrompt("cursor")).toBe("发送消息开始与 Cursor CLI 对话");
+    expect(buildSessionEmptyChatPrompt("cursor")).toBe("发送消息开始与 Cursor Agent 对话");
     expect(buildSessionEmptyChatPrompt("codex")).toBe("发送消息开始与 Codex CLI 对话");
+    expect(buildSessionEmptyChatPrompt("codex-rpc")).toBe("发送消息开始与 Codex RPC 对话");
     expect(buildSessionEmptyChatPrompt("gemini")).toBe("发送消息开始与 Gemini CLI 对话");
     expect(buildSessionEmptyChatPrompt("opencode")).toBe("发送消息开始与 OpenCode 对话");
     expect(buildSessionEmptyChatPrompt("qoder")).toBe("发送消息开始与 Qoder CLI 对话");

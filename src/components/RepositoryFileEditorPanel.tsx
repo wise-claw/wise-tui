@@ -105,7 +105,7 @@ export function RepositoryFileEditorPanel({
 
   useEffect(() => {
     if (tabs.some((tab) => !tab.loading)) {
-      void import("@monaco-editor/react");
+      void import("../utils/preloadMonacoEditor").then((m) => m.preloadMonacoEditor());
     }
   }, [tabs]);
 

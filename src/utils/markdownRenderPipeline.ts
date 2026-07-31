@@ -436,7 +436,7 @@ function createMermaidPlaceholder(doc: Document, source: string): HTMLDivElement
   const status = doc.createElement("div");
   status.className = "app-markdown-mermaid__status";
   status.setAttribute("role", "status");
-  status.textContent = "正在渲染流程图…";
+  status.textContent = "流程图将在可见时渲染…";
   const sourceEl = doc.createElement("pre");
   sourceEl.className = "app-markdown-mermaid__source";
   sourceEl.textContent = source;

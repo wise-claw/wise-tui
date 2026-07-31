@@ -532,7 +532,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     streamingTargetIdRef.current = tabSessionId;
     scheduleStreamStallTimer(tabSessionId);
     commitSessions((prev) =>
-      appendSystemMessageBySessionId(prev, tabSessionId, "Cursor CLI 执行中…"),
+      appendSystemMessageBySessionId(prev, tabSessionId, "Cursor Agent 执行中…"),
     );
     const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;

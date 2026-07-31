@@ -183,7 +183,7 @@ const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
   return (
     <div ref={ref} className="app-markdown-mermaid" role="figure" aria-label="流程图">
       <div className="app-markdown-mermaid__status" role="status">
-        正在渲染流程图…
+        流程图将在可见时渲染…
       </div>
       <pre className="app-markdown-mermaid__source" hidden>
         {source}

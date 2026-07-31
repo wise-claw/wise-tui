@@ -1,7 +1,8 @@
-//! Cursor Agent CLI execution for Wise.
+//! Cursor Agent tooling for Wise (status / probe / models / legacy CLI execute).
 //!
-//! Spawns the `agent` CLI (`agent -p --output-format stream-json`) and stores
-//! optional `CURSOR_API_KEY` in SQLite. Auth may also come from `agent login`.
+//! Dialogue execution has hard-cut to ACP (`cursor_acp_commands::execute_cursor_acp`).
+//! This module keeps `agent -p` helpers for probes and optional legacy
+//! `execute_cursor_code`, plus API key storage (`agent login` / `CURSOR_API_KEY`).
 
 use crate::cursor_binary::{
     apply_cursor_child_env, cursor_merged_path_env, find_cursor_agent_binary,

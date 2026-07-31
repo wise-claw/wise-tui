@@ -56,8 +56,21 @@ describe("isSystemMessageDisplayNoiseText", () => {
     ).toBe(true);
   });
 
+  test("treats engine running placeholders as display noise", () => {
+    expect(isSystemMessageDisplayNoiseText("Cursor Agent 执行中…")).toBe(true);
+    expect(isSystemMessageDisplayNoiseText("Cursor CLI 执行中…")).toBe(true);
+    expect(isSystemMessageDisplayNoiseText("Cursor SDK 执行中…")).toBe(true);
+    expect(isSystemMessageDisplayNoiseText("Codex 执行中（新会话，模型：默认）…")).toBe(true);
+    expect(isSystemMessageDisplayNoiseText("Codex RPC 执行中（续聊，模型：gpt-5）…")).toBe(true);
+  });
+
   test("keeps meaningful system messages visible", () => {
     expect(isSystemMessageDisplayNoiseText("Claude 系统错误: rate limit exceeded")).toBe(false);
+    expect(
+      isSystemMessageDisplayNoiseText(
+        "启动失败: invalid args params for command execute_cursor_acp",
+      ),
+    ).toBe(false);
   });
 });
 

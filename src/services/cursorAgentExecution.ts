@@ -1,7 +1,11 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { CursorMcpServerConfig } from "./cursorMcpConfig";
 import type { CursorSdkAttachment } from "./cursorComposerPrompt";
+import { executeCursorAcp } from "./cursorAcp";
 
+/**
+ * Cursor execution entry used by session engines.
+ * Hard-cut to ACP (`execute_cursor_acp`); legacy `agent -p` is no longer used here.
+ */
 export async function executeCursorCode(
   repositoryPath: string,
   prompt: string,
@@ -9,22 +13,23 @@ export async function executeCursorCode(
   invocationKey?: string,
   tabSessionId?: string,
   cursorAgentId?: string,
-  mcpServers?: Record<string, CursorMcpServerConfig>,
-  cursorAttachments?: CursorSdkAttachment[],
+  _mcpServers?: Record<string, CursorMcpServerConfig>,
+  _cursorAttachments?: CursorSdkAttachment[],
+  options?: {
+    mode?: string;
+    /** When omitted, Rust defaults to true (legacy --force parity). */
+    autoApprovePermissions?: boolean;
+  },
 ): Promise<void> {
-  const normalizedCursorAgentId = cursorAgentId?.trim() || null;
-  const normalizedMcpServers =
-    mcpServers && Object.keys(mcpServers).length > 0 ? mcpServers : null;
-  const normalizedAttachments =
-    cursorAttachments && cursorAttachments.length > 0 ? cursorAttachments : null;
-  return invoke("execute_cursor_code", {
+  const normalizedCursorAgentId = cursorAgentId?.trim() || undefined;
+  await executeCursorAcp({
     projectPath: repositoryPath,
     prompt,
     model,
-    mcpServers: normalizedMcpServers,
-    cursorAttachments: normalizedAttachments,
     invocationKey,
     tabSessionId,
     cursorAgentId: normalizedCursorAgentId,
+    mode: options?.mode,
+    autoApprovePermissions: options?.autoApprovePermissions,
   });
 }

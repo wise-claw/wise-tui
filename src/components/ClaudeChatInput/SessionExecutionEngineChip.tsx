@@ -215,7 +215,7 @@ export function SessionExecutionEngineChip({
 
   const chipTooltip = !engineReady
     ? engine === "cursor"
-      ? "Cursor CLI 未就绪；请安装 agent 并 login / 配置 API Key"
+      ? "Cursor Agent 未就绪；请安装 agent 并 login / 配置 API Key"
       : engine === "gemini"
         ? "未检测到 Gemini CLI；可在下拉菜单中点击「探测」"
         : engine === "opencode"

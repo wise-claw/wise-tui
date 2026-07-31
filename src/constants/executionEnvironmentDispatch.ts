@@ -11,6 +11,7 @@ export const EXECUTION_ENVIRONMENT_REPO_MARKER = "/执行环境:";
 export const EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES: Record<SessionExecutionEngine, string> = {
   claude: SESSION_EXECUTION_ENGINE_LABELS.claude.title,
   codex: SESSION_EXECUTION_ENGINE_LABELS.codex.title,
+  "codex-rpc": SESSION_EXECUTION_ENGINE_LABELS["codex-rpc"].title,
   cursor: SESSION_EXECUTION_ENGINE_LABELS.cursor.title,
   gemini: SESSION_EXECUTION_ENGINE_LABELS.gemini.title,
   opencode: SESSION_EXECUTION_ENGINE_LABELS.opencode.title,

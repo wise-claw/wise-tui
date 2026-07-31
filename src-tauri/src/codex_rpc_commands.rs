@@ -127,6 +127,28 @@ fn emit_rpc_output_line(
     emit_adapted_stream_payload(app, CLAUDE_STREAM_EVENT_OUTPUT, session_id, &line, invocation_key);
 }
 
+/// Persist a transcript line; log failures so silent disk miss doesn't look like a UI bug.
+fn persist_codex_rpc_transcript_line(project_path: &str, tab_session_id: &str, line: &str) {
+    if let Err(e) =
+        crate::codex_rpc_disk::append_codex_rpc_session_line(project_path, tab_session_id, line)
+    {
+        eprintln!(
+            "[codex_rpc] transcript append failed (tab={tab_session_id}): {e}"
+        );
+    }
+}
+
+fn emit_and_persist_rpc_output_line(
+    app: &AppHandle,
+    project_path: &str,
+    session_id: &str,
+    line: &str,
+    invocation_key: Option<&str>,
+) {
+    persist_codex_rpc_transcript_line(project_path, session_id, line);
+    emit_rpc_output_line(app, session_id, line, invocation_key);
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -177,13 +199,18 @@ pub(crate) async fn execute_codex_rpc(
         registry.register(session_id.clone(), params.project_path.clone(), model_label);
     }
 
-    // Emit init line.
-    emit_rpc_output_line(
+    // Emit + persist init line so reopen can hydrate even if the turn fails later.
+    emit_and_persist_rpc_output_line(
         &app,
+        &params.project_path,
         &session_id,
         &codex_rpc_init_stream_line(&session_id),
         invocation_key.as_deref(),
     );
+
+    // Persist user prompt before thread/turn so a failed start still leaves recoverable history.
+    let user_line = crate::cursor_disk::build_cursor_user_turn_line(trimmed_prompt, None);
+    persist_codex_rpc_transcript_line(&params.project_path, &session_id, &user_line);
 
     // Bootstrap the session (spawn subprocess + initialize handshake).
     let mut session = match CodexRpcSession::bootstrap(&codex_path).await {
@@ -191,8 +218,9 @@ pub(crate) async fn execute_codex_rpc(
         Err(e) => {
             let msg = format!("Codex app-server 启动失败: {e}");
             eprintln!("[codex_rpc] {msg}");
-            emit_rpc_output_line(
+            emit_and_persist_rpc_output_line(
                 &app,
+                &params.project_path,
                 &session_id,
                 &json!({
                     "type": "assistant",
@@ -229,8 +257,9 @@ pub(crate) async fn execute_codex_rpc(
     if let Err(e) = thread_result {
         let msg = format!("Codex thread 创建失败: {e}");
         eprintln!("[codex_rpc] {msg}");
-        emit_rpc_output_line(
+        emit_and_persist_rpc_output_line(
             &app,
+            &params.project_path,
             &session_id,
             &json!({
                 "type": "assistant",
@@ -250,8 +279,9 @@ pub(crate) async fn execute_codex_rpc(
     if let Err(e) = turn_result {
         let msg = format!("Codex turn 启动失败: {e}");
         eprintln!("[codex_rpc] {msg}");
-        emit_rpc_output_line(
+        emit_and_persist_rpc_output_line(
             &app,
+            &params.project_path,
             &session_id,
             &json!({
                 "type": "assistant",
@@ -265,14 +295,6 @@ pub(crate) async fn execute_codex_rpc(
         emit_rpc_complete(&app, invocation_key.as_deref(), &session_id, false);
         return Err(msg);
     }
-
-    // Persist user prompt to disk transcript.
-    let user_line = crate::cursor_disk::build_cursor_user_turn_line(trimmed_prompt, None);
-    let _ = crate::codex_rpc_disk::append_codex_rpc_session_line(
-        &params.project_path,
-        &session_id,
-        &user_line,
-    );
 
     // Store the session for potential interrupt/shutdown.
     let session_arc = Arc::new(TokioMutex::new(session));
@@ -348,7 +370,7 @@ pub(crate) async fn execute_codex_rpc(
                     // Persist adapted lines to disk, then emit to frontend.
                     let lines = adapt_notification_to_stream_lines(&notification, &session_id_loop);
                     for line in &lines {
-                        let _ = crate::codex_rpc_disk::append_codex_rpc_session_line(
+                        persist_codex_rpc_transcript_line(
                             &project_path_loop,
                             &session_id_loop,
                             line,

@@ -2,14 +2,22 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 const invoke = mock(async (_cmd: string, _payload?: unknown) => ({}));
 
-mock.module("@tauri-apps/api/core", () => ({ invoke }));
+mock.module("@tauri-apps/api/core", () => ({
+  invoke,
+  transformCallback: () => 0,
+  CHANNEL_PREFIX: "__CHANNEL__",
+  isTauri: () => true,
+}));
+mock.module("@tauri-apps/api/event", () => ({
+  listen: async () => () => {},
+}));
 
 describe("cursorAgentExecution service", () => {
   beforeEach(() => {
     invoke.mockClear();
   });
 
-  test("wraps execute_cursor_code with camelCase payload", async () => {
+  test("wraps execute_cursor_acp with params envelope", async () => {
     const { executeCursorCode } = await import("./cursorAgentExecution");
 
     await executeCursorCode(
@@ -23,15 +31,17 @@ describe("cursorAgentExecution service", () => {
       [{ path: "/tmp/a.png", mimeType: "image/png" }],
     );
 
-    expect(invoke).toHaveBeenCalledWith("execute_cursor_code", {
-      projectPath: "/repo/demo",
-      prompt: "fix bug",
-      model: "composer-2.5",
-      mcpServers: { demo: { type: "stdio", command: "echo", args: [] } },
-      cursorAttachments: [{ path: "/tmp/a.png", mimeType: "image/png" }],
-      invocationKey: "inv-1",
-      tabSessionId: "tab-1",
-      cursorAgentId: "agent-1",
+    expect(invoke).toHaveBeenCalledWith("execute_cursor_acp", {
+      params: {
+        projectPath: "/repo/demo",
+        prompt: "fix bug",
+        model: "composer-2.5",
+        invocationKey: "inv-1",
+        tabSessionId: "tab-1",
+        cursorAgentId: "agent-1",
+        mode: undefined,
+        autoApprovePermissions: undefined,
+      },
     });
   });
 });

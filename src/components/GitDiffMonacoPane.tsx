@@ -18,9 +18,10 @@ import { runWhenIdle } from "../utils/deferIdle";
 import { resolveMonacoIdleDeferTimeoutMs } from "../utils/uiWorkDefer";
 import { useMonacoCodeReviewFindingDecorations } from "../hooks/useMonacoCodeReviewFindingDecorations";
 import { MonacoSelectionChatToolbar } from "./MonacoSelectionChatToolbar";
+import { loadMonacoEditorReact } from "../utils/preloadMonacoEditor";
 
 const DiffEditor = lazy(() =>
-  import("@monaco-editor/react").then((m) => ({ default: m.DiffEditor })),
+  loadMonacoEditorReact().then((m) => ({ default: m.DiffEditor })),
 );
 
 interface Props {

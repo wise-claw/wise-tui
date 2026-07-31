@@ -103,7 +103,7 @@ export function getAgentKindLabel(kind: DetectedAgent["kind"]): string {
     case "qoder":
       return "Qoder CLI";
     case "cursor":
-      return "Cursor CLI";
+      return "Cursor Agent";
     case "custom":
       return "自定义";
   }

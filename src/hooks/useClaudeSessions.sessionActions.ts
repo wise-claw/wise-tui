@@ -206,7 +206,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     }
     if (executionEngine === "gemini") {
       const engineTitle = SESSION_EXECUTION_ENGINE_LABELS[executionEngine].title;
-      const geminiNotice = `[系统] ${engineTitle} 主会话派发即将支持，请暂时切换 Claude Code、Codex CLI、OpenCode、Qoder CLI 或 Cursor CLI。`;
+      const geminiNotice = `[系统] ${engineTitle} 主会话派发即将支持，请暂时切换 Claude Code、Codex CLI、OpenCode、Qoder CLI 或 Cursor Agent。`;
       commitSessions((prev) => {
         // task 留队列后，外部 flush 可能重派命中同一 gemini 终态分支：去重避免重复追加系统提示。
         const target = prev.find((s) => s.id === tabSessionId);
@@ -578,6 +578,12 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     purgeStreamSidecarsForSession(sessionId, victim?.claudeSessionId);
     clearStreamStallTimer(sessionId);
     detachClaudeInvocationsForSessionKey(sessionId);
+    // Release persistent Cursor ACP process for this tab.
+    void import("../services/cursorAcp")
+      .then(({ shutdownCursorAcp }) => shutdownCursorAcp(sessionId))
+      .catch(() => {
+        /* no active ACP session */
+      });
     const victimSid = victim?.claudeSessionId?.trim() ?? sessionIdMapRef.current.get(sessionId)?.trim();
     if (victimSid) {
       void closeStreamingSession(victimSid).catch(() => {

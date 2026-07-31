@@ -12,7 +12,9 @@ import type { WorkflowCodeExecutionConfig, WorkflowCodeExecutionMode, WorkflowCo
 import { DEFAULT_WORKFLOW_CODE_CONFIG } from "../../types/workflowCode";
 import type { CanvasNodeItem } from "../workflowGraph/workflowX6CanvasShared";
 
-const MonacoEditor = lazy(() => import("@monaco-editor/react"));
+const MonacoEditor = lazy(() =>
+  import("../../utils/preloadMonacoEditor").then((m) => m.loadMonacoEditorReact()),
+);
 
 export interface WorkflowCodeNodeFormValues {
   title: string;

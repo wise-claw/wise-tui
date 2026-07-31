@@ -150,6 +150,7 @@ import {
   resolveDiskTranscriptSessionKey,
   resolveDiskTranscriptSource,
   sessionHasDiskTranscript,
+  sessionMessagesSafeToDropForDiskReload,
   type DiskTranscriptSource,
 } from "../utils/sessionExecutionEngine";
 import { findSessionByTabOrClaudeId } from "../utils/claudeSessionSelection";
@@ -520,7 +521,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
         const stallMessage =
           engine === "cursor"
-            ? "Cursor CLI 长时间无可见输出。请点「结束」后重试，或检查 API Key / agent login 与网络连接。"
+            ? "Cursor Agent 长时间无可见输出。请点「结束」后重试，或检查 API Key / agent login 与网络连接。"
             : engine === "codex" || engine === "codex-rpc"
               ? "Codex 子进程长时间无可见输出。请点「结束」后重试。"
               : "Claude 子进程长时间无可见输出。请点「结束」后重试；若反复出现，可暂时关闭 Cockpit 助手 MCP 或在终端用 stream-json 自检。";
@@ -586,6 +587,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
       meta.detach();
       claudeInvocationInflightRef.current.delete(inv);
+    }
+    // Cursor ACP: session/cancel on the persistent process (kill-child alone is insufficient).
+    try {
+      const { interruptCursorAcp } = await import("../services/cursorAcp");
+      await interruptCursorAcp(tabSessionId);
+    } catch {
+      /* no active ACP session for this tab */
     }
     for (const sid of cancelIds) {
       try {
@@ -729,6 +737,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   const {
     runCodexOneshotWithInvocation,
+    runCodexRpcOneshotWithInvocation,
     runOpencodeOneshotWithInvocation,
     runQoderOneshotWithInvocation,
     runCursorOneshotWithInvocation,
@@ -1413,9 +1422,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       };
 
       const resolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
-      if (resolver?.(session) === "codex" || resolver?.(session) === "codex-rpc") {
+      const resolvedEngine = resolver?.(session);
+      if (resolvedEngine === "codex" || resolvedEngine === "codex-rpc") {
         const contextExecutionEngine =
-          params.codexContextExecutionEngine ?? resolver(session);
+          params.codexContextExecutionEngine ?? resolvedEngine;
         if (params.forceNewClaudeConversation) {
           setSessions((prev) =>
             prev.map((s) => (s.id === tabSessionId ? { ...s, claudeSessionId: null } : s)),
@@ -1425,6 +1435,19 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         const codexResumeSessionId = params.forceNewClaudeConversation
           ? null
           : resolveCodexResumeSessionId(session, tabSessionId, sessionIdMapRef.current);
+        if (resolvedEngine === "codex-rpc") {
+          // 主发送路径此前误走 Codex CLI，导致不写 ~/.wise/codex-runs，刷新后无法 hydrate。
+          await runCodexRpcOneshotWithInvocation({
+            tabSessionId,
+            turnNonce: params.turnNonce,
+            repositoryPath,
+            prompt,
+            modelArg: params.modelArg,
+            contextExecutionEngine,
+            codexResumeSessionId,
+          });
+          return;
+        }
         await runCodexOneshotWithInvocation({
           tabSessionId,
           turnNonce: params.turnNonce,
@@ -1603,6 +1626,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       invokeClaudeTurn,
       reloadTranscriptFromDisk,
       runCodexOneshotWithInvocation,
+      runCodexRpcOneshotWithInvocation,
       runCursorOneshotWithInvocation,
       runOpencodeOneshotWithInvocation,
       runQoderOneshotWithInvocation,
@@ -2386,8 +2410,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             diskTranscriptPartial: true,
           };
         }
-        const hasDisk = sessionHasDiskTranscript(s, resolveSessionExecutionEngine(s));
-        if (!hasDisk && s.messages.length > 0) return s;
+        const engine = resolveSessionExecutionEngine(s);
+        const canReloadFromDisk = sessionMessagesSafeToDropForDiskReload(s, engine);
+        // tab id 不等于 jsonl 已落盘：Codex RPC 等若尚无 diskTranscriptPartial / claudeSessionId，
+        // 清空内存会导致重开空白且无法 hydrate。
+        if (!canReloadFromDisk) return s;
         if (s.messages.length === 0) return s;
         changed = true;
         diskLoadDoneRef.current.delete(s.id);
@@ -2396,7 +2423,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           // 丢弃正文前锁住侧栏标题，避免未选中项回落「新会话」或与真实话题脱节。
           diskPreview: retainSessionListPreviewOnMessageDrop(s),
           messages: [],
-          diskTranscriptPartial: hasDisk || Boolean(s.claudeSessionId?.trim()),
+          diskTranscriptPartial: true,
           transcriptMemoryUnlimited: false,
         };
       });
@@ -3521,6 +3548,43 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         sessions: sessionsRef.current,
         sessionIdMap: sessionIdMapRef.current,
       });
+      const engineResolverForQuestion =
+        claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
+      const questionEngine =
+        engineResolverForQuestion && session
+          ? engineResolverForQuestion(session)
+          : null;
+      if (questionEngine === "cursor") {
+        try {
+          const { respondCursorAcpQuestion } = await import("../services/cursorAcp");
+          const { decodeCursorAcpQuestionRequestId } = await import(
+            "../services/cursorAcpControlBridge"
+          );
+          const decoded = decodeCursorAcpQuestionRequestId(qr.id);
+          const requestId = decoded?.requestId ?? qr.id;
+          const questionId = decoded?.questionId ?? qr.id;
+          const selected = answers.length > 0 ? answers : customAnswer ? [customAnswer] : [];
+          const outcome =
+            selected.length === 0
+              ? { outcome: "skipped", reason: "empty answer" }
+              : {
+                  outcome: "answered",
+                  answers: [
+                    {
+                      questionId,
+                      selectedOptionIds: selected,
+                    },
+                  ],
+                };
+          await respondCursorAcpQuestion(tabSessionId, requestId, outcome);
+          notificationHub.markRequestAnswered(qr.id);
+          notificationHub.clearQuestion(ownerSessionId);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          notificationHub.markRequestFailed(qr.id, msg);
+        }
+        return;
+      }
       const liveStreamingProcess = hasLiveStreamingClaudeProcess({
         session,
         defaultConnectionKind: defaultConnectionKindRef.current,
@@ -3734,6 +3798,38 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         sessions: sessionsRef.current,
         sessionIdMap: sessionIdMapRef.current,
       });
+      const engineResolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
+      const cursorEngine =
+        engineResolver && session ? engineResolver(session) : null;
+      if (cursorEngine === "cursor") {
+        try {
+          const {
+            respondCursorAcpPermission,
+            respondCursorAcpPlan,
+          } = await import("../services/cursorAcp");
+          if (pr.tool === "ExitPlanMode") {
+            const outcome =
+              response === "deny"
+                ? { outcome: "rejected", reason: "user denied" }
+                : { outcome: "accepted" };
+            await respondCursorAcpPlan(tabSessionId, pr.id, outcome);
+          } else {
+            const decision =
+              response === "allow_always"
+                ? "allow-always"
+                : response === "deny"
+                  ? "reject-once"
+                  : "allow-once";
+            await respondCursorAcpPermission(tabSessionId, pr.id, decision);
+          }
+          notificationHub.markRequestAnswered(pr.id);
+          notificationHub.clearPermission(ownerSessionId);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          notificationHub.markRequestFailed(pr.id, msg);
+        }
+        return;
+      }
       const targetSessionId = session?.claudeSessionId ?? session?.id ?? ownerSessionId;
       const payload = buildPermissionStdinLine(pr.id, response, pr.toolInput, pr.toolUseId);
       const preferStdin =

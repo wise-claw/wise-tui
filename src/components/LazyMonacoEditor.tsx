@@ -2,8 +2,9 @@ import { lazy, Suspense, useCallback, useEffect, useRef, type ComponentProps } f
 import { Spin } from "antd";
 import type { IDisposable } from "monaco-editor";
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
+import { loadMonacoEditorReact } from "../utils/preloadMonacoEditor";
 
-const MonacoEditorLazy = lazy(() => import("@monaco-editor/react"));
+const MonacoEditorLazy = lazy(() => loadMonacoEditorReact());
 
 type MonacoEditorProps = ComponentProps<typeof MonacoEditorLazy>;
 

@@ -175,7 +175,9 @@ function enforceGlobalMessagesBudget(
         !session.transcriptMemoryUnlimited &&
         !keepSessionIds.has(session.id) &&
         session.status !== "running" &&
-        session.status !== "connecting",
+        session.status !== "connecting" &&
+        // 无磁盘证据时不可整段丢弃（Codex RPC/Cursor 仅有 tab id 不足以证明 jsonl 已落盘）。
+        (Boolean(session.claudeSessionId?.trim()) || Boolean(session.diskTranscriptPartial)),
     )
     .sort((a, b) => b.messages.length - a.messages.length);
 

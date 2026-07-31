@@ -27,9 +27,9 @@ export const SESSION_EXECUTION_ENGINE_LABELS: Record<
     description: "OpenAI Codex App-Server JSON-RPC",
   },
   cursor: {
-    title: "Cursor CLI",
+    title: "Cursor Agent",
     short: "Cursor",
-    description: "Cursor Agent CLI（agent -p）",
+    description: "Cursor Agent ACP（agent acp）",
   },
   gemini: {
     title: "Gemini CLI",

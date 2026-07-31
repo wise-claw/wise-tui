@@ -129,4 +129,29 @@ mod tests {
         assert!(!is_safe_codex_tab_session_id("../evil"));
         assert!(!is_safe_codex_tab_session_id("short"));
     }
+
+    #[test]
+    fn append_and_load_roundtrip() {
+        let project = std::env::temp_dir().join(format!(
+            "wise-codex-rpc-disk-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&project);
+        fs::create_dir_all(&project).expect("temp project dir");
+        let project_path = project.to_string_lossy().to_string();
+        let tab = "session_1719000000_roundtrip";
+        append_codex_rpc_session_line(&project_path, tab, r#"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}"#)
+            .expect("append");
+        let lines = load_codex_rpc_session_jsonl(&project_path, tab, None).expect("load");
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("hi"));
+        let _ = fs::remove_dir_all(&project);
+        // Also remove the encoded repo dir under ~/.wise/codex-runs created by this test.
+        if let Ok(path) = codex_rpc_session_jsonl_path(&project_path, tab) {
+            let _ = fs::remove_file(&path);
+            if let Some(parent) = path.parent() {
+                let _ = fs::remove_dir(parent);
+            }
+        }
+    }
 }

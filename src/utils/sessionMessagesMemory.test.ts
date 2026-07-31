@@ -216,6 +216,49 @@ describe("sessionMessagesMemory", () => {
     expect(idle?.diskPreview).toBe("idle-title");
   });
 
+  test("applySessionsMemoryCap keeps tab-only sessions without disk evidence", () => {
+    const mkMessages = (n: number, prefix: string) =>
+      Array.from({ length: n }, (_, i) => ({
+        id: i,
+        role: "user" as const,
+        content: i === 0 ? `${prefix}-title` : `m${i}`,
+        parts: [],
+        timestamp: i,
+      }));
+    const sessions = [
+      {
+        id: "active",
+        claudeSessionId: "active",
+        repositoryPath: "/r",
+        repositoryName: "r",
+        model: "sonnet",
+        status: "completed" as const,
+        messages: mkMessages(IN_MEMORY_SESSION_MESSAGES_MAX, "active"),
+        createdAt: 1,
+        pendingPrompt: "",
+      },
+      {
+        id: "codex-rpc-tab",
+        claudeSessionId: null,
+        repositoryPath: "/r",
+        repositoryName: "r",
+        model: "minimax-m3",
+        status: "idle" as const,
+        messages: mkMessages(IN_MEMORY_SESSION_MESSAGES_MAX, "codex"),
+        createdAt: 2,
+        pendingPrompt: "",
+        diskTranscriptPartial: false,
+      },
+    ];
+    const next = applySessionsMemoryCap(sessions, {
+      keepSessionIds: new Set(["active"]),
+      globalMessagesBudget: IN_MEMORY_SESSION_MESSAGES_MAX,
+    });
+    expect(next.find((s) => s.id === "codex-rpc-tab")?.messages.length).toBe(
+      IN_MEMORY_SESSION_MESSAGES_MAX,
+    );
+  });
+
   test("applySessionsMemoryCap retains diskPreview when per-session cap drops first user message", () => {
     const sessions = [
       {

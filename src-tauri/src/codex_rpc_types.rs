@@ -80,10 +80,12 @@ pub struct ThreadStartParams {
 }
 
 /// Response payload from `thread/start`.
+///
+/// Wire shape: `{ "thread": { "id": "thr_…", … } }` (not a bare `{ "id": … }`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ThreadStartResponse {
-    /// Thread identifier (e.g. `"thr_xxx"`).
-    pub id: String,
+    pub thread: ThreadInfo,
 }
 
 /// Parameters for the `thread/resume` request.
@@ -93,10 +95,11 @@ pub struct ThreadResumeParams {
     pub thread_id: String,
 }
 
-/// Response payload from `thread/resume`.
+/// Response payload from `thread/resume` (same envelope as `thread/start`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ThreadResumeResponse {
-    pub id: String,
+    pub thread: ThreadInfo,
 }
 
 // ---------------------------------------------------------------------------
@@ -108,22 +111,47 @@ pub struct ThreadResumeResponse {
 #[serde(rename_all = "camelCase")]
 pub struct TurnStartParams {
     pub thread_id: String,
-    pub input: TurnInput,
+    /// App-server expects an array of input items, e.g. `[{ "type": "text", "text": "…" }]`.
+    pub input: Vec<TurnInputItem>,
 }
 
-/// User input payload for a turn.
+/// One user input item for `turn/start`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TurnInput {
+#[serde(rename_all = "camelCase")]
+pub struct TurnInputItem {
+    #[serde(rename = "type")]
+    pub item_type: String,
+    pub text: String,
+}
+
+impl TurnInputItem {
+    pub fn text(text: impl Into<String>) -> Self {
+        Self {
+            item_type: "text".to_string(),
+            text: text.into(),
+        }
+    }
+}
+
+/// Backward-compatible alias used by older call sites / docs.
+pub type TurnInput = TurnInputItem;
+
+/// Turn metadata returned by `turn/start`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnInfo {
+    pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub text: Option<String>,
+    pub status: Option<String>,
 }
 
 /// Response payload from `turn/start`.
+///
+/// Wire shape: `{ "turn": { "id": "turn_…", "status": "inProgress", … } }`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnStartResponse {
-    pub id: String,
-    pub thread_id: String,
+    pub turn: TurnInfo,
 }
 
 /// Parameters for the `turn/interrupt` request.
@@ -1195,5 +1223,55 @@ fn parse_thread_item(v: Option<&Value>) -> ThreadItem {
             item_type: "unknown".to_string(),
             raw: Value::Null,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_thread_start_response_envelope() {
+        let raw = serde_json::json!({
+            "thread": {
+                "id": "thr_123",
+                "sessionId": "thr_123",
+                "preview": "",
+                "ephemeral": false,
+                "modelProvider": "openai",
+                "createdAt": 1730910000
+            },
+            "model": "gpt-5.4",
+            "cwd": "/tmp/demo"
+        });
+        let parsed: ThreadStartResponse = serde_json::from_value(raw).expect("parse");
+        assert_eq!(parsed.thread.id, "thr_123");
+    }
+
+    #[test]
+    fn parses_turn_start_response_envelope() {
+        let raw = serde_json::json!({
+            "turn": {
+                "id": "turn_456",
+                "status": "inProgress",
+                "items": [],
+                "error": null
+            }
+        });
+        let parsed: TurnStartResponse = serde_json::from_value(raw).expect("parse");
+        assert_eq!(parsed.turn.id, "turn_456");
+        assert_eq!(parsed.turn.status.as_deref(), Some("inProgress"));
+    }
+
+    #[test]
+    fn serializes_turn_start_input_as_item_array() {
+        let params = TurnStartParams {
+            thread_id: "thr_123".to_string(),
+            input: vec![TurnInputItem::text("hello")],
+        };
+        let value = serde_json::to_value(&params).expect("serialize");
+        assert_eq!(value["threadId"], "thr_123");
+        assert_eq!(value["input"][0]["type"], "text");
+        assert_eq!(value["input"][0]["text"], "hello");
     }
 }

@@ -49,7 +49,9 @@ import { ExtensionSnapshotTree } from "./ExtensionSnapshotTree";
 import { MyExtensionsUsageHelpIcon } from "./usageGuide";
 import "./index.css";
 
-const MonacoEditor = lazy(() => import("@monaco-editor/react"));
+const MonacoEditor = lazy(() =>
+  import("../../utils/preloadMonacoEditor").then((m) => m.loadMonacoEditorReact()),
+);
 
 const KIND_FILTERS: Array<{ key: "all" | MyExtensionKind; label: string }> = [
   { key: "all", label: "全部" },

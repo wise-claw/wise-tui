@@ -5,9 +5,8 @@
  * 离线即不可用、版本随 CDN 漂移、首屏打开文件需联网下载 ~5MB。本模块把本地打包的 monaco-editor
  * 实例注入 loader，并设置 worker 工厂，使 Monaco 完全从本地 chunk 加载。
  *
- * 由 main.tsx 在应用启动时尽早异步 import：不阻塞首屏 root render，且在首个编辑器 mount 前
- * 完成 loader 配置（编辑器按需打开，通常有数秒交互窗口）。即便极端竞态下未及时就绪，
- * @monaco-editor/react 会降级走默认 CDN，不会崩溃。
+ * 由 `ensureMonacoEnvironmentReady` / `preloadMonacoEditor` 在首次打开编辑器时按需 import，
+ * 避免应用冷启动即解析 monaco-vendor。
  */
 import * as monaco from "monaco-editor";
 import { loader } from "@monaco-editor/react";

@@ -59,7 +59,13 @@ async function spawnSessionEngineOneshot(input: {
       );
       return;
     case "cursor":
-      await executeCursorCode(repositoryPath, prompt, model, invocationKey);
+      await executeCursorCode(
+        repositoryPath,
+        prompt,
+        model,
+        invocationKey,
+        tabSessionId,
+      );
       return;
     case "opencode":
       await executeOpencodeCode(

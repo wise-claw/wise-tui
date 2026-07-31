@@ -10,6 +10,9 @@ type MermaidModule = typeof import("mermaid");
 let mermaidModulePromise: Promise<MermaidModule> | null = null;
 let initializedKey: string | null = null;
 
+/** 每个占位块最多挂一个 IntersectionObserver，避免重复调度。 */
+const pendingBlockObservers = new WeakMap<HTMLElement, IntersectionObserver>();
+
 function resolveMermaidTheme(): "default" | "dark" {
   if (typeof document === "undefined") return "default";
   if (document.documentElement.getAttribute("data-theme") === "dark") return "dark";
@@ -183,30 +186,93 @@ function showMermaidRenderError(
   }
 }
 
-/** 将容器内待渲染的 Mermaid 占位块渲染为 SVG。 */
-export async function renderMermaidInContainer(container: HTMLElement): Promise<void> {
-  const blocks = container.querySelectorAll<HTMLElement>(
-    ".app-markdown-mermaid:not([data-mermaid-rendered])",
+function disconnectMermaidBlockObserver(block: HTMLElement): void {
+  const observer = pendingBlockObservers.get(block);
+  if (!observer) return;
+  observer.disconnect();
+  pendingBlockObservers.delete(block);
+}
+
+async function renderSingleMermaidBlock(block: HTMLElement): Promise<void> {
+  if (!block.isConnected || block.hasAttribute("data-mermaid-rendered")) return;
+
+  const sourceEl = block.querySelector<HTMLElement>(".app-markdown-mermaid__source");
+  const rawSource = sourceEl?.textContent?.trim() ?? "";
+  if (!rawSource) {
+    block.setAttribute("data-mermaid-rendered", "empty");
+    return;
+  }
+
+  const statusEl = block.querySelector<HTMLElement>(".app-markdown-mermaid__status");
+  if (statusEl) {
+    statusEl.textContent = "正在渲染流程图…";
+  }
+
+  try {
+    const svg = await tryRenderMermaidDiagram(rawSource);
+    if (!block.isConnected) return;
+    mountRenderedMermaidDiagram(block, svg);
+  } catch (error) {
+    if (!block.isConnected) return;
+    showMermaidRenderError(block, sourceEl, formatMermaidRenderError(error));
+  }
+}
+
+/**
+ * 进入视口（含预取边距）后再加载 mermaid chunk 并渲染，避免聊天页无图/屏外图拖垮冷启动。
+ * 无 IntersectionObserver 时立即渲染（测试环境 / 极旧运行时）。
+ */
+function scheduleMermaidBlockRender(block: HTMLElement): void {
+  if (!block.isConnected || block.hasAttribute("data-mermaid-rendered")) return;
+  disconnectMermaidBlockObserver(block);
+
+  if (typeof IntersectionObserver === "undefined") {
+    void renderSingleMermaidBlock(block);
+    return;
+  }
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      disconnectMermaidBlockObserver(block);
+      void renderSingleMermaidBlock(block);
+    },
+    {
+      root: null,
+      // 提前一点加载，滚动停住时图已准备好
+      rootMargin: "240px 0px",
+      threshold: 0,
+    },
   );
+  pendingBlockObservers.set(block, observer);
+  observer.observe(block);
+}
+
+function collectPendingMermaidBlocks(container: HTMLElement): HTMLElement[] {
+  const blocks: HTMLElement[] = [];
+  // MarkdownElements 会对单个 `.app-markdown-mermaid` 根节点调用本函数；
+  // querySelectorAll 只查后代，需单独纳入自身。
+  if (
+    container.classList.contains("app-markdown-mermaid") &&
+    !container.hasAttribute("data-mermaid-rendered")
+  ) {
+    blocks.push(container);
+  }
+  for (const el of container.querySelectorAll<HTMLElement>(
+    ".app-markdown-mermaid:not([data-mermaid-rendered])",
+  )) {
+    if (el !== container) blocks.push(el);
+  }
+  return blocks;
+}
+
+/** 将容器内待渲染的 Mermaid 占位块调度为「进视口再渲染」。 */
+export async function renderMermaidInContainer(container: HTMLElement): Promise<void> {
+  const blocks = collectPendingMermaidBlocks(container);
   if (blocks.length === 0) return;
 
   for (const block of blocks) {
-    if (!block.isConnected) continue;
-    const sourceEl = block.querySelector<HTMLElement>(".app-markdown-mermaid__source");
-    const rawSource = sourceEl?.textContent?.trim() ?? "";
-    if (!rawSource) {
-      block.setAttribute("data-mermaid-rendered", "empty");
-      continue;
-    }
-
-    try {
-      const svg = await tryRenderMermaidDiagram(rawSource);
-      if (!block.isConnected) continue;
-      mountRenderedMermaidDiagram(block, svg);
-    } catch (error) {
-      if (!block.isConnected) continue;
-      showMermaidRenderError(block, sourceEl, formatMermaidRenderError(error));
-    }
+    scheduleMermaidBlockRender(block);
   }
 }
 

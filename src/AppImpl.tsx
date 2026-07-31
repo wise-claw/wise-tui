@@ -358,6 +358,23 @@ export default function App() {
   useEffect(() => {
     clampTerminalCenterPanelHost(paneCount);
   }, [paneCount]);
+
+  useEffect(() => {
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    void import("./services/cursorAcpControlBridge").then(async ({ startCursorAcpControlBridge }) => {
+      const disposer = await startCursorAcpControlBridge();
+      if (disposed) {
+        disposer();
+        return;
+      }
+      stop = disposer;
+    });
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, []);
   /** paneCount 的 ref：供 openRepositoryFileByEvent 等回调在多屏下避免污染全局 active。 */
   const paneCountRef = useRef(paneCount);
   paneCountRef.current = paneCount;

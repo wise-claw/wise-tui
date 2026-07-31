@@ -108,7 +108,7 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
 
   return (
     <Modal
-      title="配置 Cursor CLI"
+      title="配置 Cursor Agent"
       open={open}
       onCancel={onClose}
       destroyOnHidden
@@ -179,9 +179,9 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
                 <Typography.Text code>curl https://cursor.com/install -fsS | bash</Typography.Text>
                 ）。可用{" "}
                 <Typography.Text code>WISE_CURSOR_AGENT_BIN</Typography.Text>{" "}
-                指定二进制路径。无头执行使用{" "}
-                <Typography.Text code>--force --sandbox disabled --approve-mcps</Typography.Text>
-                。macOS 请为 Wise 开启「完全磁盘访问权限」。
+                指定二进制路径。对话执行走{" "}
+                <Typography.Text code>agent acp</Typography.Text>
+                （按标签常驻会话）。macOS 请为 Wise 开启「完全磁盘访问权限」。
                 {status?.cliPath ? (
                   <>
                     {" "}
@@ -218,7 +218,7 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
           style={{ marginTop: 8, padding: "6px 10px" }}
           title={
             <span style={{ fontSize: 13 }}>
-              {status.available ? "Cursor CLI 已就绪" : "Cursor CLI 待配置"}
+              {status.available ? "Cursor Agent 已就绪" : "Cursor Agent 待配置"}
             </span>
           }
           description={

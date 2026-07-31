@@ -39,10 +39,9 @@ prefetchModule(() => import("./components/AppWorkspaceLayout.lazy"), "AppWorkspa
 prefetchModule(() => import("./AppImpl"), "AppImpl");
 
 /**
- * 尽早异步初始化 Monaco 本地加载环境（注入本地 monaco 实例 + worker 工厂，避免默认 CDN）。
- * 异步执行不阻塞首屏 root render；编辑器按需 mount 前完成即可。
+ * Monaco 本地环境改为首次打开编辑器 / 文件树预热时再加载（见 preloadMonacoEditor），
+ * 避免冷启动即解析 monaco-vendor（~4MB）。
  */
-void import("./services/monacoEnvironment");
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

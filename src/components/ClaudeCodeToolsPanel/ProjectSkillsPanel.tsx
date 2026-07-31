@@ -22,8 +22,6 @@ import {
   Typography,
   message,
 } from "antd";
-import Editor from "@monaco-editor/react";
-import type { IDisposable } from "monaco-editor";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeProjectSkill, ClaudeProjectSkillFileEntry } from "../../types";
 import {
@@ -46,8 +44,8 @@ import {
   resolveClaudeProjectSkillDisplayPath,
 } from "../../utils/claudeProjectSkillPath";
 import { mergeClaudeSkillsForPanel } from "../../utils/omcPluginDetect";
-import { installMonacoTrackpadSelectionGuard } from "../../utils/monacoTrackpadSelectionGuard";
 import { WISE_MONACO_EDITOR_OPTIONS } from "../../utils/wiseMonacoEditorOptions";
+import { LazyMonacoEditor } from "../LazyMonacoEditor";
 
 // ── Helpers ──
 
@@ -402,7 +400,6 @@ export function ProjectSkillsPanel({
   const [editSaving, setEditSaving] = useState(false);
   const [editFormatting, setEditFormatting] = useState(false);
   const [autoFormatOnSave, setAutoFormatOnSave] = useState(false);
-  const trackpadGuardRef = useRef<IDisposable | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
 
   const [addFileOpen, setAddFileOpen] = useState(false);
@@ -685,8 +682,6 @@ export function ProjectSkillsPanel({
   }
 
   const closeEditor = useCallback(() => {
-    trackpadGuardRef.current?.dispose();
-    trackpadGuardRef.current = null;
     setEditingName(null);
     setSkillFiles([]);
     setSelectedPath(null);
@@ -1172,7 +1167,7 @@ export function ProjectSkillsPanel({
               </div>
             ) : (
               <div className="app-repository-skills-editor-wrap">
-                <Editor
+                <LazyMonacoEditor
                   key={`${selectedPath ?? ""}:${selectedMonacoLanguage}`}
                   className="app-repository-skills-editor-monaco"
                   height="100%"
@@ -1182,10 +1177,6 @@ export function ProjectSkillsPanel({
                   value={editContent}
                   onChange={(value) => setEditContent(value ?? "")}
                   options={MONACO_SKILL_EDITOR_OPTIONS}
-                  onMount={(editor) => {
-                    trackpadGuardRef.current?.dispose();
-                    trackpadGuardRef.current = installMonacoTrackpadSelectionGuard(editor);
-                  }}
                 />
               </div>
             )}

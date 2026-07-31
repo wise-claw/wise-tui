@@ -25,7 +25,7 @@ use crate::codex_rpc_types::{
     ServerNotification, ServerRequest, SkillInfo, SkillsListParams, ThreadArchiveParams,
     ThreadDeleteParams, ThreadForkParams, ThreadListParams, ThreadListResponse, ThreadReadParams,
     ThreadResumeParams, ThreadStartParams, ThreadStartResponse, ThreadSummary,
-    ThreadUnarchiveParams, TurnInterruptParams, TurnInput, TurnStartParams, TurnStartResponse,
+    ThreadUnarchiveParams, TurnInterruptParams, TurnInputItem, TurnStartParams, TurnStartResponse,
     TurnSteerParams,
 };
 
@@ -171,8 +171,13 @@ impl CodexRpcSession {
         let thread_id = match &response {
             crate::codex_rpc_transport::JsonRpcMessage::Response { result, .. } => {
                 let thread_resp: ThreadStartResponse = serde_json::from_value(result.clone())
-                    .context("Failed to parse thread/start response")?;
-                thread_resp.id
+                    .with_context(|| {
+                        format!(
+                            "Failed to parse thread/start response: {}",
+                            truncate_json_for_error(result)
+                        )
+                    })?;
+                thread_resp.thread.id
             }
             crate::codex_rpc_transport::JsonRpcMessage::Error { error, .. } => {
                 return Err(anyhow!(
@@ -203,8 +208,17 @@ impl CodexRpcSession {
             .context("thread/resume request failed")?;
 
         match &response {
-            crate::codex_rpc_transport::JsonRpcMessage::Response { .. } => {
-                self.current_thread_id = Some(thread_id.to_string());
+            crate::codex_rpc_transport::JsonRpcMessage::Response { result, .. } => {
+                // Prefer the id returned by the server when present.
+                if let Ok(parsed) =
+                    serde_json::from_value::<crate::codex_rpc_types::ThreadResumeResponse>(
+                        result.clone(),
+                    )
+                {
+                    self.current_thread_id = Some(parsed.thread.id);
+                } else {
+                    self.current_thread_id = Some(thread_id.to_string());
+                }
                 Ok(())
             }
             crate::codex_rpc_transport::JsonRpcMessage::Error { error, .. } => Err(anyhow!(
@@ -228,9 +242,7 @@ impl CodexRpcSession {
 
         let params = TurnStartParams {
             thread_id,
-            input: TurnInput {
-                text: Some(input.to_string()),
-            },
+            input: vec![TurnInputItem::text(input)],
         };
         let params_value =
             serde_json::to_value(&params).context("Failed to serialize turn/start params")?;
@@ -244,8 +256,13 @@ impl CodexRpcSession {
         let turn_id = match &response {
             crate::codex_rpc_transport::JsonRpcMessage::Response { result, .. } => {
                 let turn_resp: TurnStartResponse = serde_json::from_value(result.clone())
-                    .context("Failed to parse turn/start response")?;
-                turn_resp.id
+                    .with_context(|| {
+                        format!(
+                            "Failed to parse turn/start response: {}",
+                            truncate_json_for_error(result)
+                        )
+                    })?;
+                turn_resp.turn.id
             }
             crate::codex_rpc_transport::JsonRpcMessage::Error { error, .. } => {
                 return Err(anyhow!(
@@ -1102,5 +1119,15 @@ impl CodexRpcSession {
         result: serde_json::Value,
     ) -> Result<()> {
         self.transport.send_response(request_id, result).await
+    }
+}
+
+fn truncate_json_for_error(value: &serde_json::Value) -> String {
+    let raw = value.to_string();
+    const MAX: usize = 400;
+    if raw.len() <= MAX {
+        raw
+    } else {
+        format!("{}…", &raw[..MAX])
     }
 }
