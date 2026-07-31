@@ -64,7 +64,6 @@ import {
   toggleTerminalCenterPanel,
   useTerminalCenterPanelState,
 } from "../../stores/terminalCenterPanelStore";
-import { TERMINAL_CENTER_SLOT_SENTINEL } from "../TerminalPanel/terminalCenterSlot";
 import { WORKSPACE_MEMO_PANEL_NODE } from "../WorkspaceMemoPanel";
 import { WORKSPACE_QUICK_ACTIONS_PANEL_NODE } from "../WorkspaceQuickActionsCenterPanel";
 import type { CenterView } from "./ClaudeChat";
