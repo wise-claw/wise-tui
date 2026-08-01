@@ -795,6 +795,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
   return {
     version: 1,
     connectionKind: connectionKind ?? DEFAULT_CONFIG.connectionKind,
+    defaultExecutionEngine: DEFAULT_CONFIG.defaultExecutionEngine,
     showLlmProxyTopbar: DEFAULT_CONFIG.showLlmProxyTopbar,
     showFccTopbar: DEFAULT_CONFIG.showFccTopbar,
     showFccTrafficTopbar: DEFAULT_CONFIG.showFccTrafficTopbar,
