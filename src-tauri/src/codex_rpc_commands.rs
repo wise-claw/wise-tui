@@ -277,13 +277,27 @@ pub(crate) async fn execute_codex_rpc(
     let default_settings = load_codex_default_settings(&db);
     let thread_config = build_codex_rpc_thread_config(default_settings.as_ref());
 
+    // Resolve effective model for vision vs path-only turn shaping.
+    // params.model wins; otherwise fall back to ~/.codex/config.toml `model =`.
+    let effective_model = params
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            let envelope = crate::codex_config_dir::read_codex_profile_envelope();
+            crate::codex_config_dir::read_effective_codex_model_from_envelope(&envelope)
+        });
+    session.set_active_model(effective_model.as_deref());
+
     let thread_result = if let Some(thread_id) = resume_id {
         session.resume_thread(thread_id).await
     } else {
         session
             .start_thread(
                 Some(params.project_path.as_str()),
-                params.model.as_deref(),
+                effective_model.as_deref(),
                 thread_config,
             )
             .await
@@ -311,6 +325,7 @@ pub(crate) async fn execute_codex_rpc(
     }
 
     // Start the turn.
+    // DeepSeek 等模型的 API 不接受 image 内容块时，start_turn 会保留 `附图：@path` 文本，不发 image item。
     let turn_result = session.start_turn(trimmed_prompt).await;
     if let Err(e) = turn_result {
         let msg = format!("Codex turn 启动失败: {e}");
@@ -390,11 +405,48 @@ pub(crate) async fn execute_codex_rpc(
             };
 
             match result {
-                PollResult::Notification(Some(ServerNotification::TurnCompleted { .. })) => {
-                    // Turn completed normally.
+                PollResult::Notification(Some(ServerNotification::TurnCompleted {
+                    status,
+                    error_message,
+                    ..
+                })) => {
+                    let failed = status.eq_ignore_ascii_case("failed")
+                        || status.eq_ignore_ascii_case("errored")
+                        || status.eq_ignore_ascii_case("error");
+                    if failed {
+                        success = false;
+                        if let Some(msg) = error_message.filter(|s| !s.is_empty()) {
+                            let line = json!({
+                                "type": "assistant",
+                                "message": {
+                                    "role": "assistant",
+                                    "content": [{
+                                        "type": "text",
+                                        "text": format!("Codex error: {msg}")
+                                    }]
+                                }
+                            })
+                            .to_string();
+                            persist_codex_rpc_transcript_line(
+                                &project_path_loop,
+                                &session_id_loop,
+                                &line,
+                            );
+                            emit_adapted_stream_payload(
+                                &app_loop,
+                                crate::claude_events::CLAUDE_STREAM_EVENT_OUTPUT,
+                                &session_id_loop,
+                                &line,
+                                invocation_key_loop.as_deref(),
+                            );
+                        }
+                    }
                     break;
                 }
                 PollResult::Notification(Some(notification)) => {
+                    if matches!(&notification, ServerNotification::Error { .. }) {
+                        success = false;
+                    }
                     // Check for ServerRequestResolved — emit resolved event.
                     if let ServerNotification::ServerRequestResolved { request_id, .. } = &notification {
                         use tauri::Emitter;

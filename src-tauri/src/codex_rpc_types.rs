@@ -119,26 +119,308 @@ pub struct TurnStartParams {
     pub input: Vec<TurnInputItem>,
 }
 
-/// One user input item for `turn/start`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TurnInputItem {
-    #[serde(rename = "type")]
-    pub item_type: String,
-    pub text: String,
+/// One user input item for `turn/start` / `turn/steer`.
+///
+/// Wire shape (Codex app-server v2 `UserInput`):
+/// - `{"type":"text","text":"…"}`
+/// - `{"type":"localImage","path":"/abs/path.png"}` — server reads pixels from disk
+/// - `{"type":"image","url":"data:image/png;base64,…"}` — inline data URL only (HTTP(S) rejected)
+///
+/// Optional `detail` (`high` / `original` / …) is forwarded when set; omitted → server default (`high`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum TurnInputItem {
+    Text {
+        text: String,
+    },
+    LocalImage {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+    },
+    Image {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+    },
 }
 
 impl TurnInputItem {
     pub fn text(text: impl Into<String>) -> Self {
-        Self {
-            item_type: "text".to_string(),
-            text: text.into(),
+        Self::Text { text: text.into() }
+    }
+
+    pub fn local_image(path: impl Into<String>) -> Self {
+        Self::LocalImage {
+            path: path.into(),
+            detail: None,
+        }
+    }
+
+    pub fn image_data_url(url: impl Into<String>) -> Self {
+        Self::Image {
+            url: url.into(),
+            detail: None,
         }
     }
 }
 
 /// Backward-compatible alias used by older call sites / docs.
 pub type TurnInput = TurnInputItem;
+
+/// Trim trailing CJK/ASCII punctuation commonly glued to `@/path` in bubble text.
+fn trim_composer_attachment_path(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let cut = trimmed
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| {
+            !matches!(
+                *ch,
+                '。' | '．'
+                    | '.'
+                    | '，'
+                    | ','
+                    | '；'
+                    | ';'
+                    | '！'
+                    | '!'
+                    | '？'
+                    | '?'
+                    | '）'
+                    | ')'
+                    | ']'
+                    | '」'
+                    | '』'
+                    | '"'
+                    | '\''
+                    | '`'
+            )
+        })
+        .map(|(i, ch)| i + ch.len_utf8())
+        .unwrap_or(0);
+    trimmed[..cut].to_string()
+}
+
+/// 从 Wise Composer outbound（`附图：@/abs/path …`）解析本地图片绝对路径。
+pub fn extract_composer_image_paths(text: &str) -> Vec<String> {
+    let mut paths = Vec::new();
+    // 每个 `附图：` 行段内可有多个 `@/path`
+    let block_re = regex::Regex::new(r"附图[：:]([^\n]*)").expect("附图 block regex");
+    let path_re = regex::Regex::new(r"@(/[^\s]+)").expect("@path regex");
+    for block in block_re.captures_iter(text) {
+        let segment = block.get(1).map(|m| m.as_str()).unwrap_or("");
+        for cap in path_re.captures_iter(segment) {
+            let p = trim_composer_attachment_path(cap.get(1).map(|m| m.as_str()).unwrap_or(""));
+            if !p.is_empty() && !paths.iter().any(|x| x == &p) {
+                paths.push(p);
+            }
+        }
+    }
+    // 兼容正文里直接写 `data:image/...;base64,...`（无落盘路径时）
+    let data_re =
+        regex::Regex::new(r"(data:image/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+)").expect("data url");
+    for cap in data_re.captures_iter(text) {
+        let url = cap.get(1).map(|m| m.as_str()).unwrap_or("").to_string();
+        if !url.is_empty() && !paths.iter().any(|x| x == &url) {
+            paths.push(url);
+        }
+    }
+    paths
+}
+
+/// 去掉 `附图：…` 块，与前端 `stripComposerAttachedImageSuffix` 对齐。
+///
+/// 纯附图（整段只有 `附图：@…`、无正文）会得到空字符串，避免再塞进 text item。
+pub fn strip_composer_attached_image_suffix(text: &str) -> String {
+    let trimmed = text.trim_end();
+    let only_attachment =
+        regex::Regex::new(r"^[ \t\n\r\u{2028}\u{2029}]*附图[：:][\s\S]*$").expect("only 附图");
+    if only_attachment.is_match(trimmed) {
+        return String::new();
+    }
+    let re = regex::Regex::new(r"(?:[ \t\n\r\u{2028}\u{2029}])+附图[：:][\s\S]*$")
+        .expect("附图 suffix regex");
+    re.replace(trimmed, "").trim_end().to_string()
+}
+
+/// app-server `image` 单张上限（与 Codex 高水位 sanity guard 同量级，避免撑爆 stdio JSON-RPC）。
+const MAX_TURN_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
+
+fn mime_from_image_path(path: &std::path::Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("bmp") => "image/bmp",
+        Some("avif") => "image/avif",
+        Some("heic") | Some("heif") => "image/heic",
+        _ => "image/png",
+    }
+}
+
+/// 把本地图片读成 app-server `image` data URL。
+///
+/// 优先走 inline `image`（像素直接进 turn/start），避免仅发 `localImage` 时模型只看到
+/// path 标签、vision 失败后再去 OCR 的路径。读盘失败时由调用方回退 `localImage`。
+pub fn local_image_path_to_data_url(path: &str) -> Result<String, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("图片路径为空".to_string());
+    }
+    if trimmed.starts_with("data:image/") {
+        return Ok(trimmed.to_string());
+    }
+    let path_buf = std::path::PathBuf::from(trimmed);
+    if !path_buf.is_absolute() {
+        return Err("图片路径必须是绝对路径".to_string());
+    }
+    let meta = std::fs::metadata(&path_buf).map_err(|e| format!("无法读取图片元数据: {e}"))?;
+    if !meta.is_file() {
+        return Err("图片路径不是文件".to_string());
+    }
+    if meta.len() > MAX_TURN_IMAGE_BYTES {
+        return Err(format!(
+            "图片过大（{} bytes，上限 {}）",
+            meta.len(),
+            MAX_TURN_IMAGE_BYTES
+        ));
+    }
+    let bytes = std::fs::read(&path_buf).map_err(|e| format!("无法读取图片: {e}"))?;
+    if bytes.is_empty() {
+        return Err("图片文件为空".to_string());
+    }
+    let mime = mime_from_image_path(&path_buf);
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Ok(format!("data:{mime};base64,{b64}"))
+}
+
+/// 粗判模型是否支持多模态识图（app-server `input_modalities` 的启发式替代）。
+///
+/// DeepSeek / 多数纯文本 Coding Plan 模型会把 `image` 变成 `[Unsupported Image]`；
+/// 对这些模型绝不能发 image/localImage item，应保留 `附图：@path` 文本供工具链读取。
+pub fn model_likely_supports_image_input(model: Option<&str>) -> bool {
+    let Some(raw) = model.map(str::trim).filter(|s| !s.is_empty()) else {
+        return false;
+    };
+    let n = raw.to_ascii_lowercase();
+    // 明确无视觉
+    if n.contains("deepseek")
+        || n.contains("moonshot")
+        || n.contains("kimi")
+        || n.contains("minimax")
+        || n.contains("glm-4")
+        || (n.contains("qwen") && !n.contains("vl") && !n.contains("vision"))
+    {
+        return false;
+    }
+    // 明确有视觉 / OpenAI 系 Codex
+    n.contains("gpt-4o")
+        || n.contains("gpt-4.1")
+        || n.contains("gpt-5")
+        || n.contains("gpt-4-turbo")
+        || n.starts_with("o1")
+        || n.starts_with("o3")
+        || n.starts_with("o4")
+        || n.contains("codex")
+        || n.contains("claude")
+        || n.contains("gemini")
+        || n.contains("vision")
+        || n.contains("-vl")
+        || n.contains("vl-")
+}
+
+/// 将 Composer 发出的纯文本（含 `附图：@path`）拆成 app-server `turn/start` input items。
+///
+/// - 识图模型：本地图优先读盘为 `image` data URL；失败再退回 `localImage`；剥离 `附图：` 文本。
+/// - 非识图模型：不发 image item（避免 `[Unsupported Image]`），保留完整 `附图：@path` 文本。
+pub fn build_turn_input_items_from_composer_prompt(prompt: &str) -> Vec<TurnInputItem> {
+    build_turn_input_items_from_composer_prompt_for_model(prompt, None)
+}
+
+pub fn build_turn_input_items_from_composer_prompt_for_model(
+    prompt: &str,
+    model: Option<&str>,
+) -> Vec<TurnInputItem> {
+    let paths = extract_composer_image_paths(prompt);
+    let vision = model_likely_supports_image_input(model);
+
+    if paths.is_empty() {
+        let trimmed = prompt.trim();
+        return if trimmed.is_empty() {
+            Vec::new()
+        } else {
+            vec![TurnInputItem::text(trimmed.to_string())]
+        };
+    }
+
+    if !vision {
+        eprintln!(
+            "[codex_rpc] model {:?} lacks image input; keep 附图 paths in text ({} file(s))",
+            model.unwrap_or(""),
+            paths.len()
+        );
+        let trimmed = prompt.trim();
+        return if trimmed.is_empty() {
+            Vec::new()
+        } else {
+            vec![TurnInputItem::text(trimmed.to_string())]
+        };
+    }
+
+    let mut text = strip_composer_attached_image_suffix(prompt);
+    // 去掉已抽成 image 项的 data URL，避免正文重复塞进超长 base64
+    for p in &paths {
+        if p.starts_with("data:image/") {
+            text = text.replace(p, "");
+        }
+    }
+    text = text.trim().to_string();
+
+    let mut items = Vec::new();
+    if !text.is_empty() {
+        items.push(TurnInputItem::text(text));
+    }
+    for path in paths {
+        if path.starts_with("data:image/") {
+            items.push(TurnInputItem::image_data_url(path));
+            continue;
+        }
+        match local_image_path_to_data_url(&path) {
+            Ok(data_url) => {
+                eprintln!(
+                    "[codex_rpc] turn input image: inlined data URL ({} bytes path)",
+                    path.len()
+                );
+                items.push(TurnInputItem::Image {
+                    url: data_url,
+                    // 与 app-server 默认一致；明确 high 避免个别版本忽略缺省
+                    detail: Some("high".to_string()),
+                });
+            }
+            Err(err) => {
+                eprintln!(
+                    "[codex_rpc] turn input image: inline failed ({err}), fallback localImage path={path}"
+                );
+                items.push(TurnInputItem::local_image(path));
+            }
+        }
+    }
+    if items.is_empty() {
+        let trimmed = prompt.trim();
+        if !trimmed.is_empty() {
+            items.push(TurnInputItem::text(trimmed.to_string()));
+        }
+    }
+    items
+}
 
 /// Turn metadata returned by `turn/start`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,6 +492,8 @@ pub enum ServerNotification {
         turn_id: String,
         thread_id: String,
         status: String,
+        /// Populated when the turn failed (`status` is `failed` / `errored` / …).
+        error_message: Option<String>,
     },
     ItemStarted {
         item_id: String,
@@ -285,6 +569,111 @@ pub enum ServerNotification {
     },
 }
 
+/// Extract a human-readable message from Codex app-server `error` / `TurnError` params.
+///
+/// Recent app-server builds often put the useful bits in `codexErrorInfo` /
+/// `additionalDetails` instead of a top-level `message` string — missing those
+/// used to surface as the useless `Unknown error`.
+pub fn extract_error_notification_message(p: &Value) -> String {
+    if let Some(s) = non_empty_str(p.get("message")) {
+        return s.to_string();
+    }
+    if let Some(err) = p.get("error") {
+        if let Some(s) = err.as_str().map(str::trim).filter(|s| !s.is_empty()) {
+            return s.to_string();
+        }
+        if let Some(s) = non_empty_str(err.get("message")) {
+            return s.to_string();
+        }
+        if let Some(info) = err
+            .get("codexErrorInfo")
+            .or_else(|| err.get("codex_error_info"))
+        {
+            let formatted = format_codex_error_info(info);
+            if !formatted.is_empty() {
+                return formatted;
+            }
+        }
+        if let Some(s) = non_empty_str(
+            err.get("additionalDetails")
+                .or_else(|| err.get("additional_details")),
+        ) {
+            return s.to_string();
+        }
+    }
+    if let Some(s) = non_empty_str(
+        p.get("additionalDetails")
+            .or_else(|| p.get("additional_details")),
+    ) {
+        return s.to_string();
+    }
+    if let Some(info) = p
+        .get("codexErrorInfo")
+        .or_else(|| p.get("codex_error_info"))
+    {
+        let formatted = format_codex_error_info(info);
+        if !formatted.is_empty() {
+            return formatted;
+        }
+    }
+    if p.is_null() || p.as_object().is_some_and(|m| m.is_empty()) {
+        return "Unknown error".to_string();
+    }
+    let compact = serde_json::to_string(p).unwrap_or_else(|_| p.to_string());
+    if compact.len() > 400 {
+        format!("{}…", &compact[..400])
+    } else {
+        compact
+    }
+}
+
+fn non_empty_str(v: Option<&Value>) -> Option<&str> {
+    v.and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty())
+}
+
+fn format_codex_error_info(info: &Value) -> String {
+    if let Some(s) = info.as_str().map(str::trim).filter(|s| !s.is_empty()) {
+        return s.to_string();
+    }
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(t) = non_empty_str(info.get("type")).or_else(|| non_empty_str(info.get("code"))) {
+        parts.push(t.to_string());
+    }
+    if let Some(code) = info
+        .get("httpStatusCode")
+        .or_else(|| info.get("http_status_code"))
+    {
+        parts.push(format!("http {code}"));
+    }
+    if let Some(m) = non_empty_str(info.get("message")) {
+        parts.push(m.to_string());
+    }
+    if !parts.is_empty() {
+        return parts.join(": ");
+    }
+    // Internally-tagged / single-variant object: `{ "unauthorized": { "httpStatusCode": 401 } }`
+    if let Some(obj) = info.as_object() {
+        if let Some((variant, payload)) = obj.iter().next() {
+            let mut bits = vec![variant.clone()];
+            if let Some(code) = payload
+                .get("httpStatusCode")
+                .or_else(|| payload.get("http_status_code"))
+            {
+                bits.push(format!("http {code}"));
+            }
+            if let Some(m) = non_empty_str(payload.get("message")) {
+                bits.push(m.to_string());
+            } else if payload.is_object() && payload.as_object().is_some_and(|m| !m.is_empty()) {
+                if let Ok(compact) = serde_json::to_string(payload) {
+                    bits.push(compact);
+                }
+            }
+            return bits.join(": ");
+        }
+    }
+    String::new()
+}
+
 /// Parse a raw `(method, params)` pair from the transport into a typed notification.
 ///
 /// Unknown method names are mapped to [`ServerNotification::Unknown`] so the
@@ -338,10 +727,15 @@ pub fn parse_notification(method: &str, params: Option<Value>) -> ServerNotifica
                 .and_then(Value::as_str)
                 .unwrap_or("completed")
                 .to_string();
+            let error_message = p
+                .get("error")
+                .map(extract_error_notification_message)
+                .filter(|s| !s.is_empty() && s != "Unknown error");
             ServerNotification::TurnCompleted {
                 turn_id,
                 thread_id,
                 status,
+                error_message,
             }
         }
         "item/started" => {
@@ -418,13 +812,22 @@ pub fn parse_notification(method: &str, params: Option<Value>) -> ServerNotifica
             ServerNotification::CommandExecutionOutputDelta { item_id, delta, stream }
         }
         "error" => {
-            let code = p.get("code").and_then(Value::as_i64).unwrap_or(0);
-            let message = p
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or("Unknown error")
-                .to_string();
-            let data = p.get("data").cloned();
+            let code = p
+                .get("code")
+                .and_then(Value::as_i64)
+                .or_else(|| {
+                    p.get("codexErrorInfo")
+                        .or_else(|| p.get("codex_error_info"))
+                        .and_then(|info| {
+                            info.get("httpStatusCode")
+                                .or_else(|| info.get("http_status_code"))
+                        })
+                        .and_then(Value::as_i64)
+                })
+                .unwrap_or(0);
+            let message = extract_error_notification_message(&p);
+            eprintln!("[codex_rpc] error notification: {message}");
+            let data = Some(p.clone());
             ServerNotification::Error {
                 code,
                 message,
@@ -1106,7 +1509,8 @@ pub struct ThreadReadParams {
 #[serde(rename_all = "camelCase")]
 pub struct TurnSteerParams {
     pub turn_id: String,
-    pub input: String,
+    /// Same input-item array shape as `turn/start` (text / localImage / image).
+    pub input: Vec<TurnInputItem>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1277,5 +1681,172 @@ mod tests {
         assert_eq!(value["threadId"], "thr_123");
         assert_eq!(value["input"][0]["type"], "text");
         assert_eq!(value["input"][0]["text"], "hello");
+    }
+
+    #[test]
+    fn serializes_local_image_and_image_input_items() {
+        let params = TurnStartParams {
+            thread_id: "thr_img".to_string(),
+            input: vec![
+                TurnInputItem::text("看这张图"),
+                TurnInputItem::local_image("/tmp/shot.png"),
+                TurnInputItem::image_data_url("data:image/png;base64,abc"),
+            ],
+        };
+        let value = serde_json::to_value(&params).expect("serialize");
+        assert_eq!(value["input"][0]["type"], "text");
+        assert_eq!(value["input"][1]["type"], "localImage");
+        assert_eq!(value["input"][1]["path"], "/tmp/shot.png");
+        assert!(value["input"][1].get("detail").is_none());
+        assert_eq!(value["input"][2]["type"], "image");
+        assert_eq!(value["input"][2]["url"], "data:image/png;base64,abc");
+    }
+
+    #[test]
+    fn extracts_multiple_composer_attachment_paths() {
+        let text = "你好\n\n附图：@/Users/x/.wise/composer-images/a.png @/tmp/b.jpg。";
+        assert_eq!(
+            extract_composer_image_paths(text),
+            vec![
+                "/Users/x/.wise/composer-images/a.png".to_string(),
+                "/tmp/b.jpg".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn model_likely_supports_image_input_heuristics() {
+        assert!(model_likely_supports_image_input(Some("gpt-5.4")));
+        assert!(model_likely_supports_image_input(Some("claude-opus-4")));
+        assert!(!model_likely_supports_image_input(Some("deepseek-v4-flash")));
+        assert!(!model_likely_supports_image_input(None));
+    }
+
+    #[test]
+    fn extracts_error_message_from_codex_error_info() {
+        let p = serde_json::json!({
+            "willRetry": false,
+            "codexErrorInfo": {
+                "type": "unauthorized",
+                "httpStatusCode": 401,
+                "message": "Authentication Fails, Your api key is invalid"
+            }
+        });
+        let msg = extract_error_notification_message(&p);
+        assert!(msg.contains("unauthorized"));
+        assert!(msg.contains("401"));
+        assert!(msg.contains("Authentication Fails"));
+    }
+
+    #[test]
+    fn extracts_error_message_from_nested_turn_error() {
+        let p = serde_json::json!({
+            "error": {
+                "codexErrorInfo": { "unauthorized": { "httpStatusCode": 401 } },
+                "additionalDetails": "provider rejected request"
+            }
+        });
+        let msg = extract_error_notification_message(&p);
+        assert!(
+            msg.contains("401") || msg.contains("provider rejected"),
+            "unexpected msg: {msg}"
+        );
+    }
+
+    #[test]
+    fn parses_error_notification_without_top_level_message() {
+        let notif = parse_notification(
+            "error",
+            Some(serde_json::json!({
+                "willRetry": false,
+                "codexErrorInfo": { "type": "badRequest", "message": "invalid input" }
+            })),
+        );
+        match notif {
+            ServerNotification::Error { message, .. } => {
+                assert!(message.contains("invalid input"));
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn non_vision_model_keeps_attachment_paths_in_text() {
+        let prompt =
+            "图片有什么内容？\n\n附图：@/Users/x/.wise/composer-images/demo/uuid-image.png";
+        let items =
+            build_turn_input_items_from_composer_prompt_for_model(prompt, Some("deepseek-v4-flash"));
+        assert_eq!(items, vec![TurnInputItem::text(prompt)]);
+    }
+
+    #[test]
+    fn builds_turn_input_items_falls_back_to_local_image_when_file_missing() {
+        let prompt =
+            "图片有什么内容？\n\n附图：@/Users/x/.wise/composer-images/demo/uuid-image.png";
+        let items =
+            build_turn_input_items_from_composer_prompt_for_model(prompt, Some("gpt-5.4"));
+        assert_eq!(
+            items,
+            vec![
+                TurnInputItem::text("图片有什么内容？"),
+                TurnInputItem::local_image(
+                    "/Users/x/.wise/composer-images/demo/uuid-image.png"
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn builds_image_only_turn_without_empty_text_item() {
+        let prompt = "附图：@/tmp/only-missing-wise-test.png";
+        let items =
+            build_turn_input_items_from_composer_prompt_for_model(prompt, Some("gpt-5.4"));
+        assert_eq!(
+            items,
+            vec![TurnInputItem::local_image("/tmp/only-missing-wise-test.png")]
+        );
+    }
+
+    #[test]
+    fn builds_data_url_image_item() {
+        let prompt = "见图 data:image/png;base64,QUJD";
+        let items =
+            build_turn_input_items_from_composer_prompt_for_model(prompt, Some("gpt-5.4"));
+        assert_eq!(
+            items,
+            vec![
+                TurnInputItem::text("见图"),
+                TurnInputItem::image_data_url("data:image/png;base64,QUJD"),
+            ]
+        );
+    }
+
+    #[test]
+    fn inlines_existing_local_png_as_image_data_url() {
+        let dir = std::env::temp_dir().join(format!(
+            "wise-codex-img-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let file = dir.join("shot.png");
+        // Minimal valid-ish PNG header bytes (Codex/app-server only needs a data URL here).
+        let png_bytes: &[u8] = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR";
+        std::fs::write(&file, png_bytes).expect("write png");
+        let prompt = format!("图中有什么\n\n附图：@{}", file.display());
+        let items =
+            build_turn_input_items_from_composer_prompt_for_model(&prompt, Some("gpt-5.4"));
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0], TurnInputItem::text("图中有什么"));
+        match &items[1] {
+            TurnInputItem::Image { url, detail } => {
+                assert!(url.starts_with("data:image/png;base64,"));
+                assert_eq!(detail.as_deref(), Some("high"));
+            }
+            other => panic!("expected Image data URL, got {other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

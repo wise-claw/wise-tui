@@ -37,6 +37,8 @@ pub struct CodexRpcSession {
     server_request_rx: mpsc::Receiver<ServerRequest>,
     current_thread_id: Option<String>,
     current_turn_id: Option<String>,
+    /// Effective model used for turn input shaping (vision vs path-only).
+    active_model: Option<String>,
     initialized: bool,
 }
 
@@ -145,8 +147,21 @@ impl CodexRpcSession {
             server_request_rx: srv_rx,
             current_thread_id: None,
             current_turn_id: None,
+            active_model: None,
             initialized: true,
         })
+    }
+
+    /// Record the effective model for subsequent turn input shaping.
+    pub fn set_active_model(&mut self, model: Option<&str>) {
+        self.active_model = model
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+    }
+
+    pub fn active_model(&self) -> Option<&str> {
+        self.active_model.as_deref()
     }
 
     /// Start a new thread and return its id.
@@ -156,6 +171,7 @@ impl CodexRpcSession {
         model: Option<&str>,
         config: Option<std::collections::HashMap<String, serde_json::Value>>,
     ) -> Result<String> {
+        self.set_active_model(model);
         let params = ThreadStartParams {
             model: model.map(str::to_string),
             cwd: cwd.map(str::to_string),
@@ -232,20 +248,45 @@ impl CodexRpcSession {
         }
     }
 
-    /// Start a new turn with the given user input text.
+    /// Start a new turn from Wise Composer outbound text.
     ///
-    /// Requires that a thread has been started or resumed first.
-    /// Returns the new turn id.
+    /// Vision models: `附图：@/abs/path` → inline `image` / `localImage`.
+    /// Non-vision models: keep path text only (avoids `[Unsupported Image]`).
     pub async fn start_turn(&mut self, input: &str) -> Result<String> {
+        let items =
+            crate::codex_rpc_types::build_turn_input_items_from_composer_prompt_for_model(
+                input,
+                self.active_model.as_deref(),
+            );
+        self.start_turn_with_items(items).await
+    }
+
+    /// Start a new turn with pre-built app-server input items.
+    pub async fn start_turn_with_items(&mut self, input: Vec<TurnInputItem>) -> Result<String> {
         let thread_id = self
             .current_thread_id
             .clone()
             .ok_or_else(|| anyhow!("No active thread — call start_thread or resume_thread first"))?;
 
-        let params = TurnStartParams {
-            thread_id,
-            input: vec![TurnInputItem::text(input)],
-        };
+        if input.is_empty() {
+            return Err(anyhow!("turn/start requires at least one input item"));
+        }
+
+        let summary: Vec<&'static str> = input
+            .iter()
+            .map(|item| match item {
+                TurnInputItem::Text { .. } => "text",
+                TurnInputItem::LocalImage { .. } => "localImage",
+                TurnInputItem::Image { .. } => "image",
+            })
+            .collect();
+        eprintln!(
+            "[codex_rpc] turn/start input items: {} {:?}",
+            summary.len(),
+            summary
+        );
+
+        let params = TurnStartParams { thread_id, input };
         let params_value =
             serde_json::to_value(&params).context("Failed to serialize turn/start params")?;
 
@@ -1017,11 +1058,28 @@ impl CodexRpcSession {
     // Turn steering methods (Phase 5)
     // -----------------------------------------------------------------------
 
-    /// Steer the active turn via `turn/steer`.
+    /// Steer the active turn via `turn/steer` (same input-item shape as `turn/start`).
     pub async fn steer_turn(&mut self, turn_id: &str, input: &str) -> Result<()> {
+        let items =
+            crate::codex_rpc_types::build_turn_input_items_from_composer_prompt_for_model(
+                input,
+                self.active_model.as_deref(),
+            );
+        self.steer_turn_with_items(turn_id, items).await
+    }
+
+    /// Steer with pre-built app-server input items (supports `localImage` / `image`).
+    pub async fn steer_turn_with_items(
+        &mut self,
+        turn_id: &str,
+        input: Vec<TurnInputItem>,
+    ) -> Result<()> {
+        if input.is_empty() {
+            return Err(anyhow!("turn/steer requires at least one input item"));
+        }
         let params = TurnSteerParams {
             turn_id: turn_id.to_string(),
-            input: input.to_string(),
+            input,
         };
         let params_value =
             serde_json::to_value(&params).context("Failed to serialize turn/steer params")?;

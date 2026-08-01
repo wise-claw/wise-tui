@@ -110,6 +110,15 @@ export function isAskUserQuestionToolName(name: unknown): boolean {
   return n === "AskUserQuestion" || n.includes("AskUserQuestion") || n.includes("AskUser");
 }
 
+/**
+ * Codex app-server `imageView` / Claude `view_image`：像素由执行环境消费，会话列表不展示卡片。
+ */
+export function isImageViewToolName(name: unknown): boolean {
+  if (typeof name !== "string") return false;
+  const n = name.trim().toLowerCase();
+  return n === "view_image" || n === "imageview" || n === "image_view" || n === "read_image";
+}
+
 /** 单条 part 是否在消息列表中有展示价值（空白/占位句不计）。 */
 export function isRenderableMessagePart(part: MessagePart): boolean {
   switch (part.type) {
@@ -126,6 +135,7 @@ export function isRenderableMessagePart(part: MessagePart): boolean {
       // AskUserQuestion 的问答由 Dock 题卡承载，消息列表过滤其工具卡片；其 tool_result
       // 已 fold 进同一 tool_use（按 id），一并隐藏，避免「只见答案不见问题」的割裂。
       if (isAskUserQuestionToolName(part.name)) return false;
+      if (isImageViewToolName(part.name)) return false;
       return toolUsePartHasVisiblePayload(part);
     default:
       return false;

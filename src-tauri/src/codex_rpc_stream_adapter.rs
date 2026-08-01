@@ -85,10 +85,28 @@ fn map_notification_to_stream_lines(
             .to_string()]
         }
 
-        ServerNotification::TurnCompleted { .. } => {
-            // Completion is signalled via `claude-complete`, not stream lines.
-            // The command loop handles the actual emit.
-            vec![]
+        ServerNotification::TurnCompleted {
+            status,
+            error_message,
+            ..
+        } => {
+            let failed = status.eq_ignore_ascii_case("failed")
+                || status.eq_ignore_ascii_case("errored")
+                || status.eq_ignore_ascii_case("error");
+            if failed {
+                let detail = error_message
+                    .as_deref()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(status.as_str());
+                if let Some(cleaned) = strip_benign_noise(detail) {
+                    vec![assistant_text_line(&format!("Codex error: {cleaned}"))]
+                } else {
+                    vec![]
+                }
+            } else {
+                // Success completion is signalled via `claude-complete`.
+                vec![]
+            }
         }
 
         ServerNotification::ItemStarted { item, .. } => {
@@ -222,6 +240,8 @@ fn map_notification_to_stream_lines(
 
 fn map_item_started(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> {
     match item.item_type.as_str() {
+        // userMessage / imageView：用户侧已持久化气泡；图片像素由 app-server 消费，会话列表不展示。
+        "userMessage" | "imageView" | "image_view" => vec![],
         "agentMessage" | "assistantMessage" => {
             // Agent message started — no content yet; deltas will follow.
             vec![]
@@ -323,6 +343,8 @@ fn map_item_started(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> {
 
 fn map_item_completed(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> {
     match item.item_type.as_str() {
+        // 勿把 userMessage（含 localImage 回显）或 imageView 当成助手文本/工具卡片。
+        "userMessage" | "imageView" | "image_view" => vec![],
         "agentMessage" | "assistantMessage" => {
             let text = extract_item_text(&item.raw);
             text.and_then(|t| strip_benign_noise(&t))
@@ -655,6 +677,7 @@ mod tests {
             turn_id: "t1".to_string(),
             thread_id: "thread-abc".to_string(),
             status: "completed".to_string(),
+            error_message: None,
         };
         let lines = map_notification_to_stream_lines(&notif, "sess-1");
         assert!(lines.is_empty());
@@ -713,5 +736,37 @@ mod tests {
         };
         let lines = map_notification_to_stream_lines(&notif, "sess-1");
         assert!(lines.is_empty());
+    }
+
+    #[test]
+    fn user_message_and_image_view_items_are_not_streamed() {
+        for item_type in ["userMessage", "imageView", "image_view"] {
+            let started = ServerNotification::ItemStarted {
+                item_id: "itm_img".to_string(),
+                turn_id: "t1".to_string(),
+                item: crate::codex_rpc_types::ThreadItem {
+                    id: "itm_img".to_string(),
+                    item_type: item_type.to_string(),
+                    raw: json!({ "path": "/tmp/shot.png", "text": "hi" }),
+                },
+            };
+            let completed = ServerNotification::ItemCompleted {
+                item_id: "itm_img".to_string(),
+                turn_id: "t1".to_string(),
+                item: crate::codex_rpc_types::ThreadItem {
+                    id: "itm_img".to_string(),
+                    item_type: item_type.to_string(),
+                    raw: json!({ "path": "/tmp/shot.png", "text": "hi" }),
+                },
+            };
+            assert!(
+                map_notification_to_stream_lines(&started, "sess-1").is_empty(),
+                "{item_type} started should be silent"
+            );
+            assert!(
+                map_notification_to_stream_lines(&completed, "sess-1").is_empty(),
+                "{item_type} completed should be silent"
+            );
+        }
     }
 }

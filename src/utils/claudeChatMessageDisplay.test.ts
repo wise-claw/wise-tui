@@ -10,6 +10,7 @@ import {
   isBlankDisplayText,
   isCompactNoticeSystemText,
   isDisplayNoiseUserMessageText,
+  isImageViewToolName,
   isRenderableMessagePart,
   isSystemMessageDisplayNoiseText,
   isToolActivityOnlyMessage,
@@ -367,6 +368,27 @@ describe("isAskUserQuestionToolName", () => {
     expect(isAskUserQuestionToolName("ExitPlanMode")).toBe(false);
     expect(isAskUserQuestionToolName(undefined)).toBe(false);
     expect(isAskUserQuestionToolName(123)).toBe(false);
+  });
+});
+
+describe("isImageViewToolName", () => {
+  test("matches Codex / Claude image view tool names", () => {
+    expect(isImageViewToolName("view_image")).toBe(true);
+    expect(isImageViewToolName("imageView")).toBe(true);
+    expect(isImageViewToolName("image_view")).toBe(true);
+    expect(isImageViewToolName("read_image")).toBe(true);
+  });
+
+  test("hides imageView tool_use parts from the message list", () => {
+    expect(
+      isRenderableMessagePart({
+        type: "tool_use",
+        id: "img1",
+        name: "imageView",
+        input: { path: "/tmp/shot.png" },
+        status: "completed",
+      }),
+    ).toBe(false);
   });
 });
 
