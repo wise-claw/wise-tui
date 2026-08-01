@@ -9,9 +9,33 @@ import {
   extractCodexApprovalPolicy,
   extractCodexSandboxMode,
   isFullAccessInCodexSettings,
+  resolveCodexPermissionPreset,
   serializeCodexDefaultSettings,
+  serializeCodexPermissionPreset,
   toggleFullAccessInCodexSettings,
+  type CodexPermissionPreset,
 } from "./codexDefaultSettings";
+
+type Listener = () => void;
+const listeners = new Set<Listener>();
+
+function notifyCodexDefaultSettingsChange(): void {
+  for (const fn of listeners) {
+    try {
+      fn();
+    } catch (err) {
+      console.warn("[wise:codex-default-settings] listener threw", err);
+    }
+  }
+}
+
+/** Composer 徽标与配置面板共享：写入后广播，订阅端重读。 */
+export function subscribeCodexDefaultSettings(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
 
 /**
  * codex 启动默认沙箱/审批设置。
@@ -25,23 +49,27 @@ export function useCodexDefaultSettingsSetting() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const refresh = useCallback(async (opts?: { quiet?: boolean }) => {
+    if (!opts?.quiet) setLoading(true);
     try {
       const stored = await getAppSetting(WISE_CODEX_DEFAULT_SETTINGS_KEY);
       setValue(stored ?? "");
     } finally {
-      setLoading(false);
+      if (!opts?.quiet) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void refresh();
+    return subscribeCodexDefaultSettings(() => {
+      void refresh({ quiet: true });
+    });
   }, [refresh]);
 
   const persist = useCallback(async (next: string) => {
     await setAppSetting(WISE_CODEX_DEFAULT_SETTINGS_KEY, next);
     setValue(next);
+    notifyCodexDefaultSettingsChange();
   }, []);
 
   const saveSandboxMode = useCallback(
@@ -92,15 +120,33 @@ export function useCodexDefaultSettingsSetting() {
     [value, persist],
   );
 
+  const savePermissionPreset = useCallback(
+    async (preset: CodexPermissionPreset) => {
+      setSaving(true);
+      try {
+        const next = serializeCodexPermissionPreset(preset);
+        await persist(next);
+      } catch (err) {
+        message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [persist],
+  );
+
   return {
     sandboxMode: extractCodexSandboxMode(value),
     approvalPolicy: extractCodexApprovalPolicy(value),
     fullAccess: isFullAccessInCodexSettings(value),
+    permissionPreset: resolveCodexPermissionPreset(value),
     loading,
     saving,
     refresh,
     saveSandboxMode,
     saveApprovalPolicy,
     saveFullAccess,
+    savePermissionPreset,
   };
 }

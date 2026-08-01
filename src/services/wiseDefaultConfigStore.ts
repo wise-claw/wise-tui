@@ -16,6 +16,10 @@ import {
   type AtMentionDefaultTarget,
 } from "../constants/atMentionDefault";
 import {
+  normalizeSessionExecutionEngine,
+  type SessionExecutionEngine,
+} from "../constants/sessionExecutionEngine";
+import {
   DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS,
   normalizeExecutionEnvironmentDispatchHistoryDays,
   type ExecutionEnvironmentDispatchHistoryDays,
@@ -68,6 +72,8 @@ export const CLAUDE_DEFAULT_CONNECTION_KIND_KEY = "wise.claudeDefaultConnectionK
 export const CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK: ClaudeSessionConnectionKind = "streaming";
 
 export const WISE_CLAUDE_CONNECTION_KIND_CHANGED = "wise:claude-connection-kind-changed";
+
+export const WISE_DEFAULT_EXECUTION_ENGINE_CHANGED = "wise:default-execution-engine-changed";
 
 export const WISE_TOPBAR_CHROME_DEFAULT_CHANGED = "wise:topbar-chrome-default-changed";
 
@@ -174,6 +180,8 @@ export type FeaturePanelChromeDefaults = Pick<
 export interface WiseDefaultConfigV1 {
   version: 1;
   connectionKind: ClaudeSessionConnectionKind;
+  /** 新建会话默认执行引擎；未单独设置执行引擎的仓库 / 终端跟随此默认值。默认 Claude Code。 */
+  defaultExecutionEngine: SessionExecutionEngine;
   /** 主会话顶栏 LLM 代理图标；默认隐藏。 */
   showLlmProxyTopbar: boolean;
   /** 主会话顶栏 Free Claude Code 图标；默认隐藏。 */
@@ -291,6 +299,7 @@ export interface WiseDefaultConfigV1 {
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   version: 1,
   connectionKind: CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
+  defaultExecutionEngine: "claude",
   showLlmProxyTopbar: false,
   showFccTopbar: false,
   showFccTrafficTopbar: false,
@@ -399,6 +408,14 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
     return {
       version: 1,
       connectionKind,
+      defaultExecutionEngine:
+        parsed.defaultExecutionEngine === undefined
+          ? DEFAULT_CONFIG.defaultExecutionEngine
+          : normalizeSessionExecutionEngine(
+              typeof parsed.defaultExecutionEngine === "string"
+                ? parsed.defaultExecutionEngine
+                : undefined,
+            ),
       showLlmProxyTopbar: normalizeBoolean(parsed.showLlmProxyTopbar),
       showFccTopbar:
         parsed.showFccTopbar === undefined
@@ -693,6 +710,13 @@ async function persistConfig(config: WiseDefaultConfigV1): Promise<void> {
 function dispatchConnectionKindChanged(kind: ClaudeSessionConnectionKind): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(WISE_CLAUDE_CONNECTION_KIND_CHANGED, { detail: { kind } }));
+}
+
+function dispatchDefaultExecutionEngineChanged(engine: SessionExecutionEngine): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_DEFAULT_EXECUTION_ENGINE_CHANGED, { detail: { engine } }),
+  );
 }
 
 function dispatchComposerFooterChromeDefaultChanged(config: ComposerFooterChromeDefaults): void {
@@ -996,17 +1020,43 @@ async function maybeUpgradeOneshotDefaultToStreaming(
 }
 
 /** 从 `app_settings` 读取默认配置；无记录时写入默认值并返回。 */
+let cachedDefaultExecutionEngine: SessionExecutionEngine = DEFAULT_CONFIG.defaultExecutionEngine;
+
+/** 同步读取默认执行环境（内存缓存）；启动与保存路径经 loadWiseDefaultConfig 刷新。 */
+export function getCachedDefaultExecutionEngine(): SessionExecutionEngine {
+  return cachedDefaultExecutionEngine;
+}
+
+function syncDefaultExecutionEngineCache(config: WiseDefaultConfigV1): WiseDefaultConfigV1 {
+  cachedDefaultExecutionEngine = normalizeSessionExecutionEngine(config.defaultExecutionEngine);
+  return config;
+}
+
 export async function loadWiseDefaultConfig(): Promise<WiseDefaultConfigV1> {
   const fromJson = parseConfigJson(await getAppSetting(WISE_DEFAULT_CONFIG_KEY));
   if (fromJson) {
-    return await maybeUpgradeOneshotDefaultToStreaming(fromJson);
+    return syncDefaultExecutionEngineCache(
+      await maybeUpgradeOneshotDefaultToStreaming(fromJson),
+    );
   }
 
   const migrated = await migrateLegacyConfig();
   const resolved = migrated ?? DEFAULT_CONFIG;
   await persistConfig(resolved);
   await deleteLegacyAppSettings();
-  return await maybeUpgradeOneshotDefaultToStreaming(resolved);
+  return syncDefaultExecutionEngineCache(
+    await maybeUpgradeOneshotDefaultToStreaming(resolved),
+  );
+}
+
+export async function loadDefaultExecutionEngineFromStore(): Promise<SessionExecutionEngine> {
+  return (await loadWiseDefaultConfig()).defaultExecutionEngine;
+}
+
+export async function saveDefaultExecutionEngineToStore(
+  engine: SessionExecutionEngine,
+): Promise<void> {
+  await saveWiseDefaultConfig({ defaultExecutionEngine: normalizeSessionExecutionEngine(engine) });
 }
 
 export async function saveWiseDefaultConfig(
@@ -1014,6 +1064,7 @@ export async function saveWiseDefaultConfig(
     Pick<
       WiseDefaultConfigV1,
       | "connectionKind"
+      | "defaultExecutionEngine"
       | "showLlmProxyTopbar"
       | "showFccTopbar"
       | "showFccTrafficTopbar"
@@ -1077,6 +1128,7 @@ export async function saveWiseDefaultConfig(
   const next: WiseDefaultConfigV1 = {
     version: 1,
     connectionKind: patch.connectionKind ?? current.connectionKind,
+    defaultExecutionEngine: patch.defaultExecutionEngine ?? current.defaultExecutionEngine,
     showLlmProxyTopbar: patch.showLlmProxyTopbar ?? current.showLlmProxyTopbar,
     showFccTopbar: patch.showFccTopbar ?? current.showFccTopbar,
     showFccTrafficTopbar: patch.showFccTrafficTopbar ?? current.showFccTrafficTopbar,
@@ -1206,6 +1258,9 @@ export async function saveWiseDefaultConfig(
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
+  }
+  if (patch.defaultExecutionEngine !== undefined) {
+    next.defaultExecutionEngine = normalizeSessionExecutionEngine(patch.defaultExecutionEngine);
   }
   if (patch.showLlmProxyTopbar !== undefined) {
     next.showLlmProxyTopbar = normalizeBoolean(patch.showLlmProxyTopbar);
@@ -1428,6 +1483,12 @@ export async function saveWiseDefaultConfig(
 
   if (patch.connectionKind !== undefined && next.connectionKind !== current.connectionKind) {
     dispatchConnectionKindChanged(next.connectionKind);
+  }
+  if (
+    patch.defaultExecutionEngine !== undefined &&
+    next.defaultExecutionEngine !== current.defaultExecutionEngine
+  ) {
+    dispatchDefaultExecutionEngineChanged(next.defaultExecutionEngine);
   }
   if (
     patch.showLlmProxyTopbar !== undefined ||

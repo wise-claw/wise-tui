@@ -27,6 +27,7 @@ import {
   isPaneExtraExecutionEngine,
   PANE_EXTRA_EXECUTION_ENGINES,
   resolvePaneEffectiveEngine,
+  resolvePaneExecutionEnvironmentMenuSelection,
   resolvePaneRuntimePreset,
   type PaneRuntimeOverride,
   type PaneRuntimePreset,
@@ -129,20 +130,35 @@ export function ComposerRuntimeSettingsTrigger({
   // 多屏 pane 无显式 override（或仅 claude/codex）时，根据生效引擎与代理路由推断默认选中预设，
   // 确保继承默认的 pane 也能在菜单中高亮当前预设（claude-direct / claude-proxy / codex）。
   // 当 route=auto 时，检查是否真有代理活跃；无代理则退回到直连，避免无代理时仍选中「代理」项。
+  // Codex RPC / Cursor 等额外引擎绝不推断为 Claude/Codex 预设，否则会与下方勾选项双高亮。
   const inferredPanePreset = useMemo<PaneRuntimePreset | null>(() => {
     if (!showPaneRuntimePresets) return null;
     if (activePanePreset) return activePanePreset;
     const overrideEngine = paneRuntimeOverride?.executionEngine;
-    if (overrideEngine && isPaneExtraExecutionEngine(overrideEngine)) {
-      // cursor / gemini / opencode 走 extra 引擎区，不选中任何预设
+    const effectiveOverrideEngine = overrideEngine ?? effectiveEngine;
+    if (isPaneExtraExecutionEngine(effectiveOverrideEngine)) {
       return null;
     }
-    const effectiveOverrideEngine = overrideEngine ?? effectiveEngine;
     if (effectiveOverrideEngine === "codex") return "codex";
     const route = paneRuntimeOverride?.claudeProxyRoute ?? claudeProxyRoute ?? "auto";
     if (route === "bypass") return "claude-direct";
     return activeProxyRoute ? "claude-proxy" : "claude-direct";
   }, [showPaneRuntimePresets, activePanePreset, paneRuntimeOverride, effectiveEngine, claudeProxyRoute, activeProxyRoute]);
+
+  const paneMenuSelection = useMemo(() => {
+    if (!showPaneRuntimePresets) {
+      return {
+        selectedKeys: [] as string[],
+        highlightPreset: null as PaneRuntimePreset | null,
+        highlightExtraEngine: null as SessionExecutionEngine | null,
+      };
+    }
+    return resolvePaneExecutionEnvironmentMenuSelection({
+      override: paneRuntimeOverride,
+      fallbackEngine: engine,
+      inferredPreset: inferredPanePreset,
+    });
+  }, [showPaneRuntimePresets, paneRuntimeOverride, engine, inferredPanePreset]);
 
   const showExtraPaneEngines =
     showPaneRuntimePresets &&
@@ -198,13 +214,18 @@ export function ComposerRuntimeSettingsTrigger({
     const items: MenuProps["items"] = [];
 
     if (showPaneRuntimePresets) {
-      const presetItems = buildPaneRuntimePresetMenuItems(activePanePreset, inferredPanePreset, { codexAvailable });
+      const presetItems = buildPaneRuntimePresetMenuItems(
+        paneMenuSelection.highlightPreset,
+        null,
+        { codexAvailable },
+      );
       if (presetItems?.length) {
         items.push(...presetItems);
       }
       if (showExtraPaneEngines) {
         const extraEngineItems = buildSessionExecutionEngineMenuItems({
-          engine: effectiveEngine,
+          // 仅额外引擎生效时勾选；预设生效时传 claude 哨兵，避免误勾 Codex RPC 等项
+          engine: paneMenuSelection.highlightExtraEngine ?? "claude",
           codexAvailable,
           cursorAvailable,
           geminiAvailable,
@@ -252,16 +273,15 @@ export function ComposerRuntimeSettingsTrigger({
 
     return items;
   }, [
-    activePanePreset,
     codexAvailable,
     cursorAvailable,
-    effectiveEngine,
     geminiAvailable,
     opencodeAvailable,
     qoderAvailable,
     defaultConnectionKind,
     engine,
-    inferredPanePreset,
+    paneMenuSelection.highlightExtraEngine,
+    paneMenuSelection.highlightPreset,
     onOpenExecutionEnvironment,
     resolvedConnectionKind,
     showConnection,
@@ -273,25 +293,14 @@ export function ComposerRuntimeSettingsTrigger({
   const selectedKeys = useMemo(() => {
     const keys: string[] = [];
     if (showPaneRuntimePresets) {
-      if (inferredPanePreset) {
-        keys.push(inferredPanePreset);
-      } else if (
-        paneRuntimeOverride?.executionEngine &&
-        isPaneExtraExecutionEngine(paneRuntimeOverride.executionEngine)
-      ) {
-        // cursor / gemini / opencode 等额外引擎：选中 extra 区对应项
-        keys.push(paneRuntimeOverride.executionEngine);
-      } else {
-        keys.push("claude-direct");
-      }
+      keys.push(...paneMenuSelection.selectedKeys);
     } else if (showEngine) {
       keys.push(engine);
     }
     if (showConnection) keys.push(resolvedConnectionKind);
     return keys;
   }, [
-    inferredPanePreset,
-    paneRuntimeOverride?.executionEngine,
+    paneMenuSelection.selectedKeys,
     showConnection,
     showEngine,
     showPaneRuntimePresets,

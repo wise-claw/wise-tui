@@ -17,10 +17,42 @@ use crate::claude_events::{
     emit_adapted_stream_payload, CLAUDE_STREAM_EVENT_OUTPUT,
 };
 use crate::codex_binary::find_codex_binary;
+use crate::codex_commands::load_codex_default_settings;
 use crate::codex_rpc_session::CodexRpcSession;
 use crate::codex_rpc_stream_adapter::{adapt_notification_to_stream_lines, emit_approval_request, emit_dynamic_tool_request, emit_mcp_elicitation_request, emit_rpc_complete};
 use crate::codex_rpc_types::{ApprovalDecision, CommandExecParams, CommandExecResponse, ServerNotification, ServerRequest};
 use crate::wise_db::WiseDb;
+
+/// 把 Wise 持久化的 sandbox/approval 设置转成 app-server `thread/start.config`。
+fn build_codex_rpc_thread_config(
+    settings: Option<&crate::codex_commands::CodexDefaultSettings>,
+) -> Option<HashMap<String, serde_json::Value>> {
+    let Some(settings) = settings else {
+        return None;
+    };
+    let mut config = HashMap::new();
+    if let Some(sandbox) = settings
+        .sandbox_mode
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        config.insert("sandbox_mode".to_string(), json!(sandbox));
+    }
+    if let Some(policy) = settings
+        .approval_policy
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        config.insert("approval_policy".to_string(), json!(policy));
+    }
+    if config.is_empty() {
+        None
+    } else {
+        Some(config)
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Shared state for active RPC sessions
@@ -242,6 +274,9 @@ pub(crate) async fn execute_codex_rpc(
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
+    let default_settings = load_codex_default_settings(&db);
+    let thread_config = build_codex_rpc_thread_config(default_settings.as_ref());
+
     let thread_result = if let Some(thread_id) = resume_id {
         session.resume_thread(thread_id).await
     } else {
@@ -249,6 +284,7 @@ pub(crate) async fn execute_codex_rpc(
             .start_thread(
                 Some(params.project_path.as_str()),
                 params.model.as_deref(),
+                thread_config,
             )
             .await
             .map(|_| ())

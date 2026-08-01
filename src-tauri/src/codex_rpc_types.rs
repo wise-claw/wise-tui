@@ -77,6 +77,10 @@ pub struct ThreadStartParams {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
+    /// 可选配置覆盖（与 CLI `-c key=value` / config.toml 同源键名）。
+    /// 例如 `sandbox_mode`、`approval_policy`。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<std::collections::HashMap<String, serde_json::Value>>,
 }
 
 /// Response payload from `thread/start`.

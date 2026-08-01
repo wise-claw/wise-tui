@@ -12,6 +12,7 @@ import { executeCodexCode, executeCodexRpcCode } from "../services/codex";
 import { executeOpencodeCode } from "../services/opencode";
 import { executeQoderCode } from "../services/qoder";
 import { executeCursorCode } from "../services/cursorAgentExecution";
+import { getCachedDefaultExecutionEngine } from "../services/wiseDefaultConfigStore";
 import type { CursorSdkAttachment } from "../services/cursorComposerPrompt";
 import { CURSOR_SDK_DEFAULT_MODEL } from "../constants/cursorSdk";
 import { resolveCursorLocalModelId } from "../utils/cursorModel";
@@ -713,10 +714,12 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
   const invokeClaudeTurn = async (params: ClaudeTurnInvokeParams) => {
     const session = sessionsRef.current.find((s) => s.id === params.tabSessionId);
     const resolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
-    const engine: SessionExecutionEngine = session && resolver ? resolver(session) : "claude";
+    const engine: SessionExecutionEngine =
+      session && resolver ? resolver(session) : getCachedDefaultExecutionEngine();
     if (engine === "codex") {
       const contextExecutionEngine =
-        params.codexContextExecutionEngine ?? (session && resolver ? resolver(session) : "claude");
+        params.codexContextExecutionEngine ??
+        (session && resolver ? resolver(session) : getCachedDefaultExecutionEngine());
       const codexResumeSessionId =
         params.forceNewClaudeConversation || !session
           ? null

@@ -154,10 +154,12 @@ impl CodexRpcSession {
         &mut self,
         cwd: Option<&str>,
         model: Option<&str>,
+        config: Option<std::collections::HashMap<String, serde_json::Value>>,
     ) -> Result<String> {
         let params = ThreadStartParams {
             model: model.map(str::to_string),
             cwd: cwd.map(str::to_string),
+            config,
         };
         let params_value =
             serde_json::to_value(&params).context("Failed to serialize thread/start params")?;

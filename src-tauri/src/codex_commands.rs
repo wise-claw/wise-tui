@@ -27,13 +27,28 @@ const WISE_CODEX_EXEC_SANDBOX: &str = "workspace-write";
 /// 与前端 `WISE_CODEX_DEFAULT_SETTINGS_KEY` 一致。
 pub(crate) const CODEX_DEFAULT_SETTINGS_KEY: &str = "wise.codexDefaultSettings.v1";
 
-/// codex 启动默认设置（经 `-s`/`-c` 注入 `codex exec` fresh 会话）。
+/// codex 启动默认设置（经 `-s`/`-c` 注入 `codex exec`，或 RPC `thread/start.config`）。
 /// 字段缺省（None）时回退现状：sandbox=workspace-write、不传 approval_policy。
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CodexDefaultSettings {
-    sandbox_mode: Option<String>,    // read-only | workspace-write | danger-full-access
-    approval_policy: Option<String>, // untrusted | on-request | never
+pub(crate) struct CodexDefaultSettings {
+    pub sandbox_mode: Option<String>,    // read-only | workspace-write | danger-full-access
+    pub approval_policy: Option<String>, // untrusted | on-request | never
+}
+
+/// 从 DB 读取全局 Codex 默认沙箱/审批设置；缺省或非法时返回 None。
+pub(crate) fn load_codex_default_settings(db: &WiseDb) -> Option<CodexDefaultSettings> {
+    db.get_setting(CODEX_DEFAULT_SETTINGS_KEY)
+        .ok()
+        .flatten()
+        .and_then(|s| {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                serde_json::from_str::<CodexDefaultSettings>(&t).ok()
+            }
+        })
 }
 
 #[derive(Clone, Serialize)]
@@ -620,18 +635,7 @@ pub(crate) async fn execute_codex_code(
     let path_env = codex_merged_path_env();
     let spawn_env_overrides = crate::opencode_go_proxy::codex_spawn_env_overrides(&db);
     // 全局默认配置：codex 启动沙箱/审批设置。DB 读失败或 JSON 非法时回退 None（现状）。
-    let default_settings = db
-        .get_setting(CODEX_DEFAULT_SETTINGS_KEY)
-        .ok()
-        .flatten()
-        .and_then(|s| {
-            let t = s.trim();
-            if t.is_empty() {
-                None
-            } else {
-                serde_json::from_str::<CodexDefaultSettings>(&t).ok()
-            }
-        });
+    let default_settings = load_codex_default_settings(&db);
     let spawn_params = CodexSpawnParams {
         codex_path,
         project_path: project_path.clone(),

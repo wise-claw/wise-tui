@@ -2,9 +2,10 @@
  * codex 启动默认沙箱/审批设置的纯逻辑工具：解析、序列化、「取消沙箱限制」开关。
  *
  * 与 Rust 侧 `CodexDefaultSettings`（camelCase serde）对应：用户配置作为 JSON 对象，
- * 由后端 `execute_codex_code` 读取后注入 `codex exec`：
- * - fresh：`-s <sandboxMode>` + 可选 `-c approval_policy=…`
- * - resume：`-c sandbox_mode=…`（resume 无 `-s`，必须覆盖以免旧 read-only 会话写不了）
+ * 由后端 `execute_codex_code` / `execute_codex_rpc` 读取后注入：
+ * - CLI fresh：`-s <sandboxMode>` + 可选 `-c approval_policy=…`
+ * - CLI resume：`-c sandbox_mode=…`（resume 无 `-s`，必须覆盖以免旧 read-only 会话写不了）
+ * - RPC：`thread/start` 的 `sandbox` / `approvalPolicy`（camelCase 枚举）
  */
 
 /** sandbox_mode 取值。 */
@@ -12,6 +13,15 @@ export type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-ac
 
 /** approval_policy 取值。 */
 export type CodexApprovalPolicy = "untrusted" | "on-request" | "never";
+
+/**
+ * Composer / Codex 风格权限预设（对齐 ChatGPT Codex 输入栏四档）。
+ * - `ask`：请求批准（始终询问）
+ * - `auto`：替我审批（仅风险操作询问）
+ * - `full`：完全访问
+ * - `custom`：使用 config.toml（不注入覆盖）
+ */
+export type CodexPermissionPreset = "ask" | "auto" | "full" | "custom";
 
 /** 占位示例（取消沙箱限制 = danger-full-access + never）。 */
 export const CODEX_DEFAULT_SETTINGS_PLACEHOLDER = `{
@@ -90,4 +100,33 @@ export function toggleFullAccessInCodexSettings(text: string, enabled: boolean):
   delete obj["approvalPolicy"];
   if (Object.keys(obj).length === 0) return "";
   return JSON.stringify(obj, null, 2);
+}
+
+/**
+ * 从已持久化 settings 文本解析当前权限预设。
+ * 空文本 / 非法 → `custom`；完全匹配四档之一才归类，其它组合也回落 `custom`。
+ */
+export function resolveCodexPermissionPreset(text: string): CodexPermissionPreset {
+  const obj = parseCodexDefaultSettings(text);
+  if (!obj || Object.keys(obj).length === 0) return "custom";
+  if (isFullAccessInCodexSettings(text)) return "full";
+  const sandbox = extractCodexSandboxMode(text);
+  const policy = extractCodexApprovalPolicy(text);
+  if (sandbox === "workspace-write" && policy === "untrusted") return "ask";
+  if (sandbox === "workspace-write" && policy === "on-request") return "auto";
+  return "custom";
+}
+
+/** 把权限预设序列化为 settings JSON；`custom` 返回空串（走 config.toml）。 */
+export function serializeCodexPermissionPreset(preset: CodexPermissionPreset): string {
+  switch (preset) {
+    case "ask":
+      return serializeCodexDefaultSettings("workspace-write", "untrusted");
+    case "auto":
+      return serializeCodexDefaultSettings("workspace-write", "on-request");
+    case "full":
+      return serializeCodexDefaultSettings("danger-full-access", "never");
+    case "custom":
+      return "";
+  }
 }

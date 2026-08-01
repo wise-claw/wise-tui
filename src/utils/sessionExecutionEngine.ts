@@ -3,6 +3,7 @@ import {
   SESSION_EXECUTION_ENGINE_LABELS,
   type SessionExecutionEngine,
 } from "../constants/sessionExecutionEngine";
+import { getCachedDefaultExecutionEngine } from "../services/wiseDefaultConfigStore";
 import type { PaneClaudeProxyRoute, PaneRuntimeOverride } from "../types/paneRuntimeOverride";
 import type { EmployeeItem, Repository } from "../types";
 import { normalizeEmployeeBindingName } from "./employeeBindingName";
@@ -59,9 +60,16 @@ export function resolveEngineForSession(
   repositories: readonly Repository[],
   employees: readonly EmployeeItem[],
   activeRepository?: Repository | null,
+  defaultEngine?: SessionExecutionEngine,
 ): SessionExecutionEngine {
   const chatRepo = resolveChatContextRepository(session, repositories, activeRepository);
-  return resolveSessionExecutionEngine(session, repositories, employees, chatRepo);
+  return resolveSessionExecutionEngine(
+    session,
+    repositories,
+    employees,
+    chatRepo,
+    defaultEngine,
+  );
 }
 
 export function resolveRepositoryPathForSessionExecution(
@@ -225,6 +233,7 @@ export function resolveSessionExecutionEngine(
   repositories: readonly Repository[],
   employees: readonly EmployeeItem[],
   activeRepository?: Repository | null,
+  defaultEngine?: SessionExecutionEngine,
 ): SessionExecutionEngine {
   const execWorker = parseExecutionEnvironmentWorkerRepositoryName(session.repositoryName ?? "");
   if (execWorker) {
@@ -240,7 +249,11 @@ export function resolveSessionExecutionEngine(
   }
 
   const repo = resolveExecutionEngineRepository(session, repositories, employees, activeRepository);
-  return normalizeSessionExecutionEngine(repo?.executionEngine);
+  const repoEngine = repo?.executionEngine?.trim();
+  if (repoEngine) return normalizeSessionExecutionEngine(repoEngine);
+  return defaultEngine
+    ? normalizeSessionExecutionEngine(defaultEngine)
+    : getCachedDefaultExecutionEngine();
 }
 
 /** Cursor/Codex 执行 cwd：优先匹配 session 路径的仓库，否则回退 activeRepository。 */

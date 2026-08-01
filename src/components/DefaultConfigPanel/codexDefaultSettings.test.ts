@@ -4,7 +4,9 @@ import {
   extractCodexSandboxMode,
   isFullAccessInCodexSettings,
   parseCodexDefaultSettings,
+  resolveCodexPermissionPreset,
   serializeCodexDefaultSettings,
+  serializeCodexPermissionPreset,
   toggleFullAccessInCodexSettings,
 } from "./codexDefaultSettings";
 
@@ -179,5 +181,31 @@ describe("toggleFullAccessInCodexSettings", () => {
       sandboxMode: "danger-full-access",
       approvalPolicy: "never",
     });
+  });
+});
+
+describe("resolveCodexPermissionPreset / serializeCodexPermissionPreset", () => {
+  test("空文本为 custom", () => {
+    expect(resolveCodexPermissionPreset("")).toBe("custom");
+  });
+
+  test("四档 round-trip", () => {
+    for (const preset of ["ask", "auto", "full", "custom"] as const) {
+      expect(resolveCodexPermissionPreset(serializeCodexPermissionPreset(preset))).toBe(preset);
+    }
+  });
+
+  test("完全访问匹配", () => {
+    expect(
+      resolveCodexPermissionPreset(
+        '{"sandboxMode":"danger-full-access","approvalPolicy":"never"}',
+      ),
+    ).toBe("full");
+  });
+
+  test("非预设组合回落 custom", () => {
+    expect(
+      resolveCodexPermissionPreset('{"sandboxMode":"read-only","approvalPolicy":"never"}'),
+    ).toBe("custom");
   });
 });

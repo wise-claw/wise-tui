@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { EmployeeItem, Repository } from "../types";
+
 import {
   buildSessionEmptyChatPrompt,
   resolveClaudeProxyBypassForSessionSpawn,
@@ -49,6 +50,53 @@ describe("resolveSessionExecutionEngine", () => {
         { repositoryPath: "/repo/demo", repositoryName: "demo" },
         [repo()],
         [],
+        undefined,
+        "claude",
+      ),
+    ).toBe("claude");
+  });
+
+  test("falls back to configured default execution engine when repo has none", () => {
+    expect(
+      resolveSessionExecutionEngine(
+        { repositoryPath: "/repo/demo", repositoryName: "demo" },
+        [repo()],
+        [],
+        undefined,
+        "codex",
+      ),
+    ).toBe("codex");
+    expect(
+      resolveEngineForSession(
+        { repositoryPath: "/repo/demo", repositoryName: "demo" },
+        [repo()],
+        [],
+        undefined,
+        "codex",
+      ),
+    ).toBe("codex");
+  });
+
+  test("repository executionEngine overrides configured default", () => {
+    expect(
+      resolveSessionExecutionEngine(
+        { repositoryPath: "/repo/demo", repositoryName: "demo" },
+        [repo({ executionEngine: "claude" })],
+        [],
+        undefined,
+        "codex",
+      ),
+    ).toBe("claude");
+  });
+
+  test("employee executionEngine overrides configured default", () => {
+    expect(
+      resolveSessionExecutionEngine(
+        { repositoryPath: "/repo/demo", repositoryName: "demo / 员工:Alice" },
+        [repo()],
+        [employee({ executionEngine: "claude" })],
+        undefined,
+        "codex",
       ),
     ).toBe("claude");
   });

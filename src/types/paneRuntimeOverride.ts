@@ -99,11 +99,47 @@ export function resolvePaneRuntimePreset(
   if (isPaneRuntimeOverrideEmpty(override)) return null;
   const resolved = override!;
   const engine = resolved.executionEngine ?? resolvedEngine;
-  if (engine === "codex" || engine === "codex-rpc") return "codex";
+  // Codex RPC / Cursor 等落在「额外引擎」区，不能映射到上方 Codex CLI 预设，否则会双高亮。
+  if (isPaneExtraExecutionEngine(engine)) return null;
+  if (engine === "codex") return "codex";
   if (engine === "claude") {
     return resolved.claudeProxyRoute === "bypass" ? "claude-direct" : "claude-proxy";
   }
   return null;
+}
+
+/**
+ * 多屏「执行环境」菜单选中态：预设区与额外引擎区互斥，全局只允许一个 selectedKey。
+ */
+export function resolvePaneExecutionEnvironmentMenuSelection(input: {
+  override: PaneRuntimeOverride | null | undefined;
+  fallbackEngine: SessionExecutionEngine;
+  /** 无显式 override 时，由代理路由等推断的 Claude/Codex 预设 */
+  inferredPreset: PaneRuntimePreset | null;
+}): {
+  selectedKeys: string[];
+  /** 传给预设菜单的高亮；额外引擎生效时为 null */
+  highlightPreset: PaneRuntimePreset | null;
+  /** 额外引擎区用于勾选的当前引擎；预设生效时为 null */
+  highlightExtraEngine: SessionExecutionEngine | null;
+} {
+  const effective = resolvePaneEffectiveEngine(input.override, input.fallbackEngine);
+  if (isPaneExtraExecutionEngine(effective)) {
+    return {
+      selectedKeys: [effective],
+      highlightPreset: null,
+      highlightExtraEngine: effective,
+    };
+  }
+  const preset =
+    resolvePaneRuntimePreset(input.override, input.fallbackEngine) ??
+    input.inferredPreset ??
+    "claude-direct";
+  return {
+    selectedKeys: [preset],
+    highlightPreset: preset,
+    highlightExtraEngine: null,
+  };
 }
 
 export function mergePaneRuntimeOverride(

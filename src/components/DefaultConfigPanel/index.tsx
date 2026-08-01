@@ -8,6 +8,7 @@ import {
 import {
   SESSION_EXECUTION_ENGINE_LABELS,
   SESSION_EXECUTION_ENGINES,
+  type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
 import { MONITOR_PANEL_VISIBLE_ROWS_OPTIONS } from "../../constants/monitorPanelLayout";
 import { WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS } from "../../constants/workspaceListLayout";
@@ -34,6 +35,7 @@ import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useComposerFooterChromeDefaultSetting } from "./useComposerFooterChromeDefaultSetting";
 import { useFeaturePanelChromeDefaultSetting } from "./useFeaturePanelChromeDefaultSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
+import { useDefaultExecutionEngineSetting } from "./useDefaultExecutionEngineSetting";
 import { useTerminalThemeModeSetting } from "./useTerminalThemeModeSetting";
 import { useClaudeDefaultSettingsSetting } from "./useClaudeDefaultSettingsSetting";
 import { ClaudeSettingsJsonEditor } from "../ClaudeSessions/ClaudeSettingsJsonEditor";
@@ -77,6 +79,7 @@ function DefaultConfigSection({ title, children }: { title: string; children: Re
  */
 export function DefaultConfigPanel() {
   const connection = useClaudeConnectionModeSetting();
+  const defaultExecutionEngine = useDefaultExecutionEngineSetting();
   const claudeDefaultSettings = useClaudeDefaultSettingsSetting();
   const codexDefaultSettings = useCodexDefaultSettingsSetting();
   const opencodeDefaultSettings = useOpencodeDefaultSettingsSetting();
@@ -425,6 +428,29 @@ export function DefaultConfigPanel() {
             }
           />
           <DefaultConfigRow
+            title="默认执行环境"
+            hint="新建会话默认"
+            detail="新建会话默认；仓库 / 终端单独设置过的执行引擎不变"
+            control={
+              <Select
+                size="small"
+                showSearch
+                optionFilterProp="label"
+                aria-label="默认执行环境"
+                disabled={defaultExecutionEngine.loading || defaultExecutionEngine.saving}
+                value={defaultExecutionEngine.engine}
+                style={{ minWidth: 140 }}
+                options={SESSION_EXECUTION_ENGINES.map((engine) => ({
+                  label: SESSION_EXECUTION_ENGINE_LABELS[engine].title,
+                  value: engine,
+                }))}
+                onChange={(value) => {
+                  void defaultExecutionEngine.save(value as SessionExecutionEngine);
+                }}
+              />
+            }
+          />
+          <DefaultConfigRow
             title="Claude 启动 --settings"
             hint="默认配置"
             detail='作为 claude --settings 加载，等同编辑 settings.json；留空不注入。例：{"ultracode": true}'
@@ -537,10 +563,10 @@ export function DefaultConfigPanel() {
                     }}
                     style={{ minWidth: 96 }}
                     options={[
-                      { label: "默认", value: "" },
-                      { label: "untrusted", value: "untrusted" },
-                      { label: "on-request", value: "on-request" },
-                      { label: "never", value: "never" },
+                      { label: "默认 (config.toml)", value: "" },
+                      { label: "请求批准 (untrusted)", value: "untrusted" },
+                      { label: "替我审批 (on-request)", value: "on-request" },
+                      { label: "从不询问 (never)", value: "never" },
                     ]}
                   />
                 </span>

@@ -55,7 +55,7 @@ export function onCodexApprovalResolved(
 
 /** Send an approval decision back to the codex app-server.
  *
- * The Rust command accepts individual parameters (not a nested `params` object).
+ * Rust 侧签名是 `params: RespondCodexRpcApprovalParams`（camelCase），须包一层 `params`。
  */
 export async function respondCodexApproval(
   sessionId: string,
@@ -63,9 +63,11 @@ export async function respondCodexApproval(
   decision: 'accept' | 'acceptForSession' | 'decline' | 'cancel',
 ): Promise<void> {
   await invoke('respond_codex_rpc_approval', {
-    sessionId,
-    requestId,
-    decision,
+    params: {
+      sessionId,
+      requestId,
+      decision,
+    },
   });
 }
 

@@ -12,6 +12,7 @@ import { message } from "antd";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCachedDefaultExecutionEngine } from "../services/wiseDefaultConfigStore";
 import type {
   ClaudeSession,
   QuestionRequest,
@@ -510,7 +511,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         if (sessionHasVisibleStreamProgress(session)) return;
         const engineResolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
         const engine: SessionExecutionEngine =
-          engineResolver?.(session) ?? "claude";
+          engineResolver?.(session) ?? getCachedDefaultExecutionEngine();
         if (
           sessionHasHookSystemActivity(session, recentHookActivityByTabRef.current) &&
           !streamStallHookExtendedByTabRef.current.has(key)
@@ -666,7 +667,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const resolveSessionExecutionEngine = useCallback(
     (session: ClaudeSession): SessionExecutionEngine => {
       const resolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
-      return session && resolver ? resolver(session) : "claude";
+      return session && resolver ? resolver(session) : getCachedDefaultExecutionEngine();
     },
     [],
   );

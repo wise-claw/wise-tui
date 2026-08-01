@@ -9258,6 +9258,19 @@ button.app-message-part-header:disabled:hover {
   margin-bottom: 4px;
 }
 
+.app-claude-dock--codex-approval__command {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 160px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--ant-color-fill-quaternary);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ── 选择题 Dock：独立「任务卡」视觉，与底部主输入区分（紧凑布局） ── */
 .app-claude-dock--question {
   position: relative;

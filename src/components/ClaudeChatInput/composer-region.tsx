@@ -206,6 +206,9 @@ import {
 import { extractComposerCodeSelectionRefs } from "./extractComposerCodeSelectionRefs";
 import { scheduleInsertComposerCodeSelectionRef } from "./scheduleInsertComposerCodeSelectionRef";
 import { AutoApproveBadge } from "./AutoApproveBadge";
+import { CodexPermissionModeBadge } from "./CodexPermissionModeBadge";
+import { CodexApprovalDock } from "./dock/codex-approval-dock";
+import { useCodexApprovalPending } from "../../hooks/useCodexApprovalPending";
 import { expandComposerCodeSelectionRefs } from "../../utils/expandComposerCodeSelectionRefs";
 
 function composerSpeechEngineHint(engine: ComposerSpeechEngine | null): string {
@@ -699,6 +702,11 @@ function ComposerInner({
   /** 权限/追问 dock 是否待处理：发送后重聚焦 effect 据此让出焦点给弹窗。值在渲染体回填。 */
   const showQuestionChromeRef = useRef(false);
   const showPermissionChromeRef = useRef(false);
+  const showCodexApprovalChromeRef = useRef(false);
+  const { pending: codexApprovalPending, respond: respondCodexApprovalDecision } =
+    useCodexApprovalPending(session.id);
+  const isCodexEngineFamily =
+    sessionExecutionEngine === "codex" || sessionExecutionEngine === "codex-rpc";
   const { target: atMentionDefaultTarget, save: saveAtMentionDefaultTarget } =
     useAtMentionDefaultTarget();
   const { bindings: atMentionShortcutBindings } = useAtMentionShortcuts();
@@ -3043,6 +3051,8 @@ function ComposerInner({
             </span>
           </Popover>
         ) : null}
+        {/* Codex 权限预设：紧挨语音按钮右侧（Semi 输入底栏可见工具区） */}
+        {isCodexEngineFamily ? <CodexPermissionModeBadge /> : null}
         {dualPaneRepositoryPicker ? (
           <Select
             size="small"
@@ -3137,6 +3147,7 @@ function ComposerInner({
     ensureBreakdown,
     handleFileAttach,
     handleScreenshot,
+    isCodexEngineFamily,
     isSessionBusy,
     _onCancel,
     speechDictation.engine,
@@ -3286,8 +3297,12 @@ function ComposerInner({
   useEffect(() => {
     if (!semiEditorReady) return;
     if (!composerRefocusSignal) return;
-    if (showQuestionChromeRef.current || showPermissionChromeRef.current) {
-      // 权限/追问待处理时让出焦点；请求留待迁移后新编辑器处理（consume 只读不删）
+    if (
+      showQuestionChromeRef.current ||
+      showPermissionChromeRef.current ||
+      showCodexApprovalChromeRef.current
+    ) {
+      // 权限/追问/Codex 审批待处理时让出焦点；请求留待迁移后新编辑器处理（consume 只读不删）
       return;
     }
     if (isProseMirrorFocused(shellRef.current)) {
@@ -3305,13 +3320,15 @@ function ComposerInner({
 
   const showQuestionChrome = Boolean(useAggregatedQuestionDock || questionRequest);
   const showPermissionChrome = Boolean(permissionRequest);
+  const showCodexApprovalChrome = Boolean(codexApprovalPending);
   showQuestionChromeRef.current = showQuestionChrome;
   showPermissionChromeRef.current = showPermissionChrome;
+  showCodexApprovalChromeRef.current = showCodexApprovalChrome;
 
   return (
     <div
       ref={composerEscapeRootRef}
-      className={`app-claude-composer${showQuestionChrome ? " app-claude-composer--pending-question" : ""}${showPermissionChrome ? " app-claude-composer--pending-permission" : ""}`}
+      className={`app-claude-composer${showQuestionChrome ? " app-claude-composer--pending-question" : ""}${showPermissionChrome || showCodexApprovalChrome ? " app-claude-composer--pending-permission" : ""}`}
       data-wise-composer-root=""
       data-session-id={session.id}
       onFocusCapture={() => noteComposerScreenshotFocus(session.id)}
@@ -3388,6 +3405,14 @@ function ComposerInner({
             requestStatus={permissionRequestStatus}
             requestError={permissionRequestError}
             onDecide={onRespondToPermission}
+          />
+        </div>
+      ) : null}
+      {codexApprovalPending ? (
+        <div style={{ padding: "0 6px" }}>
+          <CodexApprovalDock
+            request={codexApprovalPending}
+            onDecide={respondCodexApprovalDecision}
           />
         </div>
       ) : null}
@@ -3495,7 +3520,7 @@ function ComposerInner({
           </SemiConfigProvider>
         </div>
 
-        {/* Bottom bar：会话元信息（分支已移至输入框底栏截屏按钮后） */}
+        {/* Bottom bar：会话元信息（CSS 长期 display:none；可见控件已迁到 Semi 输入底栏） */}
         <div className="app-claude-input-bottom-bar">
           <span className="app-claude-input-bottom-statusline" title={bottomStatus.fullLine}>
             session:{bottomStatus.sessionDuration} |{" "}

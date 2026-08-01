@@ -15,9 +15,11 @@ mock.module("./appSettingsStore", () => ({
 
 import {
   loadWiseDefaultConfig,
+  getCachedDefaultExecutionEngine,
   saveWiseDefaultConfig,
   WISE_DEFAULT_CONFIG_KEY,
   WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY,
+  WISE_DEFAULT_EXECUTION_ENGINE_CHANGED,
   WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED,
   WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED,
   WISE_MONITOR_PANEL_PLACEMENT_CHANGED,
@@ -89,6 +91,7 @@ describe("wiseDefaultConfigStore", () => {
   test("load persists code defaults when unset", async () => {
     const config = await loadWiseDefaultConfig();
     expect(config.connectionKind).toBe("streaming");
+    expect(config.defaultExecutionEngine).toBe("claude");
     expect(config.showLlmProxyTopbar).toBe(false);
     expect(config.leftSidebarHubQuickEntries).toEqual(["mcp", "skills", "automation"]);
     expect(config.showLeftSidebarMonitorPanel).toBe(true);
@@ -116,6 +119,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(payload).toMatchObject({
       version: 1,
       connectionKind: "streaming",
+      defaultExecutionEngine: "claude",
       showLlmProxyTopbar: false,
       leftSidebarHubQuickEntries: ["mcp", "skills", "automation"],
       showLeftSidebarMonitorPanel: true,
@@ -248,6 +252,72 @@ describe("wiseDefaultConfigStore", () => {
     });
     await saveWiseDefaultConfig({ monitorPanelPlacement: "right" });
     expect(seen).toEqual(["right"]);
+  });
+
+  test("load backfills missing defaultExecutionEngine with product default", async () => {
+    getAppSetting.mockImplementation(async (key: string) =>
+      key === WISE_DEFAULT_CONFIG_KEY
+        ? JSON.stringify({
+            version: 1,
+            connectionKind: "streaming",
+          })
+        : null,
+    );
+    const config = await loadWiseDefaultConfig();
+    expect(config.defaultExecutionEngine).toBe("claude");
+  });
+
+  test("load normalizes invalid defaultExecutionEngine to claude", async () => {
+    getAppSetting.mockImplementation(async (key: string) =>
+      key === WISE_DEFAULT_CONFIG_KEY
+        ? JSON.stringify({
+            version: 1,
+            connectionKind: "streaming",
+            defaultExecutionEngine: "not-an-engine",
+          })
+        : null,
+    );
+    const config = await loadWiseDefaultConfig();
+    expect(config.defaultExecutionEngine).toBe("claude");
+  });
+
+  test("load refreshes cached default execution engine", async () => {
+    getAppSetting.mockImplementation(async (key: string) =>
+      key === WISE_DEFAULT_CONFIG_KEY
+        ? JSON.stringify({
+            version: 1,
+            connectionKind: "streaming",
+            defaultExecutionEngine: "opencode",
+          })
+        : null,
+    );
+    const config = await loadWiseDefaultConfig();
+    expect(config.defaultExecutionEngine).toBe("opencode");
+    expect(getCachedDefaultExecutionEngine()).toBe("opencode");
+  });
+
+  test("save default execution engine persists and dispatches event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+          defaultExecutionEngine: "claude",
+        });
+      }
+      return null;
+    });
+    const seen: string[] = [];
+    window.addEventListener(WISE_DEFAULT_EXECUTION_ENGINE_CHANGED, (e: Event) => {
+      const engine = (e as CustomEvent<{ engine?: string }>).detail?.engine;
+      if (typeof engine === "string") seen.push(engine);
+    });
+    const config = await saveWiseDefaultConfig({ defaultExecutionEngine: "codex" });
+    expect(config.defaultExecutionEngine).toBe("codex");
+    expect(seen).toEqual(["codex"]);
+    const persisted = JSON.parse(String(setAppSetting.mock.calls.at(-1)?.[1]));
+    expect(persisted.defaultExecutionEngine).toBe("codex");
   });
 
   test("load backfills missing topbar chrome fields with product defaults", async () => {
