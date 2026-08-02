@@ -11,6 +11,10 @@ import {
   type MergeAssistantPartsOptions,
 } from "./claudeStreamAssembler";
 import {
+  assistantTextJoinedFromParts,
+  sameAssistantTextIgnoringWhitespace,
+} from "../utils/assistantTextParts";
+import {
   extractCodexResumeSessionIdFromParsed,
   extractCursorAgentIdFromCompletePayload,
   extractCursorAgentIdFromParsed,
@@ -595,23 +599,41 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     if (isResultFullText === true) {
       flushPendingStreamSessionUpdatesSync();
     }
-    const effectiveParts =
-      isResultFullText === true
-        ? reconcileResultFullTextParts({
-            resultParts: dedupedParts,
-            existingParts: lastAssistantParts(tid),
-            lastAssistantHasText: lastAssistantHasVisibleTextPart(tid),
-          })
-        : dedupedParts;
+    let resultMergeOptions: MergeAssistantPartsOptions | undefined;
+    let effectiveParts: MessagePart[];
+    if (isResultFullText === true) {
+      const existingParts = lastAssistantParts(tid);
+      const hasText = lastAssistantHasVisibleTextPart(tid);
+      effectiveParts = reconcileResultFullTextParts({
+        resultParts: dedupedParts,
+        existingParts,
+        lastAssistantHasText: hasText,
+      });
+      // reconcile 在「仅空白差异」时返回整段 resultParts；必须 replace，不能当增量拼接。
+      if (
+        effectiveParts.length > 0 &&
+        hasText &&
+        sameAssistantTextIgnoringWhitespace(
+          assistantTextJoinedFromParts(effectiveParts),
+          assistantTextJoinedFromParts(existingParts),
+        )
+      ) {
+        resultMergeOptions = { replaceAllText: true };
+      }
+    } else {
+      effectiveParts = dedupedParts;
+    }
     const hasEffectiveUpdate = effectiveParts.length > 0 && !isInit;
     if (hidden && hasStreamUiUpdate && !mustPublishInit) {
       deferredStreamTabIds.add(tid);
     } else if (mustPublishInit) {
       flushPendingStreamSessionUpdatesSync();
-      setSessions(buildStreamSessionUpdater(tid, effectiveParts, isInit, realSessionId));
+      setSessions(
+        buildStreamSessionUpdater(tid, effectiveParts, isInit, realSessionId, resultMergeOptions),
+      );
     } else if (hasEffectiveUpdate) {
       enqueueStreamSessionUpdate(
-        buildStreamSessionUpdater(tid, effectiveParts, false, null),
+        buildStreamSessionUpdater(tid, effectiveParts, false, null, resultMergeOptions),
       );
       scheduleTryFinalizePendingOneshotComplete(tid);
     }

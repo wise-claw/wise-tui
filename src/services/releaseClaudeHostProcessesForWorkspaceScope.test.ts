@@ -7,11 +7,6 @@ mock.module("../components/LeftSidebar/endClaudeProcessRow", () => ({
   endClaudeProcessRow,
 }));
 
-mock.module("./claude", () => ({
-  cancelClaudeExecution: mock(async () => {}),
-  listRunningClaudeSessions: mock(async () => []),
-}));
-
 mock.module("./systemResource", () => ({
   getSystemResourceSnapshot: mock(async () => ({
     claudeProcesses: [
@@ -34,6 +29,41 @@ mock.module("./systemResource", () => ({
   killClaudeHostProcess: mock(async () => {}),
 }));
 
+mock.module("./claude", () => ({
+  cancelClaudeExecution: mock(async () => {}),
+  listRunningClaudeSessions: mock(async () => [
+    {
+      session_id: "47c8f10c-af09-4c2b-b86b-920721a0d83d",
+      project_path: "/work/vocs-web",
+      model: "sonnet",
+      status: "running",
+      started_at: "1",
+    },
+  ]),
+  // 截断 mock 时补齐常见命名导出，避免旁路模块加载失败。
+  listClaudeUserSkills: mock(async () => []),
+  listClaudeProjectSkills: mock(async () => []),
+  listClaudePluginCacheSkills: mock(async () => []),
+  listClaudeSubagents: mock(async () => []),
+  isOmcPluginInstalled: mock(async () => false),
+  getClaudeHooksStatus: mock(async () => ({
+    user: { sourcePath: "", disableAllHooks: false, hooks: {} },
+    project: { sourcePath: "", disableAllHooks: false, hooks: {} },
+    local: { sourcePath: "", disableAllHooks: false, hooks: {} },
+    omc: { sourcePath: "", disableAllHooks: false, hooks: {} },
+  })),
+  getClaudeMcpStatus: mock(async () => ({
+    user: [],
+    local: [],
+    projectShared: [],
+    legacyUserSettings: [],
+    legacyProjectSettings: [],
+    pluginMcp: [],
+  })),
+  getClaudeMcpRuntimeHealth: mock(async () => []),
+  runClaudeCliCommand: mock(async () => "ok"),
+}));
+
 const { releaseClaudeHostProcessesForRepositoryScope } = await import(
   "./releaseClaudeHostProcessesForWorkspaceScope"
 );
@@ -54,13 +84,32 @@ function session(overrides: Partial<ClaudeSession> = {}): ClaudeSession {
 }
 
 describe("releaseClaudeHostProcessesForRepositoryScope", () => {
-  it("releases scoped wise tab when bound to claude session id", async () => {
+  it("does not cancel still-executing wise tabs when creating a new main session", async () => {
+    (endClaudeProcessRow as ReturnType<typeof mock>).mockClear();
+    const releaseWiseTabSession = mock(async () => {});
+
+    const released = await releaseClaudeHostProcessesForRepositoryScope({
+      repositoryPath: "/work/vocs-web",
+      sessions: [session(), session({ id: "tab-new", claudeSessionId: null, status: "idle" })],
+      excludeSessionId: "tab-new",
+      releaseWiseTabSession,
+    });
+
+    expect(releaseWiseTabSession).not.toHaveBeenCalled();
+    expect(endClaudeProcessRow).not.toHaveBeenCalled();
+    expect(released.size).toBe(0);
+  });
+
+  it("releases zombie wise tabs whose UI is idle but host/registry still running", async () => {
     (endClaudeProcessRow as ReturnType<typeof mock>).mockClear();
     const releaseWiseTabSession = mock(async () => {});
 
     await releaseClaudeHostProcessesForRepositoryScope({
       repositoryPath: "/work/vocs-web",
-      sessions: [session(), session({ id: "tab-new" })],
+      sessions: [
+        session({ status: "idle" }),
+        session({ id: "tab-new", claudeSessionId: null, status: "idle" }),
+      ],
       excludeSessionId: "tab-new",
       releaseWiseTabSession,
     });

@@ -799,6 +799,11 @@ export interface ClaudeSession {
    */
   connectionKind?: "streaming" | "oneshot";
   /**
+   * 本标签执行引擎覆盖（如 `@Codex RPC` 新建会话）。
+   * 优先于仓库默认 / `/执行环境:` worker 名解析；落盘到 tabs.json。
+   */
+  executionEngine?: SessionExecutionEngine;
+  /**
    * 为 true 时标记为「右栏侧会话」：专用于右栏对当前仓库的独立对话，
    * 不计入中栏会话 tab 列表（`filterSessionsForWorkspace` 排除），
    * 也不写入 `repositoryMainSessionBindings`，故不影响中栏 active 解析。

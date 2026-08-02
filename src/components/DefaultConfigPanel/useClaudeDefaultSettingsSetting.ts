@@ -13,10 +13,32 @@ import {
   isSandboxDisabledInSettings,
   isUltracodeEnabledInSettings,
   parseClaudeDefaultSettings,
+  resolveEffectiveClaudePermissionMode,
   setPermissionModeInSettings,
   toggleSandboxDisabledInSettings,
   toggleUltracodeInSettings,
 } from "./claudeDefaultSettings";
+
+type Listener = () => void;
+const listeners = new Set<Listener>();
+
+function notifyClaudeDefaultSettingsChange(): void {
+  for (const fn of listeners) {
+    try {
+      fn();
+    } catch (err) {
+      console.warn("[wise:claude-default-settings] listener threw", err);
+    }
+  }
+}
+
+/** Composer 徽标与配置面板共享：写入后广播，订阅端重读。 */
+export function subscribeClaudeDefaultSettings(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
 
 /**
  * Claude 启动默认 `--settings` 配置项。
@@ -32,20 +54,23 @@ export function useClaudeDefaultSettingsSetting() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const refresh = useCallback(async (opts?: { quiet?: boolean }) => {
+    if (!opts?.quiet) setLoading(true);
     try {
       const stored = await getAppSetting(WISE_CLAUDE_DEFAULT_SETTINGS_KEY);
       const v = stored ?? "";
       setValue(v);
       setDraft(v);
     } finally {
-      setLoading(false);
+      if (!opts?.quiet) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void refresh();
+    return subscribeClaudeDefaultSettings(() => {
+      void refresh({ quiet: true });
+    });
   }, [refresh]);
 
   // 校验并持久化。返回是否成功（校验失败返回 false 且已提示）。
@@ -54,6 +79,7 @@ export function useClaudeDefaultSettingsSetting() {
     if (!trimmed) {
       await setAppSetting(WISE_CLAUDE_DEFAULT_SETTINGS_KEY, "");
       setValue("");
+      notifyClaudeDefaultSettingsChange();
       return true;
     }
     const obj = parseClaudeDefaultSettings(trimmed);
@@ -64,10 +90,12 @@ export function useClaudeDefaultSettingsSetting() {
     if (Object.keys(obj).length === 0) {
       await setAppSetting(WISE_CLAUDE_DEFAULT_SETTINGS_KEY, "");
       setValue("");
+      notifyClaudeDefaultSettingsChange();
       return true;
     }
     await setAppSetting(WISE_CLAUDE_DEFAULT_SETTINGS_KEY, trimmed);
     setValue(trimmed);
+    notifyClaudeDefaultSettingsChange();
     return true;
   }, []);
 
@@ -109,6 +137,7 @@ export function useClaudeDefaultSettingsSetting() {
         await setAppSetting(WISE_CLAUDE_DEFAULT_SETTINGS_KEY, next);
         setValue(next);
         setDraft(next);
+        notifyClaudeDefaultSettingsChange();
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;
@@ -127,6 +156,7 @@ export function useClaudeDefaultSettingsSetting() {
         await setAppSetting(WISE_CLAUDE_DEFAULT_SETTINGS_KEY, next);
         setValue(next);
         setDraft(next);
+        notifyClaudeDefaultSettingsChange();
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;
@@ -151,6 +181,7 @@ export function useClaudeDefaultSettingsSetting() {
         await setAppSetting(WISE_CLAUDE_DEFAULT_SETTINGS_KEY, next);
         setValue(next);
         setDraft(next);
+        notifyClaudeDefaultSettingsChange();
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;
@@ -168,6 +199,8 @@ export function useClaudeDefaultSettingsSetting() {
     ultracodeEnabled: isUltracodeEnabledInSettings(value),
     sandboxDisabled: isSandboxDisabledInSettings(value),
     permissionMode: extractPermissionMode(value),
+    /** Composer 徽标：未设置时按后端默认展示为 bypassPermissions。 */
+    effectivePermissionMode: resolveEffectiveClaudePermissionMode(value),
     loading,
     saving,
     refresh,

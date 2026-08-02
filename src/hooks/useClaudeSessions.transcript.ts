@@ -129,8 +129,8 @@ async function loadSessionTranscriptLinesWithKeyFallback(
 function cloneDiskAssistantMessage(message: ClaudeMessage): ClaudeMessage {
   return {
     ...message,
+    // 仅换 id 避免与内存气泡冲突；保留磁盘 timestamp，防止侧栏被顶成「刚刚」。
     id: Date.now(),
-    timestamp: Date.now(),
     parts: message.parts?.map((part) => ({ ...part })),
   };
 }
@@ -229,12 +229,66 @@ function lastNonSystemMessage(messages: readonly ClaudeMessage[]): ClaudeMessage
   return null;
 }
 
+export function transcriptHasDisplayUser(messages: readonly ClaudeMessage[]): boolean {
+  return messages.some((msg) => {
+    if (msg.role !== "user") return false;
+    return Boolean(userMessagePlainTextForDisplay(msg).trim());
+  });
+}
+
+/** 尾窗切片像从回合中段切入：首条非 system 是助手（常见于旧 Codex RPC token 落盘）。 */
+export function diskTranscriptLooksMidTurnTruncated(
+  messages: readonly ClaudeMessage[],
+): boolean {
+  for (const msg of messages) {
+    if (msg.role === "system") continue;
+    return msg.role === "assistant";
+  }
+  return false;
+}
+
+/**
+ * 尾部窗口应升级为全量重载：丢掉用户回显，或从助手中段切入。
+ * 已读完整文件（非 partial）时不再升级，避免空转。
+ */
+export function shouldUpgradeDiskTailToFullTranscript(input: {
+  messages: readonly ClaudeMessage[];
+  diskTranscriptPartial: boolean;
+  linesLength: number;
+  tailLines: number;
+}): boolean {
+  if (!input.diskTranscriptPartial && input.linesLength < input.tailLines) {
+    return false;
+  }
+  if (!transcriptHasDisplayUser(input.messages)) return true;
+  return (
+    input.diskTranscriptPartial && diskTranscriptLooksMidTurnTruncated(input.messages)
+  );
+}
+
 /** running 会话内存 transcript 领先磁盘时（刚发送的用户气泡尚未落盘），禁止 disk reload 覆盖。 */
 export function shouldPreserveMemoryTranscriptOverDisk(
   session: ClaudeSession,
   diskMessages: readonly ClaudeMessage[],
 ): boolean {
   if (isTerminalWorkerWiseTab(session)) return false;
+  // Codex RPC 曾把每个 token delta 写入 JSONL；尾部窗口重载会丢掉开头的用户回显，
+  // 只剩助手正文中段。只要内存里还有用户气泡而磁盘切片没有，就禁止覆盖（含 idle）。
+  if (
+    session.messages.length > 0 &&
+    transcriptHasDisplayUser(session.messages) &&
+    !transcriptHasDisplayUser(diskMessages)
+  ) {
+    return true;
+  }
+  // 磁盘切片从助手中段开始，而内存已有完整用户回显：禁止用残片覆盖。
+  if (
+    session.messages.length > 0 &&
+    transcriptHasDisplayUser(session.messages) &&
+    diskTranscriptLooksMidTurnTruncated(diskMessages)
+  ) {
+    return true;
+  }
   if (session.status !== "running" && session.status !== "connecting") return false;
   if (session.messages.length === 0) return false;
   if (session.messages.length > diskMessages.length) return true;
@@ -440,6 +494,24 @@ export async function applyDiskTranscriptTail(params: {
     tailRequestLines: params.tailLines,
   });
   if (messages.length === 0) return false;
+  // 尾部窗口丢掉用户回显 / 从助手中段切入（旧版 Codex RPC 逐 token 落盘）→ 升级全量。
+  if (
+    shouldUpgradeDiskTailToFullTranscript({
+      messages,
+      diskTranscriptPartial,
+      linesLength: lines.length,
+      tailLines: params.tailLines,
+    })
+  ) {
+    return reloadFullDiskTranscriptByKey({
+      sessionKey: params.session.id,
+      sessions: [params.session],
+      setSessions: params.setSessions,
+      diskTailLinesBySession: params.diskTailLinesBySession,
+      resolveSessionExecutionEngine: params.resolveSessionExecutionEngine,
+      loadSessionTranscriptLines: params.loadSessionTranscriptLines,
+    });
+  }
   const isTerminalWorker = isTerminalWorkerWiseTab(params.session);
   const sanitizedDisk = isTerminalWorker
     ? sanitizeTerminalWorkerTranscriptMessages(messages)
@@ -448,6 +520,10 @@ export async function applyDiskTranscriptTail(params: {
     ? resolveTerminalWorkerMessagesAfterDiskLoad(params.session, sanitizedDisk)
     : sanitizedDisk;
   if (!nextMessages || nextMessages.length === 0) return false;
+  // 与全量重载一致：内存已有完整用户回显时，禁止残片尾窗覆盖。
+  if (shouldPreserveMemoryTranscriptOverDisk(params.session, sanitizedDisk)) {
+    return false;
+  }
   params.diskTailLinesBySession.set(params.session.id, params.tailLines);
   // 尾部窗口的首条用户消息不是会话开头，拿它改写 diskPreview 会把长 prompt 的中段
   // （例如代码审查 harness 里的 diff 片段）当成侧栏标题。只有读到完整 transcript 才对齐标题。
@@ -455,17 +531,20 @@ export async function applyDiskTranscriptTail(params: {
     ? ""
     : deriveSessionListPreviewFromMessages(nextMessages);
   params.setSessions((prev) =>
-    prev.map((row) =>
-      row.id === params.session.id
-        ? {
-            ...row,
-            messages: nextMessages,
-            diskPreview: previewFromMessages || row.diskPreview,
-            diskTranscriptPartial,
-            transcriptMemoryUnlimited: false,
-          }
-        : row,
-    ),
+    prev.map((row) => {
+      if (row.id !== params.session.id) return row;
+      // setSessions 时再读最新 row，避免 hydrate 竞态用陈旧 session 覆盖刚发出的用户气泡。
+      if (shouldPreserveMemoryTranscriptOverDisk(row, sanitizedDisk)) {
+        return row;
+      }
+      return {
+        ...row,
+        messages: nextMessages,
+        diskPreview: previewFromMessages || row.diskPreview,
+        diskTranscriptPartial,
+        transcriptMemoryUnlimited: false,
+      };
+    }),
   );
   return true;
 }

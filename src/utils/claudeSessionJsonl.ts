@@ -6,13 +6,18 @@ import {
 import { assistantTextJoinedFromParts } from "./assistantTextParts";
 import { normalizeClaudeUserMessageForDisplay, extractCommandNameBlock } from "./userMessageImportantInput";
 
-function parseTimestamp(v: unknown): number {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
+/**
+ * JSONL 行时间戳。缺省时用 `fallback`（通常为上一行已知时间），**禁止**回落 `Date.now()`：
+ * Codex RPC 等引擎的 assistant 行常无 timestamp，若每次 hydrate 都写成「现在」，
+ * 侧栏按更新时间排序会把刚点开的会话顶到最前，表现为「点击会话就跳」。
+ */
+function parseTimestamp(v: unknown, fallback: number): number {
+  if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
   if (typeof v === "string") {
     const d = Date.parse(v);
-    return Number.isNaN(d) ? Date.now() : d;
+    if (!Number.isNaN(d) && d > 0) return d;
   }
-  return Date.now();
+  return fallback;
 }
 
 function isWriteToolName(name: unknown): name is string {
@@ -100,6 +105,14 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
   // 按 uuid 去重，同一 uuid 只保留首次出现的那行，避免主消息列表与「历史消息」弹窗出现重复消息。
   // 无 uuid 的老格式行无法去重，保持原样。
   const seenUuids = new Set<string>();
+  /** 最近一行有效时间戳；无 timestamp 的 assistant 碎片继承它，避免 hydrate 时变成「刚刚」。 */
+  let lastKnownTs = 0;
+
+  const nextTimestamp = (raw: unknown): number => {
+    const ts = parseTimestamp(raw, lastKnownTs);
+    if (ts > 0) lastKnownTs = ts;
+    return ts;
+  };
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -185,7 +198,7 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
               role: "user",
               content: textJoin,
               parts: allParts,
-              timestamp: parseTimestamp(row.timestamp),
+              timestamp: nextTimestamp(row.timestamp),
             });
           }
           continue;
@@ -211,7 +224,7 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
           role: "user",
           content: displayText,
           parts: [{ type: "text", text: displayText }],
-          timestamp: parseTimestamp(row.timestamp),
+          timestamp: nextTimestamp(row.timestamp),
           ...(defaultInstructionApplied ? { defaultInstructionApplied } : {}),
         });
         continue;
@@ -230,7 +243,7 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
         role: "user",
         content: displayText,
         parts: [{ type: "text", text: displayText }],
-        timestamp: parseTimestamp(row.timestamp),
+        timestamp: nextTimestamp(row.timestamp),
         ...(defaultInstructionApplied ? { defaultInstructionApplied } : {}),
       });
     } else if (rowType === "assistant") {
@@ -245,7 +258,7 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
         role: "assistant",
         content: textContent,
         parts,
-        timestamp: parseTimestamp(row.timestamp),
+        timestamp: nextTimestamp(row.timestamp),
       });
     }
   }

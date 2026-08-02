@@ -169,6 +169,19 @@ describe("reconcileResultFullTextParts", () => {
     ).toEqual([]);
   });
 
+  test("returns resultParts when content matches ignoring whitespace (formatting recovery)", () => {
+    // Codex RPC：delta 丢失换行压成墙式正文，item/completed 以 result 带回 Markdown。
+    const flat = "图中内容：顶部标题栏左侧工作区底部Git面板";
+    const formatted = "图中内容：\n\n顶部标题栏\n\n左侧工作区\n\n底部Git面板";
+    expect(
+      reconcileResultFullTextParts({
+        resultParts: [{ type: "text", text: formatted }],
+        existingParts: [{ type: "text", text: flat }],
+        lastAssistantHasText: true,
+      }),
+    ).toEqual([{ type: "text", text: formatted }]);
+  });
+
   test("returns empty when tail is whitespace-only (result only adds trailing blank)", () => {
     // result 仅比 existing 多尾随空白 -> 尾巴 trim 后为空，跳过避免注入纯空白 part
     expect(
@@ -243,6 +256,21 @@ describe("mergeTextPartsByContainment", () => {
 });
 
 describe("mergeAssistantParts text containment", () => {
+  test("replaceAllText swaps flattened text for authoritative markdown", () => {
+    const merged = mergeAssistantParts(
+      [
+        { type: "reasoning", text: "看图" },
+        { type: "text", text: "顶部标题栏左侧工作区" },
+      ],
+      [{ type: "text", text: "顶部标题栏\n\n左侧工作区" }],
+      { replaceAllText: true },
+    );
+    expect(merged).toEqual([
+      { type: "reasoning", text: "看图" },
+      { type: "text", text: "顶部标题栏\n\n左侧工作区" },
+    ]);
+  });
+
   test("replaces last text part when incoming result full text covers it (no duplication)", () => {
     // 末尾 text = delta 累积 "intro"；result 整段 "intro\n\n总结" 到达 -> 替换为 result，不拼接翻倍
     const merged = mergeAssistantParts(

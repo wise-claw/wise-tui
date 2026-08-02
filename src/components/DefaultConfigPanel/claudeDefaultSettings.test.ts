@@ -5,6 +5,7 @@ import {
   isSandboxDisabledInSettings,
   isUltracodeEnabledInSettings,
   parseClaudeDefaultSettings,
+  resolveEffectiveClaudePermissionMode,
   setPermissionModeInSettings,
   toggleSandboxDisabledInSettings,
   toggleUltracodeInSettings,
@@ -208,6 +209,19 @@ describe("extractPermissionMode", () => {
   test("空文本与非法 JSON 返回 null", () => {
     expect(extractPermissionMode("")).toBeNull();
     expect(extractPermissionMode("invalid")).toBeNull();
+  });
+});
+
+describe("resolveEffectiveClaudePermissionMode", () => {
+  test("未设置时回退 bypassPermissions（与后端默认一致）", () => {
+    expect(resolveEffectiveClaudePermissionMode("")).toBe("bypassPermissions");
+    expect(resolveEffectiveClaudePermissionMode('{"ultracode":true}')).toBe("bypassPermissions");
+    expect(resolveEffectiveClaudePermissionMode("invalid")).toBe("bypassPermissions");
+  });
+
+  test("合法值原样返回", () => {
+    expect(resolveEffectiveClaudePermissionMode('{"permissionMode":"plan"}')).toBe("plan");
+    expect(resolveEffectiveClaudePermissionMode('{"permissionMode":"default"}')).toBe("default");
   });
 });
 

@@ -887,6 +887,12 @@ describe("sessionsReactiveStructureKey", () => {
     });
     expect(sessionsReactiveStructureKey([short])).toBe(sessionsReactiveStructureKey([longer]));
   });
+
+  test("createdAt bump changes structure key so sidebar can re-sort", () => {
+    const before = session({ id: "empty", createdAt: 100, messages: [] });
+    const after = session({ id: "empty", createdAt: 200, messages: [] });
+    expect(sessionsReactiveStructureKey([before])).not.toBe(sessionsReactiveStructureKey([after]));
+  });
 });
 
 describe("executionEnvironmentWorkerSessionsFingerprint", () => {

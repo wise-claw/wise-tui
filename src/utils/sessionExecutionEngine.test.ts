@@ -56,6 +56,22 @@ describe("resolveSessionExecutionEngine", () => {
     ).toBe("claude");
   });
 
+  test("session.executionEngine overrides repo default and worker-less name", () => {
+    expect(
+      resolveSessionExecutionEngine(
+        {
+          repositoryPath: "/repo/demo",
+          repositoryName: "demo",
+          executionEngine: "codex-rpc",
+        },
+        [repo({ executionEngine: "claude" })],
+        [],
+        undefined,
+        "claude",
+      ),
+    ).toBe("codex-rpc");
+  });
+
   test("falls back to configured default execution engine when repo has none", () => {
     expect(
       resolveSessionExecutionEngine(

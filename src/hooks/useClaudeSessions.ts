@@ -198,6 +198,7 @@ import {
   latestTerminalTurnHasAssistant,
   latestTurnHasVisibleAssistantContent,
   shouldPreserveMemoryTranscriptOverDisk,
+  shouldUpgradeDiskTailToFullTranscript,
   terminalDiskTranscriptRecoveredStatus,
 } from "./useClaudeSessions.transcript";
 import { CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT } from "../utils/claudeTurnCompleteGate";
@@ -1024,10 +1025,26 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const diskKey = resolveDiskTranscriptSessionKey(s, engine);
       if (!diskKey) return;
       try {
-        const lines = await loadSessionTranscriptLines(s, diskKey, CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD);
-        const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
+        let lines = await loadSessionTranscriptLines(s, diskKey, CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD);
+        let { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
           tailRequestLines: CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
         });
+        // 旧版 Codex RPC 逐 token 落盘时，320 行尾窗常丢掉用户回显或从助手中段切入；升级全量。
+        if (
+          shouldUpgradeDiskTailToFullTranscript({
+            messages,
+            diskTranscriptPartial,
+            linesLength: lines.length,
+            tailLines: CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
+          })
+        ) {
+          lines = await loadSessionTranscriptLines(s, diskKey, null);
+          ({ messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
+            tailRequestLines: Math.max(lines.length, 1),
+            fullTranscript: true,
+            unlimitedMessageCount: true,
+          }));
+        }
         if (messages.length === 0) return;
         setSessions((prev) =>
           prev.map((sess) => {
@@ -1053,7 +1070,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             ) {
               return sess;
             }
-            diskTailLinesBySessionRef.current.set(sess.id, CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD);
+            diskTailLinesBySessionRef.current.set(
+              sess.id,
+              diskTranscriptPartial
+                ? CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD
+                : Math.max(lines.length, 1),
+            );
             const batch = extractLatestTodoWriteFromMessages(nextMessages);
             if (batch) {
               notificationHub.applyTodoWrite(sess.id, batch.items, batch.merge);
@@ -1076,7 +1098,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
               ...sess,
               messages: recoveredMessages,
               diskTranscriptPartial,
-              transcriptMemoryUnlimited: false,
+              // 全量升级后与 reloadFullDiskTranscript 对齐，避免立刻再被尾窗裁切。
+              transcriptMemoryUnlimited: !diskTranscriptPartial,
               status: isTerminalWorker
                 ? terminalDiskTranscriptRecoveredStatus(sess.status, hasAssistant, true)
                 : sess.status,
@@ -2683,6 +2706,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         immediateActivate?: boolean;
         /** 初始模型；提供后跳过异步读取全局档案/仓库默认模型，用于多屏保留窗格模型。 */
         initialModel?: string;
+        /** 标签级执行引擎（如 `@Codex RPC` 新建会话）；覆盖仓库默认。 */
+        initialExecutionEngine?: SessionExecutionEngine;
         /** 标记为右栏侧会话：不进中栏 tab 列表、不抢 active、不写入主会话绑定表。 */
         isSide?: boolean;
         /** 激活前钩子：在 `setActiveSessionId` 触发新会话挂载与草稿 hydration 之前 await 完成。 */
@@ -2701,6 +2726,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         createdAt: Date.now(),
         pendingPrompt: "",
         ...(opts?.connectionKind ? { connectionKind: opts.connectionKind } : {}),
+        ...(opts?.initialExecutionEngine ? { executionEngine: opts.initialExecutionEngine } : {}),
         ...(opts?.isSide ? { isSide: true } : {}),
       };
 

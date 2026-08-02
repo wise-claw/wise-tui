@@ -66,7 +66,16 @@ function isExcludedSession(
   return Boolean(id && excludeSessionIds?.has(id));
 }
 
-function collectScopedRunningWiseTabs(
+/** UI 仍在执行的标签：新建主会话时不得取消（Codex RPC / Cursor / Claude 等）。 */
+function isExecutingWiseTab(session: ClaudeSession): boolean {
+  return session.status === "running" || session.status === "connecting";
+}
+
+/**
+ * 同仓库内「僵尸」标签：宿主/注册表仍 running，但 UI 已非执行态。
+ * 可安全释放；真正执行中的标签必须保留为后台会话。
+ */
+function collectScopedZombieWiseTabs(
   params: ReleaseClaudeHostProcessesForWorkspaceScopeParams & {
     claudeProcesses: ClaudeHostProcess[];
     registryRunningIds: ReadonlySet<string>;
@@ -83,6 +92,9 @@ function collectScopedRunningWiseTabs(
     if (!isSessionInWorkspaceScope(session, scopePathKeys)) {
       continue;
     }
+    if (isExecutingWiseTab(session)) {
+      continue;
+    }
     const running =
       isClaudeSessionRunningInHostOrUi(session, registryRunningIds) ||
       isClaudeSessionRunningByHostProcesses(session, claudeProcesses);
@@ -95,7 +107,27 @@ function collectScopedRunningWiseTabs(
   return picked;
 }
 
-/** 新建主会话前：结束同仓库 / 项目工作区范围内仍存活的本机 Claude 进程。 */
+function collectProtectedExecutionIds(
+  sessions: readonly ClaudeSession[],
+  scopePathKeys: ReadonlySet<string>,
+  excludeSessionIds: ReadonlySet<string> | undefined,
+): Set<string> {
+  const protectedIds = new Set<string>();
+  for (const session of sessions) {
+    if (isExcludedSession(session.id, excludeSessionIds)) continue;
+    if (!isSessionInWorkspaceScope(session, scopePathKeys)) continue;
+    if (!isExecutingWiseTab(session)) continue;
+    protectedIds.add(session.id);
+    const claudeSid = session.claudeSessionId?.trim();
+    if (claudeSid) protectedIds.add(claudeSid);
+  }
+  return protectedIds;
+}
+
+/**
+ * 新建主会话前：清理同仓库 / 项目范围内的孤儿本机进程与僵尸标签。
+ * 仍在执行（running/connecting）的 Wise 标签不得取消，应作为后台会话继续跑。
+ */
 export async function releaseClaudeHostProcessesForWorkspaceScope(
   params: ReleaseClaudeHostProcessesForWorkspaceScopeParams,
 ): Promise<ReadonlySet<string>> {
@@ -111,8 +143,13 @@ export async function releaseClaudeHostProcessesForWorkspaceScope(
   );
   const cancelledClaudeSessionIds = new Set<string>();
   const handledHostPids = new Set<number>();
+  const protectedExecutionIds = collectProtectedExecutionIds(
+    params.sessions,
+    scopePathKeys,
+    params.excludeSessionIds,
+  );
 
-  const scopedTabs = collectScopedRunningWiseTabs({
+  const scopedTabs = collectScopedZombieWiseTabs({
     ...params,
     claudeProcesses,
     registryRunningIds,
@@ -140,6 +177,10 @@ export async function releaseClaudeHostProcessesForWorkspaceScope(
       .map((session) => session.claudeSessionId?.trim())
       .filter((id): id is string => Boolean(id && id.length > 0)),
   );
+  for (const session of params.sessions) {
+    const tabId = session.id.trim();
+    if (tabId) sessionClaudeIdSet.add(tabId);
+  }
 
   const orphanEndTasks: Promise<void>[] = [];
   for (const proc of claudeProcesses) {
@@ -154,7 +195,16 @@ export async function releaseClaudeHostProcessesForWorkspaceScope(
       continue;
     }
     const sid = proc.sessionId?.trim() ?? "";
-    if (sid && cancelledClaudeSessionIds.has(sid)) {
+    if (sid && (cancelledClaudeSessionIds.has(sid) || protectedExecutionIds.has(sid))) {
+      handledHostPids.add(proc.pid);
+      continue;
+    }
+    if (protectedExecutionIds.has(rowSession.id)) {
+      handledHostPids.add(proc.pid);
+      continue;
+    }
+    // 任一 Wise 标签仍认领该 session id 时勿当孤儿杀掉（含后台执行中的 Codex RPC）。
+    if (sid && sessionClaudeIdSet.has(sid)) {
       handledHostPids.add(proc.pid);
       continue;
     }
@@ -173,7 +223,12 @@ export async function releaseClaudeHostProcessesForWorkspaceScope(
 
   for (const info of registryRunning) {
     const sid = info.session_id.trim();
-    if (!sid || cancelledClaudeSessionIds.has(sid) || sessionClaudeIdSet.has(sid)) {
+    if (
+      !sid ||
+      cancelledClaudeSessionIds.has(sid) ||
+      sessionClaudeIdSet.has(sid) ||
+      protectedExecutionIds.has(sid)
+    ) {
       continue;
     }
     if (!isRegistryInfoInWorkspaceScope(info, scopePathKeys)) {

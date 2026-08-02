@@ -129,6 +129,7 @@ export function buildWorkspaceSidebarTreeRows(input: {
 
   const rows: WorkspaceSidebarTreeRow[] = [];
 
+  const dispatchSessionIds = new Set<string>();
   if (showRunItems) {
     for (const item of filterEmployeeMonitorForRepository(employeeMonitorItems ?? [], repositoryPath)) {
       rows.push({ kind: "employee", item, updatedAt: item.updatedAt });
@@ -137,6 +138,8 @@ export function buildWorkspaceSidebarTreeRows(input: {
       sessionConversationTaskItems ?? [],
       repositoryPath,
     )) {
+      const sid = item.sessionId?.trim();
+      if (sid) dispatchSessionIds.add(sid);
       rows.push({ kind: "dispatch", item, updatedAt: item.updatedAt });
     }
     for (const item of filterTeamMonitorForRepository(teamMonitorItems ?? [], repositoryPath)) {
@@ -145,6 +148,8 @@ export function buildWorkspaceSidebarTreeRows(input: {
   }
 
   for (const item of listWorkspaceSidebarHistorySessions(sessions, repositoryPath)) {
+    // 已在「派发」行展示的 worker 不再重复出普通会话行（避免两行同文同时跑）。
+    if (dispatchSessionIds.has(item.id)) continue;
     rows.push({ kind: "session", item, updatedAt: sessionUpdatedAtMs(item) });
   }
 

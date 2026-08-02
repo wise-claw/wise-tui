@@ -4,6 +4,7 @@ import {
   assistantTextJoinedFromParts,
   isAssistantFullTextSnapshotOfParts,
   isLikelyStreamTextFragment,
+  sameAssistantTextIgnoringWhitespace,
   shouldStartNewAssistantTextPart,
 } from "../utils/assistantTextParts";
 type ToolUsePart = Extract<MessagePart, { type: "tool_use" }>;
@@ -178,6 +179,11 @@ export type MergeAssistantPartsOptions = {
   startNewTextBlock?: boolean;
   /** content_block_start(thinking) 后首个 delta：另起 reasoning part。 */
   startNewReasoningBlock?: boolean;
+  /**
+   * result 权威全文与已流正文仅空白/换行差异：用 result 替换全部 text parts，
+   * 保留 tool_use / reasoning，避免「墙式正文」无法被带 Markdown 的 completed 纠正。
+   */
+  replaceAllText?: boolean;
 };
 
 export function mergeAssistantParts(
@@ -185,6 +191,25 @@ export function mergeAssistantParts(
   incomingParts: MessagePart[],
   options?: MergeAssistantPartsOptions,
 ): MessagePart[] {
+  if (options?.replaceAllText === true) {
+    const resultText = assistantTextJoinedFromParts(incomingParts);
+    if (!resultText) return existingParts;
+    const next: MessagePart[] = [];
+    let textPlaced = false;
+    for (const part of existingParts) {
+      if (part.type === "text") {
+        if (!textPlaced) {
+          next.push({ type: "text", text: resultText });
+          textPlaced = true;
+        }
+        continue;
+      }
+      next.push(part);
+    }
+    if (!textPlaced) next.push({ type: "text", text: resultText });
+    return next;
+  }
+
   const merged = [...existingParts];
   const incomingTextPartCount = incomingParts.filter((part) => part.type === "text").length;
   const multiTextIncomingBatch = incomingTextPartCount > 1;
@@ -351,6 +376,11 @@ export function reconcileResultFullTextParts(opts: {
   // 现有已含 result（result 是现有子集，如 delta 流得比 result 更长）：跳过
   if (existingText.startsWith(resultText)) {
     return [];
+  }
+  // 仅空白/换行差异（Codex delta 曾丢 `\n` 等）：返回 resultParts，由 runtime 带 replaceAllText 纠正格式。
+  // 必须放在前缀对齐之后，避免「仅多尾随空白」被误判成全文替换。
+  if (sameAssistantTextIgnoringWhitespace(resultText, existingText)) {
+    return resultParts;
   }
   // 不连续（result 与 delta 分歧）：保守跳过，依赖 complete 后磁盘重载落盘规范文本
   return [];

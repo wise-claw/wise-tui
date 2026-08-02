@@ -75,4 +75,15 @@ describe("getSessionUpdatedAt sort stability", () => {
     ];
     expect(getSessionUpdatedAt(session)).toBe(t0 + 9_000);
   });
+
+  test("assistant 继承用户时间后点击 hydrate 不会把会话顶成刚刚", () => {
+    const t0 = 1_700_000_000_000;
+    const session = sess("s", t0);
+    session.messages = [
+      { role: "user", content: "分析项目", timestamp: t0 },
+      { role: "assistant", content: "功能概览", timestamp: t0 },
+    ];
+    expect(getSessionUpdatedAt(session)).toBe(t0);
+    expect(getSessionUpdatedAt(session)).toBeLessThan(Date.now() - 60_000);
+  });
 });

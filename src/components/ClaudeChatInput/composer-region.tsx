@@ -206,6 +206,7 @@ import {
 import { extractComposerCodeSelectionRefs } from "./extractComposerCodeSelectionRefs";
 import { scheduleInsertComposerCodeSelectionRef } from "./scheduleInsertComposerCodeSelectionRef";
 import { AutoApproveBadge } from "./AutoApproveBadge";
+import { ClaudePermissionModeBadge } from "./ClaudePermissionModeBadge";
 import { CodexPermissionModeBadge } from "./CodexPermissionModeBadge";
 import { CodexApprovalDock } from "./dock/codex-approval-dock";
 import { useCodexApprovalPending } from "../../hooks/useCodexApprovalPending";
@@ -707,6 +708,7 @@ function ComposerInner({
     useCodexApprovalPending(session.id);
   const isCodexEngineFamily =
     sessionExecutionEngine === "codex" || sessionExecutionEngine === "codex-rpc";
+  const isClaudeEngine = sessionExecutionEngine === "claude";
   const { target: atMentionDefaultTarget, save: saveAtMentionDefaultTarget } =
     useAtMentionDefaultTarget();
   const { bindings: atMentionShortcutBindings } = useAtMentionShortcuts();
@@ -3051,8 +3053,9 @@ function ComposerInner({
             </span>
           </Popover>
         ) : null}
-        {/* Codex 权限预设：紧挨语音按钮右侧（Semi 输入底栏可见工具区） */}
+        {/* 引擎权限预设：紧挨语音按钮右侧（Semi 输入底栏可见工具区） */}
         {isCodexEngineFamily ? <CodexPermissionModeBadge /> : null}
+        {isClaudeEngine ? <ClaudePermissionModeBadge /> : null}
         {dualPaneRepositoryPicker ? (
           <Select
             size="small"
@@ -3147,6 +3150,7 @@ function ComposerInner({
     ensureBreakdown,
     handleFileAttach,
     handleScreenshot,
+    isClaudeEngine,
     isCodexEngineFamily,
     isSessionBusy,
     _onCancel,

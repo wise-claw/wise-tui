@@ -498,4 +498,29 @@ describe("parseClaudeSessionJsonlLines — Cursor 流式 assistant 碎片合并"
     expect(messages).toHaveLength(3);
     expect(messages.map((m) => m.content)).toEqual(["第一轮", "继续", "第二轮"]);
   });
+
+  test("无 timestamp 的 assistant 行继承用户时间，重复解析不漂移到现在", () => {
+    const userTs = 1_700_000_000_000;
+    const lines = [
+      JSON.stringify({
+        type: "user",
+        message: { role: "user", content: [{ type: "text", text: "分析项目" }] },
+        timestamp: userTs,
+      }),
+      JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: [{ type: "text", text: "功能" }] },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: [{ type: "text", text: "概览" }] },
+      }),
+    ];
+    const first = parseClaudeSessionJsonlLines(lines);
+    const second = parseClaudeSessionJsonlLines(lines);
+    expect(first).toHaveLength(2);
+    expect(first[1]?.timestamp).toBe(userTs);
+    expect(second[1]?.timestamp).toBe(first[1]?.timestamp);
+    expect(first[1]?.timestamp).toBeLessThan(Date.now() - 60_000);
+  });
 });

@@ -18,6 +18,8 @@ import type { ChatMessageListNavigationHandle } from "../components/ClaudeSessio
 const SCROLL_FOLLOW_MAX_STEP_PX = 96;
 /** 流式贴底读 layout 的最小间隔，避免每 RAF 强制 sync layout */
 const SCROLL_FOLLOW_MIN_INTERVAL_MS = 36;
+/** 闲置会话 Markdown 挂载会连发 DOM 变更；合并贴底，避免切换会话时消息区连跳。 */
+const IDLE_HYDRATE_SCROLL_DEBOUNCE_MS = 80;
 
 export interface UseClaudeChatMessageScrollOptions {
   session: ClaudeSession;
@@ -393,6 +395,8 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     if (hideMessages) return;
     // 流式贴底由 RAF 环负责；此处同步 scroll 会在每条 token 更新时强制 layout，造成周期性卡顿。
     if (isSessionStreaming()) return;
+    // 切会话瞬间 messages 常为空：先贴底再灌入会闪一下再跳到底。
+    if (session.messages.length === 0) return;
     scheduleScrollToBottom();
   }, [session.messages, session.status, hideMessages, scheduleScrollToBottom, isSessionStreaming]);
 
@@ -417,21 +421,25 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     const sc = messagesScrollRef.current;
     if (!sc) return;
 
-    let raf = 0;
+    let debounceTimer: number | null = null;
     const mo = new MutationObserver(() => {
       if (isSessionStreaming()) return;
-      if (raf !== 0) return;
-      raf = window.requestAnimationFrame(() => {
-        raf = 0;
-        if (shouldAutoFollow()) scheduleScrollToBottom();
-      });
+      if (!shouldAutoFollow()) return;
+      if (sessionMessagesRef.current.length === 0) return;
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        if (shouldAutoFollow() && !isSessionStreaming() && sessionMessagesRef.current.length > 0) {
+          scheduleScrollToBottom();
+        }
+      }, IDLE_HYDRATE_SCROLL_DEBOUNCE_MS);
     });
     // 勿监听 characterData：流式 Markdown 每 token 都会触发 MO，主线程会周期性卡死。
     mo.observe(sc, { childList: true, subtree: true });
 
     return () => {
       mo.disconnect();
-      if (raf !== 0) window.cancelAnimationFrame(raf);
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
     };
   }, [session.id, hideMessages, scheduleScrollToBottom, shouldAutoFollow, isSessionStreaming]);
 

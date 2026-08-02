@@ -67,6 +67,39 @@ describe("sessionListPreview", () => {
     ).toBe("磁盘预览标题");
   });
 
+  test("无用户气泡时优先 diskPreview，避免助手中段污染侧栏", () => {
+    expect(
+      resolveSessionListPreviewSource(
+        session({
+          messages: [
+            {
+              id: 2,
+              role: "assistant",
+              content: "）- **系统能力**：macOS 语音/麦克风",
+              parts: [],
+              timestamp: 2,
+            },
+          ],
+          diskPreview: "分析项目有哪些功能",
+        }),
+      ),
+    ).toBe("分析项目有哪些功能");
+  });
+
+  test("助手预览会去掉 markdown 加粗标记", () => {
+    expect(
+      deriveSessionListPreviewFromMessages([
+        {
+          id: 2,
+          role: "assistant",
+          content: "**系统能力**：macOS 语音",
+          parts: [],
+          timestamp: 2,
+        },
+      ]),
+    ).toBe("系统能力：macOS 语音");
+  });
+
   test("retainSessionListPreviewOnMessageDrop locks title before eviction", () => {
     expect(
       retainSessionListPreviewOnMessageDrop(

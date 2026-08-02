@@ -40,6 +40,9 @@ export function sessionsReactiveStructureKey(sessions: readonly ClaudeSession[])
         session.status,
         session.repositoryPath ?? "",
         session.repositoryName ?? "",
+        // createdAt 参与侧栏「最近活跃」排序；仅 bump 排序时间时也必须推进结构指纹，
+        // 否则 subscribeLive:false 的 LeftSidebar memo 不会重排。
+        String(session.createdAt),
         String(session.messages.length),
         last?.id ?? "",
         last?.role ?? "",

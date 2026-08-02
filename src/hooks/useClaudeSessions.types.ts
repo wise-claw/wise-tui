@@ -105,6 +105,8 @@ export interface UseClaudeSessionsReturn {
       immediateActivate?: boolean;
       /** 初始模型；提供后跳过异步读取全局档案/仓库默认模型，用于多屏保留窗格模型。 */
       initialModel?: string;
+      /** 标签级执行引擎（如 `@Codex RPC` 新建会话）；覆盖仓库默认。 */
+      initialExecutionEngine?: SessionExecutionEngine;
       /** 标记为右栏侧会话：不进中栏 tab 列表、不抢 active、不写入主会话绑定表。 */
       isSide?: boolean;
       /**

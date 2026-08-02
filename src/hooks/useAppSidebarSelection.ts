@@ -40,6 +40,10 @@ import { loadSessionOwnerHints, WISE_SESSION_OWNER_HINTS_CHANGED_EVENT } from ".
 import { resolveFocusedPaneTargetSlot } from "../utils/multiPaneSlots";
 import { getActivePaneIndex } from "../stores/activePaneIndexStore";
 import { requestPaneCenterView } from "../stores/paneCenterViewControlStore";
+import {
+  getClaudeSessionsSnapshot,
+  publishClaudeSessions,
+} from "../stores/claudeSessionsLiveStore";
 import type { PaneCount, PaneSlot } from "../constants/mainLayoutWidths";
 import type { UseViewModeApi } from "./useViewMode";
 
@@ -50,6 +54,27 @@ function scheduleSidebarMainSessionEnsure(work: () => Promise<string | null>): v
       void work();
     });
   });
+}
+
+/** 复用空白主会话时顶到侧栏：bump createdAt，并同步 sessionsLatestRef。 */
+function promoteReusableEmptyMainSession(
+  sessionId: string,
+  sessionsLatestRef: RefObject<ClaudeSession[]>,
+): void {
+  const id = sessionId.trim();
+  if (!id) return;
+  const now = Date.now();
+  const prev = getClaudeSessionsSnapshot();
+  let changed = false;
+  const next = prev.map((session) => {
+    if (session.id !== id) return session;
+    if (session.createdAt === now) return session;
+    changed = true;
+    return { ...session, createdAt: now };
+  });
+  if (!changed) return;
+  sessionsLatestRef.current = next;
+  publishClaudeSessions(next);
 }
 
 interface UseAppSidebarSelectionOptions {
@@ -235,6 +260,8 @@ export function useAppSidebarSelection({
       if (carryDraftFromId && carryDraftFromId !== reusable.id) {
         await migratePromptContextSessionKey(carryDraftFromId, reusable.id);
       }
+      // 复用旧空白标签时仍应顶到侧栏（与真正 createSession 的 Date.now() 一致）。
+      promoteReusableEmptyMainSession(reusable.id, sessionsLatestRef);
       switchSessionIfNeeded(reusable.id);
       void bindRepositoryMainSession(target.path, reusable.id);
       return reusable.id;
@@ -272,6 +299,7 @@ export function useAppSidebarSelection({
       if (carryDraftFromId && carryDraftFromId !== reusable.id) {
         await migratePromptContextSessionKey(carryDraftFromId, reusable.id);
       }
+      promoteReusableEmptyMainSession(reusable.id, sessionsLatestRef);
       switchSessionIfNeeded(reusable.id);
       void bindRepositoryMainSession(projectMainSessionBindingKey(project.id), reusable.id);
       return reusable.id;
@@ -414,6 +442,10 @@ export function useAppSidebarSelection({
     }
     const prior = sessionsLatestRef.current.find((s) => s.id === priorId);
     if (!prior) {
+      return;
+    }
+    // 正在执行的前一会话（含 Codex RPC）应继续后台跑，新建主会话不得打断。
+    if (prior.status === "running" || prior.status === "connecting") {
       return;
     }
     await releaseSessionHostProcessRef.current(prior.id);

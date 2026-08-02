@@ -53,6 +53,11 @@ export function extractPermissionMode(text: string): ClaudePermissionMode | null
     : null;
 }
 
+/** Composer 徽标展示用：未设置时与后端一致，回退 `bypassPermissions`。 */
+export function resolveEffectiveClaudePermissionMode(text: string): ClaudePermissionMode {
+  return extractPermissionMode(text) ?? "bypassPermissions";
+}
+
 /**
  * 设置 `permissionMode`，返回新的 settings JSON 文本。
  * - 传入合法值：置该键（保留其它键）；

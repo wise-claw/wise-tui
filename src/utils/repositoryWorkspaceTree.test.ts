@@ -117,6 +117,20 @@ describe("listWorkspaceSidebarHistorySessions", () => {
     const after = listWorkspaceSidebarHistorySessions([recycled, draft], "/work/a");
     expect(after.map((s) => s.id)).toEqual(["hello", "draft"]);
   });
+
+  test("promoted reusable empty draft floats above older chats", () => {
+    const t0 = 1_700_000_000_000;
+    const chat = makeSession("chat", "/work/a", { createdAt: t0 + 5_000, content: "你好" });
+    const draft = makeSession("draft", "/work/a", { createdAt: t0 });
+    expect(listWorkspaceSidebarHistorySessions([chat, draft], "/work/a").map((s) => s.id)).toEqual([
+      "chat",
+      "draft",
+    ]);
+    const promoted = { ...draft, createdAt: t0 + 9_000 };
+    expect(
+      listWorkspaceSidebarHistorySessions([chat, promoted], "/work/a").map((s) => s.id),
+    ).toEqual(["draft", "chat"]);
+  });
 });
 
 describe("filter monitor items by repository", () => {
@@ -220,6 +234,38 @@ describe("buildWorkspaceSidebarTreeRows", () => {
     expect(rows.map((r) => r.updatedAt)).toEqual([t0 + 300, t0 + 200, t0 + 100, t0 + 50]);
     expect(rows[0]!.kind === "session" && rows[0].item.id).toBe("sess-new");
     expect(rows[1]!.kind === "dispatch" && rows[1].item.key).toBe("dispatch-mid");
+  });
+
+  test("does not list the same worker as both dispatch and session", () => {
+    const t0 = 1_700_000_000_000;
+    const workerId = "worker-dup";
+    const rows = buildWorkspaceSidebarTreeRows({
+      sessions: [
+        makeSession(workerId, "/work/a", {
+          createdAt: t0 + 300,
+          content: "你能干什么",
+        }),
+        makeSession("sess-other", "/work/a", { createdAt: t0 + 100, content: "other" }),
+      ],
+      repositoryPath: "/work/a",
+      sessionConversationTaskItems: [
+        {
+          key: "dispatch-dup",
+          label: "你能干什么",
+          status: "running",
+          previewText: "",
+          updatedAt: t0 + 300,
+          source: "execution_environment",
+          repositoryPath: "/work/a",
+          sessionId: workerId,
+        },
+      ],
+    });
+    const sessionIds = rows
+      .filter((r): r is Extract<typeof r, { kind: "session" }> => r.kind === "session")
+      .map((r) => r.item.id);
+    expect(sessionIds).toEqual(["sess-other"]);
+    expect(rows.some((r) => r.kind === "dispatch" && r.item.key === "dispatch-dup")).toBe(true);
   });
 
   test("hides run items when showRunItems is false", () => {

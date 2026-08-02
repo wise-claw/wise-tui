@@ -19,7 +19,10 @@ use crate::claude_events::{
 use crate::codex_binary::find_codex_binary;
 use crate::codex_commands::load_codex_default_settings;
 use crate::codex_rpc_session::CodexRpcSession;
-use crate::codex_rpc_stream_adapter::{adapt_notification_to_stream_lines, emit_approval_request, emit_dynamic_tool_request, emit_mcp_elicitation_request, emit_rpc_complete};
+use crate::codex_rpc_stream_adapter::{
+    adapt_notification_to_stream_lines, emit_approval_request, emit_dynamic_tool_request,
+    emit_mcp_elicitation_request, emit_rpc_complete, CodexRpcStreamAdaptState,
+};
 use crate::codex_rpc_types::{ApprovalDecision, CommandExecParams, CommandExecResponse, ServerNotification, ServerRequest};
 use crate::wise_db::WiseDb;
 
@@ -375,6 +378,7 @@ pub(crate) async fn execute_codex_rpc(
 
     tokio::spawn(async move {
         let mut success = true;
+        let mut stream_adapt_state = CodexRpcStreamAdaptState::default();
 
         loop {
             // Take the session lock only long enough to poll one notification
@@ -455,14 +459,20 @@ pub(crate) async fn execute_codex_rpc(
                             "request_id": request_id,
                         }));
                     }
-                    // Persist adapted lines to disk, then emit to frontend.
-                    let lines = adapt_notification_to_stream_lines(&notification, &session_id_loop);
-                    for line in &lines {
+                    // Persist durable lines, then emit (deltas emit-only to avoid JSONL bloat).
+                    let output = adapt_notification_to_stream_lines(
+                        &notification,
+                        &session_id_loop,
+                        &mut stream_adapt_state,
+                    );
+                    for line in &output.persist {
                         persist_codex_rpc_transcript_line(
                             &project_path_loop,
                             &session_id_loop,
                             line,
                         );
+                    }
+                    for line in &output.emit {
                         emit_adapted_stream_payload(
                             &app_loop,
                             crate::claude_events::CLAUDE_STREAM_EVENT_OUTPUT,

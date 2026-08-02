@@ -26,6 +26,8 @@ function findEnabledEmployeeByBindingName(
 type ClaudeSessionLike = {
   repositoryPath: string;
   repositoryName: string;
+  /** 标签级引擎覆盖（@引擎新建会话等）。 */
+  executionEngine?: SessionExecutionEngine;
 };
 
 /** 多屏 spawn 时各窗格绑定的 session / repository（与 PaneSlot 子集一致）。 */
@@ -235,6 +237,11 @@ export function resolveSessionExecutionEngine(
   activeRepository?: Repository | null,
   defaultEngine?: SessionExecutionEngine,
 ): SessionExecutionEngine {
+  const sessionEngine = session.executionEngine?.trim();
+  if (sessionEngine) {
+    return normalizeSessionExecutionEngine(sessionEngine);
+  }
+
   const execWorker = parseExecutionEnvironmentWorkerRepositoryName(session.repositoryName ?? "");
   if (execWorker) {
     return normalizeSessionExecutionEngine(execWorker.engine);

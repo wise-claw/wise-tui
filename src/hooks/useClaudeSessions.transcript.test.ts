@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
 import {
   applyDiskTranscriptTail,
+  diskTranscriptLooksMidTurnTruncated,
   latestTurnHasInFlightToolUse,
   latestTurnHasVisibleAssistantContent,
   ONESHOT_DEFERRED_COMPLETE_FORCE_MS,
@@ -13,6 +14,8 @@ import {
   shouldForceFinalizeDeferredOneshotComplete,
   shouldPreserveMemoryTranscriptOverDisk,
   shouldSkipFullDiskReloadForRunningSession,
+  shouldUpgradeDiskTailToFullTranscript,
+  transcriptHasDisplayUser,
 } from "./useClaudeSessions.transcript";
 import { sessionHasVisibleStreamProgress } from "./useClaudeSessions.helpers";
 
@@ -91,6 +94,102 @@ describe("shouldPreserveMemoryTranscriptOverDisk", () => {
     });
     expect(
       shouldPreserveMemoryTranscriptOverDisk(session, [
+        { role: "user", content: "你好", timestamp: 1 },
+        { role: "assistant", content: "你好！", timestamp: 2 },
+      ]),
+    ).toBe(false);
+  });
+
+  test("preserves idle session when disk tail lost the user echo", () => {
+    const session = terminalWorker({
+      repositoryName: "demo",
+      status: "idle",
+      messages: [
+        { role: "user", content: "分析项目有哪些功能", timestamp: 1 },
+        { role: "assistant", content: "完整回复", timestamp: 2 },
+      ],
+    });
+    expect(
+      shouldPreserveMemoryTranscriptOverDisk(session, [
+        { role: "assistant", content: "）- 系统能力：macOS", timestamp: 9 },
+      ]),
+    ).toBe(true);
+  });
+
+  test("preserves idle session when disk tail starts mid-assistant even if a later user exists", () => {
+    const session = terminalWorker({
+      repositoryName: "demo",
+      status: "idle",
+      messages: [
+        { role: "user", content: "第一轮", timestamp: 1 },
+        { role: "assistant", content: "完整回复", timestamp: 2 },
+        { role: "user", content: "第二轮", timestamp: 3 },
+      ],
+    });
+    expect(
+      shouldPreserveMemoryTranscriptOverDisk(session, [
+        { role: "assistant", content: "）中段碎片", timestamp: 8 },
+        { role: "user", content: "第二轮", timestamp: 9 },
+      ]),
+    ).toBe(true);
+  });
+});
+
+describe("shouldUpgradeDiskTailToFullTranscript", () => {
+  test("upgrades when user echo missing from saturated tail", () => {
+    expect(
+      shouldUpgradeDiskTailToFullTranscript({
+        messages: [{ role: "assistant", content: "）中段", timestamp: 1 }],
+        diskTranscriptPartial: true,
+        linesLength: 320,
+        tailLines: 320,
+      }),
+    ).toBe(true);
+  });
+
+  test("upgrades when saturated tail starts with assistant fragment", () => {
+    expect(
+      shouldUpgradeDiskTailToFullTranscript({
+        messages: [
+          { role: "assistant", content: "中段", timestamp: 1 },
+          { role: "user", content: "下一轮", timestamp: 2 },
+        ],
+        diskTranscriptPartial: true,
+        linesLength: 320,
+        tailLines: 320,
+      }),
+    ).toBe(true);
+  });
+
+  test("does not upgrade complete short file that already includes user", () => {
+    expect(
+      shouldUpgradeDiskTailToFullTranscript({
+        messages: [
+          { role: "user", content: "你好", timestamp: 1 },
+          { role: "assistant", content: "你好！", timestamp: 2 },
+        ],
+        diskTranscriptPartial: false,
+        linesLength: 12,
+        tailLines: 320,
+      }),
+    ).toBe(false);
+  });
+
+  test("transcript helpers detect display user and mid-turn truncation", () => {
+    expect(transcriptHasDisplayUser([{ role: "assistant", content: "x", timestamp: 1 }])).toBe(
+      false,
+    );
+    expect(
+      transcriptHasDisplayUser([{ role: "user", content: "分析项目", timestamp: 1 }]),
+    ).toBe(true);
+    expect(
+      diskTranscriptLooksMidTurnTruncated([
+        { role: "assistant", content: "）碎片", timestamp: 1 },
+        { role: "user", content: "下一轮", timestamp: 2 },
+      ]),
+    ).toBe(true);
+    expect(
+      diskTranscriptLooksMidTurnTruncated([
         { role: "user", content: "你好", timestamp: 1 },
         { role: "assistant", content: "你好！", timestamp: 2 },
       ]),
@@ -255,6 +354,7 @@ describe("resolveTerminalWorkerMessagesAfterDiskLoad", () => {
     expect(merged?.[0]?.content).toBe("第一轮");
     expect(merged?.[2]?.content).toBe("你好");
     expect(merged?.[3]?.content).toBe("你好！");
+    expect(merged?.[3]?.timestamp).toBe(4);
   });
 
   test("does not clobber multi-turn memory when disk lacks assistant", () => {

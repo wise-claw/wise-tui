@@ -3,7 +3,7 @@ import type { ClaudeSession } from "../types";
 import { resetExecutionEnvironmentDispatchStore } from "../stores/executionEnvironmentDispatchStore";
 import { dispatchExecutionEnvironmentFromMainSession } from "./executionEnvironmentDispatch";
 
-function stubSession(id: string): ClaudeSession {
+function stubSession(id: string, overrides: Partial<ClaudeSession> = {}): ClaudeSession {
   return {
     id,
     claudeSessionId: null,
@@ -14,6 +14,7 @@ function stubSession(id: string): ClaudeSession {
     messages: [],
     createdAt: Date.now(),
     pendingPrompt: "",
+    ...overrides,
   };
 }
 
@@ -22,14 +23,20 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
     resetExecutionEnvironmentDispatchStore();
   });
 
-  test("无默认指令时不加载 slash catalog，并并行创建 worker", async () => {
+  test("@引擎直接新建普通会话，不注册派发行、不写 /执行环境: worker 名", async () => {
     const loadInstructionResolveContext = mock(async () => ({
       omcInstalled: false,
       pluginCacheSkills: [],
       projectSkills: [],
     }));
     const createdNames: string[] = [];
-    const createdOpts: Array<{ connectionKind?: "oneshot" | "streaming" } | undefined> = [];
+    const createdOpts: Array<
+      | {
+          connectionKind?: "oneshot" | "streaming";
+          initialExecutionEngine?: string;
+        }
+      | undefined
+    > = [];
     const executed: string[] = [];
     const activated: string[] = [];
     const sessions = [stubSession("main")];
@@ -41,17 +48,23 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
         createSession: async (_path, name, opts) => {
           createdNames.push(name);
           createdOpts.push(opts);
-          const id = `worker-${createdNames.length}`;
-          sessions.push(stubSession(id));
+          const id = `sess-${createdNames.length}`;
+          sessions.push(
+            stubSession(id, {
+              repositoryName: name,
+              executionEngine: opts?.initialExecutionEngine,
+              connectionKind: opts?.connectionKind,
+            }),
+          );
           return id;
         },
-        executeSession: (workerTabId) => {
-          executed.push(workerTabId);
+        executeSession: (sessionId) => {
+          executed.push(sessionId);
           return true;
         },
         appendSystemMessage: () => {},
-        activateWorkerSession: (workerSessionId) => {
-          activated.push(workerSessionId);
+        activateWorkerSession: (sessionId) => {
+          activated.push(sessionId);
         },
       },
       {
@@ -62,24 +75,37 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
 
     expect(ok).toBe(true);
     expect(loadInstructionResolveContext).not.toHaveBeenCalled();
-    expect(createdNames).toHaveLength(2);
+    expect(createdNames).toEqual(["demo · 1", "demo · 2"]);
+    expect(createdNames.every((name) => !name.includes("/执行环境:"))).toBe(true);
     expect(createdOpts.every((opts) => opts?.connectionKind === "streaming")).toBe(true);
+    expect(createdOpts.every((opts) => opts?.initialExecutionEngine === "claude")).toBe(true);
     expect(executed).toHaveLength(2);
-    expect(activated).toEqual(["worker-1"]);
+    expect(activated).toEqual(["sess-1"]);
   });
 
-  test("非 Claude 引擎仍用 oneshot worker", async () => {
-    const createdOpts: Array<{ connectionKind?: "oneshot" | "streaming" } | undefined> = [];
+  test("非 Claude 引擎仍用 oneshot，并写入标签引擎", async () => {
+    const createdOpts: Array<
+      | {
+          connectionKind?: "oneshot" | "streaming";
+          initialExecutionEngine?: string;
+        }
+      | undefined
+    > = [];
     const sessions = [stubSession("main")];
 
     const ok = await dispatchExecutionEnvironmentFromMainSession(
       {
         getSessions: () => sessions,
         codexAvailable: true,
-        createSession: async (_path, _name, opts) => {
+        createSession: async (_path, name, opts) => {
           createdOpts.push(opts);
-          const id = `worker-${createdOpts.length}`;
-          sessions.push(stubSession(id));
+          const id = `sess-${createdOpts.length}`;
+          sessions.push(
+            stubSession(id, {
+              repositoryName: name,
+              executionEngine: opts?.initialExecutionEngine,
+            }),
+          );
           return id;
         },
         executeSession: () => true,
@@ -94,6 +120,7 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
     expect(ok).toBe(true);
     expect(createdOpts).toHaveLength(1);
     expect(createdOpts[0]?.connectionKind).toBe("oneshot");
+    expect(createdOpts[0]?.initialExecutionEngine).toBe("codex");
   });
 
   test("有默认指令时才加载 resolve context", async () => {
@@ -109,7 +136,7 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
         getSessions: () => sessions,
         loadInstructionResolveContext,
         createSession: async () => {
-          const id = "worker-1";
+          const id = "sess-1";
           sessions.push(stubSession(id));
           return id;
         },
