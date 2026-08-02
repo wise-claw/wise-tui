@@ -365,7 +365,8 @@ interface ComposerInnerProps {
     patch: Partial<import("../../types/paneRuntimeOverride").PaneRuntimeOverride>,
   ) => void;
   /** 右栏紧凑模式：隐藏常用语按钮，并把执行环境 / 模型切换压成只渲染图标。
-   * 不影响 `composerFooterChrome` 的全局配置（中栏依旧按用户偏好显示）。 */
+   * 不影响 `composerFooterChrome` 的全局配置（中栏依旧按用户偏好显示）。
+   * 多屏（`paneCount > 1`）同样强制仅图标，与紧凑模式一致。 */
   compactFooterChrome?: boolean;
 }
 
@@ -3054,8 +3055,24 @@ function ComposerInner({
           </Popover>
         ) : null}
         {/* 引擎权限预设：紧挨语音按钮右侧（Semi 输入底栏可见工具区） */}
-        {isCodexEngineFamily ? <CodexPermissionModeBadge /> : null}
-        {isClaudeEngine ? <ClaudePermissionModeBadge /> : null}
+        {isCodexEngineFamily ? (
+          <CodexPermissionModeBadge
+            iconOnly={
+              compactFooterChrome ||
+              paneCount > 1 ||
+              composerFooterChrome.composerFooterTriggerDisplayMode === "icon"
+            }
+          />
+        ) : null}
+        {isClaudeEngine ? (
+          <ClaudePermissionModeBadge
+            iconOnly={
+              compactFooterChrome ||
+              paneCount > 1 ||
+              composerFooterChrome.composerFooterTriggerDisplayMode === "icon"
+            }
+          />
+        ) : null}
         {dualPaneRepositoryPicker ? (
           <Select
             size="small"
@@ -3166,6 +3183,8 @@ function ComposerInner({
     speechPrefs.autoSendEndingText,
     speechPrefs.sendMode,
     voiceSettingsPanel,
+    compactFooterChrome,
+    paneCount,
   ]);
 
   /** 与 Semi 底栏同一行：常用语 + 模型选择 + 发送（结束按钮在左侧 configure 区） */
@@ -3212,7 +3231,11 @@ function ComposerInner({
             paneIndex={paneIndex}
             paneRuntimeOverride={paneRuntimeOverride}
             onUpdatePaneRuntimeOverride={paneCount > 1 ? onUpdatePaneRuntimeOverride : undefined}
-            iconOnly={compactFooterChrome || composerFooterChrome.composerFooterTriggerDisplayMode === "icon"}
+            iconOnly={
+              compactFooterChrome ||
+              paneCount > 1 ||
+              composerFooterChrome.composerFooterTriggerDisplayMode === "icon"
+            }
           />
         ) : null}
         {composerFooterChrome.showComposerFooterModelPicker ? (
@@ -3222,7 +3245,11 @@ function ComposerInner({
             model={model}
             onModelChange={handleComposerModelChange}
             disabled={isSessionBusy}
-            iconOnly={compactFooterChrome || composerFooterChrome.composerFooterTriggerDisplayMode === "icon"}
+            iconOnly={
+              compactFooterChrome ||
+              paneCount > 1 ||
+              composerFooterChrome.composerFooterTriggerDisplayMode === "icon"
+            }
           />
         ) : null}
         {menuItem}
@@ -3654,7 +3681,8 @@ export interface ComposerRegionProps {
     patch: Partial<import("../../types/paneRuntimeOverride").PaneRuntimeOverride>,
   ) => void;
   /** 右栏紧凑模式：隐藏常用语按钮，并把执行环境 / 模型切换压成只渲染图标。
-   * 不影响 `composerFooterChrome` 的全局配置（中栏依旧按用户偏好显示）。 */
+   * 不影响 `composerFooterChrome` 的全局配置（中栏依旧按用户偏好显示）。
+   * 多屏（`paneCount > 1`）同样强制仅图标，与紧凑模式一致。 */
   compactFooterChrome?: boolean;
 }
 

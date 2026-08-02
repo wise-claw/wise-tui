@@ -81,6 +81,55 @@
   background: var(--app-multi-pane-divider);
 }
 
+/* 多屏底栏：执行环境 / 模型 / 权限控制强制仅图标（窄屏省空间；与 composer iconOnly 双保险） */
+.app-claude-sessions__multi-panes .app-composer-runtime-settings-btn__engine-label,
+.app-claude-sessions__multi-panes .app-composer-runtime-settings-btn__proxy-badge,
+.app-claude-sessions__multi-panes .app-composer-model-picker-bar-label,
+.app-claude-sessions__multi-panes .app-composer-model-picker__chevron,
+.app-claude-sessions__multi-panes .app-codex-permission-mode-pill__label {
+  display: none !important;
+}
+
+.app-claude-sessions__multi-panes .app-composer-runtime-settings-btn--with-engine {
+  width: 24px;
+  max-width: 24px;
+  gap: 0;
+  padding: 0;
+}
+
+.app-claude-sessions__multi-panes .app-composer-model-picker,
+.app-claude-sessions__multi-panes .app-composer-model-picker__select {
+  max-width: 24px;
+}
+
+.app-claude-sessions__multi-panes .app-composer-model-picker__select {
+  gap: 0;
+  padding: 0;
+}
+
+.app-claude-sessions__multi-panes .app-codex-permission-mode-pill {
+  width: 24px;
+  height: 24px;
+  margin-left: 0;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-claude-sessions__multi-panes .app-codex-permission-mode-pill .anticon {
+  font-size: 14px;
+}
+
+.app-claude-sessions__multi-panes .app-codex-permission-mode-pill--danger {
+  color: var(--ant-color-warning-text);
+  border: none;
+  background: transparent;
+}
+
 /* 双屏列宽由 JS 像素控制（formatTwoPaneSplitGridTemplateColumnsPx），避免 fr + min-width 与分隔条错位；
    min-width 统一在 .__pane 上设为 0，故此处不再需要覆盖。 */
 

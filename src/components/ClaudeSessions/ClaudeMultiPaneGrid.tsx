@@ -322,6 +322,8 @@ interface MultiPanePrimaryPaneProps {
   activeRepository: Repository;
   workflowTasks: WorkflowTaskItem[];
   shared: MultiPaneSharedChatProps;
+  /** 直接传入：shared 为稳定 ref 原地更新，memo 不能靠 shared.paneCount 感知变化。 */
+  paneCount: PaneCount;
   initialNotificationPanelCollapsed: boolean;
   onCreateNewSession: () => void;
   paneAuxLayout: PaneAuxLayout;
@@ -333,6 +335,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   activeRepository,
   workflowTasks,
   shared,
+  paneCount,
   initialNotificationPanelCollapsed,
   onCreateNewSession,
   paneAuxLayout,
@@ -539,7 +542,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onLoadMoreTranscriptFromDisk={shared.onLoadMoreTranscriptFromDisk}
         onCompactSessionHistory={shared.onCompactSessionHistory}
         paneIndex={0}
-        paneCount={shared.paneCount}
+        paneCount={paneCount}
         paneRuntimeOverride={shared.primaryPaneRuntimeOverride}
         onUpdatePaneRuntimeOverride={shared.onUpdatePaneRuntimeOverride}
       />
@@ -553,6 +556,9 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   prev.initialNotificationPanelCollapsed === next.initialNotificationPanelCollapsed &&
   prev.onCreateNewSession === next.onCreateNewSession &&
   prev.paneAuxLayout === next.paneAuxLayout &&
+  prev.paneCount === next.paneCount &&
+  prev.shared.primaryPaneRuntimeOverride === next.shared.primaryPaneRuntimeOverride &&
+  prev.shared.onUpdatePaneRuntimeOverride === next.shared.onUpdatePaneRuntimeOverride &&
   prev.shared === next.shared,
 );
 
@@ -1296,6 +1302,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
         activeRepository={activeRepository}
         workflowTasks={activeSessionWorkflowTasks}
         shared={shared}
+        paneCount={paneCount}
         initialNotificationPanelCollapsed={
           pendingCollapseNotificationForSessionId === activeSession.id
         }

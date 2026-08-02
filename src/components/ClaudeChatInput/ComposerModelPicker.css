@@ -49,6 +49,12 @@
   opacity: 1;
 }
 
+.app-composer-model-picker__select--icon-only {
+  max-width: 24px;
+  gap: 0;
+  padding: 0;
+}
+
 /* Composer 底栏：Dropdown 承载完整「模型切换」面板（与执行引擎下拉同一套触发） */
 .app-composer-model-picker-popover,
 .app-composer-model-picker-panel-dropdown {

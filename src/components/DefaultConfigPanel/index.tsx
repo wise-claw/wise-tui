@@ -1066,7 +1066,7 @@ export function DefaultConfigPanel() {
           <DefaultConfigRow
             title="触发器显示"
             hint="执行环境 / 模型"
-            detail="主会话底栏「执行环境」与「模型切换」触发器：仅图标或完整（图标+文字）；紧凑模式始终仅图标"
+            detail="主会话底栏「执行环境」与「模型切换」触发器：仅图标或完整（图标+文字）；紧凑模式 / 多屏始终仅图标"
             control={
               <DefaultConfigOptionPick<"full" | "icon">
                 aria-label="底栏触发器显示模式"

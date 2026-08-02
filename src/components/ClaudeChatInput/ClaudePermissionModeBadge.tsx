@@ -58,7 +58,7 @@ const PILL_LABEL: Record<ClaudePermissionMode, string> = {
  * 写入与「工作台配置 → Claude 启动 --settings」同源的 `wise.claudeDefaultSettings.v1`；
  * 对新 spawn 生效。
  */
-export function ClaudePermissionModeBadge() {
+export function ClaudePermissionModeBadge({ iconOnly = false }: { iconOnly?: boolean }) {
   const settings = useClaudeDefaultSettingsSetting();
   const [open, setOpen] = useState(false);
   const mode = settings.effectivePermissionMode;
@@ -124,9 +124,12 @@ export function ClaudePermissionModeBadge() {
     >
       <button
         type="button"
-        className={`app-codex-permission-mode-pill app-codex-permission-mode-pill--${activeTone}`}
+        className={`app-codex-permission-mode-pill app-codex-permission-mode-pill--${activeTone}${
+          iconOnly ? " app-codex-permission-mode-pill--icon-only" : ""
+        }`}
         data-claude-permission-mode={mode}
         aria-label={`Claude Code 权限：${PILL_LABEL[mode]}`}
+        title={PILL_LABEL[mode]}
         disabled={settings.saving}
       >
         {mode === "bypassPermissions" ? (
@@ -134,7 +137,9 @@ export function ClaudePermissionModeBadge() {
         ) : (
           <SafetyCertificateOutlined />
         )}
-        <span>{PILL_LABEL[mode]}</span>
+        {iconOnly ? null : (
+          <span className="app-codex-permission-mode-pill__label">{PILL_LABEL[mode]}</span>
+        )}
       </button>
     </Popover>
   );

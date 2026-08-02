@@ -18,6 +18,41 @@
   font-size: 11px;
 }
 
+/* 仅图标：与底栏 + / 截屏 / 语音同风格，无胶囊边框 */
+.app-codex-permission-mode-pill--icon-only {
+  width: 24px;
+  height: 24px;
+  margin-left: 0;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-codex-permission-mode-pill--icon-only .anticon {
+  font-size: 14px;
+}
+
+.app-codex-permission-mode-pill--icon-only:hover:not(:disabled) {
+  color: var(--ant-color-text-secondary);
+  background: transparent;
+  border: none;
+}
+
+.app-codex-permission-mode-pill--icon-only.app-codex-permission-mode-pill--danger {
+  color: var(--ant-color-warning-text);
+  border: none;
+  background: transparent;
+}
+
+.app-codex-permission-mode-pill--icon-only.app-codex-permission-mode-pill--danger:hover:not(:disabled) {
+  color: var(--ant-color-warning);
+  background: transparent;
+}
+
 .app-codex-permission-mode-pill:hover:not(:disabled) {
   color: var(--ant-color-text);
   border-color: var(--ant-color-border-secondary);

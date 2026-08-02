@@ -57,7 +57,7 @@ const PILL_LABEL: Record<CodexPermissionPreset, string> = {
  * 写入与「工作台配置 → Codex 沙箱/审批」同源的 `wise.codexDefaultSettings.v1`；
  * 对新会话 / 新 thread 生效。
  */
-export function CodexPermissionModeBadge() {
+export function CodexPermissionModeBadge({ iconOnly = false }: { iconOnly?: boolean }) {
   const settings = useCodexDefaultSettingsSetting();
   const [open, setOpen] = useState(false);
   const preset = settings.permissionPreset;
@@ -123,13 +123,18 @@ export function CodexPermissionModeBadge() {
     >
       <button
         type="button"
-        className={`app-codex-permission-mode-pill app-codex-permission-mode-pill--${activeTone}`}
+        className={`app-codex-permission-mode-pill app-codex-permission-mode-pill--${activeTone}${
+          iconOnly ? " app-codex-permission-mode-pill--icon-only" : ""
+        }`}
         data-codex-permission-preset={preset}
         aria-label={`Codex 权限：${PILL_LABEL[preset]}`}
+        title={PILL_LABEL[preset]}
         disabled={settings.saving}
       >
         {preset === "full" ? <ExclamationCircleOutlined /> : <SafetyCertificateOutlined />}
-        <span>{PILL_LABEL[preset]}</span>
+        {iconOnly ? null : (
+          <span className="app-codex-permission-mode-pill__label">{PILL_LABEL[preset]}</span>
+        )}
       </button>
     </Popover>
   );
