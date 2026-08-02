@@ -14,11 +14,14 @@ import {
   lineHasRunLogIssue,
   normalizeRunOpenUrl,
   readRunAutoOpenPageEnabled,
+  readRunRestart,
   repositoryRunCommandStorageKeys,
   shouldSkipRunErrorMonitorSend,
   summarizeRunLogIssueKinds,
   collectRunLogIssues,
   normalizeRunLogOutputChunk,
+  wrapCommandWithAutoRestart,
+  type RunRestartConfig,
 } from "../utils/repositoryRunCommand";
 
 type RepoRuntimeState = {
@@ -34,6 +37,8 @@ type RepoRuntimeInternals = {
   runPreferredUrl: string;
   runAutoOpenPageEnabled: boolean;
   runErrorMonitorEnabled: boolean;
+  /** 「退出后自动重启」配置（异常退出后按设定间隔自动重启）。 */
+  runRestart: RunRestartConfig;
   runLogTail: string;
   runChunkBuffer: string;
   idleTimer: number | null;
@@ -245,13 +250,15 @@ function ensureVisibilityFlushListener(): void {
 function getOrCreateInternals(repositoryId: number, runCwd: string): RepoRuntimeInternals {
   let internals = repoInternalsById.get(repositoryId);
   if (!internals) {
-    const { runKey, runUrlKey, runAutoOpenKey } = repositoryRunCommandStorageKeys(runCwd);
+    const { runKey, runUrlKey, runAutoOpenKey, runRestartKey } =
+      repositoryRunCommandStorageKeys(runCwd);
     internals = {
       runCwd,
       runCommand: runKey ? (window.localStorage.getItem(runKey) ?? "") : "",
       runPreferredUrl: runUrlKey ? (window.localStorage.getItem(runUrlKey) ?? "") : "",
       runAutoOpenPageEnabled: readRunAutoOpenPageEnabled(runAutoOpenKey),
       runErrorMonitorEnabled: false,
+      runRestart: readRunRestart(runRestartKey),
       runLogTail: "",
       runChunkBuffer: "",
       idleTimer: null,
@@ -316,11 +323,13 @@ function resolveOpenUrl(internals: RepoRuntimeInternals, detectedUrl: string | n
 }
 
 function refreshInternalsFromStorage(internals: RepoRuntimeInternals, runCwd: string): void {
-  const { runKey, runUrlKey, runAutoOpenKey } = repositoryRunCommandStorageKeys(runCwd);
+  const { runKey, runUrlKey, runAutoOpenKey, runRestartKey } =
+    repositoryRunCommandStorageKeys(runCwd);
   internals.runCwd = runCwd;
   internals.runCommand = runKey ? (window.localStorage.getItem(runKey) ?? "") : "";
   internals.runPreferredUrl = runUrlKey ? (window.localStorage.getItem(runUrlKey) ?? "") : "";
   internals.runAutoOpenPageEnabled = readRunAutoOpenPageEnabled(runAutoOpenKey);
+  internals.runRestart = readRunRestart(runRestartKey);
 }
 
 const RUN_ERROR_MONITOR_DISPATCH_DELAY_MS = 8_000;
@@ -679,11 +688,16 @@ export async function startRepositoryRunCommand(input: {
   }
   const internals = getOrCreateInternals(repository.id, runCwd);
   refreshInternalsFromStorage(internals, runCwd);
-  const cmd = (input.commandOverride ?? internals.runCommand).trim();
-  if (!cmd) {
+  const rawCmd = (input.commandOverride ?? internals.runCommand).trim();
+  if (!rawCmd) {
     input.onRequestConfigure?.() ?? globalOnRequestConfigure?.(repository);
     return;
   }
+  // 启用「退出后自动重启」时，把指令包装成 shell 循环：异常退出（非 0 且非
+  // Ctrl+C 的 130）等待设定间隔后自动重启；正常退出或 Ctrl+C 则停止循环。
+  const cmd = internals.runRestart.enabled
+    ? wrapCommandWithAutoRestart(rawCmd, internals.runRestart.intervalSeconds)
+    : rawCmd;
   try {
     await openTerminalSession(String(repository.id), REPOSITORY_RUNNER_TERMINAL_ID, 120, 36, runCwd).catch(
       () => {

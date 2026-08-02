@@ -18,7 +18,9 @@ import {
 import {
   normalizeRunOpenUrl,
   readRunAutoOpenPageEnabled,
+  readRunRestart,
   repositoryRunCommandStorageKeys,
+  type RunRestartConfig,
 } from "../utils/repositoryRunCommand";
 
 export type RepositoryRunStatus = "idle" | "running" | "stopping";
@@ -103,7 +105,7 @@ export function useRepositoryRunCommand({
 }: UseRepositoryRunCommandOptions) {
   const repositoryId = repository?.id ?? null;
   const trimmedCwd = runCwd.trim();
-  const { runKey, runUrlKey, runAutoOpenKey, terminalRunKey } =
+  const { runKey, runUrlKey, runAutoOpenKey, terminalRunKey, runRestartKey } =
     repositoryRunCommandStorageKeys(trimmedCwd);
 
   const subscribeRuntime = useCallback(
@@ -130,6 +132,14 @@ export function useRepositoryRunCommand({
   // 外部终端按钮的运行指令独立存储，不参与 profile 自动应用，纯手动配置。
   const [terminalRunCommand, setTerminalRunCommand] =
     useLocalStorageBackedState(terminalRunKey, "");
+  // 「运行」按钮指令的「退出后自动重启」配置，随 runKey 一起按仓库隔离。
+  const [runRestart, setRunRestart] = useState<RunRestartConfig>(() =>
+    readRunRestart(runRestartKey),
+  );
+
+  useEffect(() => {
+    setRunRestart(readRunRestart(runRestartKey));
+  }, [runRestartKey]);
   const [runPreferredUrl, setRunPreferredUrl] = useLocalStorageBackedState(runUrlKey, "");
   const [runAutoOpenPageEnabled, setRunAutoOpenPageEnabled] = useState(() =>
     readRunAutoOpenPageEnabled(runAutoOpenKey),
@@ -285,6 +295,16 @@ export function useRepositoryRunCommand({
     [runAutoOpenKey],
   );
 
+  const saveRunRestart = useCallback(
+    (next: RunRestartConfig) => {
+      setRunRestart(next);
+      if (runRestartKey) {
+        window.localStorage.setItem(runRestartKey, JSON.stringify(next));
+      }
+    },
+    [runRestartKey],
+  );
+
   const startRun = useCallback(
     async (options?: { debug?: boolean }) => {
       if (!repository || !trimmedCwd) return;
@@ -324,10 +344,13 @@ export function useRepositoryRunCommand({
     runUrlKey,
     runAutoOpenKey,
     terminalRunKey,
+    runRestartKey,
     runCommand,
     setRunCommand,
     terminalRunCommand,
     setTerminalRunCommand,
+    runRestart,
+    saveRunRestart,
     runPreferredUrl,
     setRunPreferredUrl,
     runStatus: runtime.status,

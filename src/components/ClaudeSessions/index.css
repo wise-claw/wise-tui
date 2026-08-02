@@ -943,7 +943,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  padding: 6px 10px 5px;
+  padding: 5px 10px 4px;
   border-bottom: 1px solid var(--ant-color-border-secondary);
 }
 
@@ -982,8 +982,8 @@
 
 .app-run-command-popover__detect-hint,
 .app-run-command-popover__detect-banner {
-  margin: 0 10px 6px;
-  padding: 6px 8px;
+  margin: 0 10px 4px;
+  padding: 5px 8px;
   border-radius: 6px;
   background: var(--ant-color-fill-quaternary);
   border: 1px solid var(--ant-color-border-secondary);
@@ -1123,8 +1123,8 @@
 .app-run-command-popover__section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 5px;
+  padding: 5px 10px;
 }
 
 .app-run-command-popover__section + .app-run-command-popover__section {
@@ -1132,7 +1132,7 @@
 }
 
 .app-run-command-popover__section--form {
-  gap: 6px;
+  gap: 5px;
 }
 
 .app-run-command-popover__row {
@@ -1141,7 +1141,7 @@
   align-items: center;
   column-gap: 8px;
   min-width: 0;
-  min-height: 28px;
+  min-height: 26px;
 }
 
 .app-run-command-popover__field-label {
@@ -1150,6 +1150,21 @@
   line-height: 1.2;
   color: var(--ant-color-text-tertiary);
   text-align: right;
+  white-space: nowrap;
+}
+
+.app-run-command-popover__interval-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-run-command-popover__interval-unit {
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--ant-color-text-tertiary);
   white-space: nowrap;
 }
 
@@ -1184,7 +1199,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 2px 0 0;
   margin-left: calc(var(--app-run-popover-label-w) + 8px);
 }
 
@@ -1213,9 +1227,9 @@
 .app-run-command-popover__dock {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin: 4px 10px 6px;
-  padding: 6px 8px;
+  gap: 3px;
+  margin: 2px 10px 4px;
+  padding: 5px 8px;
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 6px;
   background: var(--ant-color-fill-quaternary);
@@ -1316,7 +1330,7 @@
   justify-content: space-between;
   gap: 8px;
   margin-top: auto;
-  padding: 6px 10px 8px;
+  padding: 5px 10px 6px;
   border-top: 1px solid var(--ant-color-border-secondary);
   background: var(--ant-color-bg-container);
 }
@@ -9919,6 +9933,5 @@ button.app-message-part-header:disabled:hover {
 .app-turn-files-changed__remove {
   color: var(--ant-color-error);
 }
-
 
 

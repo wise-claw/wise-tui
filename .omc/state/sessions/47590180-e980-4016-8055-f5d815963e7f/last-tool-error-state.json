@@ -1,0 +1,7 @@
+{
+  "tool_name": "mcp__plugin_oh-my-claudecode_t__lsp_diagnostics",
+  "tool_input_preview": "{\"file\":\"/Users/sjl/Documents/github/wise-tui/src/services/openWorkspaceWithTerminalPreference.ts\"}",
+  "error": "Language server 'typescript-language-server' not found.\nInstall with: npm install -g typescript-language-server typescript",
+  "timestamp": "2026-08-02T05:09:08.970Z",
+  "retry_count": 5
+}

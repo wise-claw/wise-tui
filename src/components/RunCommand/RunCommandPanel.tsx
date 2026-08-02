@@ -1,9 +1,14 @@
-import { Input, Switch } from "antd";
+import { Input, InputNumber, Switch } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { openExternalUrl } from "../../services/openExternal";
 import type { RunCommandOutputLine, RepositoryRunStatus } from "../../hooks/useRepositoryRunCommand";
 import type { RepositoryRunProfile } from "../../utils/detectRepositoryRunProfile";
 import { getRunCommandPlaceholder, getRunDebugHint } from "../../utils/detectRepositoryRunProfile";
+import {
+  RUN_RESTART_MAX_SECONDS,
+  RUN_RESTART_MIN_SECONDS,
+  type RunRestartConfig,
+} from "../../utils/repositoryRunCommand";
 import "../ClaudeSessions/index.css";
 
 export type RunCommandPanelProps = {
@@ -20,6 +25,8 @@ export type RunCommandPanelProps = {
   setRunErrorMonitorEnabled: (enabled: boolean) => void;
   runAutoOpenPageEnabled: boolean;
   handleRunAutoOpenPageChange: (checked: boolean) => void;
+  runRestart: RunRestartConfig;
+  saveRunRestart: (next: RunRestartConfig) => void;
   saveRunCommand: () => void;
   saveRunOpenUrl: () => void;
   resolveOpenUrl: () => string;
@@ -50,6 +57,8 @@ export function RunCommandPanel({
   setRunErrorMonitorEnabled,
   runAutoOpenPageEnabled,
   handleRunAutoOpenPageChange,
+  runRestart,
+  saveRunRestart,
   saveRunCommand,
   saveRunOpenUrl,
   resolveOpenUrl,
@@ -276,6 +285,43 @@ export function RunCommandPanel({
               AI 报错监控
             </span>
           </div>
+        </div>
+        <div className="app-run-command-popover__options-row app-run-command-popover__options-row--restart">
+          <div className="app-run-command-popover__option-item">
+            <Switch
+              size="small"
+              checked={runRestart.enabled}
+              onChange={(checked) => saveRunRestart({ ...runRestart, enabled: checked })}
+            />
+            <span
+              className="app-run-command-popover__option-text"
+              title="命令异常退出将等待设定间隔后自动重启；Ctrl+C 或正常退出则停止。"
+            >
+              退出后自动重启
+            </span>
+          </div>
+          <span className="app-run-command-popover__interval-input">
+            <InputNumber
+              size="small"
+              min={RUN_RESTART_MIN_SECONDS}
+              max={RUN_RESTART_MAX_SECONDS}
+              step={1}
+              value={runRestart.intervalSeconds}
+              disabled={!runRestart.enabled}
+              onChange={(value) =>
+                saveRunRestart({
+                  ...runRestart,
+                  intervalSeconds:
+                    value != null &&
+                    value >= RUN_RESTART_MIN_SECONDS &&
+                    value <= RUN_RESTART_MAX_SECONDS
+                      ? Math.floor(value)
+                      : runRestart.intervalSeconds,
+                })
+              }
+            />
+            <span className="app-run-command-popover__interval-unit">秒</span>
+          </span>
         </div>
       </section>
 

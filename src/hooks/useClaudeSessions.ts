@@ -163,7 +163,10 @@ import {
 } from "../utils/sessionExecuteResolve";
 import { createClaudeStreamRuntime } from "../services/claudeStreamRuntime";
 import { setBackgroundContextCompactInFlight } from "../stores/backgroundContextCompactStore";
-import { migrateComposerRefocus } from "../stores/composerRefocusStore";
+import {
+  migrateComposerRefocus,
+  requestComposerRefocus,
+} from "../stores/composerRefocusStore";
 import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
 import { publishRunningClaudeSessionIds } from "../stores/claudeRunningSessionsRegistryStore";
 import {
@@ -650,6 +653,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         });
       }
       if (activeSessionIdRef.current === from) {
+        console.log("[wise-2click] tabIdMigration state-sync", { from, to });
         setActiveSessionId(to);
       }
       onSessionTabIdMigratedRef.current?.(from, to);
@@ -2264,6 +2268,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         memoryKeepSessionIdsRef.current.add(migration.toClaudeSessionId);
         memoryKeepSessionIdsRef.current.delete(migration.fromTabId);
         if (activeSessionIdRef.current === migration.fromTabId) {
+          console.log("[wise-2click] mergeDiskSession ref-migrate", { fromTabId: migration.fromTabId, toClaudeSessionId: migration.toClaudeSessionId });
           activeSessionIdRef.current = migration.toClaudeSessionId;
         }
       }
@@ -2742,6 +2747,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       // 触发新会话挂载与草稿 hydration 之前落盘，否则新会话 hydration 读盘早于写入而显示为空。
       if (!opts?.skipActivate && opts?.onBeforeActivate) {
         await opts.onBeforeActivate(id);
+      }
+      if (!opts?.skipActivate) {
+        // 新建会话激活后同样请求输入框聚焦，便于直接输入（后台 worker 创建走 skipActivate 不触发）
+        requestComposerRefocus(id);
       }
       if (!opts?.skipActivate && opts?.immediateActivate) {
         setActiveSessionId(id);
@@ -3382,6 +3391,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   );
 
   const switchSession = useCallback((sessionId: string) => {
+    // 切换会话后请求新会话输入框聚焦：ClaudeChat 按 key={activeSession.id} 渲染，
+    // 切换即 remount，composerRefocusStore 的请求跨 remount 存活，由新编辑器
+    // semiEditorReady 后的 refocus effect consume 并聚焦（见 composer-region.tsx）。
+    console.log("[wise-2click] switchSession", { sessionId, prevActive: activeSessionIdRef.current });
+    requestComposerRefocus(sessionId);
     setActiveSessionId(sessionId);
   }, []);
 

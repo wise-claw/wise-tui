@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"sed -n '630,680p' /Users/sjl/Documents/github/wise-tui/src/hooks/useClaudeSessions.ts; echo =====; sed -n '2255,2290p' /Users/sjl/Documents/github/wise-tui/src/hooks/useClaudeSessions.ts\",...",
+  "error": "Exit code 1\n      if (meta.tabId === fromTabId) {\n        meta.tabId = toClaudeSessionId;\n      }\n    }\n  }, []);\n\n  const applySessionTabIdMigration = useCallback(\n    (fromTabId: string, toClaudeSessionId: string) => {\n      const from = fromTabId.trim();\n      const to = toClaudeSessionId.trim();\n      if (!from || !to || from === to) return;\n      markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, to);\n      const nonceMap = expectedTurnNonceByTabIdRef.current;\n      ...",
+  "timestamp": "2026-08-02T05:03:52.814Z",
+  "retry_count": 1
+}

@@ -9,7 +9,9 @@ import {
   isSameRunErrorFingerprint,
   lineHasRunLogIssue,
   normalizeRunLogOutputChunk,
+  parseRunRestart,
   summarizeRunLogIssueKinds,
+  wrapCommandWithAutoRestart,
 } from "./repositoryRunCommand";
 
 describe("normalizeRunLogOutputChunk", () => {
@@ -248,5 +250,119 @@ describe("isRunLogIgnorableNoise", () => {
     expect(isRunLogIgnorableNoise("Fast Refresh had to perform a full reload")).toBe(true);
     expect(isRunLogIgnorableNoise("Compiled in 39ms (253 modules)")).toBe(true);
     expect(isRunLogIgnorableNoise("TypeError: boom")).toBe(false);
+  });
+});
+
+describe("wrapCommandWithAutoRestart", () => {
+  test("empty command passes through untouched", () => {
+    expect(wrapCommandWithAutoRestart("   ", 5)).toBe("");
+    expect(wrapCommandWithAutoRestart("", 5)).toBe("");
+  });
+
+  test("invalid interval passes through untouched", () => {
+    expect(wrapCommandWithAutoRestart("bun run dev", 0)).toBe("bun run dev");
+    expect(wrapCommandWithAutoRestart("bun run dev", -1)).toBe("bun run dev");
+    expect(wrapCommandWithAutoRestart("bun run dev", 3601)).toBe("bun run dev");
+    expect(wrapCommandWithAutoRestart("bun run dev", 99999)).toBe("bun run dev");
+    expect(wrapCommandWithAutoRestart("bun run dev", Number.NaN)).toBe("bun run dev");
+  });
+
+  test("wraps command in a restart loop with sleep interval", () => {
+    const wrapped = wrapCommandWithAutoRestart("bun run dev", 5);
+    expect(wrapped).toContain("while true; do");
+    expect(wrapped).toContain("  bun run dev");
+    expect(wrapped).toContain('  if [ "$code" -ne 0 ] && [ "$code" -ne 130 ]; then');
+    expect(wrapped).toContain("    sleep 5");
+    expect(wrapped).toContain("    break");
+    expect(wrapped).toContain("done");
+    expect(wrapped).toMatch(/5 秒后自动重启/);
+  });
+
+  test("multiline output has the exact canonical structure", () => {
+    expect(wrapCommandWithAutoRestart("bun run dev", 5)).toBe(
+      [
+        "while true; do",
+        "  bun run dev",
+        "  code=$?",
+        '  if [ "$code" -ne 0 ] && [ "$code" -ne 130 ]; then',
+        '    echo ""',
+        '    echo "[wise] 命令已退出（码 $code），5 秒后自动重启… 按 Ctrl+C 停止"',
+        "    sleep 5",
+        "  else",
+        '    echo ""',
+        '    echo "[wise] 命令已停止（码 $code），不再重启"',
+        "    break",
+        "  fi",
+        "done",
+      ].join("\n"),
+    );
+  });
+
+  test("multi-line command keeps its lines inside the loop", () => {
+    const wrapped = wrapCommandWithAutoRestart("bun install\nbun run dev", 3);
+    expect(wrapped).toContain("  bun install");
+    expect(wrapped).toContain("  bun run dev");
+    expect(wrapped).not.toContain("  code=$?\n  bun install");
+  });
+
+  test("fractional interval is floored", () => {
+    expect(wrapCommandWithAutoRestart("bun run dev", 4.9)).toContain("    sleep 4");
+  });
+});
+
+describe("parseRunRestart", () => {
+  test("null and empty raw values fall back to defaults", () => {
+    expect(parseRunRestart(null)).toEqual({ enabled: false, intervalSeconds: 5 });
+    expect(parseRunRestart("")).toEqual({ enabled: false, intervalSeconds: 5 });
+  });
+
+  test("invalid JSON falls back to defaults", () => {
+    expect(parseRunRestart("not-json")).toEqual({ enabled: false, intervalSeconds: 5 });
+    expect(parseRunRestart("{")).toEqual({ enabled: false, intervalSeconds: 5 });
+  });
+
+  test("partial fields fill in defaults", () => {
+    expect(parseRunRestart('{"enabled":true}')).toEqual({
+      enabled: true,
+      intervalSeconds: 5,
+    });
+    expect(parseRunRestart('{"intervalSeconds":12}')).toEqual({
+      enabled: false,
+      intervalSeconds: 12,
+    });
+  });
+
+  test("out-of-range or non-numeric intervals fall back", () => {
+    expect(parseRunRestart('{"enabled":true,"intervalSeconds":0}')).toEqual({
+      enabled: true,
+      intervalSeconds: 5,
+    });
+    expect(parseRunRestart('{"enabled":true,"intervalSeconds":99999}')).toEqual({
+      enabled: true,
+      intervalSeconds: 5,
+    });
+    expect(parseRunRestart('{"enabled":true,"intervalSeconds":"abc"}')).toEqual({
+      enabled: true,
+      intervalSeconds: 5,
+    });
+    // 布尔值不是合法 number，必须回落默认（此前 Number(true)===1 会误收）
+    expect(parseRunRestart('{"enabled":true,"intervalSeconds":true}')).toEqual({
+      enabled: true,
+      intervalSeconds: 5,
+    });
+  });
+
+  test("fractional interval is floored within range", () => {
+    expect(parseRunRestart('{"enabled":true,"intervalSeconds":7.6}')).toEqual({
+      enabled: true,
+      intervalSeconds: 7,
+    });
+  });
+
+  test("non-boolean enabled is treated as false", () => {
+    expect(parseRunRestart('{"enabled":"yes","intervalSeconds":3}')).toEqual({
+      enabled: false,
+      intervalSeconds: 3,
+    });
   });
 });

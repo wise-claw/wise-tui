@@ -1432,7 +1432,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 /* 仓库 .md 文件预览：文档阅读排版（与聊天气泡内 Markdown 解耦） */
 .app-file-editor-md-preview .app-markdown--file-doc {
-  max-width: 52rem;
+  max-width: 68rem;
   margin: 0 auto;
   padding: 28px 36px 56px;
   font-size: 14.5px;
@@ -4173,7 +4173,8 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-sidebar-more-menu-submenu .ant-dropdown-menu-item {
-  padding: 0 6px;
+  /* antd v6 cssinjs 注入更晚且特异性相同，必须 !important 才能压过 5px 12px 的默认内边距 */
+  padding: 0 6px !important;
   margin-inline: 0;
   border-radius: 6px;
   font-size: 12px !important;
@@ -4181,6 +4182,10 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   min-height: 24px !important;
   height: auto !important;
   gap: 4px;
+}
+
+.app-sidebar-more-menu-submenu .ant-dropdown-menu-item-divider {
+  margin: 2px 0;
 }
 
 .app-sidebar-more-menu-submenu .ant-dropdown-menu-title-content {
@@ -4491,4 +4496,3 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   font-size: var(--app-sidebar-list-secondary-size);
   line-height: var(--app-sidebar-list-secondary-line-height);
 }
-

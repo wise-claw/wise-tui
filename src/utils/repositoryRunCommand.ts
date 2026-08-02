@@ -351,10 +351,98 @@ export function readRunAutoOpenPageEnabled(storageKey: string | null): boolean {
   return raw === "1" || raw === "true";
 }
 
+export type RunRestartConfig = {
+  /** 命令异常退出后是否自动重启 */
+  enabled: boolean;
+  /** 重启间隔（秒） */
+  intervalSeconds: number;
+};
+
+export const DEFAULT_RUN_RESTART: RunRestartConfig = {
+  enabled: false,
+  intervalSeconds: 5,
+};
+
+/** 重启间隔允许范围（秒），与 popover InputNumber 的 min/max 保持一致。 */
+export const RUN_RESTART_MIN_SECONDS = 1;
+export const RUN_RESTART_MAX_SECONDS = 3600;
+
+/**
+ * 解析运行指令的「退出后自动重启」配置。任何缺失 / 非法字段都回落到默认值，
+ * 保证旧用户（无此 key）与手写坏 JSON 都能安全退场。
+ */
+export function parseRunRestart(raw: string | null): RunRestartConfig {
+  if (!raw) return { ...DEFAULT_RUN_RESTART };
+  try {
+    const parsed = JSON.parse(raw) as Partial<RunRestartConfig>;
+    const interval = parsed.intervalSeconds;
+    return {
+      enabled: parsed.enabled === true,
+      intervalSeconds:
+        typeof interval === "number" &&
+        Number.isFinite(interval) &&
+        interval >= RUN_RESTART_MIN_SECONDS &&
+        interval <= RUN_RESTART_MAX_SECONDS
+          ? Math.floor(interval)
+          : DEFAULT_RUN_RESTART.intervalSeconds,
+    };
+  } catch {
+    return { ...DEFAULT_RUN_RESTART };
+  }
+}
+
+export function readRunRestart(storageKey: string | null): RunRestartConfig {
+  if (!storageKey) return { ...DEFAULT_RUN_RESTART };
+  return parseRunRestart(window.localStorage.getItem(storageKey));
+}
+
+/**
+ * 把运行指令包装成「退出后自动重启」的 shell 循环（zsh / bash 通用）：
+ *
+ * - 命令退出码非 0 且非 130（Ctrl+C 的 128+2）→ 打印提示并 `sleep N` 后重启；
+ * - 退出码 0（正常退出）或 130（Ctrl+C 中断）→ 退出循环，不再重启。
+ *
+ * 终端里按一次 Ctrl+C 即停止（中断中的命令退出码 130，sleep 期间中断同样为
+ * 130），重启日志直接打印在终端里，无需应用侧轮询。
+ */
+export function wrapCommandWithAutoRestart(command: string, intervalSeconds: number): string {
+  const trimmed = command.trim();
+  const n = Math.floor(Number(intervalSeconds));
+  if (
+    !trimmed ||
+    !Number.isFinite(n) ||
+    n < RUN_RESTART_MIN_SECONDS ||
+    n > RUN_RESTART_MAX_SECONDS
+  ) {
+    return trimmed;
+  }
+  return [
+    "while true; do",
+    ...trimmed.split("\n").map((line) => `  ${line}`),
+    "  code=$?",
+    '  if [ "$code" -ne 0 ] && [ "$code" -ne 130 ]; then',
+    '    echo ""',
+    `    echo "[wise] 命令已退出（码 $code），${n} 秒后自动重启… 按 Ctrl+C 停止"`,
+    `    sleep ${n}`,
+    "  else",
+    '    echo ""',
+    '    echo "[wise] 命令已停止（码 $code），不再重启"',
+    "    break",
+    "  fi",
+    "done",
+  ].join("\n");
+}
+
 export function repositoryRunCommandStorageKeys(runCwd: string) {
   const trimmed = runCwd.trim();
   if (!trimmed) {
-    return { runKey: null, runUrlKey: null, runAutoOpenKey: null, terminalRunKey: null };
+    return {
+      runKey: null,
+      runUrlKey: null,
+      runAutoOpenKey: null,
+      terminalRunKey: null,
+      runRestartKey: null,
+    };
   }
   return {
     runKey: `wise.topbar.run-command:${trimmed}`,
@@ -362,5 +450,7 @@ export function repositoryRunCommandStorageKeys(runCwd: string) {
     runAutoOpenKey: `wise.topbar.run-auto-open:${trimmed}`,
     // 外部终端按钮的运行指令独立存储，与「运行」按钮分开配置，互不影响。
     terminalRunKey: `wise.topbar.terminal-run-command:${trimmed}`,
+    // 「运行」按钮指令的退出后自动重启配置（JSON：{ enabled, intervalSeconds }）。
+    runRestartKey: `wise.topbar.run-restart:${trimmed}`,
   };
 }

@@ -268,6 +268,7 @@ export function useAppSessionRouting({
       const canonicalId = target?.id ?? sid;
       const currentActive = activeSessionIdLatestRef.current?.trim() ?? "";
       if (canonicalId === currentActive) {
+        console.log("[wise-2click] jump EARLY-RETURN", { sid, canonicalId, currentActive, targetId: target?.id, targetClaudeId: target?.claudeSessionId });
         return;
       }
       if (!target?.repositoryPath) {
@@ -294,6 +295,7 @@ export function useAppSessionRouting({
       if (repo && !keepProjectFocus && repo.id !== activeRepositoryId) {
         setActiveRepositoryWithOwner(repo.id);
       }
+      console.log("[wise-2click] jump switchSession", { sid, canonicalId, currentActive, repoId: repo?.id ?? null, keepProjectFocus });
       switchSession(canonicalId);
     },
     [

@@ -83,6 +83,7 @@ export function getPaneCenterView(paneIndex: number): CenterView | null {
  */
 export function requestPaneCenterView(paneIndex: number, view: CenterView): void {
   const index = normalizePaneIndex(paneIndex);
+  console.log("[wise-2click] requestPaneCenterView", { index, view, hasSetter: setters.has(index) });
   currentViews.set(index, view);
   setters.get(index)?.(view);
 }

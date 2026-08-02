@@ -229,6 +229,7 @@ export function resolveClaudePanelActiveSession(
   if (!current) return undefined;
 
   if (sessionMatchesRepositoryScope(current, activeRepository.path)) {
+    console.log("[wise-2click] resolvePanelActive OK(scope)", { activeKey, resultId: current.id, resultClaudeId: current.claudeSessionId });
     return current;
   }
 
@@ -239,7 +240,9 @@ export function resolveClaudePanelActiveSession(
     sessions: [...allSessions],
     preferredRepositoryId: activeRepository.id,
   });
-  return resolvedRepo?.id === activeRepository.id ? current : undefined;
+  const result = resolvedRepo?.id === activeRepository.id ? current : undefined;
+  console.log("[wise-2click] resolvePanelActive", { activeKey, focus: activeWorkspaceFocus, resultId: result?.id ?? null, resultClaudeId: result?.claudeSessionId ?? null });
+  return result;
 }
 
 export interface ResolveClaudeWorkspaceMainSessionInput {
