@@ -80,7 +80,14 @@ export async function syncMainWindowMinLogicalSize(options: {
   // 多屏时理论最小宽度可能超过屏幕（如 8 屏需 2253px），clamp 到屏幕可用宽度，
   // 保证用户总能把窗口缩回屏幕内（pane 随之变窄，优于窗口超出屏幕且被 OS 锁死缩不回）。
   const monitorWidth = await readCurrentMonitorLogicalWidth();
-  const minWidth = clampMinWindowWidthToMonitor(theoreticalMin, monitorWidth);
+  const clampedToMonitor = clampMinWindowWidthToMonitor(theoreticalMin, monitorWidth);
+  // 不要再把 OS 最小宽度抬到当前窗口宽度之上：挂载竞态、侧栏展开等布局状态变化时，
+  // 若理论最小宽度大于当前 inner 宽度，setMinSize 会把用户已缩小的窗口重新撑大。
+  const currentInnerWidth = typeof window !== "undefined" ? window.innerWidth : null;
+  const minWidth =
+    currentInnerWidth != null && Number.isFinite(currentInnerWidth) && currentInnerWidth > 0
+      ? Math.min(clampedToMonitor, Math.max(320, currentInnerWidth))
+      : clampedToMonitor;
   try {
     await getCurrentWindow().setMinSize(new LogicalSize(minWidth, 480));
   } catch {

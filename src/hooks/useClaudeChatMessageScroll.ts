@@ -38,6 +38,8 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
   const scrollFollowLoopRafRef = useRef<number | null>(null);
   const lastScrollFollowLayoutAtRef = useRef(0);
   const scrollNavTimeoutRef = useRef<number | null>(null);
+  /** 会话切换后的延迟贴底定时器：见 [session.id] reset effect。 */
+  const switchResetTimerRef = useRef<number | null>(null);
   const sessionStatusRef = useRef(session.status);
   sessionStatusRef.current = session.status;
   const sessionMessagesRef = useRef(session.messages);
@@ -274,7 +276,30 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     clearChatScrollFileOpenLock();
     takeChatScrollFileOpenAnchor();
     setClaudeChatUserPausedFollow(false);
-  }, [session.id, cancelScrollFollowLoop]);
+
+    // 切会话后消息 / 虚拟窗口 / Markdown 要数帧才稳定：布局贴底 effect 只在
+    // `session.messages` 引用变化时重跑，同引用切换（B 已在内存、快照未变）时不会触发；
+    // MutationObserver 微任务又早于本被动 effect 执行，若切会话瞬间贴底处于暂停态，
+    // MO 入口会跳过调度且之后不再有 DOM 变更兜底——加载出的消息就会停在中间位置。
+    // 这里在 DOM 稳定窗口后强制补一次贴底（fire 时仍尊重 shouldAutoFollow，用户真在
+    // 滚动则不打断），配合 MO 的 fire 时机判定，保证「切换会话即展示最新消息」。
+    if (switchResetTimerRef.current != null) {
+      window.clearTimeout(switchResetTimerRef.current);
+    }
+    switchResetTimerRef.current = window.setTimeout(() => {
+      switchResetTimerRef.current = null;
+      if (shouldAutoFollow()) {
+        snapScrollToBottom();
+      }
+    }, IDLE_HYDRATE_SCROLL_DEBOUNCE_MS + 120);
+
+    return () => {
+      if (switchResetTimerRef.current != null) {
+        window.clearTimeout(switchResetTimerRef.current);
+        switchResetTimerRef.current = null;
+      }
+    };
+  }, [session.id, cancelScrollFollowLoop, shouldAutoFollow, snapScrollToBottom]);
 
   useEffect(() => {
     const onFileEditorClosed = () => {
@@ -424,9 +449,11 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     let debounceTimer: number | null = null;
     const mo = new MutationObserver(() => {
       if (isSessionStreaming()) return;
-      if (!shouldAutoFollow()) return;
       if (sessionMessagesRef.current.length === 0) return;
       if (debounceTimer != null) window.clearTimeout(debounceTimer);
+      // MO 微任务可能早于切会话的被动 reset effect 执行：不能在入口因「贴底暂停」直接
+      // 跳过调度，否则暂停在随后的 reset 中解除后，不再有 DOM 变更来触发补滚。改为先
+      // 调度、在 debounce 到期时按当时的 shouldAutoFollow 状态决定是否真正贴底。
       debounceTimer = window.setTimeout(() => {
         debounceTimer = null;
         if (shouldAutoFollow() && !isSessionStreaming() && sessionMessagesRef.current.length > 0) {
@@ -449,6 +476,10 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
       if (scrollNavTimeoutRef.current != null) {
         window.clearTimeout(scrollNavTimeoutRef.current);
         scrollNavTimeoutRef.current = null;
+      }
+      if (switchResetTimerRef.current != null) {
+        window.clearTimeout(switchResetTimerRef.current);
+        switchResetTimerRef.current = null;
       }
     },
     [cancelScrollFollowLoop],

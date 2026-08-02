@@ -17,7 +17,7 @@ export const MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX = 300;
 export const MAIN_LAYOUT_RESIZE_HANDLE_PX = 5;
 
 /** 左栏可拖动宽度范围。 */
-export const MAIN_LAYOUT_LEFT_SIDER_MIN_WIDTH_PX = 200;
+export const MAIN_LAYOUT_LEFT_SIDER_MIN_WIDTH_PX = 160;
 export const MAIN_LAYOUT_LEFT_SIDER_MAX_WIDTH_PX = 480;
 
 /** @deprecated 仅用于读取旧版 localStorage 并迁移到 v2。 */
@@ -83,11 +83,11 @@ export function writePersistedLeftSiderWidthToStorage(widthPx: number): void {
 }
 
 /** 右栏可拖动宽度范围。 */
-export const MAIN_LAYOUT_RIGHT_SIDER_MIN_WIDTH_PX = 200;
+export const MAIN_LAYOUT_RIGHT_SIDER_MIN_WIDTH_PX = 160;
 export const MAIN_LAYOUT_RIGHT_SIDER_MAX_WIDTH_PX = 640;
 
 /** 拖动时中栏至少保留的逻辑宽度，避免三栏挤死。 */
-export const MAIN_LAYOUT_CENTER_MIN_WIDTH_WHILE_RESIZE_PX = 360;
+export const MAIN_LAYOUT_CENTER_MIN_WIDTH_WHILE_RESIZE_PX = 240;
 
 export interface MainLayoutSiderClampContext {
   innerWidth: number;
