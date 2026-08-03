@@ -445,6 +445,8 @@ pub(crate) async fn execute_cursor_acp(
                             );
                         }
                     }
+                    // cursor/task is also handled inside adapt_acp_notification_to_stream_lines;
+                    // lines above already include the mapped Task tool_use when method matches.
                 }
                 Poll::Req(req) => {
                     handle_server_request(

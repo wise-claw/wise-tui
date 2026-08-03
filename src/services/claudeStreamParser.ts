@@ -1,4 +1,4 @@
-import type { MessagePart, ToolUsePart, ToolUseDiagnostics } from "../types";
+import type { MessagePart, ToolUsePart, ToolUseDiagnostics, ToolUseLocation } from "../types";
 import { unwrapClaudeStreamLineRoot } from "../notifications/streamIngest";
 import { humanizeClaudeError } from "../utils/humanizeClaudeError";
 
@@ -97,6 +97,49 @@ export function isClaudeToolInputValidationErrorText(
     return { kind: "write-missing-file_path", raw: normalized };
   }
   return null;
+}
+
+/** Extract ACP-style locations from a tool_use content block. */
+function toolUseLocationsFromBlock(raw: unknown): ToolUseLocation[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const out: ToolUseLocation[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const rec = item as Record<string, unknown>;
+    const path =
+      (typeof rec.path === "string" && rec.path.trim()) ||
+      (typeof rec.file_path === "string" && rec.file_path.trim()) ||
+      "";
+    if (!path) continue;
+    const line =
+      typeof rec.line === "number" && Number.isFinite(rec.line)
+        ? Math.trunc(rec.line)
+        : typeof rec.line === "string" && /^\d+$/.test(rec.line.trim())
+          ? Number.parseInt(rec.line.trim(), 10)
+          : undefined;
+    const endLine =
+      typeof rec.endLine === "number" && Number.isFinite(rec.endLine)
+        ? Math.trunc(rec.endLine)
+        : typeof rec.end_line === "number" && Number.isFinite(rec.end_line)
+          ? Math.trunc(rec.end_line)
+          : undefined;
+    out.push({
+      path,
+      ...(line != null ? { line } : {}),
+      ...(endLine != null ? { endLine } : {}),
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function toolUseStatusFromBlock(raw: unknown): ToolUsePart["status"] | undefined {
+  if (typeof raw !== "string") return undefined;
+  const s = raw.trim().toLowerCase();
+  if (s === "pending") return "pending";
+  if (s === "running" || s === "in_progress") return "running";
+  if (s === "completed" || s === "success") return "completed";
+  if (s === "error" || s === "failed") return "error";
+  return undefined;
 }
 
 /** Extract plain text from a `tool_result` content payload (string | array | undefined). */
@@ -392,12 +435,22 @@ export function extractPartsFromParsed(obj: unknown): ExtractPartsFromParsedResu
                 };
               }
             }
+            const locations = toolUseLocationsFromBlock(
+              (b as { locations?: unknown }).locations,
+            );
+            const status =
+              toolUseStatusFromBlock((b as { status?: unknown }).status) ?? "running";
+            const outputRaw = (b as { output?: unknown }).output;
+            const output =
+              typeof outputRaw === "string" && outputRaw.trim() ? outputRaw : undefined;
             parts.push({
               type: "tool_use",
               id: b.id || `tool_${Date.now()}`,
               name,
               input,
-              status: "running",
+              status,
+              ...(output ? { output } : {}),
+              ...(locations ? { locations } : {}),
               ...(diagnostics ? { diagnostics } : {}),
             } satisfies ToolUsePart);
           } else if (b.type === "thinking" && b.thinking) {

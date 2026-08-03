@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ClaudeMessage, ClaudeSession } from "../types";
+import type { ClaudeMessage, ClaudeSession, ToolUsePart } from "../types";
 import {
   appendAssistantStreamParts,
   applyToolResultPartsToMessages,
@@ -393,6 +393,76 @@ describe("mergeAssistantParts reasoning containment", () => {
       [{ type: "reasoning", text: "，再执行" }],
     );
     expect((merged[0] as { text: string }).text).toBe("先分析，再执行");
+  });
+});
+
+describe("mergeAssistantParts tool_use ACP updates", () => {
+  test("preserves real name/title when update fabricates Tool placeholder", () => {
+    const merged = mergeAssistantParts(
+      [
+        {
+          type: "tool_use",
+          id: "tc1",
+          name: "Read",
+          input: { path: "a.rs", title: "Reading file" },
+          status: "running",
+        },
+      ],
+      [
+        {
+          type: "tool_use",
+          id: "tc1",
+          name: "Tool",
+          input: { title: "Tool" },
+          status: "completed",
+          output: "ok",
+        },
+      ],
+    );
+    const part = merged[0] as ToolUsePart;
+    expect(part.name).toBe("Read");
+    expect(part.input.path).toBe("a.rs");
+    expect(part.input.title).toBe("Reading file");
+    expect(part.status).toBe("completed");
+    expect(part.output).toBe("ok");
+  });
+
+  test("replaces locations array on update and keeps old when omitted", () => {
+    const withLocs = mergeAssistantParts(
+      [
+        {
+          type: "tool_use",
+          id: "tc2",
+          name: "Read",
+          input: {},
+          status: "running",
+          locations: [{ path: "old.ts" }],
+        },
+      ],
+      [
+        {
+          type: "tool_use",
+          id: "tc2",
+          name: "",
+          input: {},
+          status: "running",
+          locations: [{ path: "new.ts", line: 3 }],
+        },
+      ],
+    );
+    expect((withLocs[0] as ToolUsePart).locations?.[0]?.path).toBe("new.ts");
+
+    const keepOld = mergeAssistantParts(withLocs, [
+      {
+        type: "tool_use",
+        id: "tc2",
+        name: "",
+        input: {},
+        status: "completed",
+        output: "done",
+      },
+    ]);
+    expect((keepOld[0] as ToolUsePart).locations?.[0]?.path).toBe("new.ts");
   });
 });
 

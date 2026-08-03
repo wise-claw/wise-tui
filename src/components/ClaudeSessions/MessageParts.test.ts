@@ -240,6 +240,50 @@ describe("getToolDisplayInfo fallback", () => {
     expect(info.label).toBe("工具结果");
     expect(info.subtitle).toBe("Done");
   });
+
+  test("avoids Tool · Tool placeholder and uses locations", () => {
+    const part: ToolUsePart = {
+      id: "t2",
+      type: "tool_use",
+      name: "Tool",
+      input: { title: "Tool" },
+      status: "running",
+      locations: [{ path: "/repo/src/App.tsx", line: 12 }],
+    };
+    const info = getToolDisplayInfo(part);
+    expect(info.label).not.toBe("Tool");
+    expect(info.subtitle).toContain("App.tsx");
+    expect(info.label === "Tool" && info.subtitle === "Tool").toBe(false);
+  });
+
+  test("read tool uses location basename when input path missing", () => {
+    const part: ToolUsePart = {
+      id: "t3",
+      type: "tool_use",
+      name: "Read",
+      input: {},
+      status: "running",
+      locations: [{ path: "/repo/README.md" }],
+    };
+    const info = getToolDisplayInfo(part);
+    expect(info.label).toBe("读取文件");
+    expect(info.subtitle).toBe("README.md");
+  });
+});
+
+describe("getToolInputParamRows placeholder", () => {
+  test("skips placeholder title and surfaces locations", () => {
+    const rows = getToolInputParamRows({
+      id: "t1",
+      type: "tool_use",
+      name: "Tool",
+      input: { title: "Tool" },
+      status: "running",
+      locations: [{ path: "src/main.rs", line: 10, endLine: 20 }],
+    });
+    expect(rows.some((r) => r.key === "title" && r.value === "Tool")).toBe(false);
+    expect(rows.some((r) => r.key === "path" && r.value.includes("main.rs"))).toBe(true);
+  });
 });
 
 describe("buildMergedTextGroups", () => {
@@ -337,6 +381,71 @@ describe("buildMergedTextGroups", () => {
     if (groups[0]!.type === "tool_group") {
       expect(groups[0]!.parts.map((p) => p.part.id)).toEqual(["t1", "t2", "t3"]);
       expect(groups[0]!.parts.map((p) => p.originalIndex)).toEqual([0, 1, 2]);
+    }
+  });
+
+  test("splits Task/Agent into standalone subagent group", () => {
+    const task: ToolUsePart = {
+      type: "tool_use",
+      id: "task-1",
+      name: "Task",
+      input: {
+        description: "更新琅琊榜 e2e",
+        prompt: "Updating e2e",
+        model: "composer-2",
+        subagent_type: "generalPurpose",
+      },
+      status: "running",
+    };
+    const groups = buildMergedTextGroups([bashTool("b1"), task, bashTool("b2")]);
+    expect(groups.map((g) => g.type)).toEqual(["tool_group", "subagent", "tool_group"]);
+    if (groups[1]!.type === "subagent") {
+      expect(groups[1]!.part.id).toBe("task-1");
+      expect(groups[1]!.childParts).toHaveLength(0);
+    }
+  });
+
+  test("Explorer Task nests subsequent Read tools as childParts", () => {
+    const explore: ToolUsePart = {
+      type: "tool_use",
+      id: "exp-1",
+      name: "Task",
+      input: {
+        description: "审计源差异",
+        prompt: "compare",
+        subagent_type: "explore",
+      },
+      status: "running",
+    };
+    const read1: ToolUsePart = {
+      type: "tool_use",
+      id: "r1",
+      name: "Read",
+      input: { path: "src/index.tsx", offset: 1, limit: 239 },
+      status: "completed",
+    };
+    const read2: ToolUsePart = {
+      type: "tool_use",
+      id: "r2",
+      name: "Read",
+      input: { path: "src/EditTable.tsx" },
+      status: "completed",
+    };
+    const edit: ToolUsePart = {
+      type: "tool_use",
+      id: "e1",
+      name: "Edit",
+      input: { file_path: "a.ts" },
+      status: "completed",
+    };
+    const groups = buildMergedTextGroups([explore, read1, read2, edit]);
+    expect(groups.map((g) => g.type)).toEqual(["subagent", "tool_group"]);
+    if (groups[0]!.type === "subagent") {
+      expect(groups[0]!.childParts).toHaveLength(2);
+      expect(groups[0]!.childParts.map((c) => c.part.id)).toEqual(["r1", "r2"]);
+    }
+    if (groups[1]!.type === "tool_group") {
+      expect(groups[1]!.parts[0]!.part.id).toBe("e1");
     }
   });
 

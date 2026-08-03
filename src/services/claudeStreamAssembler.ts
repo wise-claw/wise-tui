@@ -264,9 +264,9 @@ export function mergeAssistantParts(
 
     if (part.type === "tool_use") {
       const existing = merged.find((p) => p.type === "tool_use" && p.id === part.id);
-      if (existing) {
+      if (existing && existing.type === "tool_use") {
         const idx = merged.indexOf(existing);
-        merged[idx] = { ...existing, ...part };
+        merged[idx] = mergeToolUseWithUpdate(existing, part);
       } else {
         merged.push(part);
       }
@@ -403,12 +403,57 @@ export function partitionStreamMessageParts(parts: MessagePart[]): {
 }
 
 function mergeToolUseWithUpdate(part: ToolUsePart, update: ToolUsePart): ToolUsePart {
+  const nextInput = mergeToolUseInput(part.input, update.input);
+  const nextName = preferToolUseName(part.name, update.name);
   return {
     ...part,
     ...update,
-    name: part.name.trim() ? part.name : update.name,
-    input: Object.keys(part.input ?? {}).length > 0 ? part.input : update.input,
+    name: nextName,
+    input: nextInput,
+    // ACP：locations 有值则整数组替换；更新缺省时保留旧值。
+    locations: update.locations !== undefined ? update.locations : part.locations,
   };
+}
+
+function isPlaceholderToolName(name: string): boolean {
+  const t = name.trim();
+  return !t || t.toLowerCase() === "tool" || t.toLowerCase() === "unknown";
+}
+
+function preferToolUseName(existing: string, incoming: string): string {
+  const next = incoming.trim();
+  const prev = existing.trim();
+  if (!next || isPlaceholderToolName(next)) {
+    return prev || next;
+  }
+  if (!prev || isPlaceholderToolName(prev)) {
+    return next;
+  }
+  return next;
+}
+
+function mergeToolUseInput(
+  existing: Record<string, unknown> | undefined,
+  incoming: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const base: Record<string, unknown> = { ...(existing ?? {}) };
+  if (!incoming || Object.keys(incoming).length === 0) {
+    return base;
+  }
+  for (const [key, value] of Object.entries(incoming)) {
+    if (
+      key === "title" &&
+      typeof value === "string" &&
+      isPlaceholderToolName(value) &&
+      typeof base.title === "string" &&
+      !isPlaceholderToolName(base.title)
+    ) {
+      // 保留已有有意义 title，避免 ACP update 缺省填入的 "Tool" 覆盖。
+      continue;
+    }
+    base[key] = value;
+  }
+  return base;
 }
 
 function assistantMessageWithMergedToolParts(

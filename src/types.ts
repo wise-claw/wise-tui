@@ -860,6 +860,13 @@ export interface ToolUseDiagnostics {
   };
 }
 
+/** ACP `tool_call.locations` 跟随进度（路径 + 可选行号）。 */
+export interface ToolUseLocation {
+  path: string;
+  line?: number;
+  endLine?: number;
+}
+
 export interface ToolUsePart {
   type: "tool_use";
   id: string;
@@ -869,6 +876,8 @@ export interface ToolUsePart {
   error?: string;
   status: "pending" | "running" | "completed" | "error";
   diagnostics?: ToolUseDiagnostics;
+  /** ACP tool_call.locations；更新时整数组替换。 */
+  locations?: ToolUseLocation[];
 }
 
 export interface ReasoningPart {

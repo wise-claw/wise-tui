@@ -22,6 +22,12 @@ import {
   isToolEditNoiseOutput,
 } from "../../utils/toolFileEditPreview";
 import { buildToolGroupActivitySummary } from "../../utils/toolGroupActivitySummary";
+import {
+  buildSubagentCardModel,
+  isExplorerNestableToolPart,
+  isExplorerSubagentPart,
+  isSubagentToolPart,
+} from "../../utils/subagentToolDisplay";
 
 // ── SVG Icons ──
 
@@ -283,6 +289,31 @@ function truncateToolPreview(text: string, maxLen = 72): string {
   return normalized.length > maxLen ? `${normalized.slice(0, maxLen)}…` : normalized;
 }
 
+function isPlaceholderToolLabel(label: string): boolean {
+  const t = label.trim();
+  return !t || t.toLowerCase() === "tool" || t.toLowerCase() === "unknown";
+}
+
+function locationPathBasename(part: ToolUsePart): string {
+  const locs = part.locations;
+  if (!Array.isArray(locs) || locs.length === 0) return "";
+  const path = locs[0]?.path?.trim() ?? "";
+  if (!path) return "";
+  return path.split("/").pop() || path;
+}
+
+function locationSubtitle(part: ToolUsePart, maxLen = 120): string {
+  const locs = part.locations;
+  if (!Array.isArray(locs) || locs.length === 0) return "";
+  const first = locs[0];
+  if (!first?.path?.trim()) return "";
+  const base = first.path.trim().split("/").pop() || first.path.trim();
+  const line =
+    typeof first.line === "number" && Number.isFinite(first.line) ? `:${first.line}` : "";
+  const more = locs.length > 1 ? ` +${locs.length - 1}` : "";
+  return truncateToolPreview(`${base}${line}${more}`, maxLen);
+}
+
 /** 解析 MCP 工具线名 `mcp__<server>__<tool>` 为可读的 server / tool。 */
 export function parseMcpToolName(name: string): { server: string; tool: string } | null {
   if (!/^mcp__/i.test(name)) return null;
@@ -305,10 +336,11 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
     const preview = err ? truncateToolPreview(err, 80) : truncateToolPreview(out, 80);
     return {
       label: "工具结果",
-      subtitle: preview || (part.id ? `…${part.id.slice(-10)}` : ""),
+      subtitle: preview || locationSubtitle(part) || (part.id ? `…${part.id.slice(-10)}` : ""),
     };
   }
   const lower = n.toLowerCase();
+  const locSub = locationSubtitle(part);
 
   switch (lower) {
     case "bash":
@@ -324,17 +356,26 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
     case "read":
       return {
         label: "读取文件",
-        subtitle: pickInputString(input, ["file_path", "path", "target_file"]).split("/").pop() || "",
+        subtitle:
+          pickInputString(input, ["file_path", "path", "target_file"]).split("/").pop() ||
+          locationPathBasename(part) ||
+          "",
       };
     case "edit":
       return {
         label: "编辑文件",
-        subtitle: pickInputString(input, ["file_path", "path", "target_file"]).split("/").pop() || "",
+        subtitle:
+          pickInputString(input, ["file_path", "path", "target_file"]).split("/").pop() ||
+          locationPathBasename(part) ||
+          "",
       };
     case "write":
       return {
         label: "写入文件",
-        subtitle: pickInputString(input, ["file_path", "path", "target_file"]).split("/").pop() || "",
+        subtitle:
+          pickInputString(input, ["file_path", "path", "target_file"]).split("/").pop() ||
+          locationPathBasename(part) ||
+          "",
       };
     case "glob":
       return {
@@ -352,14 +393,16 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
             "paths",
           ],
           1000
-        ),
+        ) || locSub,
       };
     case "grep":
       return {
         label: "Grep",
-        subtitle: pickInputString(input, ["pattern", "query", "path", "file_path", "glob"], 1000),
+        subtitle:
+          pickInputString(input, ["pattern", "query", "path", "file_path", "glob"], 1000) || locSub,
       };
     case "web_fetch":
+    case "webfetch":
       return {
         label: "获取网页",
         subtitle: pickInputString(input, ["url"], 120),
@@ -371,7 +414,7 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
       };
     case "apply_patch": {
       // Codex 文件编辑：路径已在 Rust 端解析到 file_path；副标题展示首个受影响的文件。
-      const filePath = pickInputString(input, ["file_path", "path"]);
+      const filePath = pickInputString(input, ["file_path", "path"]) || locationPathBasename(part);
       const fileName = filePath ? filePath.split("/").pop() || filePath : "补丁";
       return {
         label: "应用补丁",
@@ -413,9 +456,12 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
     case "task": {
       const agentType = pickInputString(input, ["subagent_type", "agent_type"], 48);
       const headline = pickInputString(input, ["description", "title", "summary"], 140);
-      const body = headline || pickInputString(input, ["prompt", "instructions"], 160);
+      const meaningfulHeadline =
+        headline && !isPlaceholderToolLabel(headline) ? headline : "";
+      const body = meaningfulHeadline || pickInputString(input, ["prompt", "instructions"], 160);
       const modelHint = pickInputString(input, ["model"], 24);
-      const bits = [agentType && `[${agentType}]`, body, modelHint && `模型: ${modelHint}`].filter(Boolean);
+      const bits = [agentType && `[${agentType}]`, body, modelHint && `模型: ${modelHint}`, locSub]
+        .filter(Boolean);
       return {
         label: "子 Agent（Task）",
         subtitle: bits.join(" · "),
@@ -442,26 +488,38 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
         ]);
         return {
           label: mcp.tool,
-          subtitle: [mcp.server && `${mcp.server}`, detail].filter(Boolean).join(" · "),
+          subtitle: [mcp.server && `${mcp.server}`, detail || locSub].filter(Boolean).join(" · "),
         };
       }
+      const titleHint = pickInputString(input, [
+        "description",
+        "prompt",
+        "subagent_type",
+        "title",
+        "instructions",
+        "command",
+        "pattern",
+        "path",
+        "file_path",
+        "query",
+        "url",
+        "glob_pattern",
+        "target_directory",
+      ]);
+      const meaningfulTitle =
+        titleHint && !isPlaceholderToolLabel(titleHint) ? titleHint : "";
+      // ACP 缺名 / 占位名 "Tool"：优先用有意义的 title / locations，避免「Tool · Tool」。
+      if (!n || isPlaceholderToolLabel(n)) {
+        return {
+          label: meaningfulTitle || "工具",
+          subtitle: meaningfulTitle ? locSub : locSub || "",
+        };
+      }
+      const subtitle = meaningfulTitle || locSub;
+      // 副标题与标签相同时不重复展示（如旧数据 title 与 name 同为占位符）。
       return {
         label: n || part.name,
-        subtitle: pickInputString(input, [
-          "description",
-          "prompt",
-          "subagent_type",
-          "title",
-          "instructions",
-          "command",
-          "pattern",
-          "path",
-          "file_path",
-          "query",
-          "url",
-          "glob_pattern",
-          "target_directory",
-        ]),
+        subtitle: subtitle && subtitle !== n ? subtitle : locSub && locSub !== n ? locSub : "",
       };
     }
   }
@@ -580,21 +638,36 @@ export function getToolInputParamRows(part: ToolUsePart): { key: string; value: 
     }
     value = value.trim();
     if (!value) continue;
+    // 跳过无信息量的占位 title（ACP 适配器曾把缺省 title 填成 "Tool"）。
+    if (key === "title" && isPlaceholderToolLabel(value)) continue;
     if (value.length > TOOL_INPUT_VALUE_MAX) value = `${value.slice(0, TOOL_INPUT_VALUE_MAX)}…`;
     rows.push({ key, value });
+  }
+  // locations 没有进 input 时，展开体仍展示路径，避免「只有占位 title」的空壳卡片。
+  if (rows.length === 0 && Array.isArray(part.locations) && part.locations.length > 0) {
+    for (const loc of part.locations) {
+      const path = loc.path?.trim();
+      if (!path) continue;
+      const line =
+        typeof loc.line === "number" && Number.isFinite(loc.line) ? `:${loc.line}` : "";
+      const end =
+        typeof loc.endLine === "number" && Number.isFinite(loc.endLine) ? `-${loc.endLine}` : "";
+      rows.push({ key: "path", value: `${path}${line}${end}` });
+    }
   }
   return rows;
 }
 
 function toolPartRenderFingerprint(part: ToolUsePart): string {
   if (part.status !== "running") {
-    return `${part.status}|${part.name}|${part.output?.length ?? 0}|${part.error ?? ""}`;
+    return `${part.status}|${part.name}|${part.output?.length ?? 0}|${part.error ?? ""}|${part.locations?.length ?? 0}`;
   }
   const subtitle = getToolDisplayInfo(part).subtitle;
   const outputBucketSize = isFileEditToolName(part.name) ? 1024 : 512;
   const outBucket = Math.floor((part.output?.length ?? 0) / outputBucketSize);
   const subBucket = Math.floor(subtitle.length / 64);
-  return `${part.status}|${part.name}|${outBucket}|${subBucket}|${part.error ?? ""}`;
+  const locBucket = part.locations?.length ?? 0;
+  return `${part.status}|${part.name}|${outBucket}|${subBucket}|${locBucket}|${part.error ?? ""}`;
 }
 
 function ToolUseOutputBody({ part, streaming }: { part: ToolUsePart; streaming: boolean }) {
@@ -933,6 +1006,154 @@ function toolPartDisplayEqual(
   return toolPartRenderFingerprint(prev.part) === toolPartRenderFingerprint(next.part);
 }
 
+function SubagentIcon({ kind }: { kind: "explorer" | "subagent" }) {
+  if (kind === "explorer") {
+    return (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+        <circle cx="3" cy="4" r="1.15" />
+        <circle cx="8" cy="4" r="1.15" />
+        <circle cx="13" cy="4" r="1.15" />
+        <circle cx="3" cy="8" r="1.15" />
+        <circle cx="8" cy="8" r="1.15" />
+        <circle cx="13" cy="8" r="1.15" />
+        <circle cx="3" cy="12" r="1.15" />
+        <circle cx="8" cy="12" r="1.15" />
+        <circle cx="13" cy="12" r="1.15" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+      <path d="M5.2 4.2v7.6M10.8 4.2v7.6" strokeLinecap="round" />
+      <path d="M5.2 4.2h1.6M10.8 4.2H9.2M5.2 11.8h1.6M10.8 11.8H9.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const SubagentToolCard = memo(function SubagentToolCard({
+  part,
+  childParts = [],
+  shimmerActive = false,
+}: {
+  part: ToolUsePart;
+  childParts?: ToolUsePart[];
+  shimmerActive?: boolean;
+}) {
+  const model = useMemo(() => buildSubagentCardModel(part, childParts), [part, childParts]);
+  const [filesOpen, setFilesOpen] = useState(model.kind === "explorer" && model.fileRows.length > 0);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const info = useMemo(() => getToolDisplayInfo(part), [part]);
+  const hasExpandableBody = hasExpandableToolBody(part, info);
+  const { onPointerDown, consumeHadTextSelection } = useClickAfterSelectionGuard();
+  const showWaiting = model.waiting || shimmerActive;
+  const fileCount = model.fileRows.length;
+
+  return (
+    <div
+      className={`app-message-part app-message-part--subagent app-message-part--subagent-${model.kind}${
+        showWaiting ? " app-message-part--subagent-waiting" : ""
+      }${detailsOpen ? " app-message-part--expanded" : ""}`}
+      data-tool-name={part.name.trim().toLowerCase() || "task"}
+      data-subagent-kind={model.kind}
+    >
+      <div className="app-subagent-card">
+        <div className="app-subagent-card__head">
+          <span className="app-subagent-card__icon" aria-hidden>
+            <SubagentIcon kind={model.kind} />
+          </span>
+          <div className="app-subagent-card__main">
+            <div className="app-subagent-card__title-row">
+              <span
+                className={`app-subagent-card__title${
+                  showWaiting ? " app-status-text-shimmer" : ""
+                }`}
+              >
+                {model.title}
+              </span>
+              {model.kind === "explorer" ? (
+                <span className="app-subagent-card__kind-tag">Explorer</span>
+              ) : null}
+            </div>
+            {model.subtitle ? (
+              <div className="app-subagent-card__subtitle" title={model.subtitle}>
+                {model.subtitle}
+              </div>
+            ) : null}
+          </div>
+          {hasExpandableBody ? (
+            <button
+              type="button"
+              className="app-subagent-card__detail-toggle"
+              aria-expanded={detailsOpen}
+              onPointerDown={onPointerDown}
+              onClick={() => {
+                if (consumeHadTextSelection()) return;
+                setDetailsOpen((prev) => !prev);
+              }}
+            >
+              <ChevronIcon expanded={detailsOpen} />
+            </button>
+          ) : null}
+        </div>
+
+        {model.kind === "explorer" && fileCount > 0 ? (
+          <div className="app-subagent-card__files">
+            <button
+              type="button"
+              className="app-subagent-card__files-toggle"
+              aria-expanded={filesOpen}
+              onPointerDown={onPointerDown}
+              onClick={() => {
+                if (consumeHadTextSelection()) return;
+                setFilesOpen((prev) => !prev);
+              }}
+            >
+              <span>
+                {showWaiting ? `正在探索 ${fileCount} 个文件` : `探索了 ${fileCount} 个文件`}
+              </span>
+              <ChevronIcon expanded={filesOpen} />
+            </button>
+            {filesOpen ? (
+              <ul className="app-subagent-card__file-list">
+                {model.fileRows.map((row, idx) => (
+                  <li key={`${row.label}-${idx}`} className="app-subagent-card__file-row" title={row.path}>
+                    {row.label}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+
+        {showWaiting ? (
+          <div className="app-subagent-card__waiting" aria-live="polite">
+            <span className="app-status-text-shimmer">等待子代理</span>
+          </div>
+        ) : null}
+
+        {detailsOpen && hasExpandableBody ? (
+          <div className="app-message-part-content app-subagent-card__details">
+            {getToolInputParamRows(part).length > 0 ? (
+              <div className="app-tool-input-params">
+                {getToolInputParamRows(part).map(({ key, value }) => (
+                  <div className="app-tool-input-param" key={key}>
+                    <span className="app-tool-input-param__key">{key}</span>
+                    <pre className="app-tool-input-param__value">{value}</pre>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {part.error?.trim() ? <pre className="app-tool-error">{part.error.trim()}</pre> : null}
+            {shouldShowToolOutputBody(part) ? (
+              <ToolUseOutputBody part={part} streaming={part.status === "running"} />
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+});
+
 // ── Message Parts ──
 
 /**
@@ -947,6 +1168,7 @@ function toolPartDisplayEqual(
  * - 相邻 `text` parts 顺序合并，文本间以 `"\n\n"` 拼接（与 `assistantMessagePostToolTextParts` 对齐）。
  * - `reasoning` 与 `text` **不合并**（`ReasoningPartDisplay` 有专门样式与折叠行为，不能混入）。
  * - `tool_use` / 非可见 part 是天然分段边界。
+ * - Task/Agent 子代理单独成卡；Explorer 可吞并后续连续 explore 类工具为 childParts。
  * - 空段或全 trim 空白段过滤掉，避免 memo 抖动 / 视觉空行。
  */
 export type PartRenderGroup =
@@ -959,13 +1181,41 @@ export type PartRenderGroup =
       /** 拼接后供 `<Markdown>` 渲染的纯文本（已带段间 `\n\n`，已 trim 去重） */
       joinedText: string;
     }
-  | { type: "tool_group"; parts: { part: ToolUsePart; originalIndex: number }[] };
+  | { type: "tool_group"; parts: { part: ToolUsePart; originalIndex: number }[] }
+  | {
+      type: "subagent";
+      part: ToolUsePart;
+      originalIndex: number;
+      childParts: { part: ToolUsePart; originalIndex: number }[];
+    };
 
 export function buildMergedTextGroups(visibleParts: readonly MessagePart[]): PartRenderGroup[] {
   const out: PartRenderGroup[] = [];
   for (let i = 0; i < visibleParts.length; i += 1) {
     const part = visibleParts[i]!;
     if (part.type === "tool_use") {
+      if (isSubagentToolPart(part)) {
+        const childParts: { part: ToolUsePart; originalIndex: number }[] = [];
+        let j = i + 1;
+        if (isExplorerSubagentPart(part)) {
+          while (j < visibleParts.length) {
+            const next = visibleParts[j]!;
+            if (next.type !== "tool_use") break;
+            if (isSubagentToolPart(next)) break;
+            if (!isExplorerNestableToolPart(next)) break;
+            childParts.push({ part: next, originalIndex: j });
+            j += 1;
+          }
+        }
+        out.push({
+          type: "subagent",
+          part,
+          originalIndex: i,
+          childParts,
+        });
+        i = j - 1;
+        continue;
+      }
       const lastGroup = out[out.length - 1];
       if (lastGroup && lastGroup.type === "tool_group") {
         lastGroup.parts.push({ part, originalIndex: i });
@@ -1062,9 +1312,31 @@ export const MessagePartsDisplay = memo(function MessagePartsDisplay({
     && lastGroup?.type === "tool_group"
     && lastGroup.parts[lastGroup.parts.length - 1]?.originalIndex === lastOriginalIdx;
 
+  const subagentPending =
+    streaming
+    && inlinePendingHint
+    && lastGroup?.type === "subagent"
+    && (
+      lastGroup.childParts.length > 0
+        ? lastGroup.childParts[lastGroup.childParts.length - 1]!.originalIndex === lastOriginalIdx
+        : lastGroup.originalIndex === lastOriginalIdx
+    );
+
   return (
     <div className="app-message-parts">
       {groups.map((group, groupIdx) => {
+        if (group.type === "subagent") {
+          const isPendingTail =
+            subagentPending && groupIdx === groups.length - 1;
+          return (
+            <SubagentToolCard
+              key={`subagent-${group.originalIndex}`}
+              part={group.part}
+              childParts={group.childParts.map(({ part }) => part)}
+              shimmerActive={isPendingTail}
+            />
+          );
+        }
         if (group.type === "tool_group") {
           // 流式末段工具组：光波落在摘要行，不再叠底部「思考中」提示。
           const isPendingTail =
@@ -1102,6 +1374,17 @@ export const MessagePartsDisplay = memo(function MessagePartsDisplay({
             return <TextPartDisplay key={key} part={part} streaming={streaming} showPendingHint={hintHere} />;
           case "reasoning":
             return <ReasoningPartDisplay key={key} part={part} streaming={streaming} showPendingHint={hintHere} />;
+          case "tool_use":
+            if (isSubagentToolPart(part)) {
+              return (
+                <SubagentToolCard
+                  key={key}
+                  part={part}
+                  shimmerActive={hintHere}
+                />
+              );
+            }
+            return <ToolUsePartDisplay key={key} part={part} />;
           default:
             return null;
         }
