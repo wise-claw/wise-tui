@@ -151,9 +151,9 @@ export function PendingTaskQueuePanel({
     setEditText(t.promptText);
   }, []);
 
-  const saveEdit = useCallback(() => {
+  const saveEdit = useCallback((explicitText?: string) => {
     if (!editing) return;
-    const text = editText.trim();
+    const text = (explicitText ?? editText).trim();
     if (!text) {
       message.warning("任务内容不能为空");
       return;
@@ -334,9 +334,8 @@ export function PendingTaskQueuePanel({
       <Modal
         title="编辑排队任务"
         open={editing != null}
-        onOk={saveEdit}
         onCancel={() => setEditing(null)}
-        okText="保存"
+        footer={(_, { CancelBtn }) => <CancelBtn />}
         keyboard
         destroyOnHidden
         width={640}
@@ -360,6 +359,31 @@ export function PendingTaskQueuePanel({
               geminiAvailable={geminiAvailable}
               opencodeAvailable={opencodeAvailable}
               qoderAvailable={qoderAvailable}
+              canSend={editText.trim().length > 0}
+              onMessageSend={(plain) => saveEdit(plain)}
+              placeholder="@ 终端/工作流/文件，/ 命令，Enter 保存，Shift+Enter 换行"
+              renderConfigureArea={() => (
+                <span className="app-pending-task-queue-edit-composer-hint">
+                  Enter 保存 · Shift+Enter 换行 · Esc 取消
+                </span>
+              )}
+              renderActionArea={({ className }) => (
+                <div
+                  className={`${className} app-pending-task-queue-edit-composer-footer`}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Button
+                    type="primary"
+                    size="small"
+                    className="app-pending-task-queue-edit-save-btn"
+                    disabled={editText.trim().length === 0}
+                    onClick={() => saveEdit()}
+                  >
+                    保存
+                  </Button>
+                </div>
+              )}
               autoFocus
               className="app-pending-task-queue-edit-composer"
             />

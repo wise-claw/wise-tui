@@ -2311,7 +2311,34 @@
 }
 
 .app-pending-task-queue-edit-composer .semi-aiChatInput-footer {
-  display: none;
+  margin-top: 4px;
+  column-gap: 6px;
+  align-items: center;
+}
+
+.app-pending-task-queue-edit-composer-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-pending-task-queue-edit-composer-footer {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  column-gap: 8px;
+}
+
+.app-pending-task-queue-edit-save-btn {
+  flex-shrink: 0;
+  height: 24px !important;
+  min-width: 64px;
+  font-size: 12px !important;
+  font-weight: 600 !important;
 }
 
 .app-pending-task-queue-edit-modal .ant-modal-body {
@@ -5142,68 +5169,70 @@
   box-sizing: border-box;
 }
 
-.app-message-part-reasoning-summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+/* 思考消息：图标 + 正文直接展示；正文超过 4 行时收起并提供「更多」展开 */
+.app-message-part-reasoning-show {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
   max-width: 100%;
-  margin: 0;
-  padding: 1px 0;
-  border: none;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  color: var(--ant-color-text-tertiary);
 }
 
-.app-message-part-reasoning-summary:hover:not(:disabled) {
-  color: var(--ant-color-text-secondary);
-}
-
-.app-message-part-reasoning-summary:disabled {
-  cursor: default;
-  opacity: 0.7;
-}
-
-.app-message-part-reasoning-summary__label {
+.app-message-part-reasoning-show__head {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  line-height: 1.45;
+  gap: 4px;
+  color: color-mix(in srgb, #7c3aed 72%, var(--ant-color-text-secondary));
+  font-size: var(--app-reasoning-font-size);
+  font-weight: 600;
+  line-height: var(--app-reasoning-line-height);
+  letter-spacing: 0.01em;
+  user-select: none;
 }
 
-.app-message-part-reasoning-summary__icon {
+.app-message-part-reasoning-show__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: currentColor;
+  color: color-mix(in srgb, #7c3aed 80%, var(--ant-color-primary));
 }
 
-.app-message-part-reasoning-summary__icon svg {
-  width: 12px;
-  height: 12px;
+.app-message-part-reasoning-show__icon svg {
+  width: 11px;
+  height: 11px;
 }
 
-.app-message-part-reasoning-summary__meta {
-  font-size: 11px;
-  color: var(--ant-color-text-quaternary);
-}
-
-.app-message-part-reasoning-summary__chevron {
-  display: inline-flex;
-  opacity: 0.55;
-}
-
-.app-message-part-reasoning-compact-body {
-  margin-top: 4px;
-  padding-left: 2px;
-  width: 100%;
+.app-message-part-reasoning-show__body {
   min-width: 0;
   max-width: 100%;
-  box-sizing: border-box;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.app-message-part-reasoning-show__body--clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.app-message-part-reasoning-show__toggle {
+  align-self: flex-end;
+  margin: 2px 0 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ant-color-primary);
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+}
+
+.app-message-part-reasoning-show__toggle:hover {
+  color: var(--ant-color-primary-hover);
+  text-decoration: underline;
 }
 
 .app-message-parts__tool-group .app-message-part--tool {
@@ -5637,10 +5666,6 @@ button.app-message-part-header:disabled:hover {
   background: transparent;
   box-shadow: none;
   overflow: visible;
-}
-
-.app-message-part--reasoning-expanded {
-  margin-bottom: 3px;
 }
 
 .app-message-part-reasoning-shell {
@@ -8389,12 +8414,61 @@ button.app-message-part-header:disabled:hover {
   min-width: 0;
   max-width: 480px;
   flex: 0 1 auto;
+  display: block;
   font-size: 12px;
   line-height: 18px;
   color: var(--ant-color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  border: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.app-session-owner-panel__msg-text:hover {
+  color: var(--ant-color-primary);
+}
+
+.app-session-owner-panel__msg-text:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 2px;
+}
+
+.app-session-owner-panel__message-popover {
+  max-width: min(560px, calc(100vw - 48px));
+}
+
+.app-session-owner-panel__message-popover-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-session-owner-panel__message-popover-label {
+  font-size: 12px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-session-owner-panel__message-popover-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ant-color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow: auto;
+  user-select: text;
+}
+
+.app-session-owner-panel__message-popover-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .app-session-owner-panel__copy-btn {
@@ -9933,5 +10007,3 @@ button.app-message-part-header:disabled:hover {
 .app-turn-files-changed__remove {
   color: var(--ant-color-error);
 }
-
-

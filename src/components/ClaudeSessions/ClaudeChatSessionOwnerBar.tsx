@@ -1,4 +1,5 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
+import { Popover } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import type { ClaudeSession } from "../../types";
 import { buildClaudeSessionHoverTitle } from "../../utils/claudeSessionIdTooltip";
@@ -26,6 +27,7 @@ export const ClaudeChatSessionOwnerBar = memo(function ClaudeChatSessionOwnerBar
   onReturnMainSession,
 }: ClaudeChatSessionOwnerBarProps) {
   const latestUserText = useMemo(() => getLatestUserPlainText(session), [session]);
+  const [messagePopoverOpen, setMessagePopoverOpen] = useState(false);
   const { copied, copy } = useCopyToClipboard();
   const handleCopy = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -42,9 +44,42 @@ export const ClaudeChatSessionOwnerBar = memo(function ClaudeChatSessionOwnerBar
     >
       {showLatestUserMessage ? (
         <>
-          <span className="app-session-owner-panel__msg-text" title={latestUserText}>
-            {latestUserText}
-          </span>
+          <Popover
+            trigger="click"
+            placement="bottom"
+            open={messagePopoverOpen}
+            onOpenChange={setMessagePopoverOpen}
+            overlayClassName="app-session-owner-panel__message-popover"
+            content={
+              <div className="app-session-owner-panel__message-popover-body">
+                <span className="app-session-owner-panel__message-popover-label">最近发送的消息</span>
+                <div className="app-session-owner-panel__message-popover-text">{latestUserText}</div>
+                <div className="app-session-owner-panel__message-popover-actions">
+                  <HoverHint title={copied ? "已复制" : "复制完整消息"} placement="top">
+                    <button
+                      type="button"
+                      className="app-session-owner-panel__copy-btn"
+                      aria-label="复制完整消息"
+                      onClick={handleCopy}
+                    >
+                      <CopyFeedbackIcon copied={copied} />
+                    </button>
+                  </HoverHint>
+                </div>
+              </div>
+            }
+          >
+            <button
+              type="button"
+              className="app-session-owner-panel__msg-text"
+              title={latestUserText}
+              aria-label="查看最近发送的消息完整内容"
+              aria-haspopup="dialog"
+              aria-expanded={messagePopoverOpen}
+            >
+              {latestUserText}
+            </button>
+          </Popover>
           <HoverHint title={copied ? "已复制" : "复制最近发送的消息"} placement="bottom">
             <button
               type="button"

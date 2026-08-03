@@ -201,6 +201,7 @@ import {
   latestTerminalTurnHasAssistant,
   latestTurnHasVisibleAssistantContent,
   shouldPreserveMemoryTranscriptOverDisk,
+  shouldRequestDiskTranscriptHydration,
   shouldUpgradeDiskTailToFullTranscript,
   terminalDiskTranscriptRecoveredStatus,
 } from "./useClaudeSessions.transcript";
@@ -1740,14 +1741,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (!raw) return;
       const session = findSessionByTabOrClaudeId(sessionsRef.current, raw);
       if (!session) return;
-      if (session.messages.length > 0) return;
-      if (session.status === "running" || session.status === "connecting") return;
       const engine = resolveSessionExecutionEngine(session);
-      const shouldHydrate =
-        sessionHasDiskTranscript(session, engine) ||
-        Boolean(session.claudeSessionId?.trim()) ||
-        Boolean(session.diskTranscriptPartial);
-      if (!shouldHydrate) return;
+      // 运行中/连接中也允许补全：并行执行时切回某会话，其内存正文可能已被淘汰清空，
+      // 跳过会导致整轮消息不可见。写入侧按最新 row 复判运行态保护，不会覆盖进行中的回合。
+      if (!shouldRequestDiskTranscriptHydration(session, engine)) return;
       const loadKey = session.id;
       if (diskHydrateInFlightRef.current.has(loadKey)) return;
       diskHydrateInFlightRef.current.add(loadKey);
@@ -2349,7 +2346,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (cancelled) return;
       const candidates = sessionsRef.current.filter((session) => {
         if (session.messages.length > 0) return false;
-        if (session.status === "running" || session.status === "connecting") return false;
         return sessionHasDiskTranscript(session, resolveSessionExecutionEngine(session));
       });
       for (const session of candidates.slice(0, 16)) {
@@ -2377,7 +2373,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         const engine = resolveSessionExecutionEngine(s);
         const hasDisk = sessionHasDiskTranscript(s, engine);
         if (!hasDisk) return;
-        if (s.status === "running" || s.status === "connecting") return;
         idleCleanups.push(
           runWhenIdle(() => {
             if (cancelled) return;

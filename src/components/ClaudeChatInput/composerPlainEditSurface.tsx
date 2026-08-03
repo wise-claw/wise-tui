@@ -1,7 +1,7 @@
 import { AIChatInput, ConfigProvider as SemiConfigProvider } from "@douyinfe/semi-ui";
 import semiLocaleZhCN from "@douyinfe/semi-ui/lib/es/locale/source/zh_CN";
 import type { Content } from "@douyinfe/semi-ui/lib/es/aiChatInput/interface";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AIChatInput as AIChatInputType } from "@douyinfe/semi-ui";
 import { loadSlashCatalog } from "../../services/slashCatalogCache";
 import { useAtMentionDefaultTarget } from "../../hooks/useAtMentionDefaultTarget";
@@ -121,6 +121,13 @@ export interface ComposerPlainEditSurfaceProps {
   placeholder?: string;
   className?: string;
   autoFocus?: boolean;
+  /** 会话输入框同款底栏：左侧配置区（默认空） */
+  renderConfigureArea?: () => ReactNode;
+  /** 会话输入框同款底栏：右侧操作区（默认空）；可渲染「保存」等主操作 */
+  renderActionArea?: (args: { menuItem: ReactNode[]; className: string }) => ReactNode;
+  /** 与会话输入框一致：canSend 为 true 时 Enter 触发 onMessageSend */
+  canSend?: boolean;
+  onMessageSend?: (plain: string) => void;
 }
 
 export function ComposerPlainEditSurface({
@@ -137,6 +144,10 @@ export function ComposerPlainEditSurface({
   placeholder = "@ 终端/工作流/文件，/ 命令，Shift+Enter 换行",
   className = "",
   autoFocus = false,
+  renderConfigureArea,
+  renderActionArea,
+  canSend = false,
+  onMessageSend,
 }: ComposerPlainEditSurfaceProps) {
   const aiChatRef = useRef<InstanceType<typeof AIChatInputType> | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -318,11 +329,17 @@ export function ComposerPlainEditSurface({
             showUploadFile={false}
             showReference={false}
             showTemplateButton={false}
-            renderConfigureArea={() => null}
-            renderActionArea={() => null}
+            renderConfigureArea={renderConfigureArea ?? (() => null)}
+            renderActionArea={renderActionArea ?? (() => null)}
             clearContentOnGenerating={false}
             generating={false}
-            canSend={false}
+            canSend={canSend}
+            onMessageSend={(msg) => {
+              const tiptapPlain = contentsToPlain((msg.inputContents ?? []) as Content[]);
+              const live = lastEditorPlainRef.current;
+              const plain = live ? live : tiptapPlain;
+              onMessageSend?.(normalizeComposerEditorPlain(plain));
+            }}
             onContentChange={applySemiContentChange}
             style={{ width: "100%" }}
           />

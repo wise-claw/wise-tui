@@ -13,6 +13,7 @@ import {
   shouldDeferOneshotTurnComplete,
   shouldForceFinalizeDeferredOneshotComplete,
   shouldPreserveMemoryTranscriptOverDisk,
+  shouldRequestDiskTranscriptHydration,
   shouldSkipFullDiskReloadForRunningSession,
   shouldUpgradeDiskTailToFullTranscript,
   transcriptHasDisplayUser,
@@ -816,6 +817,58 @@ describe("shouldSkipFullDiskReloadForRunningSession", () => {
   });
 });
 
+describe("shouldRequestDiskTranscriptHydration", () => {
+  function plainSession(overrides: Partial<ClaudeSession> = {}): ClaudeSession {
+    return {
+      id: "wise-tab-s",
+      claudeSessionId: "claude-9",
+      repositoryPath: "/repo",
+      repositoryName: "demo",
+      model: "sonnet",
+      status: "idle",
+      messages: [],
+      createdAt: 1,
+      pendingPrompt: "",
+      ...overrides,
+    };
+  }
+
+  test("running session with empty in-memory messages still hydrates (dropped while idle, resumed)", () => {
+    // @派发/新建会话并行执行后切回：非活动标签正文被内存策略清空（diskTranscriptPartial），
+    // 会话在后台被重新派发仍处于 running——此前 running 跳过导致整轮消息不可见。
+    const session = plainSession({
+      status: "running",
+      diskTranscriptPartial: true,
+      messages: [],
+    });
+    expect(shouldRequestDiskTranscriptHydration(session, "claude")).toBe(true);
+  });
+
+  test("connecting session with claudeSessionId hydrates", () => {
+    expect(shouldRequestDiskTranscriptHydration(plainSession({ status: "connecting" }), "claude")).toBe(
+      true,
+    );
+  });
+
+  test("session that already has in-memory messages does not re-hydrate", () => {
+    expect(
+      shouldRequestDiskTranscriptHydration(
+        plainSession({ status: "running", messages: [{ role: "user", content: "你好", timestamp: 1 }] }),
+        "claude",
+      ),
+    ).toBe(false);
+  });
+
+  test("fresh session without disk evidence does not hydrate", () => {
+    expect(
+      shouldRequestDiskTranscriptHydration(
+        plainSession({ claudeSessionId: null, diskTranscriptPartial: undefined }),
+        "claude",
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("reloadFullDiskTranscriptByKey running protection", () => {
   test("running main session keeps in-memory turn when disk lacks assistant content", async () => {
     const sessions = [
@@ -877,5 +930,57 @@ describe("reloadFullDiskTranscriptByKey running protection", () => {
     const recovered = nextSessions.find((item) => item.id === "wise-tab-1");
     expect(recovered?.messages).toHaveLength(2);
     expect(recovered?.messages[0]?.content).toBe("磁盘第一轮");
+  });
+
+  test("keeps a user bubble appended during the disk read (latest-row re-check)", async () => {
+    // 会话在磁盘读取期间被恢复执行：发送气泡已写入内存但尚未落盘。
+    // 全量重载必须在 setSessions 时按最新 row 复判运行态保护，不得用略旧的磁盘快照覆盖。
+    const sessions = [
+      {
+        id: "wise-tab-1",
+        claudeSessionId: "claude-1",
+        repositoryPath: "/repo",
+        repositoryName: "demo",
+        model: "sonnet",
+        status: "idle",
+        messages: [],
+        createdAt: 1,
+        pendingPrompt: "",
+      } satisfies ClaudeSession,
+    ];
+    let nextSessions: ClaudeSession[] = sessions;
+    const result = await reloadFullDiskTranscriptByKey({
+      sessionKey: "wise-tab-1",
+      sessions,
+      setSessions: (updater) => {
+        // 模拟读取期间会话被恢复：最新 row 是 running 且带刚发出的用户气泡（磁盘尚无）。
+        nextSessions = updater([
+          {
+            id: "wise-tab-1",
+            claudeSessionId: "claude-1",
+            repositoryPath: "/repo",
+            repositoryName: "demo",
+            model: "sonnet",
+            status: "running",
+            messages: [{ role: "user", content: "刚发送的新任务", timestamp: 9 }],
+            createdAt: 1,
+            pendingPrompt: "",
+          } satisfies ClaudeSession,
+        ]);
+      },
+      diskTailLinesBySession: new Map(),
+      resolveSessionExecutionEngine: () => "claude",
+      loadSessionTranscriptLines: async () => [
+        JSON.stringify({ type: "user", message: { role: "user", content: "磁盘旧任务" } }),
+        JSON.stringify({
+          type: "assistant",
+          message: { role: "assistant", content: [{ type: "text", text: "磁盘旧回复" }] },
+        }),
+      ],
+    });
+    expect(result).toBe(true);
+    const recovered = nextSessions.find((item) => item.id === "wise-tab-1");
+    // 最新 row 的内存回合领先磁盘：禁止覆盖，保留刚发送的气泡。
+    expect(recovered?.messages).toEqual([{ role: "user", content: "刚发送的新任务", timestamp: 9 }]);
   });
 });

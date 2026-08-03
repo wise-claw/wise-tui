@@ -101,22 +101,33 @@ const SHELL_COMMAND_HEAD_RE = /^(?:npm|bun|pnpm|yarn|npx|git|curl|sudo)\s+/i;
  */
 const CLAUDE_COMMAND_RE = /^claude\s+(?:mcp|code|-{1,2}[a-z])/i;
 
-/** CJK 起头说明这是中文说明文字而非命令参数。 */
-const CJK_HEAD_RE = /^[\u3400-\u9fff\u3040-\u30ff]/;
+/**
+ * CJK / 全角标点起头 → 中文说明文字，而非命令参数。
+ * 含汉字、假名、CJK 标点（、。等）与全角符号，避免 `claude code、…` 被包成 Bash 卡片。
+ */
+const CJK_PROSE_HEAD_RE = /^[\u3400-\u9fff\u3040-\u30ff\u3000-\u303f\uff00-\uffef]/;
 
 /**
  * 该行是否是「省略了围栏的裸 shell 命令」。
  *
  * 命令名后紧跟中文的一律不算：`git 状态读取失败`、`npm 安装失败` 是说明文字，
  * 而 `git commit -m "修复问题"` 参数里带中文仍是命令 —— 故只看命令名后首个字符。
+ * `claude code` / `claude mcp` 同理：后接 CLI 参数才算命令，后接中文/中文标点不算。
  */
 export function isBareShellCommandLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
-  if (CLAUDE_COMMAND_RE.test(trimmed)) return true;
+
+  const claudeMatch = CLAUDE_COMMAND_RE.exec(trimmed);
+  if (claudeMatch) {
+    const rest = trimmed.slice(claudeMatch[0].length).replace(/^\s+/, "");
+    if (rest && CJK_PROSE_HEAD_RE.test(rest)) return false;
+    return true;
+  }
+
   const head = SHELL_COMMAND_HEAD_RE.exec(trimmed);
   if (!head) return false;
-  return !CJK_HEAD_RE.test(trimmed.slice(head[0].length));
+  return !CJK_PROSE_HEAD_RE.test(trimmed.slice(head[0].length));
 }
 
 /** 独立行的 shell 命令自动包进 bash 围栏（模型常省略 ```）。跳过已在围栏内的行。 */

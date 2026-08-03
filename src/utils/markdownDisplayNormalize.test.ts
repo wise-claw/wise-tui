@@ -570,6 +570,17 @@ describe("isBareShellCommandLine", () => {
     expect(isBareShellCommandLine("Claude 已启动")).toBe(false);
   });
 
+  test("does not treat Chinese prose that starts with claude code / mcp as commands", () => {
+    // `claude code` 命中 CLAUDE_COMMAND_RE 后若直接 return true，用户消息会被包成 Bash 卡片。
+    expect(
+      isBareShellCommandLine(
+        "claude code、cursor agent的会话消息中的思考了的消息已思考图标加文字的形式直接展示",
+      ),
+    ).toBe(false);
+    expect(isBareShellCommandLine("claude code 会话里思考消息用图标展示")).toBe(false);
+    expect(isBareShellCommandLine("claude mcp 相关配置需要检查")).toBe(false);
+  });
+
   test("does not treat Chinese notices after other command names as commands", () => {
     expect(isBareShellCommandLine("git 状态读取失败")).toBe(false);
     expect(isBareShellCommandLine("npm 安装失败，请检查网络")).toBe(false);
@@ -585,6 +596,12 @@ describe("wrapBareShellCommandLines", () => {
   test("leaves a Chinese system error notice unfenced", () => {
     const notice = "Claude 系统错误：请求频率超限，请稍后重试（rate_limit_error）";
     expect(wrapBareShellCommandLines(notice)).toBe(notice);
+  });
+
+  test("leaves Chinese prose starting with claude code unfenced", () => {
+    const prose =
+      "claude code、cursor agent的会话消息中的思考了的消息已思考图标加文字的形式直接展示，只是信息比较长的时候比如超过4行就已更多收起";
+    expect(wrapBareShellCommandLines(prose)).toBe(prose);
   });
 
   test("fences consecutive bare shell commands", () => {

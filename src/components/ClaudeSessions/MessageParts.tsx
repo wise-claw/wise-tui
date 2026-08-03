@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import type { MessagePart, TextPart, ToolUsePart, ReasoningPart } from "../../types";
 import { isRenderableMessagePart } from "../../utils/claudeChatMessageDisplay";
@@ -146,69 +146,87 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
   showPendingHint: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
   const text = part.text;
-  const charCount = part.text.trim().length;
   const hasBody = text.trim().length > 0;
-  // Cursor 风格：默认只显示一行「思考了」；展开后才看正文。
-  const canToggle = hasBody || streaming;
-  const { onPointerDown, consumeHadTextSelection } = useClickAfterSelectionGuard();
+  const collapsed = !expanded;
+
+  // 折叠态（CSS line-clamp 4 行）下测量正文是否溢出；流式文本逐 token 变化时重测。
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    let rafId = 0;
+    const measure = () => {
+      const nextOverflows = el.scrollHeight > el.clientHeight + 1;
+      setOverflows((prev) => (prev === nextOverflows ? prev : nextOverflows));
+    };
+    const scheduleMeasure = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(measure);
+    };
+    scheduleMeasure();
+    const observer =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
+    observer?.observe(el);
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      observer?.disconnect();
+    };
+  }, [text, expanded]);
 
   return (
-    <div
-      className={`app-message-part app-message-part--reasoning app-message-part--reasoning-compact${
-        expanded ? " app-message-part--reasoning-expanded" : ""
-      }`}
-    >
+    <div className="app-message-part app-message-part--reasoning">
       <div className="app-message-part-reasoning-shell">
-        <button
-          type="button"
-          className="app-message-part-reasoning-summary"
-          aria-expanded={expanded}
-          disabled={!canToggle}
-          onPointerDown={canToggle ? onPointerDown : undefined}
-          onClick={() => {
-            if (!canToggle) return;
-            if (consumeHadTextSelection()) return;
-            setExpanded((prev) => !prev);
-          }}
-        >
-          <span className="app-message-part-reasoning-summary__label">
+        <div className="app-message-part-reasoning-show">
+          <div className="app-message-part-reasoning-show__head">
             <span
-              className={`app-message-part-reasoning-summary__icon${
-                streaming && !expanded ? " app-thinking-hint-icon--active" : ""
-              }`}
+              className={`app-message-part-reasoning-show__icon${streaming ? " app-thinking-hint-icon--active" : ""}`}
               aria-hidden
             >
               <ThinkingHintIcon />
             </span>
-            <span
-              className={
-                streaming && !expanded ? "app-status-text-shimmer" : undefined
-              }
-            >
-              {streaming && !expanded ? "思考中" : "思考了"}
+            <span className={streaming ? "app-status-text-shimmer" : undefined}>
+              {streaming ? "思考中" : "思考了"}
             </span>
-            {!expanded && charCount > 0 ? (
-              <span className="app-message-part-reasoning-summary__meta">{charCount} 字</span>
-            ) : null}
-          </span>
-          {canToggle ? (
-            <span className="app-message-part-reasoning-summary__chevron" aria-hidden>
-              <ChevronIcon expanded={expanded} />
-            </span>
-          ) : null}
-        </button>
-        {expanded && hasBody ? (
-          <div className="app-message-part-reasoning-compact-body">
-            <Markdown
-              text={text}
-              streaming={streaming}
-              showPendingHint={false}
-              className="app-message-part--reasoning-content"
-            />
           </div>
-        ) : null}
-        {showPendingHint ? <StreamingReplyHint /> : null}
+          {hasBody ? (
+            <div
+              ref={bodyRef}
+              className={`app-message-part-reasoning-show__body${
+                collapsed ? " app-message-part-reasoning-show__body--clamped" : ""
+              }`}
+            >
+              <Markdown
+                text={text}
+                streaming={streaming}
+                showPendingHint={false}
+                className="app-message-part--reasoning-content"
+              />
+            </div>
+          ) : null}
+          {hasBody && collapsed && overflows ? (
+            <button
+              type="button"
+              className="app-message-part-reasoning-show__toggle"
+              aria-expanded={false}
+              onClick={() => setExpanded(true)}
+            >
+              更多
+            </button>
+          ) : null}
+          {hasBody && expanded ? (
+            <button
+              type="button"
+              className="app-message-part-reasoning-show__toggle"
+              aria-expanded={true}
+              onClick={() => setExpanded(false)}
+            >
+              收起
+            </button>
+          ) : null}
+          {showPendingHint ? <StreamingReplyHint /> : null}
+        </div>
       </div>
     </div>
   );

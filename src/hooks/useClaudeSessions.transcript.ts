@@ -327,6 +327,27 @@ export function shouldSkipFullDiskReloadForRunningSession(
   return false;
 }
 
+/**
+ * 是否应为该会话发起磁盘 transcript 补全。
+ *
+ * 内存已有消息或尚无可恢复的磁盘证据时不发起。运行中/连接中的会话**也允许发起**：
+ * @派发 / 新建会话并行执行时，非活动标签的内存正文可能已被淘汰清空（diskTranscriptPartial），
+ * 切回时若因 running 跳过补全，整轮消息都不可见；运行态保护由
+ * `shouldPreserveMemoryTranscriptOverDisk` / `shouldSkipFullDiskReloadForRunningSession`
+ * 在写入时按最新 row 复判，不会覆盖进行中的回合。
+ */
+export function shouldRequestDiskTranscriptHydration(
+  session: ClaudeSession,
+  engine: SessionExecutionEngine,
+): boolean {
+  if (session.messages.length > 0) return false;
+  return (
+    sessionHasDiskTranscript(session, engine) ||
+    Boolean(session.claudeSessionId?.trim()) ||
+    Boolean(session.diskTranscriptPartial)
+  );
+}
+
 function lastDiskAssistantMessage(disk: readonly ClaudeMessage[]): ClaudeMessage | null {
   for (let i = disk.length - 1; i >= 0; i -= 1) {
     const msg = disk[i]!;
@@ -447,6 +468,11 @@ export async function reloadFullDiskTranscriptByKey(params: {
   params.setSessions((prev) =>
     prev.map((row) => {
       if (row.id !== tabId) return row;
+      // 读取磁盘期间会话可能已开始新一轮（刚发送的用户气泡 / 流式增量领先磁盘）：
+      // 对最新 row 复判运行态保护，避免用略旧的磁盘快照覆盖进行中的回合。
+      if (shouldSkipFullDiskReloadForRunningSession(row, sanitizedDisk)) {
+        return row;
+      }
       const recoveredMessages =
         isTerminalWorker && hasAssistant
           ? nextMessages.filter(
@@ -534,7 +560,12 @@ export async function applyDiskTranscriptTail(params: {
     prev.map((row) => {
       if (row.id !== params.session.id) return row;
       // setSessions 时再读最新 row，避免 hydrate 竞态用陈旧 session 覆盖刚发出的用户气泡。
-      if (shouldPreserveMemoryTranscriptOverDisk(row, sanitizedDisk)) {
+      // 读取磁盘期间会话可能已开始新一轮 / 流式增量领先磁盘：按最新 row 复判运行态保护
+      // （terminal worker 走专用合并，不在此跳过）。
+      if (
+        !isTerminalWorker &&
+        shouldSkipFullDiskReloadForRunningSession(row, sanitizedDisk)
+      ) {
         return row;
       }
       return {
