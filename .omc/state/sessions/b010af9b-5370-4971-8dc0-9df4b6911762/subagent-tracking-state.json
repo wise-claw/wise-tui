@@ -1,0 +1,71 @@
+{
+  "agents": [
+    {
+      "agent_id": "a693f11f1819351b4",
+      "agent_type": "Explore",
+      "started_at": "2026-08-03T23:32:00.635Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-08-03T23:36:31.811Z",
+      "duration_ms": 271176
+    },
+    {
+      "agent_id": "a715fb5700a935e7b",
+      "agent_type": "Explore",
+      "started_at": "2026-08-03T23:32:00.686Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-08-03T23:35:18.270Z",
+      "duration_ms": 197584
+    },
+    {
+      "agent_id": "a0de463341432fe62",
+      "agent_type": "Explore",
+      "started_at": "2026-08-03T23:32:00.740Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-08-03T23:39:22.751Z",
+      "duration_ms": 442011
+    },
+    {
+      "agent_id": "a039902a8047b232f",
+      "agent_type": "Explore",
+      "started_at": "2026-08-03T23:32:00.796Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-08-03T23:36:13.723Z",
+      "duration_ms": 252927
+    },
+    {
+      "agent_id": "af64273a509c04e94",
+      "agent_type": "Explore",
+      "started_at": "2026-08-03T23:32:00.852Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-08-03T23:37:05.298Z",
+      "duration_ms": 304446
+    },
+    {
+      "agent_id": "ab8486211b318ce59",
+      "agent_type": "unknown",
+      "started_at": "2026-08-03T23:34:26.635Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-08-03T23:34:26.635Z",
+      "duration_ms": 0
+    },
+    {
+      "agent_id": "a6e4d0480f0b71f62",
+      "agent_type": "unknown",
+      "started_at": "2026-08-03T23:44:44.857Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-08-03T23:44:44.857Z",
+      "duration_ms": 0
+    }
+  ],
+  "total_spawned": 3,
+  "total_completed": 7,
+  "total_failed": 0,
+  "last_updated": "2026-08-03T23:44:44.961Z"
+}

@@ -42,11 +42,24 @@ describe("areLeftSidebarPropsEqual", () => {
     expect(areLeftSidebarPropsEqual(prev, next)).toBe(false);
   });
 
-  test("ignores active session changes when monitor is hidden and repository selection is stable", () => {
+  test("busts when active session changes and workspace list is visible", () => {
     const shared = baseProps({
       activeRepositoryId: 7,
       activeWorkspaceFocus: "repository",
       showLeftSidebarMonitorPanel: false,
+      showLeftSidebarWorkspaceList: true,
+    });
+    const prev = { ...shared, activeSessionId: "session-a" };
+    const next = { ...shared, activeSessionId: "session-b" };
+    expect(areLeftSidebarPropsEqual(prev, next)).toBe(false);
+  });
+
+  test("ignores active session changes when workspace list and monitor are hidden", () => {
+    const shared = baseProps({
+      activeRepositoryId: 7,
+      activeWorkspaceFocus: "repository",
+      showLeftSidebarMonitorPanel: false,
+      showLeftSidebarWorkspaceList: false,
     });
     const prev = { ...shared, activeSessionId: "session-a" };
     const next = { ...shared, activeSessionId: "session-b" };

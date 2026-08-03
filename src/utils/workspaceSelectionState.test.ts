@@ -12,6 +12,7 @@ import {
   resolveClaudeWorkspaceMainSession,
   resolveProjectComposerRepository,
   resolveScheduledTasksRepository,
+  shouldKeepProjectFocusActiveSession,
   shouldKeepProjectFocusWhenSwitchingSession,
   WORKSPACE_SCOPED_VIRTUAL_REPOSITORY_ID,
 } from "./workspaceSelectionState";
@@ -465,5 +466,59 @@ describe("shouldKeepProjectFocusWhenSwitchingSession", () => {
         workspaceMode: "multi_repo",
       }),
     ).toBe(false);
+  });
+});
+
+describe("shouldKeepProjectFocusActiveSession", () => {
+  test("keeps when activeSessionId is the main session", () => {
+    expect(
+      shouldKeepProjectFocusActiveSession({
+        activeSessionId: "s-main",
+        mainSessionId: "s-main",
+        incomingSessions: [session("s-main", "/r/1", "repo-1")],
+      }),
+    ).toBe(true);
+  });
+
+  test("keeps explicitly selected worker session findable in full list", () => {
+    const worker = session("s-worker", "/r/1", "repo-1/执行环境:claude:任务");
+    expect(
+      shouldKeepProjectFocusActiveSession({
+        activeSessionId: "s-worker",
+        mainSessionId: "s-main",
+        incomingSessions: [session("s-main", "/r/1", "repo-1"), worker],
+      }),
+    ).toBe(true);
+  });
+
+  test("keeps explicitly selected cross-project session by claudeSessionId", () => {
+    const other = session("s-other", "/elsewhere", "elsewhere-app");
+    expect(
+      shouldKeepProjectFocusActiveSession({
+        activeSessionId: other.claudeSessionId,
+        mainSessionId: "s-main",
+        incomingSessions: [session("s-main", "/r/1", "repo-1"), other],
+      }),
+    ).toBe(true);
+  });
+
+  test("does not keep stale session id absent from full list", () => {
+    expect(
+      shouldKeepProjectFocusActiveSession({
+        activeSessionId: "s-stale",
+        mainSessionId: "s-main",
+        incomingSessions: [session("s-main", "/r/1", "repo-1")],
+      }),
+    ).toBe(false);
+  });
+
+  test("keeps when no main session is resolvable", () => {
+    expect(
+      shouldKeepProjectFocusActiveSession({
+        activeSessionId: "s-any",
+        mainSessionId: undefined,
+        incomingSessions: [],
+      }),
+    ).toBe(true);
   });
 });

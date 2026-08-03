@@ -251,6 +251,24 @@ export interface ResolveClaudeWorkspaceMainSessionInput {
   workspaceMode?: WorkspaceMode;
 }
 
+/** 工作区焦点下，activeSessionId 是否应保持用户当前选择（不拉回项目主会话）。
+ *  用户显式选中的会话（能在全量列表解析到：员工 worker / 跨项目会话 / 磁盘恢复会话）
+ *  优先于主会话对齐；仅对找不到的陈旧 id 返回 false，以便调用方拉回主会话保证
+ *  live 订阅与磁盘 hydrate 命中可订阅的会话。 */
+export function shouldKeepProjectFocusActiveSession(input: {
+  activeSessionId: string | null | undefined;
+  mainSessionId: string | null | undefined;
+  incomingSessions: ReadonlyArray<ClaudeSession>;
+}): boolean {
+  const mainId = input.mainSessionId?.trim();
+  if (!mainId) return true;
+  const sid = input.activeSessionId?.trim();
+  if (!sid || sid === mainId) return true;
+  return input.incomingSessions.some(
+    (session) => session.id === sid || session.claudeSessionId === sid,
+  );
+}
+
 export function resolveClaudeWorkspaceMainSession(
   input: ResolveClaudeWorkspaceMainSessionInput,
 ): ClaudeSession | null {

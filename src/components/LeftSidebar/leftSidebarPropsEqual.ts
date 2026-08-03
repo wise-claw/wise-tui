@@ -40,6 +40,10 @@ function shouldBustSidebarOnActiveSessionIdChange(
   if (prev.activeSessionId === next.activeSessionId) {
     return false;
   }
+  // 工作区会话树用 activeSessionId 画选中高亮；跳过重渲染会导致要点两次才看起来切过去。
+  if (prev.showLeftSidebarWorkspaceList || next.showLeftSidebarWorkspaceList) {
+    return true;
+  }
   if (prev.showLeftSidebarMonitorPanel || next.showLeftSidebarMonitorPanel) {
     return true;
   }

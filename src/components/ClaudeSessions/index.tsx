@@ -40,7 +40,7 @@ export { Topbar, type TopbarProps, type PaneTopbarSharedProps } from "./Topbar";
 import type { CenterView } from "./ClaudeChat";
 import type { PaneAuxLayout, ResolvePaneAuxLayout } from "./paneAuxLayout";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
-import { filterSessionsForWorkspace, sessionMatchesProjectWorkspaceFocus } from "../../utils/projectSessionPanelFilter";
+import { filterSessionsForWorkspace } from "../../utils/projectSessionPanelFilter";
 import {
   resolveBoundMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
@@ -51,6 +51,7 @@ import {
   resolveChatContextRepository,
   resolveClaudePanelActiveSession,
   resolveClaudeWorkspaceMainSession,
+  shouldKeepProjectFocusActiveSession,
 } from "../../utils/workspaceSelectionState";
 import { loadSessionOwnerHints } from "../../utils/sessionOwnerHints";
 import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
@@ -554,20 +555,15 @@ function ClaudeSessionsShell({
     if (activeWorkspaceFocus !== "project" || !activeProject || !mainSessionForDataLink) {
       return;
     }
-    if (activeSessionId === mainSessionForDataLink.id) {
-      return;
-    }
-    const current = activeSessionId
-      ? incomingSessions.find(
-          (session) => session.id === activeSessionId || session.claudeSessionId === activeSessionId,
-        ) ?? null
-      : null;
+    // 用户显式选中的会话（能在全量列表解析到）优先，不拉回项目主会话——
+    // 与 resolveClaudePanelActiveSession 尊重 activeSessionId 的语义一致。
+    // 仅当 activeSessionId 指向找不到的陈旧 id 时才拉回主会话，确保 live 订阅
+    // 与磁盘 hydrate 命中可订阅的主会话。
     if (
-      current &&
-      sessionMatchesProjectWorkspaceFocus(current, {
-        workspaceMode,
-        project: activeProject,
-        repositories: repositories ?? [],
+      shouldKeepProjectFocusActiveSession({
+        activeSessionId,
+        mainSessionId: mainSessionForDataLink.id,
+        incomingSessions,
       })
     ) {
       return;
@@ -580,8 +576,6 @@ function ClaudeSessionsShell({
     incomingSessions,
     mainSessionForDataLink,
     onSwitchSession,
-    repositories,
-    workspaceMode,
   ]);
 
   /** 打开仓库/项目时恢复已有主会话；无可用会话时自动新建。 */
