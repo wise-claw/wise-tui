@@ -58,11 +58,6 @@ function activateSession(
 ) {
   // 侧栏会话行：优先切到会话窗口（含执行环境 worker）。
   // restore-as-main 仅作无 onSelectSession 时的兜底（会改主会话绑定，不适合 worker）。
-  console.log("[wise-2click] activateSession", {
-    sessionId,
-    hasOnSelectSession: Boolean(props.onSelectSession),
-    hasRestore: Boolean(props.onRestoreHistorySessionAsMain),
-  });
   if (props.onSelectSession) {
     props.onSelectSession(sessionId);
     return;

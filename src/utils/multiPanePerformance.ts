@@ -80,7 +80,7 @@ export function resolveCompanionSessionMessagesMax(companionCount: number): numb
 /** 多伴生会话时适度抬高全局预算上限。 */
 export function resolveGlobalMessagesBudget(companionCount: number): number {
   const extra = Math.max(0, companionCount - 1) * 8;
-  return Math.min(256, IN_MEMORY_GLOBAL_MESSAGES_BUDGET + extra);
+  return Math.min(IN_MEMORY_GLOBAL_MESSAGES_BUDGET + 128, IN_MEMORY_GLOBAL_MESSAGES_BUDGET + extra);
 }
 
 /** 伴生窗格磁盘懒加载行数：窗格越多，单次读入越少。 */

@@ -22,7 +22,16 @@ export const IN_MEMORY_SESSION_MESSAGES_MAX = 64;
 export const IN_MEMORY_COMPANION_SESSION_MESSAGES_MAX = 24;
 
 /** 全部标签合计最多保留的消息条数（超出时优先清空非活动/非运行会话正文） */
-export const IN_MEMORY_GLOBAL_MESSAGES_BUDGET = 128;
+export const IN_MEMORY_GLOBAL_MESSAGES_BUDGET = 256;
+
+/**
+ * 最近切换过的会话热缓存条数（含当前）。
+ * 切走不清空正文，接近 Cursor 的即时切 tab；超出后再按磁盘懒加载。
+ */
+export const IN_MEMORY_RECENT_SESSION_KEEP = 5;
+
+/** 热缓存中非当前会话的每会话消息上限（低于活动会话上限，控制总内存） */
+export const IN_MEMORY_RECENT_SESSION_MESSAGES_MAX = 40;
 
 /** 单条 message part 文本/tool 输出在内存中的字符上限 */
 export const IN_MEMORY_MESSAGE_PART_TEXT_MAX = 10_000;

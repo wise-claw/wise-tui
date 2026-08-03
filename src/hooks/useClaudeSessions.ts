@@ -72,6 +72,8 @@ import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import {
   CLAUDE_DISK_JSONL_TAIL_LINES_LAZY,
   CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
+  IN_MEMORY_RECENT_SESSION_KEEP,
+  IN_MEMORY_RECENT_SESSION_MESSAGES_MAX,
   IN_MEMORY_SESSION_MESSAGES_MAX,
   PERSIST_SESSION_MESSAGES_MAX,
 } from "../constants/claudeMessageListWindow";
@@ -324,6 +326,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   const buildMemoryKeepSessionIds = useCallback((list: ClaudeSession[]) => {
     const keep = new Set(memoryKeepSessionIdsRef.current);
+    for (const id of recentActiveSessionIdsRef.current) keep.add(id);
     for (const session of list) {
       if (session.status === "running" || session.status === "connecting") {
         keep.add(session.id);
@@ -388,14 +391,26 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
   activeSessionIdRef.current = activeSessionId;
+  /** 最近切过的会话（含当前）：切走保留正文，避免 Cursor 式切 tab 时闪空白再 hydrate。 */
+  const recentActiveSessionIdsRef = useRef<string[]>([]);
   const modelSwitchReconnectInFlightRef = useRef(false);
   const lastModelSwitchReconnectKeyRef = useRef<string | null>(null);
   const lastModelSwitchReconnectAtRef = useRef(0);
 
   useEffect(() => {
+    if (!activeSessionId) return;
+    const prev = recentActiveSessionIdsRef.current.filter((id) => id !== activeSessionId);
+    recentActiveSessionIdsRef.current = [activeSessionId, ...prev].slice(
+      0,
+      IN_MEMORY_RECENT_SESSION_KEEP,
+    );
+  }, [activeSessionId]);
+
+  useEffect(() => {
     const keep = new Set<string>();
     if (activeSessionId) keep.add(activeSessionId);
     for (const id of companionSessionIds) keep.add(id);
+    for (const id of recentActiveSessionIdsRef.current) keep.add(id);
     memoryKeepSessionIdsRef.current = keep;
   }, [activeSessionId, companionSessionIds, companionSessionIdsJoinKey]);
 
@@ -655,7 +670,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         });
       }
       if (activeSessionIdRef.current === from) {
-        console.log("[wise-2click] tabIdMigration state-sync", { from, to });
         setActiveSessionId(to);
       }
       onSessionTabIdMigratedRef.current?.(from, to);
@@ -2266,7 +2280,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         memoryKeepSessionIdsRef.current.add(migration.toClaudeSessionId);
         memoryKeepSessionIdsRef.current.delete(migration.fromTabId);
         if (activeSessionIdRef.current === migration.fromTabId) {
-          console.log("[wise-2click] mergeDiskSession ref-migrate", { fromTabId: migration.fromTabId, toClaudeSessionId: migration.toClaudeSessionId });
           activeSessionIdRef.current = migration.toClaudeSessionId;
         }
       }
@@ -2310,6 +2323,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   useEffect(() => {
     if (!activeSessionId) return;
+    // 切 tab 立即补全：勿等 requestIdleCallback（忙时会拖成空白闪一下）。
+    requestDiskTranscriptHydration(activeSessionId);
     let cancelled = false;
     const cancelIdle = runWhenIdle(() => {
       if (cancelled) return;
@@ -2397,6 +2412,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     const keep = new Set<string>();
     if (activeSessionId) keep.add(activeSessionId);
     for (const cid of companionSessionIds) keep.add(cid);
+    const recentWarm = new Set(recentActiveSessionIdsRef.current);
     setSessions((prev) => {
       let changed = false;
       const next = prev.map((s) => {
@@ -2413,6 +2429,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             messages: capSessionMessagesForMemory(s.messages, perSessionMax),
             diskTranscriptPartial: true,
             transcriptMemoryUnlimited: false,
+          };
+        }
+        // 最近切过的会话：保留热缓存正文，切回立即可见（Cursor 式切 tab）。
+        if (recentWarm.has(s.id)) {
+          if (s.messages.length <= IN_MEMORY_RECENT_SESSION_MESSAGES_MAX) return s;
+          changed = true;
+          return {
+            ...s,
+            messages: capSessionMessagesForMemory(s.messages, IN_MEMORY_RECENT_SESSION_MESSAGES_MAX),
+            diskTranscriptPartial: true,
+            diskPreview: retainSessionListPreviewOnMessageDrop(s),
           };
         }
         if (isTerminalWorkerWiseTab(s)) return s;
@@ -3387,13 +3414,21 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   );
 
   const switchSession = useCallback((sessionId: string) => {
-    // 切换会话后请求新会话输入框聚焦：ClaudeChat 按 key={activeSession.id} 渲染，
-    // 切换即 remount，composerRefocusStore 的请求跨 remount 存活，由新编辑器
-    // semiEditorReady 后的 refocus effect consume 并聚焦（见 composer-region.tsx）。
-    console.log("[wise-2click] switchSession", { sessionId, prevActive: activeSessionIdRef.current });
+    // 切换会话后请求新会话输入框聚焦：ClaudeChat 按 session.id 切换，
+    // composerRefocusStore 的请求跨切换存活，由新编辑器 semiEditorReady 后的 refocus effect consume。
     requestComposerRefocus(sessionId);
+    // 先推入热缓存，避免紧随其后的 inactive-wipe effect 把目标会话正文清掉。
+    const prevRecent = recentActiveSessionIdsRef.current.filter((id) => id !== sessionId);
+    recentActiveSessionIdsRef.current = [sessionId, ...prevRecent].slice(
+      0,
+      IN_MEMORY_RECENT_SESSION_KEEP,
+    );
     setActiveSessionId(sessionId);
-  }, []);
+    const target = sessionsRef.current.find((s) => s.id === sessionId);
+    if (target && target.messages.length === 0) {
+      requestDiskTranscriptHydration(sessionId);
+    }
+  }, [requestDiskTranscriptHydration]);
 
   const stopSessionConversationTask = useCallback((item: SessionConversationTaskItem): boolean => {
     if (item.status !== "running" || !item.cancellable) return false;

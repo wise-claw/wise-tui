@@ -31,15 +31,15 @@ describe("multiPanePerformance", () => {
 
   test("companion per-session cap shrinks as pane count grows", () => {
     expect(resolveCompanionSessionMessagesMax(1)).toBe(IN_MEMORY_COMPANION_SESSION_MESSAGES_MAX);
-    const forSeven = resolveCompanionSessionMessagesMax(7);
-    expect(forSeven).toBeLessThan(IN_MEMORY_COMPANION_SESSION_MESSAGES_MAX);
-    expect(forSeven).toBeGreaterThanOrEqual(6);
+    const forMany = resolveCompanionSessionMessagesMax(12);
+    expect(forMany).toBeLessThan(IN_MEMORY_COMPANION_SESSION_MESSAGES_MAX);
+    expect(forMany).toBeGreaterThanOrEqual(6);
   });
 
   test("global budget scales with companion count but stays capped", () => {
     expect(resolveGlobalMessagesBudget(0)).toBe(IN_MEMORY_GLOBAL_MESSAGES_BUDGET);
     expect(resolveGlobalMessagesBudget(7)).toBeGreaterThan(IN_MEMORY_GLOBAL_MESSAGES_BUDGET);
-    expect(resolveGlobalMessagesBudget(30)).toBe(256);
+    expect(resolveGlobalMessagesBudget(30)).toBe(IN_MEMORY_GLOBAL_MESSAGES_BUDGET + 128);
   });
 
   test("companion disk tail lines shrink with more companions", () => {

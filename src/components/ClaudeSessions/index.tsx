@@ -572,7 +572,6 @@ function ClaudeSessionsShell({
     ) {
       return;
     }
-    console.log("[wise-2click] project-fix pullback", { activeSessionId, to: mainSessionForDataLink.id });
     onSwitchSession(mainSessionForDataLink.id);
   }, [
     activeProject,
@@ -613,7 +612,6 @@ function ClaudeSessionsShell({
 
       if (activeWorkspaceFocus === "project" && activeProject) {
         if (mainSessionForDataLink) {
-          console.log("[wise-2click] autoEnsure->mainSession", { to: mainSessionForDataLink.id });
           onSwitchSession(mainSessionForDataLink.id);
           return;
         }
@@ -639,7 +637,6 @@ function ClaudeSessionsShell({
         mainOwnerPick,
       );
       if (boundId && sessions.some((item) => item.id === boundId)) {
-        console.log("[wise-2click] autoEnsure->boundId", { to: boundId });
         onSwitchSession(boundId);
         return;
       }
@@ -651,7 +648,6 @@ function ClaudeSessionsShell({
         { mainOwnerAgentName: mainOwnerPick },
       );
       if (picked) {
-        console.log("[wise-2click] autoEnsure->picked", { to: picked.id });
         onSwitchSession(picked.id);
         return;
       }
