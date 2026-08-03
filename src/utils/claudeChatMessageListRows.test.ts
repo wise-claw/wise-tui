@@ -59,7 +59,7 @@ describe("shouldShowListEndThinkingHint", () => {
     ).toBe(false);
   });
 
-  test("shows when last assistant reasoning is blank (just started, no preview yet)", () => {
+  test("hides when last assistant reasoning is blank (inline 思考中 card covers it)", () => {
     expect(
       shouldShowListEndThinkingHint(
         [
@@ -72,7 +72,26 @@ describe("shouldShowListEndThinkingHint", () => {
         ],
         "running",
       ),
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  test("renders blank-reasoning assistant message as a message row (icon + 思考中 in content)", () => {
+    const messages = [
+      msg({ id: 1, role: "user", content: "hi" }),
+      msg({
+        id: 2,
+        role: "assistant",
+        parts: [{ type: "reasoning", text: "   " }],
+      }),
+    ];
+    const showListEndThinkingHint = shouldShowListEndThinkingHint(messages, "running");
+    expect(showListEndThinkingHint).toBe(false);
+    const rows = buildChatMessageListRows(messages, {
+      sessionStatus: "running",
+      showListEndThinkingHint,
+    });
+    expect(rows.map((row) => (row.kind === "message" ? row.msg.id : row.kind))).toEqual([1, 2]);
+    expect(rows[1]!.kind === "message" && rows[1]!.streamingThisBubble).toBe(true);
   });
 
   test("shows when last assistant's final renderable part is text (not reasoning)", () => {

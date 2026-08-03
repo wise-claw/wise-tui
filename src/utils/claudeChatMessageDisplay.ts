@@ -170,7 +170,9 @@ export function hasRenderableChatMessageBody(msg: ClaudeMessage): boolean {
   }
   const parts = msg.parts;
   if (Array.isArray(parts) && parts.length > 0) {
-    return parts.some(isRenderableMessagePart);
+    // 空 reasoning（流式启动、正文尚未到达）也要渲染「思考中」卡片，作为消息内容的一部分，
+    // 避免整行被跳过、只剩底部左侧空白的提示行。
+    return parts.some((part) => part.type === "reasoning" || isRenderableMessagePart(part));
   }
   const content = msg.content ?? "";
   if (isBlankDisplayText(content)) return false;

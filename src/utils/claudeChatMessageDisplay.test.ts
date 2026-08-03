@@ -352,6 +352,16 @@ describe("hasRenderableChatMessageBody", () => {
       timestamp: 0,
     };
     expect(hasRenderableChatMessageBody(emptyAssistantShell)).toBe(false);
+
+    const blankReasoningOnly: ClaudeMessage = {
+      id: 5,
+      role: "assistant",
+      content: "",
+      parts: [{ type: "reasoning", text: "   " }],
+      timestamp: 0,
+    };
+    // 空 reasoning 也要渲染「思考中」卡片（作为消息内容的一部分），因此消息行不跳过。
+    expect(hasRenderableChatMessageBody(blankReasoningOnly)).toBe(true);
   });
 });
 

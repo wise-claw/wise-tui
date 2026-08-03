@@ -152,7 +152,7 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
   const hasBody = text.trim().length > 0;
   const collapsed = !expanded;
 
-  // 折叠态（CSS line-clamp 4 行）下测量正文是否溢出；流式文本逐 token 变化时重测。
+  // 折叠态（max-height ≈ 4 行）下测量正文是否溢出；流式文本逐 token 变化时重测。
   useLayoutEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
@@ -180,31 +180,31 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
       <div className="app-message-part-reasoning-shell">
         <div className="app-message-part-reasoning-show">
           {hasBody ? (
-            <div className="app-message-part-reasoning-show__row">
-              <span
-                className={`app-message-part-reasoning-show__icon${streaming ? " app-thinking-hint-icon--active" : ""}`}
-                aria-hidden
-              >
-                <ThinkingHintIcon />
+            <div
+              ref={bodyRef}
+              className={`app-message-part-reasoning-show__flow${
+                collapsed ? " app-message-part-reasoning-show__flow--clamped" : ""
+              }`}
+            >
+              <span className="app-message-part-reasoning-show__lead">
+                <span
+                  className={`app-message-part-reasoning-show__icon${streaming ? " app-thinking-hint-icon--active" : ""}`}
+                  aria-hidden
+                >
+                  <ThinkingHintIcon />
+                </span>
+                <span
+                  className={`app-message-part-reasoning-show__label${streaming ? " app-status-text-shimmer" : ""}`}
+                >
+                  思考:
+                </span>
               </span>
-              <span
-                className={`app-message-part-reasoning-show__label${streaming ? " app-status-text-shimmer" : ""}`}
-              >
-                思考:
-              </span>
-              <div
-                ref={bodyRef}
-                className={`app-message-part-reasoning-show__body${
-                  collapsed ? " app-message-part-reasoning-show__body--clamped" : ""
-                }`}
-              >
-                <Markdown
-                  text={text}
-                  streaming={streaming}
-                  showPendingHint={false}
-                  className="app-message-part--reasoning-content"
-                />
-              </div>
+              <Markdown
+                text={text}
+                streaming={streaming}
+                showPendingHint={false}
+                className="app-message-part--reasoning-content"
+              />
               {collapsed && overflows ? (
                 <button
                   type="button"
@@ -1042,7 +1042,11 @@ export const MessagePartsDisplay = memo(function MessagePartsDisplay({
   streaming: boolean;
   inlinePendingHint?: boolean;
 }) {
-  const visibleParts = parts.filter(isRenderableMessagePart);
+  // reasoning 即使正文为空也要渲染（流式启动期的「思考中」卡片）；空正文由
+  // ReasoningPartDisplay 走 head 分支（图标 + 思考中/思考:），其余 part 仍按可渲染性过滤。
+  const visibleParts = parts.filter(
+    (part) => part.type === "reasoning" || isRenderableMessagePart(part),
+  );
   if (visibleParts.length === 0) return null;
 
   const groups = buildMergedTextGroups(visibleParts);
