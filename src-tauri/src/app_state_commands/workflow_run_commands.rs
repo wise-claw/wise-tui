@@ -67,18 +67,28 @@ pub(crate) fn set_workflow_run(
 #[tauri::command]
 pub(crate) fn list_workflow_runs(
     db: tauri::State<'_, wise_db::WiseDb>,
+    repository_path: Option<String>,
+    limit: Option<i64>,
+    status: Option<String>,
 ) -> Result<Vec<serde_json::Value>, String> {
-    // 与前端 listRuns 上限对齐；payload 内 tasks 可极大，列表仅用于绑定会话，剥离后再过 IPC。
-    let raws = db.list_workflow_run_payloads(500)?;
-    let mut out = Vec::new();
-    for raw in raws {
-        let mut parsed: serde_json::Value =
-            serde_json::from_str(&raw).map_err(|e| format!("解析 workflow run 失败: {}", e))?;
-        if let Some(obj) = parsed.as_object_mut() {
-            obj.insert("tasks".to_string(), serde_json::json!([]));
-        }
-        out.push(parsed);
-    }
+    // 列表只需绑定会话/展示阶段：DB 侧元数据投影 + json_extract，不载入巨大 tasks payload，
+    // repository_path/limit/status 由前端下推（status 过滤在 LIMIT 之前），避免每次返回最多 500 条无关 run。
+    let summaries = db
+        .list_workflow_run_summaries(limit.unwrap_or(500), repository_path.as_deref(), status.as_deref())?;
+    let out = summaries
+        .into_iter()
+        .map(|(workflow_run_id, session_id, repository_path, updated_at, current_stage, status)| {
+            serde_json::json!({
+                "workflowRunId": workflow_run_id,
+                "sessionId": session_id,
+                "repositoryPath": repository_path,
+                // 老数据可能缺 stage/status 字段，回退到与 createRun 一致的默认值，避免前端列表空值。
+                "currentStage": current_stage.unwrap_or_else(|| "split".to_string()),
+                "status": status.unwrap_or_else(|| "running".to_string()),
+                "updatedAt": updated_at,
+            })
+        })
+        .collect();
     Ok(out)
 }
 

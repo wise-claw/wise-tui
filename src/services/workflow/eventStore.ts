@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { WorkflowEventEnvelope, WorkflowRunDTO, WorkflowStore } from "../../types/workflow";
+import type {
+  ListWorkflowRunsInput,
+  WorkflowEventEnvelope,
+  WorkflowRunDTO,
+  WorkflowRunSummaryDTO,
+  WorkflowStore,
+} from "../../types/workflow";
 import { deleteAppSetting, getAppSetting } from "../appSettingsStore";
 
 const LEGACY_APP_SETTING_KEY_WORKFLOW_STORE = "wise.workflow.store.v1";
@@ -52,9 +58,17 @@ export class LocalWorkflowStore implements WorkflowStore {
     return loaded ?? null;
   }
 
-  async listRuns(): Promise<WorkflowRunDTO[]> {
+  async listRuns(opts?: ListWorkflowRunsInput): Promise<WorkflowRunSummaryDTO[]> {
     await ensureMigrated();
-    const runs = await invoke<WorkflowRunDTO[]>("list_workflow_runs");
+    const runs = await invoke<WorkflowRunSummaryDTO[]>("list_workflow_runs", {
+      // 空字符串归一化为 null：后端以 SQL 等值过滤，空串会落到 repository_path = '' 匹配不到任何行
+      // （旧实现 `input.repositoryPath ? ... : true` 对空串是不过滤）。
+      repositoryPath: opts?.repositoryPath || null,
+      limit: opts?.limit ?? 100,
+      // status 下推 SQL（WHERE COALESCE(status,'running') = ?），让过滤发生在 LIMIT 之前，
+      // 避免匹配 run 落在最新 N 条之外被静默裁掉。
+      status: opts?.status || null,
+    });
     return [...runs].sort((a, b) => b.updatedAt - a.updatedAt);
   }
 

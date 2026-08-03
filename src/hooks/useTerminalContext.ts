@@ -98,10 +98,24 @@ export function useTerminalContext({
 
   const rememberSurfaceSnapshot = useCallback(
     (terminalId: string, snapshot: TerminalSurfaceSnapshot) => {
-      setSurfaceSnapshots((prev) => ({
-        ...prev,
-        [terminalId]: snapshot,
-      }));
+      setSurfaceSnapshots((prev) => {
+        const existing = prev[terminalId];
+        // 值级去重：cols/rows/scrollY/cursor 均未变时复用旧引用，避免终端活动输出期间
+        // 每帧（~60Hz）setState 新对象导致 TerminalPanel 子树冗余重渲染。
+        if (
+          existing &&
+          existing.cols === snapshot.cols &&
+          existing.rows === snapshot.rows &&
+          existing.scrollY === snapshot.scrollY &&
+          existing.cursor === snapshot.cursor
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [terminalId]: snapshot,
+        };
+      });
     },
     [],
   );

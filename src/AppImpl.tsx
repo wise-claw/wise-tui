@@ -1317,6 +1317,7 @@ export default function App() {
             requestPaneCenterView(0, "messages");
             jumpToSessionWithRepository(workerSessionId);
           },
+          closeSession,
         },
         {
           mainSessionId,
@@ -1336,6 +1337,7 @@ export default function App() {
       createSession,
       executeSession,
       appendSystemMessage,
+      closeSession,
       jumpToSessionWithRepository,
       viewMode,
     ],

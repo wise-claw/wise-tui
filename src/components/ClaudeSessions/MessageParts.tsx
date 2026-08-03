@@ -154,12 +154,17 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
   const [expanded, setExpanded] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [overflows, setOverflows] = useState(false);
+  // 常驻观察者：不随流式 text 每 token 重建（旧实现以 [text, expanded] 为依赖，推理流式期
+  // 每 tick cleanup+重跑，反复 new ResizeObserver + rAF 布局读）。文本增长引起的高度变化由
+  // ResizeObserver 自身捕获，无需以 text 为依赖。
+  const observerRef = useRef<ResizeObserver | null>(null);
   const text = part.text;
   const hasBody = text.trim().length > 0;
   const collapsed = !expanded;
 
-  // 折叠态（max-height ≈ 4 行）下测量正文是否溢出；流式文本逐 token 变化时重测。
+  // 折叠态（max-height ≈ 4 行）下测量正文是否溢出；展开态不消费 overflows，免测。
   useLayoutEffect(() => {
+    if (expanded) return;
     const el = bodyRef.current;
     if (!el) return;
     let rafId = 0;
@@ -172,14 +177,15 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
       rafId = requestAnimationFrame(measure);
     };
     scheduleMeasure();
-    const observer =
-      typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
-    observer?.observe(el);
+    if (!observerRef.current && typeof ResizeObserver !== "undefined") {
+      observerRef.current = new ResizeObserver(scheduleMeasure);
+    }
+    observerRef.current?.observe(el);
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
-      observer?.disconnect();
+      observerRef.current?.disconnect();
     };
-  }, [text, expanded]);
+  }, [expanded]);
 
   return (
     <div className="app-message-part app-message-part--reasoning">

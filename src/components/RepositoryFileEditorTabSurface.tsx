@@ -266,14 +266,26 @@ function RepositoryFileEditorTabSurface({
     lastInjectedContentVersionRef.current = version;
     // 读 tabRef：避免把 tab.content 列入依赖，防抖 flush 时反复 setValue。
     const content = tabRef.current.content;
-    const view = editor.saveViewState();
+    // huge 文件无 folding（folding:false、renderLineHighlight:none），saveViewState/restoreViewState
+    // 会走全行索引重建（O(n)）。改用 cursor+scrollTop+selection 轻量快照注入完成后恢复，
+    // 省 2 次 O(n) 扫描且不丢位置与选中范围（getSelection/setSelection 为 O(1)）。
+    const view = hugeFile ? null : editor.saveViewState();
+    const savedPosition = hugeFile ? editor.getPosition() : null;
+    const savedScrollTop = hugeFile ? editor.getScrollTop() : null;
+    const savedSelection = hugeFile ? editor.getSelection() : null;
     contentInjectionCancelRef.current?.();
     const injectTimeoutMs = resolveMonacoIdleDeferTimeoutMs(hugeFile ? 96 : 0);
     contentInjectionCancelRef.current = scheduleMonacoLargeFileContentInjection(
       editor,
       content,
       () => {
-        if (view) editor.restoreViewState(view);
+        if (hugeFile) {
+          if (savedPosition) editor.setPosition(savedPosition);
+          if (savedScrollTop) editor.setScrollTop(savedScrollTop);
+          if (savedSelection) editor.setSelection(savedSelection);
+        } else if (view) {
+          editor.restoreViewState(view);
+        }
       },
       injectTimeoutMs,
     );
@@ -445,6 +457,22 @@ function RepositoryFileEditorTabSurface({
     if (!isActive || tabRef.current.diffOriginal !== undefined) return;
     const editor = editorRef.current;
     if (!editor) return;
+    if (hugeFile) {
+      // huge 文件 layout 与 reveal 拆两帧：首帧仅 layout，reveal 推到 idle 时窗，
+      // 让主线程先消化 layout + 渲染首屏再滚到目标行（避免同帧 50-100ms 同步阻塞）。
+      let revealCancel: (() => void) | undefined;
+      const frame = window.requestAnimationFrame(() => {
+        editor.layout();
+        revealCancel = runWhenIdle(
+          () => revealEditorLineFocus(editor, tabRef.current, lastAppliedFocusRef, true),
+          { timeoutMs: 32 },
+        );
+      });
+      return () => {
+        window.cancelAnimationFrame(frame);
+        revealCancel?.();
+      };
+    }
     const frame = window.requestAnimationFrame(() => {
       editor.layout();
       revealEditorLineFocus(editor, tabRef.current, lastAppliedFocusRef, true);
@@ -452,7 +480,7 @@ function RepositoryFileEditorTabSurface({
     return () => window.cancelAnimationFrame(frame);
     // 依赖不含 tab.content：仅在激活态切换、文件切换、聚焦行、diff 模式变化时
     // layout + reveal；否则每次按键编辑都会触发 editor.layout() 造成输入卡顿。
-  }, [isActive, tab.relativePath, tab.focusLine, tab.diffOriginal]);
+  }, [isActive, tab.relativePath, tab.focusLine, tab.diffOriginal, hugeFile]);
 
   // ── import/export 路径 Ctrl/Cmd+Click 导航 ──
   useEffect(() => {

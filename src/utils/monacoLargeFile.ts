@@ -16,6 +16,9 @@ export const MONACO_HUGE_FILE_CHAR_THRESHOLD = 512 * 1024;
 /** 超大文件 onChange 合并写入 React 状态的间隔（毫秒）。 */
 export const MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS = 180;
 
+/** 超大文件（≥512KB）onChange 合并间隔：渲染频次直降，编辑手感由 Monaco 本地承担。 */
+export const MONACO_HUGE_FILE_CHANGE_DEBOUNCE_MS = 500;
+
 /**
  * 编辑器可读/可写正文上限（字节，与 Tauri `MAX_EDITOR_FILE_BYTES` 对齐）。
  * 前端对已拿到的字符串用 `length` 作近似二次闸门（源码多为 ASCII，偏差可接受）。
@@ -54,6 +57,13 @@ export function shouldUseMonacoDefaultValuePath(contentLength: number): boolean 
 /** medium 及以上：onChange 合并进 React 状态。 */
 export function shouldDebounceMonacoEditorContentChange(contentLength: number): boolean {
   return contentLength >= MONACO_MEDIUM_FILE_CHAR_THRESHOLD;
+}
+
+/** medium+ onChange 合并间隔：huge 用 500ms 直降 React 渲染频次，medium/large 保持 180ms。 */
+export function resolveMonacoChangeDebounceMs(contentLength: number): number {
+  return contentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD
+    ? MONACO_HUGE_FILE_CHANGE_DEBOUNCE_MS
+    : MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS;
 }
 
 /** large/huge Diff 用 inline，避免双栏 diff 算法拖垮主线程。 */

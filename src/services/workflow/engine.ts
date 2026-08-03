@@ -152,19 +152,22 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
   }
 
   async listRuns(input: ListWorkflowRunsInput) {
-    const runs = await this.store.listRuns();
-    return runs
-      .filter((run) => (input.repositoryPath ? run.repositoryPath === input.repositoryPath : true))
-      .filter((run) => (input.status ? run.status === input.status : true))
-      .slice(0, input.limit ?? 50)
-      .map((run) => ({
-        workflowRunId: run.workflowRunId,
-        sessionId: run.sessionId,
-        repositoryPath: run.repositoryPath,
-        currentStage: run.currentStage,
-        status: run.status,
-        updatedAt: run.updatedAt,
-      }));
+    // repositoryPath/limit/status 全部下推后端 SQL（过滤发生在 LIMIT 之前），前端只做字段投影。
+    // 后端 list_workflow_run_summaries 以 COALESCE(json_extract(payload,'$.status'),'running') 过滤，
+    // 与投影层的老数据回退默认值一致，避免 status 过滤在取前 N 条之后执行时静默丢弃匹配 run。
+    const runs = await this.store.listRuns({
+      repositoryPath: input.repositoryPath,
+      limit: input.limit ?? 100,
+      status: input.status,
+    });
+    return runs.map((run) => ({
+      workflowRunId: run.workflowRunId,
+      sessionId: run.sessionId,
+      repositoryPath: run.repositoryPath,
+      currentStage: run.currentStage,
+      status: run.status,
+      updatedAt: run.updatedAt,
+    }));
   }
 
   async advanceStage(input: AdvanceStageInput): Promise<WorkflowRunDTO> {

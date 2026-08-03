@@ -11,6 +11,12 @@ import { shouldDeferNonCriticalUiWork } from "../utils/uiWorkDefer";
 import { shouldEnableMonacoGitLineDecorations } from "../utils/monacoLargeFile";
 
 /**
+ * gutter diff 防抖间隔：编辑停顿后再算，避免打字连发时每帧全量 getValue + diffLines
+ * （60/s → ~20/s）。gutter 装饰是锦上添花，无需逐键紧跟。
+ */
+export const MONACO_GIT_GUTTER_DEBOUNCE_MS = 50;
+
+/**
  * `scheduleRefresh` 内 raf 回调每帧轮询：是否允许执行本次 gutter 装饰刷新。
  *
  * 设计上必须满足"不应静默丢弃"：当主线程拥塞或 composer 正在交互时，gutter 装饰
@@ -109,6 +115,7 @@ export function useMonacoGitModifiedLineDecorations(args: {
     const baseline = baselineContent;
     let cancelled = false;
     let rafId = 0;
+    let debounceTimer = 0;
 
     const refreshFromEditor = () => {
       if (cancelled) return;
@@ -149,21 +156,27 @@ export function useMonacoGitModifiedLineDecorations(args: {
     // 这里的回调本身已经走 raf 节流 + 轻量 diff，无理由在 defer 期间静默丢弃：
     // 改成「raf 内若仍 defer 则再排一帧」，拥塞/composer 结束后自然消费掉积压的 last。
     // 决策收敛到 shouldRunDecorationRefreshNow 纯函数，便于单测断言"不静默丢"。
+    // trailing 防抖 + rAF：打字连发只保留最后一次，停顿 MONACO_GIT_GUTTER_DEBOUNCE_MS 后才算
+    // gutter diff，把每键全量 getValue+diffLines 压到编辑停顿后一次。
     const scheduleRefresh = () => {
       if (rafId) window.cancelAnimationFrame(rafId);
-      const tick = () => {
-        if (cancelled) {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = 0;
+        const tick = () => {
+          if (cancelled) {
+            rafId = 0;
+            return;
+          }
+          if (!shouldRunDecorationRefreshNow(shouldDeferNonCriticalUiWork(), editor.hasTextFocus())) {
+            rafId = window.requestAnimationFrame(tick);
+            return;
+          }
           rafId = 0;
-          return;
-        }
-        if (!shouldRunDecorationRefreshNow(shouldDeferNonCriticalUiWork(), editor.hasTextFocus())) {
-          rafId = window.requestAnimationFrame(tick);
-          return;
-        }
-        rafId = 0;
-        refreshFromEditor();
-      };
-      rafId = window.requestAnimationFrame(tick);
+          refreshFromEditor();
+        };
+        rafId = window.requestAnimationFrame(tick);
+      }, MONACO_GIT_GUTTER_DEBOUNCE_MS);
     };
 
     const contentListener = editor.onDidChangeModelContent(scheduleRefresh);
@@ -174,6 +187,7 @@ export function useMonacoGitModifiedLineDecorations(args: {
     return () => {
       cancelled = true;
       if (rafId) window.cancelAnimationFrame(rafId);
+      if (debounceTimer) window.clearTimeout(debounceTimer);
       contentListener.dispose();
       decorationRef.current?.clear();
       decorationRef.current = null;

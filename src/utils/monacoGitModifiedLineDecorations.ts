@@ -8,6 +8,9 @@ export interface MonacoLineChange {
 }
 
 function normalizeNewlines(content: string): string {
+  // 绝大多数文件不含 \r（macOS/Linux 原生换行）：先短路，避免 regex 替换产生新字符串分配
+  // 与正则引擎开销（编辑大文件时每键全量 diff 路径上成本翻倍）。
+  if (!content.includes("\r")) return content;
   return content.replace(/\r\n/g, "\n");
 }
 

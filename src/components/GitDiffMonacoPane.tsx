@@ -6,8 +6,8 @@ import { configureWiseMonacoTypeScript } from "../services/monacoTypeScriptEnvir
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
 import {
   maxMonacoContentLength,
-  MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS,
   resolveDiffEditorMountContent,
+  resolveMonacoChangeDebounceMs,
   resolveWiseMonacoEditorOptionsFromLength,
   shouldDebounceMonacoEditorContentChange,
   shouldDeferMonacoEditorMount,
@@ -249,8 +249,6 @@ export function GitDiffMonacoPane({
               const originalEditor = diffEditor.getOriginalEditor();
               const modifiedEditor = diffEditor.getModifiedEditor();
               setDiffEditors({ original: originalEditor, modified: modifiedEditor });
-              // automaticLayout 已移除：挂载后立即 layout 一次，后续由 ResizeObserver 接管。
-              diffEditor.layout();
               const guards = [
                 installMonacoTrackpadSelectionGuard(originalEditor),
                 installMonacoTrackpadSelectionGuard(modifiedEditor),
@@ -284,6 +282,12 @@ export function GitDiffMonacoPane({
                   cancelLeft();
                   cancelRight();
                 };
+              } else {
+                // automaticLayout 已移除：非 inject（受控/frozen）路径挂载后立即 layout 一次，
+                // 后续由 ResizeObserver 接管。inject（huge）路径内容为空串挂载，立即 layout
+                // 无意义，统一由右侧注入 onReady（两侧都 setValue 完）单次 layout，避免两次
+                // 全量 diff 计算。
+                diffEditor.layout();
               }
 
               if (!readOnly) {
@@ -302,7 +306,7 @@ export function GitDiffMonacoPane({
                   modifiedChangeTimerRef.current = window.setTimeout(() => {
                     modifiedChangeTimerRef.current = null;
                     flushModified();
-                  }, MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS);
+                  }, resolveMonacoChangeDebounceMs(diffContentLength));
                 });
               }
             }}

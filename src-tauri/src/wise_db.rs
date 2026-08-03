@@ -1530,6 +1530,47 @@ impl WiseDb {
     }
 
     /// 仅用于「列举运行」等场景：按时间倒序，限制条数，避免全表大 payload 进内存。
+    /// 列表所需 stage/status 通过 json_extract 从 payload 就地提取，不读 payload 整列（tasks 可极大）。
+    pub fn list_workflow_run_summaries(
+        &self,
+        limit: i64,
+        repository_path: Option<&str>,
+        status: Option<&str>,
+    ) -> Result<Vec<(String, String, String, i64, Option<String>, Option<String>)>, String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let cap = limit.clamp(1, 2000);
+        // status 过滤在 LIMIT 之前执行，避免匹配 run 落在最新 N 条之外被静默裁掉。
+        // 老数据可能缺 status 字段（json_extract 为 NULL），以 COALESCE 回退 'running'，
+        // 与 list_workflow_runs 投影层的默认值一致，避免老数据在 status 过滤下被排除。
+        let sql = "SELECT workflow_run_id, session_id, repository_path, updated_at,
+                          json_extract(payload, '$.currentStage') AS current_stage,
+                          json_extract(payload, '$.status') AS status
+                   FROM workflow_runs
+                   WHERE (?2 IS NULL OR repository_path = ?2)
+                     AND (?3 IS NULL OR COALESCE(json_extract(payload, '$.status'), 'running') = ?3)
+                   ORDER BY updated_at DESC
+                   LIMIT ?1";
+        let mut stmt = g.prepare(sql).map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![cap, repository_path, status], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        let mut out = Vec::new();
+        for item in rows {
+            out.push(item.map_err(|e| e.to_string())?);
+        }
+        Ok(out)
+    }
+
+    /// 兼容旧调用（未下推 repository_path 时取全量 payload 字符串）。
     pub fn list_workflow_run_payloads(&self, limit: i64) -> Result<Vec<String>, String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let cap = limit.clamp(1, 2000);

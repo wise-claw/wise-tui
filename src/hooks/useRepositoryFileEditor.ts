@@ -32,7 +32,7 @@ import {
   isEditorFileContentTooLarge,
   isMonacoHugeFileContent,
   isMonacoLargeFileContent,
-  MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS,
+  resolveMonacoChangeDebounceMs,
   shouldDebounceMonacoEditorContentChange,
 } from "../utils/monacoLargeFile";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
@@ -376,7 +376,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
               tab.relativePath === relativePath ? { ...tab, content: pending } : tab,
             ),
           );
-        }, MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS),
+        }, resolveMonacoChangeDebounceMs(content.length)),
       );
     },
     [paneIndex, updatePaneTabs],

@@ -99,14 +99,19 @@ function capToolUseOutputs(parts: MessagePart[]): MessagePart[] {
   });
 }
 
-function enforceAssistantMessageMemoryLimits(message: ClaudeMessage): ClaudeMessage {
+function enforceAssistantMessageMemoryLimits(
+  message: ClaudeMessage,
+  precomputedContent?: string,
+): ClaudeMessage {
   if (message.role !== "assistant") {
     return message;
   }
   let parts = capToolUseOutputs([...message.parts]);
   const trBefore = countTextReasoningChars(parts);
   if (trBefore <= MAX_ASSISTANT_TEXT_REASONING_CHARS) {
-    const content = textContentFromParts(parts);
+    // capToolUseOutputs 只截断 tool_use 的 output/error，不改变 text join 结果，
+    // 因此可安全复用调用方预计算的 content——流式每 tick 省一次 O(文本长度) join。
+    const content = precomputedContent ?? textContentFromParts(parts);
     return { ...message, parts, content };
   }
   const stripTarget = MAX_ASSISTANT_TEXT_REASONING_CHARS - TEXT_REASONING_HEADROOM;
@@ -596,11 +601,11 @@ export function appendAssistantStreamParts(
       parts: mergedParts,
       content: textContentFromParts(mergedParts),
     };
-    const capped = enforceAssistantMessageMemoryLimits(merged);
+    const capped = enforceAssistantMessageMemoryLimits(merged, merged.content);
     nextMessages = [...session.messages.slice(0, -1), capped];
   } else {
     const built = buildAssistantMessage(parts);
-    const cappedNew = enforceAssistantMessageMemoryLimits(built);
+    const cappedNew = enforceAssistantMessageMemoryLimits(built, built.content);
     nextMessages = [...session.messages, cappedNew];
   }
   return {

@@ -387,21 +387,29 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
     },
     paneAuxLayout.hideMessages,
   );
-  const centerSwitcherOptions: Array<{ label: string; value: CenterView }> = [
-    { label: "消息", value: "messages" },
-  ];
-  if (panelBelowMessages) {
-    centerSwitcherOptions.push({ label: "文件", value: "files" });
-  }
-  if (panelBelowRequirements) {
-    centerSwitcherOptions.push({ label: "需求", value: "requirements" });
-  }
-  if (panelBelowQuickActions) {
-    centerSwitcherOptions.push({ label: "快捷操作", value: "quickActions" });
-  }
-  if (terminalMounted) {
-    centerSwitcherOptions.push({ label: "终端", value: "terminal" });
-  }
+  // useMemo 稳定引用：否则每次 grid 重渲都新建数组，Topbar 的 memo(topbarPropsEqual) 对
+  // 数组做 Object.is 比较恒 false，memo 永不命中、每个 pane 重渲都整棵重渲 Topbar chrome。
+  const centerSwitcherOptions = useMemo<Array<{ label: string; value: CenterView }>>(
+    () => {
+      const options: Array<{ label: string; value: CenterView }> = [
+        { label: "消息", value: "messages" },
+      ];
+      if (panelBelowMessages) {
+        options.push({ label: "文件", value: "files" });
+      }
+      if (panelBelowRequirements) {
+        options.push({ label: "需求", value: "requirements" });
+      }
+      if (panelBelowQuickActions) {
+        options.push({ label: "快捷操作", value: "quickActions" });
+      }
+      if (terminalMounted) {
+        options.push({ label: "终端", value: "terminal" });
+      }
+      return options;
+    },
+    [panelBelowMessages, panelBelowRequirements, panelBelowQuickActions, terminalMounted],
+  );
   const handleCenterViewChange = useCallback(
     (view: CenterView) => {
       // 打开文件会 collapse 终端；Segmented 切回「终端」时必须先恢复可见，
@@ -453,8 +461,9 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         />
       ) : null}
       <CenterViewControlContext.Provider value={requestCenterView}>
+      {/* 与单屏路径对齐：不设 key={sessionId}，靠 ClaudeChat 内部 [session.id] reset effect 复位
+          通知瞬态量，避免切主会话整树 remount 让运行面板/git panel/feature panel 闪一下。 */}
       <ClaudeSessionChatWithDock
-        key={sessionId}
         session={session}
         activeSessionId={activeSessionId}
         sessions={shared.sessions}
@@ -555,7 +564,13 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   prev.workflowTasks === next.workflowTasks &&
   prev.initialNotificationPanelCollapsed === next.initialNotificationPanelCollapsed &&
   prev.onCreateNewSession === next.onCreateNewSession &&
-  prev.paneAuxLayout === next.paneAuxLayout &&
+  // resolveLayout 每次 grid 重渲都新建 paneAuxLayout 对象，身份比较恒 false 会击穿 memo；
+  // 与 MultiPaneExtraPaneCell 对齐改为逐字段比较。
+  prev.paneAuxLayout.panelBelowMessages === next.paneAuxLayout.panelBelowMessages &&
+  prev.paneAuxLayout.panelBelowRequirements === next.paneAuxLayout.panelBelowRequirements &&
+  prev.paneAuxLayout.panelBelowQuickActions === next.paneAuxLayout.panelBelowQuickActions &&
+  prev.paneAuxLayout.hideMessages === next.paneAuxLayout.hideMessages &&
+  prev.paneAuxLayout.hideSessionTools === next.paneAuxLayout.hideSessionTools &&
   prev.paneCount === next.paneCount &&
   prev.shared.primaryPaneRuntimeOverride === next.shared.primaryPaneRuntimeOverride &&
   prev.shared.onUpdatePaneRuntimeOverride === next.shared.onUpdatePaneRuntimeOverride &&
@@ -689,15 +704,22 @@ const MultiPaneExtraPaneCell = memo(
       },
       hidePaneMessages,
     );
-    const centerSwitcherOptions: Array<{ label: string; value: CenterView }> = [
-      { label: "消息", value: "messages" },
-    ];
-    if (panelBelowMessages) {
-      centerSwitcherOptions.push({ label: "文件", value: "files" });
-    }
-    if (terminalMounted) {
-      centerSwitcherOptions.push({ label: "终端", value: "terminal" });
-    }
+    // useMemo 稳定引用：让 pane 级 Topbar 的 memo 恢复命中（数组 Object.is 恒 false 会击穿）。
+    const centerSwitcherOptions = useMemo<Array<{ label: string; value: CenterView }>>(
+      () => {
+        const options: Array<{ label: string; value: CenterView }> = [
+          { label: "消息", value: "messages" },
+        ];
+        if (panelBelowMessages) {
+          options.push({ label: "文件", value: "files" });
+        }
+        if (terminalMounted) {
+          options.push({ label: "终端", value: "terminal" });
+        }
+        return options;
+      },
+      [panelBelowMessages, terminalMounted],
+    );
     const handleCenterViewChange = useCallback(
       (view: CenterView) => {
         if (view === "terminal") {
@@ -829,7 +851,6 @@ const MultiPaneExtraPaneCell = memo(
           ) : null}
           <CenterViewControlContext.Provider value={requestCenterView}>
           <ClaudeSessionChatWithDock
-            key={sessionId}
             session={paneSession}
             activeSessionId={activeSessionId}
             sessions={shared.sessions}
@@ -1183,6 +1204,13 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
   const [twoPaneSplitRatio, setTwoPaneSplitRatio] = useState(DEFAULT_TWO_PANE_SPLIT_RATIO);
   const [twoPaneContainerWidthPx, setTwoPaneContainerWidthPx] = useState(0);
   const prevPaneCountRef = useRef(paneCount);
+
+  // 卸载清理：ClaudeSessionsChatHost 以 paneCount > 1 门控本组件，屏数 2→1（或关闭多屏）
+  // 时组件直接卸载，[paneCount] effect 不再执行，activePaneIndex 残留旧索引会让
+  // handleToggleTerminal/handleCloseTerminalPanel 把终端切到幽灵 pane。卸载时统一重置回 primary。
+  useEffect(() => {
+    return () => resetActivePaneIndex();
+  }, []);
 
   const { rows, cols } = paneGridDimensions(paneCount);
 

@@ -55,6 +55,7 @@ import {
   resolveExpectedTurnNonceForTab,
   shouldApplyClaudeTurnComplete,
 } from "../utils/claudeTurnCompleteGate";
+import { isWiseAppFocused } from "../utils/isWiseAppFocused";
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
 type SetActiveSessionId = (updater: (prev: string | null) => string | null) => void;
@@ -210,11 +211,30 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   /** content_block_start 与下一 delta 分行到达时，暂存 merge 边界标记。 */
   const pendingMergeOptionsByTabRef = new Map<string, MergeAssistantPartsOptions>();
 
-  function takePendingMergeOptions(tid: string): MergeAssistantPartsOptions | undefined {
+  /** 按本批 part 类型选择性消费 pending 边界标志：startNewTextBlock 只被 text part 消费、
+   *  startNewReasoningBlock 只被 reasoning part 消费。类型不匹配的批次（如纯 tool_use）不吞掉
+   *  标志，避免 content_block_start(text) 后先到的 tool/reasoning updater 误删边界致总结并段。 */
+  function takePendingMergeOptions(
+    tid: string,
+    partTypes: Array<MessagePart["type"]>,
+  ): MergeAssistantPartsOptions | undefined {
     const pending = pendingMergeOptionsByTabRef.get(tid);
     if (!pending) return undefined;
-    pendingMergeOptionsByTabRef.delete(tid);
-    return pending;
+    const wanted = new Set(partTypes);
+    const options: MergeAssistantPartsOptions = {};
+    if (pending.startNewTextBlock && wanted.has("text")) {
+      options.startNewTextBlock = true;
+      pending.startNewTextBlock = false;
+    }
+    if (pending.startNewReasoningBlock && wanted.has("reasoning")) {
+      options.startNewReasoningBlock = true;
+      pending.startNewReasoningBlock = false;
+    }
+    if (!pending.startNewTextBlock && !pending.startNewReasoningBlock) {
+      pendingMergeOptionsByTabRef.delete(tid);
+    }
+    const hasAny = options.startNewTextBlock === true || options.startNewReasoningBlock === true;
+    return hasAny ? options : undefined;
   }
 
   function stashPendingMergeOptions(
@@ -293,9 +313,13 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
           // 与 key={session.id} 聊天区 remount（致输入框失焦）。worker 会话一直走此路径。
           updated = { ...updated, claudeSessionId: realSessionId };
         }
-        const effectiveMergeOptions = mergeOptions ?? takePendingMergeOptions(tid);
         if (dedupedParts.length > 0 && !isInit) {
           const { toolResults, streamParts } = partitionStreamMessageParts(dedupedParts);
+          // 边界标志按本批 part 类型选择性消费（见 takePendingMergeOptions），
+          // 类型不匹配的批次不吞标志，text/reasoning 边界标志保留给后续匹配批次。
+          const effectiveMergeOptions =
+            mergeOptions ??
+            takePendingMergeOptions(tid, streamParts.map((p) => p.type));
           if (toolResults.length > 0) {
             updated = applyToolResultPartsToSession(updated, toolResults);
           }
@@ -663,6 +687,9 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       return;
     }
     // 单屏：与 invocation 路径共用 tab 映射，`system.init` 后 tab id 会变为 Claude session_id，旧 ref 须经 sessionIdMap 解析。
+    // 全局 claude-output 通道被所有主窗口共享监听（仅 attach 失败时后端才发全局通道），
+    // 非聚焦窗口消费会把本窗口输出灌入活动会话造成跨窗口串流，故加焦点守卫。
+    if (!isWiseAppFocused()) return;
     handleOutputForSendTab(refTid, payload);
   }
 
@@ -760,6 +787,22 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     return false;
   }
 
+  /** 消费本轮 expected nonce：同一 nonce 的 complete 只接受一次投递。双通道（session + invocation）
+   *  同时送达同一 complete 时，第二次经 shouldApplyClaudeTurnComplete(false) 被拦截，
+   *  避免重复 finalize + notifyCompletion。 */
+  function consumeExpectedTurnNonceForTab(tabId: string, turnNonce: number): void {
+    const map = expectedTurnNonceByTabIdRef?.current;
+    if (!map) return;
+    const session = sessionsRef.current.find((s) => s.id === tabId || s.claudeSessionId === tabId);
+    const keys = new Set<string>([tabId]);
+    if (session?.id) keys.add(session.id);
+    const cc = session?.claudeSessionId?.trim();
+    if (cc) keys.add(cc);
+    for (const key of keys) {
+      if (map.get(key) === turnNonce) map.delete(key);
+    }
+  }
+
   function applySessionComplete(
     tid: string,
     payload: unknown,
@@ -837,26 +880,25 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     }
     if (!opts?.uiOnly) {
       notifyCompletion({ tid, success: uiSuccess, nonce: turnNonce, previewRaw, structuredVerdict });
+      // 消费本轮 expected nonce：同一 nonce 的 complete 只接受一次投递，双通道二次送达被门禁拦截。
+      consumeExpectedTurnNonceForTab(tid, turnNonce);
       if (isDocumentHidden()) {
         pushDeferred(deferredCompletes, { tid, payload, turnNonce });
         return true;
       }
     }
     setSessions((prev) => {
-      let sessions = prev.map((s) => {
+      const sessions = prev.map((s) => {
         if (s.id !== tid && s.claudeSessionId !== tid) return s;
         const boundCursorAgentId = extractCursorAgentIdFromCompletePayload(payload);
         if (!boundCursorAgentId) return s;
         return { ...s, claudeSessionId: boundCursorAgentId };
       });
-      if (uiSuccess && previewRaw) {
-        sessions = appendAssistantPreviewTextMessage(sessions, tid, previewRaw);
-      }
       const effectiveNoAssistantReply =
         extractLatestAssistantPlainText(
           sessions.find((s) => s.id === tid || s.claudeSessionId === tid),
         ).trim().length === 0;
-      return finalizeSessionAfterComplete({
+      const finalized = finalizeSessionAfterComplete({
         sessions,
         targetId: tid,
         success: uiSuccess,
@@ -864,6 +906,13 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         streamingResident,
         executionEngine,
       });
+      // finalize 先把 status 置 idle/completed，appendAssistantPreviewTextMessage 的
+      // running/connecting 守卫才放行。原顺序（先 append 后 finalize）在会话仍 running 时
+      // append 恒被守卫拒绝为 no-op，「防闪空」兜底永不触发。append 移到 finalize 后真正补气泡。
+      if (uiSuccess && previewRaw) {
+        return appendAssistantPreviewTextMessage(finalized, tid, previewRaw);
+      }
+      return finalized;
     });
     if (uiSuccess && session) {
       finalizeTodosAfterSuccessfulTurn(session.id, session.messages);
@@ -949,6 +998,9 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       boundNonce: lastUserSendNonceRef.current,
     });
     if (nonceForTurn === undefined) return;
+    // 单屏兜底：全局 claude-complete 通道被所有主窗口共享监听（attach 失败降级时后端才发全局通道），
+    // 非聚焦窗口消费会跨窗口误完结会话（stale complete 二次 finalize），故加焦点守卫。
+    if (!isWiseAppFocused()) return;
     handleCompleteForSendTab(refTid, payload, nonceForTurn);
   }
 
@@ -977,6 +1029,8 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       // 定向 invocation 通道仍会投递 claude-error:invocation:{inv}；codex/cursor/opencode 不 emit claude-error。
       return;
     }
+    // 单屏兜底：全局 claude-error 通道被所有主窗口共享监听，非聚焦窗口消费会跨窗口串流错误态，加焦点守卫。
+    if (!isWiseAppFocused()) return;
     handleErrorForSendTab(refTid, payload);
   }
 

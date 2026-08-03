@@ -3,12 +3,14 @@ import type {
   GateCheckBatchDTO,
   GateEngine,
   GateType,
+  ListWorkflowRunsInput,
   OmcWorkflowAdapter,
   RunGateChecksInput,
   TaskRouter,
   TrellisExecutionMetadata,
   WorkflowEventEnvelope,
   WorkflowRunDTO,
+  WorkflowStatus,
   WorkflowStore,
 } from "../../types/workflow";
 import { DefaultWorkflowEngine } from "./engine";
@@ -25,7 +27,10 @@ class MemoryWorkflowStore implements WorkflowStore {
     return this.runs.get(workflowRunId) ?? null;
   }
 
-  async listRuns(): Promise<WorkflowRunDTO[]> {
+  public lastListRunsInput: ListWorkflowRunsInput | undefined;
+
+  async listRuns(input?: ListWorkflowRunsInput): Promise<WorkflowRunDTO[]> {
+    this.lastListRunsInput = input;
     return Array.from(this.runs.values());
   }
 
@@ -121,7 +126,41 @@ function createEngineHarness() {
   return { engine, store, adapter };
 }
 
+function stubRun(id: string, status: WorkflowStatus, repositoryPath = "/tmp/repo"): WorkflowRunDTO {
+  return {
+    workflowRunId: id,
+    sessionId: `s-${id}`,
+    repositoryPath,
+    currentStage: "split",
+    status,
+    startedAt: 0,
+    updatedAt: 0,
+    stageStates: [],
+    tasks: [],
+    taskSnapshotId: id,
+  };
+}
+
 describe("DefaultWorkflowEngine", () => {
+  test("listRuns 把 status/repositoryPath/limit 下推给 store（过滤发生在 SQL LIMIT 之前）", async () => {
+    const { engine, store } = createEngineHarness();
+    await store.saveRun(stubRun("r1", "running"));
+    await store.saveRun(stubRun("r2", "completed"));
+    const runs = await engine.listRuns({
+      repositoryPath: "/tmp/repo",
+      status: "running",
+      limit: 10,
+    });
+    expect(store.lastListRunsInput).toEqual({
+      repositoryPath: "/tmp/repo",
+      limit: 10,
+      status: "running",
+    });
+    // status 下推后引擎不再前端 filter：两条都返回，过滤交由 store/SQL 决定，
+    // 避免匹配 run 落在最新 N 条之外被静默丢弃。
+    expect(runs).toHaveLength(2);
+  });
+
   test("createRun initializes with split stage", async () => {
     const engine = createEngine();
     const run = await engine.createRun({

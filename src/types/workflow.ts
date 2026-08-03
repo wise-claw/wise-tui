@@ -334,7 +334,8 @@ export interface ReplayEventsInput {
 export interface WorkflowStore {
   saveRun(run: WorkflowRunDTO): Promise<void>;
   loadRun(workflowRunId: string): Promise<WorkflowRunDTO | null>;
-  listRuns(): Promise<WorkflowRunDTO[]>;
+  /** 列表只返回摘要字段；repositoryPath/limit 下推后端过滤，避免拉回巨大 tasks payload。 */
+  listRuns(opts?: ListWorkflowRunsInput): Promise<WorkflowRunSummaryDTO[]>;
   appendEvent(event: WorkflowEventEnvelope): Promise<void>;
   listEvents(workflowRunId: string, options?: { from?: number; until?: number }): Promise<WorkflowEventEnvelope[]>;
 }

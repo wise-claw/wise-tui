@@ -663,6 +663,10 @@ export function ClaudeChatInner({
    * 后两者防「同一帧重入 / status 翻转延迟」，本追踪器防「持续抛错的无限重派」。
    */
   const dispatchFailureTrackerRef = useRef(createDispatchFailureTracker());
+  /** 退避重入队的 setTimeout 句柄：会话切换/卸载时清理，避免把旧会话任务派发到新会话队列。 */
+  const dispatchRequeueTimerRef = useRef<number | null>(null);
+  const dispatchRequeueSessionIdRef = useRef(session.id);
+  dispatchRequeueSessionIdRef.current = session.id;
 
   const wasRunningRef = useRef(session.status === "running");
   const deferredSendNextRef = useRef(false);
@@ -742,7 +746,17 @@ export function ClaudeChatInner({
             return;
           }
           // 退避重入队：延迟 addTask + flush，避免立即重派形成紧循环。
-          window.setTimeout(() => {
+          // timer 绑定发起会话：会话切换/卸载时清理，触发时校验会话未变才重入队，
+          // 否则把旧会话任务派发到新会话共享队列（串会话执行）或已卸载组件 state（静默丢失）。
+          const requeueSessionId = session.id;
+          if (dispatchRequeueTimerRef.current !== null) {
+            window.clearTimeout(dispatchRequeueTimerRef.current);
+          }
+          dispatchRequeueTimerRef.current = window.setTimeout(() => {
+            dispatchRequeueTimerRef.current = null;
+            if (dispatchRequeueSessionIdRef.current !== requeueSessionId) {
+              return;
+            }
             addTask({
               promptText,
               executorLabel,
@@ -1167,6 +1181,11 @@ export function ClaudeChatInner({
     lastPendingFlushGateKeyRef.current = "";
     // 会话切换：清空派发失败计数，避免新会话的同指纹任务被旧计数误判 drop。
     dispatchFailureTrackerRef.current.clear();
+    // 会话切换：清理上一会话遗留的退避重入队 timer，防止任务重入队到新会话队列。
+    if (dispatchRequeueTimerRef.current !== null) {
+      window.clearTimeout(dispatchRequeueTimerRef.current);
+      dispatchRequeueTimerRef.current = null;
+    }
     // 轮次状态按 tabSessionId 隔离，切换会话不会继承上一个会话的门闸，无需在此重置。
     const sid = session.id;
     const rp = session.repositoryPath;
@@ -1210,6 +1229,11 @@ export function ClaudeChatInner({
     })();
     return () => {
       cancelled = true;
+      // 卸载/切会话：清退避重入队 timer，避免 timer 回调访问已卸载组件 state。
+      if (dispatchRequeueTimerRef.current !== null) {
+        window.clearTimeout(dispatchRequeueTimerRef.current);
+        dispatchRequeueTimerRef.current = null;
+      }
     };
   }, [session.id, session.repositoryPath]);
 

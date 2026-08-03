@@ -44,6 +44,8 @@ export type ExecutionEnvironmentDispatchDeps = {
   activateWorkerSession?: (workerSessionId: string) => void;
   /** 测试可注入；默认 `loadDefaultInstructionResolveContext`。 */
   loadInstructionResolveContext?: typeof loadDefaultInstructionResolveContext;
+  /** executeSession 返回 false（并发门闸/未真正 spawn）或创建失败时清理空壳 worker 会话，避免侧栏留 idle 幽灵 tab。 */
+  closeSession?: (sessionId: string) => void | Promise<void>;
 };
 
 function resolveEngineAvailability(deps: ExecutionEnvironmentDispatchDeps) {
@@ -132,7 +134,7 @@ export async function dispatchExecutionEnvironmentFromMainSession(
 
   // Claude Code：streaming；Codex/Cursor 等仍 oneshot。
   const connectionKind = plan.executionEngine === "claude" ? "streaming" : "oneshot";
-  const sessionIds = await Promise.all(
+  const createOutcomes = await Promise.allSettled(
     sessionSpecs.map((spec) =>
       deps.createSession(mainSession.repositoryPath, spec.label, {
         skipActivate: true,
@@ -141,6 +143,16 @@ export async function dispatchExecutionEnvironmentFromMainSession(
       }),
     ),
   );
+  const sessionIds: string[] = [];
+  for (const outcome of createOutcomes) {
+    if (outcome.status === "fulfilled") sessionIds.push(outcome.value);
+  }
+  if (sessionIds.length !== sessionSpecs.length) {
+    // 部分创建失败：清理已成功创建的空壳，避免泄漏；整体提示失败（此前 Promise.all 会形成未处理 rejection）。
+    for (const id of sessionIds) void deps.closeSession?.(id);
+    message.error("新建执行环境会话失败，请稍后重试。");
+    return false;
+  }
 
   for (let i = 0; i < sessionSpecs.length; i += 1) {
     const sessionId = sessionIds[i]!;
@@ -150,6 +162,9 @@ export async function dispatchExecutionEnvironmentFromMainSession(
     });
     if (spawnOk === false) {
       blocked += 1;
+      // 清理未真正启动的空壳 worker 会话：executeSession 被并发门闸挡住时不会自行清理，
+      // 留着会在侧栏出现永远 idle 的幽灵 tab（started===0 时更是整批泄漏）。
+      void deps.closeSession?.(sessionId);
       continue;
     }
     if (!firstStartedSessionId) firstStartedSessionId = sessionId;

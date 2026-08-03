@@ -7,13 +7,16 @@ import {
   isMonacoHugeFileContent,
   isMonacoLargeFileContent,
   maxMonacoContentLength,
+  MONACO_HUGE_FILE_CHANGE_DEBOUNCE_MS,
   MONACO_HUGE_FILE_CHAR_THRESHOLD,
+  MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS,
   MONACO_LARGE_FILE_CHAR_THRESHOLD,
   MONACO_MEDIUM_FILE_CHAR_THRESHOLD,
   monacoEditorOptionsBucket,
   EDITOR_FILE_MAX_BYTES,
   isEditorFileContentTooLarge,
   resolveFileEditorKeepAliveLimit,
+  resolveMonacoChangeDebounceMs,
   resolveMonacoEditorLanguage,
   resolveWiseMonacoEditorOptions,
   shouldDeferMonacoEditorMount,
@@ -33,6 +36,20 @@ import {
 } from "./wiseMonacoEditorOptions";
 
 describe("monacoLargeFile", () => {
+  test("resolveMonacoChangeDebounceMs 按规模分级 onChange 合并间隔", () => {
+    // small/medium/large 保持 180ms，huge（≥512KB）提到 500ms 直降 React 渲染频次。
+    expect(resolveMonacoChangeDebounceMs(0)).toBe(MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS);
+    expect(resolveMonacoChangeDebounceMs(MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe(
+      MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS,
+    );
+    expect(resolveMonacoChangeDebounceMs(MONACO_HUGE_FILE_CHAR_THRESHOLD - 1)).toBe(
+      MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS,
+    );
+    expect(resolveMonacoChangeDebounceMs(MONACO_HUGE_FILE_CHAR_THRESHOLD)).toBe(
+      MONACO_HUGE_FILE_CHANGE_DEBOUNCE_MS,
+    );
+  });
+
   test("classifies content by thresholds", () => {
     const small = "a".repeat(MONACO_LARGE_FILE_CHAR_THRESHOLD - 1);
     const large = "a".repeat(MONACO_LARGE_FILE_CHAR_THRESHOLD);
