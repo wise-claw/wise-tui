@@ -28,11 +28,14 @@ export function formatExecutionEnvironmentDispatchSavedTime(timestamp: number): 
 }
 
 /**
- * App 壳层 useMemo / effect 依赖：跟踪会话结构，忽略同一条消息内的流式正文增长。
+ * App 壳层 useMemo / effect 依赖：跟踪会话结构。
+ * 忽略同一条消息内的流式正文增长；running/connecting 时也忽略消息条数与末条 id，
+ * 避免多会话并行工具流把 structure 订阅（App / 侧栏）打满。
  */
 export function sessionsReactiveStructureKey(sessions: readonly ClaudeSession[]): string {
   const parts: string[] = [`n:${sessions.length}`];
   for (const session of sessions) {
+    const streaming = session.status === "running" || session.status === "connecting";
     const last = session.messages[session.messages.length - 1];
     parts.push(
       [
@@ -43,9 +46,11 @@ export function sessionsReactiveStructureKey(sessions: readonly ClaudeSession[])
         // createdAt 参与侧栏「最近活跃」排序；仅 bump 排序时间时也必须推进结构指纹，
         // 否则 subscribeLive:false 的 LeftSidebar memo 不会重排。
         String(session.createdAt),
-        String(session.messages.length),
-        last?.id ?? "",
-        last?.role ?? "",
+        // 多会话并行时，running 态每来一条工具/助手消息都会改 length/last.id，
+        // 若写入结构指纹会拖垮 App 壳与侧栏（正文已由 per-session live 投递）。
+        streaming ? "run" : String(session.messages.length),
+        streaming ? "" : (last?.id ?? ""),
+        streaming ? "" : (last?.role ?? ""),
       ].join("|"),
     );
   }

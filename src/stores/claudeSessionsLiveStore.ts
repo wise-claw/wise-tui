@@ -37,11 +37,13 @@ function liveFlushMinIntervalMs(): number {
   if (isFileTreeScrollActive()) return 200;
   if (isWorkspacePriorityReliefActive()) return 195;
   if (isSidePanelPriorityReliefActive()) return 180;
+  // 多会话同时有 pending live 时拉长合并窗口，避免 N 路流式把主线程打满。
+  const multiSessionLive = pendingSessionLiveIds.size > 1;
   // 消息列表正在贴底跟随时加快 flush，降低「字顿一下才出来」的体感延迟。
   if (!getClaudeChatUserPausedFollow()) {
-    return 48;
+    return multiSessionLive ? 96 : 48;
   }
-  return 100;
+  return multiSessionLive ? 160 : 100;
 }
 
 let liveFlushRaf: number | null = null;
@@ -74,6 +76,17 @@ function flushLiveListeners(): void {
   lastLiveFlushAt = typeof performance !== "undefined" ? performance.now() : 0;
   const sessionIds = [...pendingSessionLiveIds];
   pendingSessionLiveIds.clear();
+  // 后台会话流式时也会入队；若当前没有任何 live 订阅者，跳过 startTransition。
+  let hasWork = liveListeners.size > 0;
+  if (!hasWork) {
+    for (const sessionId of sessionIds) {
+      if (sessionLiveListeners.get(sessionId)?.size) {
+        hasWork = true;
+        break;
+      }
+    }
+  }
+  if (!hasWork) return;
   startTransition(() => {
     for (const listener of liveListeners) {
       listener();
@@ -156,12 +169,10 @@ export function getClaudeSessionsStructureKey(): string {
 }
 
 export function publishClaudeSessions(next: ClaudeSession[]): void {
-  const prev = sessionsSnapshot;
   sessionsSnapshot = next;
 
-  // diff 出引用变化的 session（只 notify 这些），同时顺带建 next 的 id 索引供 getSnapshot O(1) 查询。
-  const prevById = new Map<string, ClaudeSession>();
-  for (const session of prev) prevById.set(session.id, session);
+  // 复用上一轮 id 索引做 diff，避免每帧再扫一遍 prev 建 Map（多会话流式时 O(n) 翻倍）。
+  const prevById = sessionById;
   const nextById = new Map<string, ClaudeSession>();
   for (const session of next) {
     nextById.set(session.id, session);

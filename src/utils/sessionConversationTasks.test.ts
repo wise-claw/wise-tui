@@ -888,6 +888,40 @@ describe("sessionsReactiveStructureKey", () => {
     expect(sessionsReactiveStructureKey([short])).toBe(sessionsReactiveStructureKey([longer]));
   });
 
+  test("ignores new tool messages while session is running (multi-session shell stability)", () => {
+    const before = session({
+      id: "worker",
+      status: "running",
+      messages: [{ id: "u1", role: "user", content: "go", timestamp: 1 }],
+    });
+    const after = session({
+      id: "worker",
+      status: "running",
+      messages: [
+        { id: "u1", role: "user", content: "go", timestamp: 1 },
+        { id: "a1", role: "assistant", content: "tool", timestamp: 2 },
+      ],
+    });
+    expect(sessionsReactiveStructureKey([before])).toBe(sessionsReactiveStructureKey([after]));
+  });
+
+  test("status change while running still advances structure key", () => {
+    const running = session({
+      id: "worker",
+      status: "running",
+      messages: [{ id: "u1", role: "user", content: "go", timestamp: 1 }],
+    });
+    const completed = session({
+      id: "worker",
+      status: "completed",
+      messages: [
+        { id: "u1", role: "user", content: "go", timestamp: 1 },
+        { id: "a1", role: "assistant", content: "done", timestamp: 2 },
+      ],
+    });
+    expect(sessionsReactiveStructureKey([running])).not.toBe(sessionsReactiveStructureKey([completed]));
+  });
+
   test("createdAt bump changes structure key so sidebar can re-sort", () => {
     const before = session({ id: "empty", createdAt: 100, messages: [] });
     const after = session({ id: "empty", createdAt: 200, messages: [] });

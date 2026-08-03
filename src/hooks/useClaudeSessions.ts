@@ -145,6 +145,8 @@ import {
 } from "../services/claudeSessionState";
 import { markSessionToolUseStopped } from "../utils/sessionConversationTasks";
 import { isTerminalWorkerWiseTab, sanitizeTerminalWorkerTranscriptMessages, waitForTerminalWorkerTurnStarted } from "../services/terminalDispatch";
+import { isExecutionEnvironmentWorkerRepositoryName } from "../utils/executionEnvironmentDispatch";
+import { isFeedbackLoopWorkerRepositoryName } from "../utils/sessionFeedbackLoopDispatch";
 import { sessionShouldRetainMessagesWhenInactive } from "../utils/sessionMessagesRetainPolicy";
 import {
   resolveDiskTranscriptSessionKey,
@@ -329,8 +331,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (isTerminalWorkerWiseTab(session)) {
         keep.add(session.id);
       }
-      // 派发执行环境 / 反馈循环 / `@引擎` 普通会话：完成后也不应被全局预算清零。
-      if (sessionShouldRetainMessagesWhenInactive(session)) {
+      // 全局预算：仅永久保留旧式 `/执行环境:` / 神经网 worker。
+      // `@引擎` 普通会话靠切标签不清空（sessionShouldRetainMessagesWhenInactive），
+      // 但完成后仍可被全局预算回收，避免多路派发后 keep 集膨胀拖垮流式。
+      if (
+        isExecutionEnvironmentWorkerRepositoryName(session.repositoryName ?? "") ||
+        isFeedbackLoopWorkerRepositoryName(session.repositoryName ?? "")
+      ) {
         keep.add(session.id);
       }
     }

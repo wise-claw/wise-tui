@@ -32,10 +32,22 @@ describe("claudeSessionsLiveStore", () => {
     expect(getClaudeSessionsSnapshot()[0]?.messages).toHaveLength(2);
   });
 
-  test("structure key changes when message count changes", () => {
+  test("structure key ignores message count growth while session is running", () => {
     publishClaudeSessions([stubSession("a", 1)]);
     const key1 = getClaudeSessionsStructureKey();
     publishClaudeSessions([stubSession("a", 2)]);
+    const key2 = getClaudeSessionsStructureKey();
+    expect(key1).toBe(key2);
+  });
+
+  test("structure key changes when idle session message count changes", () => {
+    const idle = (count: number): ClaudeSession => ({
+      ...stubSession("a", count),
+      status: "idle",
+    });
+    publishClaudeSessions([idle(1)]);
+    const key1 = getClaudeSessionsStructureKey();
+    publishClaudeSessions([idle(2)]);
     const key2 = getClaudeSessionsStructureKey();
     expect(key1).not.toBe(key2);
   });
