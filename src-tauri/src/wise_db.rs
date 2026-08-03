@@ -1570,23 +1570,6 @@ impl WiseDb {
         Ok(out)
     }
 
-    /// 兼容旧调用（未下推 repository_path 时取全量 payload 字符串）。
-    pub fn list_workflow_run_payloads(&self, limit: i64) -> Result<Vec<String>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        let cap = limit.clamp(1, 2000);
-        let mut stmt = g
-            .prepare("SELECT payload FROM workflow_runs ORDER BY updated_at DESC LIMIT ?1")
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map(params![cap], |row| row.get::<_, String>(0))
-            .map_err(|e| e.to_string())?;
-        let mut out = Vec::new();
-        for item in rows {
-            out.push(item.map_err(|e| e.to_string())?);
-        }
-        Ok(out)
-    }
-
     /// Claude 标签从临时 id 合并为 `session_id` 后，同步工作流库中的会话引用，保证 OMC 批量 / 团队任务与「执行详情」跳转仍可用。
     pub fn migrate_claude_tab_session_references(
         &self,
