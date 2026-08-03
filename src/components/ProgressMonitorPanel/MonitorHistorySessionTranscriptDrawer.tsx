@@ -131,7 +131,7 @@ export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistor
   const peekTranscriptClaudeId = liveSession?.claudeSessionId?.trim() ?? "";
   const peekHasDiskTranscript =
     liveSession != null &&
-    sessionHasDiskTranscript(liveSession, resolveSessionExecutionEngine(liveSession));
+    sessionHasDiskTranscript(liveSession, resolveSessionExecutionEngine(liveSession, [], []));
   const peekNeedsFullTranscript = !liveSession?.transcriptMemoryUnlimited;
 
   const missingTerminalAssistant =
@@ -235,7 +235,7 @@ export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistor
     if (
       onReloadFullDiskTranscript &&
       (found.claudeSessionId?.trim() ||
-        sessionHasDiskTranscript(found, resolveSessionExecutionEngine(found))) &&
+        sessionHasDiskTranscript(found, resolveSessionExecutionEngine(found, [], []))) &&
       !(isTerminalWorkerWiseTab(found) && latestTerminalTurnHasAssistant(found.messages))
     ) {
       diskReloadAttemptedRef.current = null;
