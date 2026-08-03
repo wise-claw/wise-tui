@@ -4812,8 +4812,8 @@
 }
 
 .app-claude-messages .app-message-part-reasoning-shell {
-  --app-reasoning-font-size: 11px;
-  --app-reasoning-line-height: 1.45;
+  --app-reasoning-font-size: 13px;
+  --app-reasoning-line-height: 1.5;
   --app-reasoning-content-color: color-mix(in srgb, var(--ant-color-text) 82%, var(--ant-color-text-secondary));
   padding: 4px 6px;
   border-radius: 6px;
@@ -4911,8 +4911,8 @@
 }
 
 .app-claude-messages .app-message-part-reasoning-label__icon svg {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
 }
 
 .app-claude-messages .app-message-part-reasoning-collapsible {
@@ -5029,8 +5029,8 @@
   max-width: 100%;
   box-sizing: border-box;
   color: var(--app-reasoning-content-color, var(--ant-color-text-secondary));
-  font-size: var(--app-reasoning-font-size, 11px);
-  line-height: var(--app-reasoning-line-height, 1.45);
+  font-size: var(--app-reasoning-font-size, 13px);
+  line-height: var(--app-reasoning-line-height, 1.5);
 }
 
 .app-message-parts__tool-group {
@@ -5239,8 +5239,8 @@
 }
 
 .app-message-part-reasoning-show__icon svg {
-  width: 11px;
-  height: 11px;
+  width: 13px;
+  height: 13px;
 }
 
 /* 正文跟在浮动 lead 后绕排，第二行起从左侧铺满，避免图标下方留白 */
@@ -5287,8 +5287,8 @@
   border: none;
   background: transparent;
   color: var(--ant-color-primary);
-  font-size: 11px;
-  line-height: var(--app-reasoning-line-height, 1.45);
+  font-size: 12px;
+  line-height: var(--app-reasoning-line-height, 1.5);
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
@@ -5749,8 +5749,8 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-message-part-reasoning-shell {
-  --app-reasoning-font-size: 11px;
-  --app-reasoning-line-height: 1.45;
+  --app-reasoning-font-size: 13px;
+  --app-reasoning-line-height: 1.5;
   --app-reasoning-content-color: color-mix(in srgb, var(--ant-color-text) 82%, var(--ant-color-text-secondary));
   padding: 4px 6px;
   border-radius: 6px;
@@ -5791,7 +5791,7 @@ button.app-message-part-header:disabled:hover {
   width: auto;
   overflow: hidden;
   display: block;
-  line-height: var(--app-reasoning-line-height, 1.45);
+  line-height: var(--app-reasoning-line-height, 1.5);
 }
 
 .app-message-part-reasoning-inline-row .app-markdown p:only-child {
@@ -5853,8 +5853,8 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-message-part-reasoning-label__icon svg {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
 }
 
 .app-message-part-reasoning-collapsible {
@@ -5868,7 +5868,7 @@ button.app-message-part-header:disabled:hover {
   align-items: flex-start;
   gap: 4px;
   min-width: 0;
-  min-height: calc(var(--app-reasoning-font-size, 11px) * var(--app-reasoning-line-height, 1.45));
+  min-height: calc(var(--app-reasoning-font-size, 13px) * var(--app-reasoning-line-height, 1.5));
   padding-right: 14px;
 }
 
@@ -5881,7 +5881,7 @@ button.app-message-part-header:disabled:hover {
   align-items: flex-start;
   flex: 1 1 auto;
   min-width: 0;
-  max-height: calc(var(--app-reasoning-font-size, 11px) * var(--app-reasoning-line-height, 1.45));
+  max-height: calc(var(--app-reasoning-font-size, 13px) * var(--app-reasoning-line-height, 1.5));
   overflow: hidden;
   word-break: break-word;
 }
@@ -5947,8 +5947,8 @@ button.app-message-part-header:disabled:hover {
   max-width: 100%;
   box-sizing: border-box;
   color: var(--app-reasoning-content-color, var(--ant-color-text-secondary));
-  font-size: var(--app-reasoning-font-size, 11px);
-  line-height: var(--app-reasoning-line-height, 1.45);
+  font-size: var(--app-reasoning-font-size, 13px);
+  line-height: var(--app-reasoning-line-height, 1.5);
 }
 
 .app-message-part--reasoning-content p {

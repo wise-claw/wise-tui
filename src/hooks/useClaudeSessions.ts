@@ -145,8 +145,7 @@ import {
 } from "../services/claudeSessionState";
 import { markSessionToolUseStopped } from "../utils/sessionConversationTasks";
 import { isTerminalWorkerWiseTab, sanitizeTerminalWorkerTranscriptMessages, waitForTerminalWorkerTurnStarted } from "../services/terminalDispatch";
-import { isExecutionEnvironmentWorkerRepositoryName } from "../utils/executionEnvironmentDispatch";
-import { isFeedbackLoopWorkerRepositoryName } from "../utils/sessionFeedbackLoopDispatch";
+import { sessionShouldRetainMessagesWhenInactive } from "../utils/sessionMessagesRetainPolicy";
 import {
   resolveDiskTranscriptSessionKey,
   resolveDiskTranscriptSource,
@@ -330,13 +329,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (isTerminalWorkerWiseTab(session)) {
         keep.add(session.id);
       }
-      // 派发执行环境 / 反馈循环 worker：完成后消息也不应被全局内存预算清零，
-      // 否则运行面板派发任务详情抽屉会退化到 prompt-only（助手正文消失、找不到）。
-      // 三类引擎（codex/opencode/claude code）均经执行环境派发，此处统一保留。
-      if (
-        isExecutionEnvironmentWorkerRepositoryName(session.repositoryName ?? "") ||
-        isFeedbackLoopWorkerRepositoryName(session.repositoryName ?? "")
-      ) {
+      // 派发执行环境 / 反馈循环 / `@引擎` 普通会话：完成后也不应被全局预算清零。
+      if (sessionShouldRetainMessagesWhenInactive(session)) {
         keep.add(session.id);
       }
     }
@@ -2415,8 +2409,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           };
         }
         if (isTerminalWorkerWiseTab(s)) return s;
-        if (isExecutionEnvironmentWorkerRepositoryName(s.repositoryName ?? "")) {
-          // 执行环境 worker：侧栏可点开查看，勿在切走时清空正文（否则打开后空白、排序抖动）。
+        // `/执行环境:` worker 与 `@引擎` 标签级 executionEngine：切走时勿清空正文。
+        if (sessionShouldRetainMessagesWhenInactive(s)) {
           if (s.messages.length <= IN_MEMORY_SESSION_MESSAGES_MAX) return s;
           changed = true;
           return {

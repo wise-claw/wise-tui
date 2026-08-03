@@ -183,7 +183,12 @@ import {
   useTerminalCenterPanelState,
 } from "./stores/terminalCenterPanelStore";
 import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "./utils/executionEnvironmentDispatchAnchor";
-import { subscribeClaudeSessionsStructure, getClaudeSessionsStructureKey, getClaudeSessionSnapshot } from "./stores/claudeSessionsLiveStore";
+import {
+  subscribeClaudeSessionsStructure,
+  getClaudeSessionsStructureKey,
+  getClaudeSessionSnapshot,
+  getClaudeSessionsSnapshot,
+} from "./stores/claudeSessionsLiveStore";
 import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOverview";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
@@ -1390,7 +1395,9 @@ export default function App() {
   beforeSpawnClaudeRef.current = (session) =>
     evaluateBeforeSpawnClaudeCode({
       spawningSession: session,
-      sessions,
+      // 必须用 live snapshot：App 层 subscribeLive:false，React `sessions` 等结构
+      // rAF 刷 status；刚结束的 running 若仍被当成占用，@引擎派发会误判并发已满而失败。
+      sessions: getClaudeSessionsSnapshot(),
       projects,
       repositories,
       limitsMap: claudeConcurrencyLimitsMap,

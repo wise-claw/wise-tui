@@ -152,4 +152,35 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
 
     expect(loadInstructionResolveContext).toHaveBeenCalledTimes(1);
   });
+
+  test("executeSession 全部失败时返回 false", async () => {
+    const sessions = [stubSession("main")];
+    const warning = mock(() => {});
+    const messageMod = await import("antd");
+    const originalWarning = messageMod.message.warning;
+    messageMod.message.warning = warning as typeof messageMod.message.warning;
+
+    try {
+      const ok = await dispatchExecutionEnvironmentFromMainSession(
+        {
+          getSessions: () => sessions,
+          createSession: async (_path, name) => {
+            const id = "sess-fail";
+            sessions.push(stubSession(id, { repositoryName: name, executionEngine: "claude" }));
+            return id;
+          },
+          executeSession: () => false,
+          appendSystemMessage: () => {},
+        },
+        {
+          mainSessionId: "main",
+          prompt: "@Claude Code 修登录",
+        },
+      );
+      expect(ok).toBe(false);
+      expect(warning).toHaveBeenCalled();
+    } finally {
+      messageMod.message.warning = originalWarning;
+    }
+  });
 });

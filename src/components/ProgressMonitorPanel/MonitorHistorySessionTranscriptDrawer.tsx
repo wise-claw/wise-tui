@@ -18,6 +18,10 @@ import {
 } from "./MonitorDrawerSessionComposer";
 import { latestTerminalTurnHasAssistant } from "../../hooks/useClaudeSessions.transcript";
 import { isTerminalWorkerWiseTab } from "../../services/terminalDispatch";
+import {
+  resolveSessionExecutionEngine,
+  sessionHasDiskTranscript,
+} from "../../utils/sessionExecutionEngine";
 import { monitorHistoryTranscriptDrawerPropsEqual } from "./monitorOverlayPropsEqual";
 
 export interface MonitorHistorySessionTranscriptDrawerProps {
@@ -125,6 +129,9 @@ export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistor
   const peekTranscriptTargetId = liveSession?.id ?? null;
   const peekTranscriptStatus = liveSession?.status;
   const peekTranscriptClaudeId = liveSession?.claudeSessionId?.trim() ?? "";
+  const peekHasDiskTranscript =
+    liveSession != null &&
+    sessionHasDiskTranscript(liveSession, resolveSessionExecutionEngine(liveSession));
   const peekNeedsFullTranscript = !liveSession?.transcriptMemoryUnlimited;
 
   const missingTerminalAssistant =
@@ -141,13 +148,14 @@ export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistor
   useEffect(() => {
     if (!open || !sessionId || !onReloadFullDiskTranscript || !peekTranscriptTargetId) return;
     if (!peekNeedsFullTranscript) return;
-    if (!peekTranscriptClaudeId) return;
+    // Claude 有 claudeSessionId；Cursor/Codex 等可仅凭 Wise tab id 读盘。
+    if (!peekTranscriptClaudeId && !peekHasDiskTranscript) return;
     // 内存已有助手回复时，终端 jsonl 仅为单轮切片，reload 可能覆盖多轮历史。
     if (memoryHasTerminalAssistant) return;
     if (peekTranscriptStatus === "running" || peekTranscriptStatus === "connecting") {
       if (!missingTerminalAssistant) return;
     }
-    const reloadKey = `${sessionId}:${peekTranscriptClaudeId}:${liveSession?.messages.length ?? 0}`;
+    const reloadKey = `${sessionId}:${peekTranscriptClaudeId || peekTranscriptTargetId}:${liveSession?.messages.length ?? 0}`;
     if (diskReloadAttemptedRef.current === reloadKey) return;
     diskReloadAttemptedRef.current = reloadKey;
 
@@ -185,6 +193,7 @@ export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistor
     peekNeedsFullTranscript,
     peekTranscriptStatus,
     peekTranscriptClaudeId,
+    peekHasDiskTranscript,
     missingTerminalAssistant,
     memoryHasTerminalAssistant,
     liveSession?.messages.length,
@@ -225,7 +234,8 @@ export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistor
     }
     if (
       onReloadFullDiskTranscript &&
-      found.claudeSessionId?.trim() &&
+      (found.claudeSessionId?.trim() ||
+        sessionHasDiskTranscript(found, resolveSessionExecutionEngine(found))) &&
       !(isTerminalWorkerWiseTab(found) && latestTerminalTurnHasAssistant(found.messages))
     ) {
       diskReloadAttemptedRef.current = null;

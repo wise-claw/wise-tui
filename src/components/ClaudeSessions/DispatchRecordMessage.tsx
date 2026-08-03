@@ -41,20 +41,20 @@ function DispatchRecordMessageInner({
 
   return (
     <div className="app-system-dispatch-card app-system-dispatch-card--sentence">
-      {canOpenSession ? (
-        <button
-          type="button"
-          className="app-system-dispatch-card__sentence-link"
-          onClick={() => onOpenHistorySessionInInspector!(sessionId!)}
-        >
-          {sentence}
-        </button>
-      ) : canOpenExecutionEnvironmentTask ? (
+      {canOpenExecutionEnvironmentTask ? (
         <button
           type="button"
           className="app-system-dispatch-card__sentence-link"
           title="打开执行会话"
           onClick={() => onOpenSessionConversationTaskDetail!(executionEnvironmentTask!)}
+        >
+          {sentence}
+        </button>
+      ) : canOpenSession ? (
+        <button
+          type="button"
+          className="app-system-dispatch-card__sentence-link"
+          onClick={() => onOpenHistorySessionInInspector!(sessionId!)}
         >
           {sentence}
         </button>
