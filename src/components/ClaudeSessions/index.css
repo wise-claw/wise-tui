@@ -5169,12 +5169,20 @@
   box-sizing: border-box;
 }
 
-/* 思考消息：图标 + 正文直接展示；正文超过 4 行时收起并提供「更多」展开 */
+/* 思考消息：图标 + 思考: + 正文行内展示；正文超过 4 行时收起，「更多」内联在最后一行右下角 */
 .app-message-part-reasoning-show {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-message-part-reasoning-show__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
   min-width: 0;
   max-width: 100%;
 }
@@ -5191,11 +5199,22 @@
   user-select: none;
 }
 
+.app-message-part-reasoning-show__label {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, #7c3aed 72%, var(--ant-color-text-secondary));
+  font-size: var(--app-reasoning-font-size);
+  font-weight: 600;
+  line-height: var(--app-reasoning-line-height);
+  letter-spacing: 0.01em;
+  user-select: none;
+}
+
 .app-message-part-reasoning-show__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  margin-top: 2px;
   color: color-mix(in srgb, #7c3aed 80%, var(--ant-color-primary));
 }
 
@@ -5205,6 +5224,7 @@
 }
 
 .app-message-part-reasoning-show__body {
+  flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -5228,6 +5248,14 @@
   line-height: 1.4;
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
+}
+
+.app-message-part-reasoning-show__toggle--inline {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  margin: 0;
+  padding-left: 2px;
 }
 
 .app-message-part-reasoning-show__toggle:hover {

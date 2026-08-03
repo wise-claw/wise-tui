@@ -179,42 +179,56 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
     <div className="app-message-part app-message-part--reasoning">
       <div className="app-message-part-reasoning-shell">
         <div className="app-message-part-reasoning-show">
-          <div className="app-message-part-reasoning-show__head">
-            <span
-              className={`app-message-part-reasoning-show__icon${streaming ? " app-thinking-hint-icon--active" : ""}`}
-              aria-hidden
-            >
-              <ThinkingHintIcon />
-            </span>
-            <span className={streaming ? "app-status-text-shimmer" : undefined}>
-              {streaming ? "思考中" : "思考了"}
-            </span>
-          </div>
           {hasBody ? (
-            <div
-              ref={bodyRef}
-              className={`app-message-part-reasoning-show__body${
-                collapsed ? " app-message-part-reasoning-show__body--clamped" : ""
-              }`}
-            >
-              <Markdown
-                text={text}
-                streaming={streaming}
-                showPendingHint={false}
-                className="app-message-part--reasoning-content"
-              />
+            <div className="app-message-part-reasoning-show__row">
+              <span
+                className={`app-message-part-reasoning-show__icon${streaming ? " app-thinking-hint-icon--active" : ""}`}
+                aria-hidden
+              >
+                <ThinkingHintIcon />
+              </span>
+              <span
+                className={`app-message-part-reasoning-show__label${streaming ? " app-status-text-shimmer" : ""}`}
+              >
+                思考:
+              </span>
+              <div
+                ref={bodyRef}
+                className={`app-message-part-reasoning-show__body${
+                  collapsed ? " app-message-part-reasoning-show__body--clamped" : ""
+                }`}
+              >
+                <Markdown
+                  text={text}
+                  streaming={streaming}
+                  showPendingHint={false}
+                  className="app-message-part--reasoning-content"
+                />
+              </div>
+              {collapsed && overflows ? (
+                <button
+                  type="button"
+                  className="app-message-part-reasoning-show__toggle app-message-part-reasoning-show__toggle--inline"
+                  aria-expanded={false}
+                  onClick={() => setExpanded(true)}
+                >
+                  更多
+                </button>
+              ) : null}
             </div>
-          ) : null}
-          {hasBody && collapsed && overflows ? (
-            <button
-              type="button"
-              className="app-message-part-reasoning-show__toggle"
-              aria-expanded={false}
-              onClick={() => setExpanded(true)}
-            >
-              更多
-            </button>
-          ) : null}
+          ) : (
+            <div className="app-message-part-reasoning-show__head">
+              <span
+                className={`app-message-part-reasoning-show__icon${streaming ? " app-thinking-hint-icon--active" : ""}`}
+                aria-hidden
+              >
+                <ThinkingHintIcon />
+              </span>
+              <span className={streaming ? "app-status-text-shimmer" : undefined}>
+                {streaming ? "思考中" : "思考:"}
+              </span>
+            </div>
+          )}
           {hasBody && expanded ? (
             <button
               type="button"
