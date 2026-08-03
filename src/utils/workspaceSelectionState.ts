@@ -194,7 +194,6 @@ export function resolveClaudePanelActiveSession(
     repositories,
     repositoryMainBindings,
     workspaceMainSession,
-    workspaceMode = "multi_repo",
   } = input;
 
   if (activeWorkspaceFocus === "project" && activeProject) {
@@ -202,14 +201,13 @@ export function resolveClaudePanelActiveSession(
       const current =
         findSessionByTabOrClaudeId(sessions, activeSessionId) ??
         findSessionByTabOrClaudeId(allSessions, activeSessionId);
-      if (
-        current &&
-        sessionMatchesProjectWorkspaceFocus(current, {
-          workspaceMode,
-          project: activeProject,
-          repositories,
-        })
-      ) {
+      if (current) {
+        // 用户显式选中的会话优先于项目主会话回退：即使 current 不属于当前
+        // 项目成员会话集（跨项目会话 / 员工 worker / 磁盘恢复会话），点击侧栏
+        // 会话行也应真正切换过去，而不是被回退到 workspaceMainSession 造成
+        // 「点击切换会话没有反应」（侧栏高亮已变，中栏仍显示项目主会话）。
+        // 主动切到项目主会话时 activeSessionId 本就指向主会话，故这里统一尊重
+        // activeSessionId 不会削弱「切项目回到主会话」的既有语义。
         return current;
       }
     }

@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "bunx tsc -p tsconfig.app.json --noEmit 2>&1 | tail -5; echo \"TSC_EXIT=$?\"",
-    "testCommand": "bun test 2>&1 | grep -B1 -A3 \"✗\\|fail\\b\" | grep -E \"✗|\\.test\\.|→\" | head -40",
+    "buildCommand": "bunx tsc -p tsconfig.app.json --noEmit 2>&1 | tail -8; echo \"TSC_DONE\"",
+    "testCommand": "bun test 2>&1 | tail -15",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -250,14 +250,14 @@
   "hotPaths": [
     {
       "path": "src/hooks/useClaudeSessions.ts",
-      "accessCount": 49,
-      "lastAccessed": 1785754941127,
+      "accessCount": 52,
+      "lastAccessed": 1785765101885,
       "type": "file"
     },
     {
       "path": "src/components/ClaudeSessions/ClaudeMultiPaneGrid.tsx",
-      "accessCount": 29,
-      "lastAccessed": 1785754710629,
+      "accessCount": 33,
+      "lastAccessed": 1785765134769,
       "type": "file"
     },
     {
@@ -267,15 +267,15 @@
       "type": "file"
     },
     {
-      "path": "src/components/ClaudeSessions/ClaudeChat.tsx",
-      "accessCount": 24,
-      "lastAccessed": 1785754761685,
+      "path": "src/AppImpl.tsx",
+      "accessCount": 25,
+      "lastAccessed": 1785764991258,
       "type": "file"
     },
     {
-      "path": "src/AppImpl.tsx",
-      "accessCount": 20,
-      "lastAccessed": 1785755214873,
+      "path": "src/components/ClaudeSessions/ClaudeChat.tsx",
+      "accessCount": 24,
+      "lastAccessed": 1785754761685,
       "type": "file"
     },
     {
@@ -288,6 +288,12 @@
       "path": "src/hooks/useRepositoryRunCommand.ts",
       "accessCount": 11,
       "lastAccessed": 1785753716747,
+      "type": "file"
+    },
+    {
+      "path": "src/hooks/useAppSidebarSelection.ts",
+      "accessCount": 10,
+      "lastAccessed": 1785764962126,
       "type": "file"
     },
     {
@@ -315,33 +321,45 @@
       "type": "file"
     },
     {
-      "path": "src/hooks/useAppSidebarSelection.ts",
-      "accessCount": 8,
-      "lastAccessed": 1785754229049,
-      "type": "file"
-    },
-    {
       "path": "src/hooks/useClaudeSessions.sessionActions.ts",
       "accessCount": 8,
       "lastAccessed": 1785755142588,
       "type": "file"
     },
     {
-      "path": "src/hooks/useAppSessionRouting.ts",
-      "accessCount": 6,
-      "lastAccessed": 1785647182965,
+      "path": "src/components/AppWorkspaceLayout.tsx",
+      "accessCount": 8,
+      "lastAccessed": 1785765148596,
       "type": "file"
     },
     {
       "path": "src/components/LeftSidebar/RepositoryWorkspaceSessionTree.tsx",
-      "accessCount": 6,
-      "lastAccessed": 1785647191943,
+      "accessCount": 7,
+      "lastAccessed": 1785764832186,
       "type": "file"
     },
     {
-      "path": "src/components/AppWorkspaceLayout.tsx",
+      "path": "src/hooks/useAppSessionRouting.ts",
+      "accessCount": 7,
+      "lastAccessed": 1785764882754,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ClaudeSessions/index.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1785765165030,
+      "type": "file"
+    },
+    {
+      "path": "src/stores/paneCenterViewControlStore.ts",
       "accessCount": 6,
-      "lastAccessed": 1785753363497,
+      "lastAccessed": 1785764920186,
+      "type": "file"
+    },
+    {
+      "path": "src/components/LeftSidebar/LeftSidebarWorkspaceListSlot.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1785765113898,
       "type": "file"
     },
     {
@@ -363,21 +381,9 @@
       "type": "file"
     },
     {
-      "path": "src/components/ClaudeSessions/index.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1785753542955,
-      "type": "file"
-    },
-    {
       "path": "src/utils/monacoLargeFile.ts",
       "accessCount": 5,
       "lastAccessed": 1785753654337,
-      "type": "file"
-    },
-    {
-      "path": "src/stores/paneCenterViewControlStore.ts",
-      "accessCount": 5,
-      "lastAccessed": 1785754175959,
       "type": "file"
     },
     {
@@ -387,9 +393,9 @@
       "type": "file"
     },
     {
-      "path": "src/components/LeftSidebar/LeftSidebarWorkspaceListSlot.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1785647150587,
+      "path": "src/utils/workspaceSelectionState.ts",
+      "accessCount": 5,
+      "lastAccessed": 1785765359969,
       "type": "file"
     },
     {
@@ -429,21 +435,33 @@
       "type": "file"
     },
     {
+      "path": "src/components/LeftSidebar.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1785764858833,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ClaudeSessions/claudeChatHelpers.ts",
+      "accessCount": 3,
+      "lastAccessed": 1785765007732,
+      "type": "file"
+    },
+    {
+      "path": "src/hooks/useMonitorSessionsForOverview.ts",
+      "accessCount": 3,
+      "lastAccessed": 1785765033715,
+      "type": "file"
+    },
+    {
+      "path": "src/hooks/useRepositoryList.ts",
+      "accessCount": 3,
+      "lastAccessed": 1785765377215,
+      "type": "file"
+    },
+    {
       "path": "src-tauri/src/lib_impl.rs",
       "accessCount": 2,
       "lastAccessed": 1785600696637,
-      "type": "file"
-    },
-    {
-      "path": "src/components/LeftSidebar.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1785647138407,
-      "type": "file"
-    },
-    {
-      "path": "src/utils/workspaceSelectionState.ts",
-      "accessCount": 2,
-      "lastAccessed": 1785647193660,
       "type": "file"
     },
     {
@@ -453,21 +471,9 @@
       "type": "file"
     },
     {
-      "path": "src/hooks/useRepositoryList.ts",
-      "accessCount": 2,
-      "lastAccessed": 1785754222686,
-      "type": "file"
-    },
-    {
       "path": "src/stores/terminalCenterPanelStore.ts",
       "accessCount": 2,
       "lastAccessed": 1785754355678,
-      "type": "file"
-    },
-    {
-      "path": "src/components/ClaudeSessions/claudeChatHelpers.ts",
-      "accessCount": 2,
-      "lastAccessed": 1785754517227,
       "type": "file"
     },
     {
@@ -486,12 +492,6 @@
       "path": "src/stores/composerRefocusStore.ts",
       "accessCount": 1,
       "lastAccessed": 1785645327279,
-      "type": "file"
-    },
-    {
-      "path": "src/hooks/useMonitorSessionsForOverview.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785645893695,
       "type": "file"
     },
     {

@@ -281,6 +281,40 @@ describe("resolveClaudePanelActiveSession", () => {
     expect(resolved?.id).toBe("s-proj");
   });
 
+  test("project focus respects explicitly selected worker session (not falling back to main)", () => {
+    const worker = session("s-worker", "/eco/web", "eco-ai-web/执行环境:claude:任务");
+    const resolved = resolveClaudePanelActiveSession({
+      sessions: [repoMain, worker],
+      allSessions: [projectMain, repoMain, worker],
+      activeSessionId: "s-worker",
+      activeWorkspaceFocus: "project",
+      activeProject: eco,
+      activeRepository: null,
+      repositories,
+      repositoryMainBindings: {},
+      workspaceMainSession: projectMain,
+    });
+    // worker 不匹配项目主会话视图：此前会被回退到 workspaceMainSession
+    // 造成「点击切换会话没有反应」；现在尊重用户显式选择。
+    expect(resolved?.id).toBe("s-worker");
+  });
+
+  test("project focus respects explicitly selected cross-project session", () => {
+    const other = session("s-other", "/elsewhere", "elsewhere-app");
+    const resolved = resolveClaudePanelActiveSession({
+      sessions: [projectMain, other],
+      allSessions: [projectMain, other],
+      activeSessionId: "s-other",
+      activeWorkspaceFocus: "project",
+      activeProject: eco,
+      activeRepository: null,
+      repositories,
+      repositoryMainBindings: {},
+      workspaceMainSession: projectMain,
+    });
+    expect(resolved?.id).toBe("s-other");
+  });
+
   test("repository focus requires active repository match", () => {
     const resolved = resolveClaudePanelActiveSession({
       sessions: [repoMain],
