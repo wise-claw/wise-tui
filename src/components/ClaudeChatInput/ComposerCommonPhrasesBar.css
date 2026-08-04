@@ -20,7 +20,7 @@
   display: inline-flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   padding: 0;
   max-width: none;
   flex-shrink: 0;
@@ -29,33 +29,39 @@
 .app-composer-common-phrases-quick-label {
   flex-shrink: 0;
   margin: 0;
-  padding: 2px 3px;
-  border: none;
-  border-radius: 0;
+  padding: 0 7px;
+  min-height: 20px;
+  border: 1px solid var(--ant-color-border);
+  border-radius: 999px;
   background: transparent;
-  color: var(--ant-color-text-secondary);
+  color: var(--ant-color-text);
   font-family: inherit;
-  font-size: 11.5px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
   white-space: nowrap;
   touch-action: manipulation;
-  transition: color 0.12s ease, opacity 0.12s ease;
+  transition:
+    color 0.12s ease,
+    opacity 0.12s ease,
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .app-composer-common-phrases-quick-label:hover:not(:disabled) {
   color: var(--ant-color-primary);
+  border-color: var(--ant-color-primary);
+  background: transparent;
 }
 
 .app-composer-common-phrases-quick-label:active:not(:disabled) {
-  opacity: 0.72;
+  opacity: 0.86;
 }
 
 .app-composer-common-phrases-quick-label:focus-visible {
   outline: 2px solid var(--ant-color-primary);
   outline-offset: 1px;
-  border-radius: 2px;
 }
 
 .app-composer-common-phrases-quick-label:disabled {
@@ -64,12 +70,15 @@
 }
 
 .app-composer-common-phrases-quick-label--insert {
-  font-weight: 400;
-  color: var(--ant-color-text-secondary);
+  font-weight: 600;
+  border-style: dashed;
+  border-color: var(--ant-color-border);
+  color: var(--ant-color-text);
 }
 
 .app-composer-common-phrases-quick-label--insert:hover:not(:disabled) {
   color: var(--ant-color-primary);
+  border-color: var(--ant-color-primary);
 }
 
 .app-composer-common-phrases-bar__chip--insert {

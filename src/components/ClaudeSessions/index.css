@@ -8080,21 +8080,21 @@ button.app-message-part-header:disabled:hover {
 
 .app-session-quick-actions--composer {
   flex-shrink: 0;
-  padding: 3px 6px 0;
+  padding: 4px 6px 0;
   background: transparent;
 }
 
 /* 钉钉风格：左侧紧凑胶囊 + 右侧「更多」 */
 .app-session-quick-actions--dingtalk {
   flex-shrink: 0;
-  padding: 3px 6px 2px;
+  padding: 4px 6px 0;
   background: transparent;
 }
 
 .app-session-quick-actions__row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   position: relative;
   z-index: 3;
@@ -8103,7 +8103,7 @@ button.app-message-part-header:disabled:hover {
 .app-session-quick-actions__primary {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   flex: 1;
   min-width: 0;
   overflow-x: auto;
@@ -8306,25 +8306,32 @@ button.app-message-part-header:disabled:hover {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 3px 6px;
-  min-height: 24px;
-  border: none;
-  border-radius: 4px;
+  padding: 0 7px;
+  min-height: 20px;
+  border: 1px solid var(--ant-color-border);
+  border-radius: 999px;
   background: transparent;
-  color: var(--ant-color-text-secondary);
-  font-size: 11.5px;
+  color: var(--ant-color-text);
+  font-size: 11px;
   line-height: 1.2;
   cursor: pointer;
   white-space: nowrap;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
-  transition: color 0.12s ease, opacity 0.12s ease, background 0.12s ease;
+  transition:
+    color 0.12s ease,
+    opacity 0.12s ease,
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .app-session-quick-pill--new-session {
   position: relative;
   z-index: 1;
+  border-color: var(--ant-color-primary-border);
+  background: transparent;
+  color: var(--ant-color-primary);
 }
 
 .app-session-quick-pill--new-session.app-session-quick-pill--loading {
@@ -8337,7 +8344,8 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-session-quick-pill--new-session:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ant-color-primary-bg) 55%, transparent);
+  border-color: var(--ant-color-primary);
+  background: transparent;
 }
 
 .app-session-quick-pill:disabled,
@@ -8348,6 +8356,7 @@ button.app-message-part-header:disabled:hover {
 
 .app-session-quick-pill:hover:not(:disabled) {
   color: var(--ant-color-primary);
+  border-color: var(--ant-color-primary);
   background: transparent;
 }
 
@@ -8356,17 +8365,18 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-session-quick-pill:active:not(:disabled) {
-  opacity: 0.72;
+  opacity: 0.86;
 }
 
 .app-session-quick-pill:focus-visible {
   outline: 2px solid var(--ant-color-primary);
   outline-offset: 1px;
-  border-radius: 2px;
 }
 
 .app-session-quick-pill--compact-context.app-session-quick-pill--context-high {
   color: var(--ant-color-warning);
+  border-color: var(--ant-color-warning-border);
+  background: transparent;
 }
 
 .app-session-quick-pill--compact-context.app-session-quick-pill--context-high .app-session-quick-pill__label {
@@ -8375,21 +8385,21 @@ button.app-message-part-header:disabled:hover {
 
 .app-session-quick-pill--push {
   gap: 3px;
-  padding: 1px 1px;
+  padding: 0 7px;
 }
 
 .app-session-quick-pill--more {
-  padding: 1px 4px;
+  padding: 0 6px;
 }
 
 .app-session-quick-pill__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 0;
-  font-size: 10px;
+  font-size: 11px;
   flex-shrink: 0;
 }
 
@@ -8410,17 +8420,17 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-session-quick-pill__label {
-  font-size: 11.5px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   color: inherit;
 }
 
 .app-session-quick-pill__stats {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
@@ -9018,14 +9028,14 @@ button.app-message-part-header:disabled:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
 }
 
 .app-session-quick-actions__group {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
 }
 
 .app-session-quick-actions__group--segmented {

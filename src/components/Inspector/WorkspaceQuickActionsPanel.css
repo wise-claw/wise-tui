@@ -76,7 +76,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 4px;
+  gap: 3px;
 }
 
 .app-workspace-quick-actions-panel__card {
@@ -98,21 +98,26 @@
   align-items: center;
   justify-content: flex-start;
   gap: 3px;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 4px;
-  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border);
+  border-radius: 999px;
+  background: transparent;
   text-align: left;
-  padding: 1px 5px;
+  padding: 1px 8px;
   cursor: pointer;
-  color: inherit;
+  color: var(--ant-color-text);
   line-height: 1.1;
-  min-height: 18px;
+  min-height: 22px;
   box-sizing: border-box;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .app-workspace-quick-actions-panel__card-main:hover {
-  border-color: var(--ant-color-border);
-  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-primary);
+  border-color: var(--ant-color-primary);
+  background: transparent;
 }
 
 .app-workspace-quick-actions-panel__card-icon {
@@ -128,8 +133,8 @@
 
 .app-workspace-quick-actions-panel__card-label {
   flex: 0 1 auto;
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   line-height: 14px;
   white-space: nowrap;
 }
