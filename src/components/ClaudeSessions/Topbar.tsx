@@ -26,7 +26,7 @@ import { useRepositoryRunCommand } from "../../hooks/useRepositoryRunCommand";
 import { PageMonitorTopbarTrigger } from "../ChromeDevtoolsMonitor";
 import { resolveChatTopbarContext } from "../../utils/workspaceSelectionState";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
-import { PANE_COUNT_OPTIONS, isPaneCount, type PaneCount } from "../../constants/mainLayoutWidths";
+import { PANE_COUNT_OPTIONS, paneGridDimensions, type PaneCount } from "../../constants/mainLayoutWidths";
 import { topbarPropsEqual } from "./topbarPropsEqual";
 import type { CenterView } from "./ClaudeChat";
 
@@ -102,6 +102,61 @@ function IconDualPane() {
       <rect x="3" y="3" width="8" height="18" rx="2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       <rect x="13" y="3" width="8" height="18" rx="2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+function PaneLayoutGlyph({ count }: { count: PaneCount }) {
+  const { rows, cols } = paneGridDimensions(count);
+  return (
+    <span
+      className="app-topbar-pane-layout-glyph"
+      style={{
+        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+      }}
+      aria-hidden
+    >
+      {Array.from({ length: count }, (_, index) => (
+        <span key={index} className="app-topbar-pane-layout-glyph__cell" />
+      ))}
+    </span>
+  );
+}
+
+function paneCountOptionLabel(count: PaneCount): string {
+  return count === 1 ? "单屏" : `${count}屏`;
+}
+
+function PaneCountPickerPanel({
+  paneCount,
+  disabled,
+  onSelect,
+}: {
+  paneCount: PaneCount;
+  disabled?: boolean;
+  onSelect: (count: PaneCount) => void;
+}) {
+  return (
+    <div className="app-topbar-pane-count-picker" role="menu" aria-label="多屏布局">
+      {PANE_COUNT_OPTIONS.map((count) => {
+        const selected = count === paneCount;
+        return (
+          <button
+            key={count}
+            type="button"
+            role="menuitemradio"
+            aria-checked={selected}
+            className={`app-topbar-pane-count-picker__option${selected ? " is-selected" : ""}`}
+            disabled={disabled}
+            title={count === 1 ? "单屏（关闭多屏）" : `${count}屏布局`}
+            onClick={() => onSelect(count)}
+          >
+            <PaneLayoutGlyph count={count} />
+            <span className="app-topbar-pane-count-picker__label">{paneCountOptionLabel(count)}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -259,6 +314,7 @@ export const Topbar = memo(function Topbar({
   });
   const [runPopoverOpen, setRunPopoverOpen] = useState(false);
   const [externalTerminalPopoverOpen, setExternalTerminalPopoverOpen] = useState(false);
+  const [paneCountPickerOpen, setPaneCountPickerOpen] = useState(false);
 
   const topbarContext = useMemo(
     () =>
@@ -563,19 +619,22 @@ export const Topbar = memo(function Topbar({
         </Popover>
         {onChangePaneCount && (
           <Dropdown
-            menu={{
-              selectedKeys: [String(paneCount)],
-              items: PANE_COUNT_OPTIONS.map((count) => ({
-                key: String(count),
-                label: count === 1 ? "1屏（关闭多屏）" : `${count}屏`,
-              })),
-              onClick: ({ key }) => {
-                const count = Number(key);
-                if (!isPaneCount(count)) return;
-                onChangePaneCount(count);
-              },
-            }}
+            open={paneCountPickerOpen}
+            onOpenChange={setPaneCountPickerOpen}
             trigger={["click"]}
+            placement="bottomRight"
+            rootClassName="app-topbar-pane-count-dropdown"
+            popupRender={() => (
+              <PaneCountPickerPanel
+                paneCount={paneCount}
+                disabled={paneChangeInFlight}
+                onSelect={(count) => {
+                  setPaneCountPickerOpen(false);
+                  if (count === paneCount) return;
+                  onChangePaneCount(count);
+                }}
+              />
+            )}
           >
             <button
               className={`app-topbar-btn ${paneCount > 1 ? "active" : ""}`}

@@ -855,6 +855,84 @@
   height: 24px;
 }
 
+.app-topbar-pane-count-dropdown.ant-dropdown {
+  padding-top: 4px;
+}
+
+.app-topbar-pane-count-picker {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--ant-color-bg-elevated, #fff);
+  border: 1px solid var(--ant-color-border-secondary);
+  box-shadow: var(--ant-box-shadow-secondary, 0 6px 16px rgba(0, 0, 0, 0.08));
+}
+
+.app-topbar-pane-count-picker__option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 40px;
+  padding: 6px 7px 5px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.app-topbar-pane-count-picker__option:hover:not(:disabled) {
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text);
+}
+
+.app-topbar-pane-count-picker__option.is-selected {
+  background: var(--ant-color-primary-bg);
+  border-color: color-mix(in srgb, var(--ant-color-primary) 35%, transparent);
+  color: var(--ant-color-primary);
+}
+
+.app-topbar-pane-count-picker__option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.app-topbar-pane-count-picker__label {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.app-topbar-pane-layout-glyph {
+  display: grid;
+  width: 22px;
+  height: 16px;
+  gap: 1.5px;
+}
+
+.app-topbar-pane-layout-glyph__cell {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 1.5px;
+  background: currentColor;
+  opacity: 0.72;
+}
+
+.app-topbar-pane-count-picker__option.is-selected .app-topbar-pane-layout-glyph__cell {
+  opacity: 0.92;
+}
+
 /* 中栏顶栏：OpenApp（Cursor 等）与图标按钮同高、同 hover */
 .app-chat-topbar-right .app-open-app-menu {
   display: inline-flex;
@@ -926,7 +1004,7 @@
 
 .app-run-command-popover__content {
   --app-run-popover-label-w: 48px;
-  width: 290px;
+  width: 380px;
   display: flex;
   flex-direction: column;
   gap: 0;

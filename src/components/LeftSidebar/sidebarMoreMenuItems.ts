@@ -13,6 +13,12 @@ type MenuItem = NonNullable<MenuProps["items"]>[number];
 
 /** 产品暂时隐藏仓库右键「配置 Owner」入口；恢复时改为 true。 */
 const REPOSITORY_MAIN_OWNER_MENU_ENABLED = false;
+/** 产品暂时隐藏仓库右键「配置角标」入口；恢复时改为 true。 */
+const REPOSITORY_ICON_BADGE_MENU_ENABLED = false;
+/** 产品暂时隐藏侧栏「仓库/工作区需求」入口；恢复时改为 true。 */
+const SIDEBAR_REQUIREMENTS_MENU_ENABLED = false;
+/** 产品暂时隐藏侧栏「可执行任务」入口；恢复时改为 true。 */
+const SIDEBAR_EXECUTABLE_TASKS_MENU_ENABLED = false;
 
 function compactItems(items: Array<MenuItem | false | null | undefined>): MenuItem[] {
   return items.filter((item): item is MenuItem => Boolean(item));
@@ -106,9 +112,13 @@ function repositoryTaskMenuItems(input: {
   } = input;
 
   return compactItems([
-    trellisEnabled && onOpenRequirements ? { key: "requirements", label: requirementsLabel } : null,
+    SIDEBAR_REQUIREMENTS_MENU_ENABLED && trellisEnabled && onOpenRequirements
+      ? { key: "requirements", label: requirementsLabel }
+      : null,
     onOpenScheduledTasks ? { key: "scheduled-tasks", label: "定时任务" } : null,
-    trellisEnabled && onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
+    SIDEBAR_EXECUTABLE_TASKS_MENU_ENABLED && trellisEnabled && onOpenExecutableTasks
+      ? { key: "executable-tasks", label: "可执行任务" }
+      : null,
   ]);
 }
 
@@ -169,7 +179,9 @@ function repositoryConfigureMenuItems(input: {
   } = input;
 
   return compactItems([
-    onConfigureRepositoryIconBadge ? { key: "icon-badge", label: "配置角标" } : null,
+    REPOSITORY_ICON_BADGE_MENU_ENABLED && onConfigureRepositoryIconBadge
+      ? { key: "icon-badge", label: "配置角标" }
+      : null,
     REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
       ? { key: "main-owner", label: mainOwnerLabel }
       : null,

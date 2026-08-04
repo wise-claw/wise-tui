@@ -65,6 +65,7 @@ export function WorkspaceQuickActionsPanel({
         label: string;
         target: string;
         category: string;
+        pinnedToTopbar: boolean;
       },
       existingId?: string,
     ) => {
@@ -86,9 +87,13 @@ export function WorkspaceQuickActionsPanel({
           target: input.target,
           updatedAt: now,
           ...(category ? { category } : { category: undefined }),
+          ...(input.pinnedToTopbar ? { pinnedToTopbar: true } : { pinnedToTopbar: undefined }),
         };
         if (!category) {
           delete next[index].category;
+        }
+        if (!input.pinnedToTopbar) {
+          delete next[index].pinnedToTopbar;
         }
       } else {
         next.unshift({
@@ -97,6 +102,7 @@ export function WorkspaceQuickActionsPanel({
           label: input.label,
           target: input.target,
           ...(category ? { category } : {}),
+          ...(input.pinnedToTopbar ? { pinnedToTopbar: true } : {}),
           createdAt: now,
           updatedAt: now,
         });

@@ -1,25 +1,8 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { App as AntdApp } from "antd";
-import type { AddRepositoryOptions, ProjectItem, Repository, RepositoryAssociatePreset } from "../../types";
+import type { AddRepositoryOptions, ProjectItem, Repository } from "../../types";
 import type { RepositoryAcquireMode, RepositoryAcquireParams } from "../../utils/repositoryAcquire";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../../constants/workspaceBootstrapAddons";
-import {
-  REPOSITORY_ASSOCIATE_PRESETS_MAX,
-  REPOSITORY_ASSOCIATE_PRESETS_STORAGE_KEY,
-} from "../../constants/repositoryAssociatePresets";
-import {
-  customPresetOptionValue,
-  formatRepositoryAssociatePresetLabel,
-  isCustomPresetSelectValue,
-  newRepositoryAssociatePresetId,
-  normalizeRepositoryAssociatePresets,
-  presetFingerprint,
-} from "../../utils/repositoryAssociatePresets";
-import { getAppSettingJson, setAppSettingJson } from "../../services/appSettingsStore";
-import {
-  repositoryTypeSolidBadgeColor,
-  resolveRepositoryIconColor,
-} from "../../utils/repositoryType";
 import { pickFolder, resolveRepositoryAcquirePath } from "../../services/repository";
 import {
   deriveFolderNameFromGitUrl,
@@ -29,6 +12,8 @@ import { yieldToUi } from "../../utils/yieldToUi";
 import { buildAddRepositoryOptions } from "./RepositoryAssociateModal";
 
 const REPO_ACQUIRE_LOADING_KEY = "wise-repo-acquire";
+/** 添加/关联仓库时不再暴露角标与角色选择，统一默认前端角色。 */
+const DEFAULT_REPOSITORY_TYPE: Repository["repositoryType"] = "frontend";
 
 function acquireLoadingLabel(mode: RepositoryAcquireMode): string {
   if (mode === "git_clone") return "正在克隆仓库…";
@@ -54,11 +39,6 @@ interface UseRepositoryAssociateModalControllerInput {
   ) => void;
 }
 
-interface SelectOptionGroup {
-  label: string;
-  options: { value: string; title?: string; label: ReactNode }[];
-}
-
 export function useRepositoryAssociateModalController({
   projects = [],
   onAddRepositoryToProject,
@@ -67,14 +47,9 @@ export function useRepositoryAssociateModalController({
   const { message } = AntdApp.useApp();
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [floatingMode, setFloatingMode] = useState(false);
-  const [repositoryType, setRepositoryType] = useState<Repository["repositoryType"]>("frontend");
   const [workspaceBootstrapSelection, setWorkspaceBootstrapSelection] = useState(
     () => ({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION }),
   );
-  const [iconDisplayName, setIconDisplayName] = useState("");
-  const [iconColor, setIconColor] = useState<string | null>(null);
-  const [presets, setPresets] = useState<RepositoryAssociatePreset[]>([]);
-  const [associateSelectValue, setAssociateSelectValue] = useState<string>("frontend");
   const [acquireMode, setAcquireMode] = useState<RepositoryAcquireMode>("pick_existing");
   const [parentPath, setParentPath] = useState("");
   const [folderName, setFolderName] = useState("");
@@ -88,78 +63,12 @@ export function useRepositoryAssociateModalController({
   const defaultParentPath = pendingProject?.rootPath?.trim() ?? "";
 
   const resetDraft = useCallback(() => {
-    setAssociateSelectValue("frontend");
-    setRepositoryType("frontend");
     setWorkspaceBootstrapSelection({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION });
-    setIconDisplayName("");
-    setIconColor(null);
     setAcquireMode("pick_existing");
     setParentPath("");
     setFolderName("");
     setGitUrl("");
   }, []);
-
-  const refreshPresets = useCallback(async () => {
-    const raw = await getAppSettingJson<unknown>(REPOSITORY_ASSOCIATE_PRESETS_STORAGE_KEY);
-    setPresets(normalizeRepositoryAssociatePresets(raw));
-  }, []);
-
-  useEffect(() => {
-    void refreshPresets();
-  }, [refreshPresets]);
-
-  const selectOptions = useMemo<SelectOptionGroup[]>(() => {
-    const builtinOptions = (["frontend", "backend", "document"] as const).map((type) => {
-      const title = type === "frontend" ? "前端" : type === "backend" ? "后端" : "文档（PRD…）";
-      return {
-        value: type,
-        title,
-        label: (
-          <span className="app-add-repo-option-row">
-            <span
-              className="app-add-repo-option-swatch"
-              style={{ background: repositoryTypeSolidBadgeColor(type) }}
-              aria-hidden
-            />
-            <span>{title}</span>
-          </span>
-        ),
-      };
-    });
-    const groups: SelectOptionGroup[] = [{ label: "预设角色", options: builtinOptions }];
-    if (presets.length > 0) {
-      groups.push({
-        label: "常用配置",
-        options: presets.map((preset) => {
-          const title = formatRepositoryAssociatePresetLabel(preset);
-          return {
-            value: customPresetOptionValue(preset.id),
-            title,
-            label: (
-              <span className="app-add-repo-option-row">
-                <span
-                  className="app-add-repo-option-swatch"
-                  style={{ background: resolveRepositoryIconColor(preset.repositoryType, preset.iconColor) }}
-                  aria-hidden
-                />
-                <span>{title}</span>
-              </span>
-            ),
-          };
-        }),
-      });
-    }
-    return groups;
-  }, [presets]);
-
-  const resolvePresetSelectValue = useCallback(
-    (value: string) => {
-      if (!isCustomPresetSelectValue(value)) return null;
-      const id = value.slice("custom:".length);
-      return presets.find((preset) => preset.id === id) ?? null;
-    },
-    [presets],
-  );
 
   const openAddRepositoryModal = useCallback(
     (projectId: string) => {
@@ -170,17 +79,15 @@ export function useRepositoryAssociateModalController({
       if (project?.rootPath?.trim()) {
         setParentPath(project.rootPath.trim());
       }
-      void refreshPresets();
     },
-    [projects, refreshPresets, resetDraft],
+    [projects, resetDraft],
   );
 
   const openAddFloatingRepositoryModal = useCallback(() => {
     setPendingProjectId(null);
     setFloatingMode(true);
     resetDraft();
-    void refreshPresets();
-  }, [refreshPresets, resetDraft]);
+  }, [resetDraft]);
 
   const close = useCallback(() => {
     setPendingProjectId(null);
@@ -191,38 +98,6 @@ export function useRepositoryAssociateModalController({
     const picked = await pickFolder();
     if (picked) setParentPath(picked);
   }, []);
-
-  const addPreset = useCallback(async () => {
-    const name = iconDisplayName.trim();
-    if (!name && iconColor === null) {
-      message.warning("请先填写角标文案或选择角标颜色");
-      return;
-    }
-    const candidate: RepositoryAssociatePreset = {
-      id: newRepositoryAssociatePresetId(),
-      repositoryType,
-      iconDisplayName: name,
-      iconColor,
-      createdAt: Date.now(),
-    };
-    const fingerprint = presetFingerprint(candidate);
-    if (presets.some((preset) => presetFingerprint(preset) === fingerprint)) {
-      message.warning("已有相同的常用配置");
-      return;
-    }
-    let next = [...presets, candidate].sort((a, b) => b.createdAt - a.createdAt);
-    if (next.length > REPOSITORY_ASSOCIATE_PRESETS_MAX) {
-      next = next.slice(0, REPOSITORY_ASSOCIATE_PRESETS_MAX);
-    }
-    try {
-      await setAppSettingJson(REPOSITORY_ASSOCIATE_PRESETS_STORAGE_KEY, next);
-      setPresets(next);
-      setAssociateSelectValue(customPresetOptionValue(candidate.id));
-    } catch (err) {
-      console.error(err);
-      message.error("保存常用配置失败");
-    }
-  }, [iconColor, iconDisplayName, message, presets, repositoryType]);
 
   const buildAcquireParams = useCallback((): RepositoryAcquireParams => {
     if (acquireMode === "pick_existing") {
@@ -249,16 +124,7 @@ export function useRepositoryAssociateModalController({
 
   const submit = useCallback(() => {
     if (!pendingProjectId && !floatingMode) return;
-    if (isCustomPresetSelectValue(associateSelectValue)) {
-      const presetId = associateSelectValue.slice("custom:".length);
-      if (!presets.some((preset) => preset.id === presetId)) {
-        message.warning("所选常用配置已不存在，请重新选择");
-        return;
-      }
-    }
     const options = buildAddRepositoryOptions({
-      iconDisplayName,
-      iconColor,
       bootstrap: workspaceBootstrapSelection,
     });
     const acquire = buildAcquireParams();
@@ -285,7 +151,7 @@ export function useRepositoryAssociateModalController({
             return;
           }
           await Promise.resolve(
-            onAddFloatingRepository(repositoryType, options, acquire, explicitFolderPath),
+            onAddFloatingRepository(DEFAULT_REPOSITORY_TYPE, options, acquire, explicitFolderPath),
           );
         } else if (capturedProjectId) {
           if (!onAddRepositoryToProject) {
@@ -295,7 +161,7 @@ export function useRepositoryAssociateModalController({
           await Promise.resolve(
             onAddRepositoryToProject(
               capturedProjectId,
-              repositoryType,
+              DEFAULT_REPOSITORY_TYPE,
               options,
               acquire,
               explicitFolderPath,
@@ -335,19 +201,14 @@ export function useRepositoryAssociateModalController({
       }
     })();
   }, [
-    associateSelectValue,
     buildAcquireParams,
     close,
     defaultParentPath,
     floatingMode,
-    iconColor,
-    iconDisplayName,
     message,
     onAddFloatingRepository,
     onAddRepositoryToProject,
     pendingProjectId,
-    presets,
-    repositoryType,
     workspaceBootstrapSelection,
   ]);
 
@@ -376,23 +237,11 @@ export function useRepositoryAssociateModalController({
     defaultParentPath,
     pickParentPath,
     submitOkText,
-    associateSelectValue,
-    setAssociateSelectValue,
-    repositoryType,
-    setRepositoryType,
     workspaceBootstrapSelection,
     setWorkspaceBootstrapSelection,
-    iconDisplayName,
-    setIconDisplayName,
-    iconColor,
-    setIconColor,
-    presets,
-    selectOptions,
-    resolvePresetSelectValue,
     openAddRepositoryModal,
     openAddFloatingRepositoryModal,
     close,
-    addPreset,
     submit,
   };
 }

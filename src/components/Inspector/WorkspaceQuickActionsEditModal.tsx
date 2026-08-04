@@ -1,10 +1,11 @@
 import { FolderOpenOutlined, LinkOutlined } from "@ant-design/icons";
-import { App, AutoComplete, Button, Form, Input, Modal, Segmented } from "antd";
+import { App, AutoComplete, Button, Form, Input, Modal, Segmented, Switch } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { isSafeExternalHref, openExternalUrl } from "../../services/openExternal";
 import { pathIsAccessibleDirectory, pickFolder } from "../../services/repository";
 import {
   normalizeWorkspaceQuickActionCategory,
+  resolveWorkspaceQuickActionPinnedToTopbar,
   WORKSPACE_QUICK_ACTION_CATEGORY_MAX_LENGTH,
   type WorkspaceQuickActionItem,
   type WorkspaceQuickActionKind,
@@ -31,6 +32,7 @@ export interface WorkspaceQuickActionsEditModalProps {
     label: string;
     target: string;
     category: string;
+    pinnedToTopbar: boolean;
     scope: WorkspaceQuickActionScope;
     scopeId: string;
   }) => void | Promise<void>;
@@ -82,6 +84,7 @@ export function WorkspaceQuickActionsEditModal({
   const [label, setLabel] = useState("");
   const [target, setTarget] = useState("");
   const [category, setCategory] = useState("");
+  const [pinnedToTopbar, setPinnedToTopbar] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const categorySelectOptions = useMemo(
@@ -109,6 +112,7 @@ export function WorkspaceQuickActionsEditModal({
     setLabel(initialItem?.label ?? "");
     setTarget(initialItem?.target ?? "");
     setCategory(normalizeWorkspaceQuickActionCategory(initialItem?.category));
+    setPinnedToTopbar(resolveWorkspaceQuickActionPinnedToTopbar(initialItem ?? {}));
     setSubmitting(false);
   }, [
     open,
@@ -160,6 +164,7 @@ export function WorkspaceQuickActionsEditModal({
         label: trimmedLabel,
         target: trimmedTarget,
         category: trimmedCategory,
+        pinnedToTopbar,
         scope,
         scopeId,
       });
@@ -186,6 +191,21 @@ export function WorkspaceQuickActionsEditModal({
             .toLowerCase()
             .includes(inputValue.trim().toLowerCase())
         }
+      />
+    </Form.Item>
+  );
+
+  const pinField = (
+    <Form.Item
+      label="顶栏显示"
+      extra={compact ? undefined : "开启后会出现在中栏顶栏「远程」入口之后"}
+    >
+      <Switch
+        size={compact ? "small" : undefined}
+        checked={pinnedToTopbar}
+        onChange={setPinnedToTopbar}
+        checkedChildren="开"
+        unCheckedChildren="关"
       />
     </Form.Item>
   );
@@ -246,6 +266,7 @@ export function WorkspaceQuickActionsEditModal({
                 ) : null}
               </div>
             </Form.Item>
+            {pinField}
           </div>
         ) : (
           <>
@@ -290,6 +311,7 @@ export function WorkspaceQuickActionsEditModal({
                 ) : null}
               </div>
             </Form.Item>
+            {pinField}
           </>
         )}
         {mode === "edit" && initialItem?.kind === "link" && isSafeExternalHref(initialItem.target) ? (

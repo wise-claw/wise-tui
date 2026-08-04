@@ -48,7 +48,7 @@ export function RepositoryRunCommandModal({
       footer={null}
       closable={false}
       centered
-      width={320}
+      width={380}
       destroyOnHidden
       className="app-run-command-modal"
       title={null}

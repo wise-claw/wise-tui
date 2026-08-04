@@ -76,13 +76,20 @@ describe("buildProjectMoreMenuItems", () => {
 });
 
 describe("buildProjectRepositoryMoreMenuItems", () => {
-  test("includes icon badge configure entry when handler is available", () => {
+  test("hides icon badge / requirements / executable-tasks menu entries", () => {
     const labels = menuLabels(
       buildProjectRepositoryMoreMenuItems({
+        trellisEnabled: true,
         onConfigureRepositoryIconBadge: true,
+        onOpenRequirements: true,
+        onOpenExecutableTasks: true,
+        onOpenScheduledTasks: true,
       }),
     );
-    expect(labels).toContain("配置角标");
+    expect(labels).not.toContain("配置角标");
+    expect(labels).not.toContain("仓库需求");
+    expect(labels).not.toContain("可执行任务");
+    expect(labels).toContain("定时任务");
   });
 
   test("separates repository sections with dividers instead of group titles", () => {
@@ -101,6 +108,9 @@ describe("buildProjectRepositoryMoreMenuItems", () => {
     expect(dividerCount(items)).toBeGreaterThan(0);
     expect(labels).toContain("移出工作区");
     expect(labels).not.toContain("添加待办事项");
+    expect(labels).not.toContain("配置角标");
+    expect(labels).not.toContain("仓库需求");
+    expect(labels).not.toContain("可执行任务");
   });
 
   test("repository editor label reflects scoped open app", () => {
@@ -173,6 +183,10 @@ describe("buildFloatingRepositoryMoreMenuItems", () => {
     const labels = menuLabels(
       buildFloatingRepositoryMoreMenuItems({
         joinableProjects: [{ id: "p1", name: "eco", repositoryIds: [] } as never],
+        trellisEnabled: true,
+        onConfigureRepositoryIconBadge: true,
+        onOpenRequirements: true,
+        onOpenExecutableTasks: true,
         onPromoteToNewProject: true,
         onJoinExistingProject: true,
       }),
@@ -181,5 +195,8 @@ describe("buildFloatingRepositoryMoreMenuItems", () => {
     expect(labels).toContain("加入工作区");
     expect(labels).toContain("移除仓库");
     expect(labels).not.toContain("添加待办事项");
+    expect(labels).not.toContain("配置角标");
+    expect(labels).not.toContain("仓库需求");
+    expect(labels).not.toContain("可执行任务");
   });
 });

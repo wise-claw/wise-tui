@@ -1,11 +1,9 @@
 import { FolderOpenOutlined } from "@ant-design/icons";
-import { HoverHint } from "../shared/HoverHint";
-import { Button, Divider, Input, Modal, Select, Space, Typography } from "antd";
-import type { AddRepositoryOptions, Repository, RepositoryAssociatePreset } from "../../types";
+import { Button, Input, Modal, Space, Typography } from "antd";
+import type { AddRepositoryOptions } from "../../types";
 import type { WorkspaceBootstrapSelection } from "../../constants/workspaceBootstrapAddons";
 import type { RepositoryAcquireMode } from "../../utils/repositoryAcquire";
 import { deriveFolderNameFromGitUrl } from "../../utils/repositoryAcquire";
-import { REPOSITORY_ICON_COLOR_PRESETS } from "../../utils/repositoryType";
 import { WorkspaceBootstrapPicker } from "../WorkspaceBootstrapPicker";
 import "./RepositoryAssociateModal.css";
 
@@ -22,22 +20,8 @@ interface RepositoryAssociateModalProps {
   gitUrl: string;
   onGitUrlChange: (value: string) => void;
   submitOkText: string;
-  associateSelectValue: string;
-  onAssociateSelectValueChange: (value: string) => void;
-  onRepositoryTypeChange: (value: Repository["repositoryType"]) => void;
   workspaceBootstrapSelection: WorkspaceBootstrapSelection;
   onWorkspaceBootstrapSelectionChange: (value: WorkspaceBootstrapSelection) => void;
-  iconDisplayName: string;
-  onIconDisplayNameChange: (value: string) => void;
-  iconColor: string | null;
-  onIconColorChange: (value: string | null) => void;
-  presets: RepositoryAssociatePreset[];
-  selectOptions: Array<{
-    label: string;
-    options: { value: string; title?: string; label: React.ReactNode }[];
-  }>;
-  resolvePresetSelectValue: (value: string) => RepositoryAssociatePreset | null;
-  onAddPreset: () => void;
   onCancel: () => void;
   onSubmit: () => void;
 }
@@ -89,18 +73,8 @@ export function RepositoryAssociateModal({
   gitUrl,
   onGitUrlChange,
   submitOkText,
-  associateSelectValue,
-  onAssociateSelectValueChange,
-  onRepositoryTypeChange,
   workspaceBootstrapSelection,
   onWorkspaceBootstrapSelectionChange,
-  iconDisplayName,
-  onIconDisplayNameChange,
-  iconColor,
-  onIconColorChange,
-  selectOptions,
-  resolvePresetSelectValue,
-  onAddPreset,
   onCancel,
   onSubmit,
 }: RepositoryAssociateModalProps) {
@@ -225,82 +199,6 @@ export function RepositoryAssociateModal({
         </div>
 
         <div>
-          <div className="app-add-repo-field-label">{compact ? "角标与角色" : "角标与自定义角色标签"}</div>
-          <Select
-            className="app-add-repository-badge-select"
-            size="small"
-            classNames={{ popup: { root: "app-add-repo-select-dropdown" } }}
-            popupMatchSelectWidth
-            optionLabelProp="title"
-            value={associateSelectValue}
-            onChange={(value) => {
-              const nextValue = String(value);
-              if (nextValue === "frontend" || nextValue === "backend" || nextValue === "document") {
-                onAssociateSelectValueChange(nextValue);
-                onRepositoryTypeChange(nextValue);
-                onIconDisplayNameChange("");
-                onIconColorChange(null);
-                return;
-              }
-              const preset = resolvePresetSelectValue(nextValue);
-              if (!preset) return;
-              onAssociateSelectValueChange(nextValue);
-              onRepositoryTypeChange(preset.repositoryType);
-              onIconDisplayNameChange(preset.iconDisplayName);
-              onIconColorChange(preset.iconColor ?? null);
-            }}
-            options={selectOptions}
-            popupRender={(menu) => (
-              <div className="app-add-repo-select-popup">
-                {menu}
-                <div className="app-add-repo-select-popup-extra" onMouseDown={(event) => event.preventDefault()}>
-                  <Divider className="app-add-repo-select-popup-divider" />
-                  <div className="app-add-repo-field-label">角标颜色</div>
-                  <div className="app-add-repo-icon-swatches">
-                    <HoverHint title="与该角色标签的默认角标色一致">
-                      <button
-                        type="button"
-                        className={`app-add-repo-icon-swatch app-add-repo-icon-swatch--follow${iconColor === null ? " app-add-repo-icon-swatch--selected" : ""}`}
-                        aria-label="角标颜色与角色标签默认色一致"
-                        onClick={() => onIconColorChange(null)}
-                      />
-                    </HoverHint>
-                    {REPOSITORY_ICON_COLOR_PRESETS.map((hex) => (
-                      <HoverHint key={hex} title={hex}>
-                        <button
-                          type="button"
-                          className={`app-add-repo-icon-swatch${iconColor === hex ? " app-add-repo-icon-swatch--selected" : ""}`}
-                          aria-label={`角标颜色 ${hex}`}
-                          style={{ backgroundColor: hex }}
-                          onClick={() => onIconColorChange(hex)}
-                        />
-                      </HoverHint>
-                    ))}
-                  </div>
-                  <div className="app-add-repo-field-label app-add-repo-field-label--spaced">角标标题</div>
-                  <Input
-                    size="small"
-                    value={iconDisplayName}
-                    onChange={(event) => onIconDisplayNameChange(event.target.value)}
-                    placeholder="留空则角标内仅显示角色默认文案（前/后/文）"
-                    allowClear
-                  />
-                  <Button
-                    type="default"
-                    size="small"
-                    block
-                    className="app-add-repo-preset-add-btn"
-                    onClick={onAddPreset}
-                  >
-                    将当前配置加入常用选项
-                  </Button>
-                </div>
-              </div>
-            )}
-            style={{ width: "100%" }}
-          />
-        </div>
-        <div>
           {!floatingMode ? (
             <div className="app-add-repo-field-label">SDD 与内置能力</div>
           ) : null}
@@ -315,18 +213,9 @@ export function RepositoryAssociateModal({
 }
 
 export function buildAddRepositoryOptions({
-  iconDisplayName,
-  iconColor,
   bootstrap,
 }: {
-  iconDisplayName: string;
-  iconColor: string | null;
   bootstrap?: WorkspaceBootstrapSelection;
 }): AddRepositoryOptions {
-  const iconText = iconDisplayName.trim();
-  return {
-    iconDisplayName: iconText.length > 0 ? iconText : undefined,
-    iconColor,
-    bootstrap,
-  };
+  return { bootstrap };
 }

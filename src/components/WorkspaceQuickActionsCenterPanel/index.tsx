@@ -103,6 +103,7 @@ export function WorkspaceQuickActionsCenterPanel() {
         label: string;
         target: string;
         category: string;
+        pinnedToTopbar: boolean;
       },
       existingId?: string,
     ) => {
@@ -125,9 +126,13 @@ export function WorkspaceQuickActionsCenterPanel() {
           target: input.target,
           updatedAt: now,
           ...(category ? { category } : { category: undefined }),
+          ...(input.pinnedToTopbar ? { pinnedToTopbar: true } : { pinnedToTopbar: undefined }),
         };
         if (!category) {
           delete next[index].category;
+        }
+        if (!input.pinnedToTopbar) {
+          delete next[index].pinnedToTopbar;
         }
       } else {
         next.unshift({
@@ -136,6 +141,7 @@ export function WorkspaceQuickActionsCenterPanel() {
           label: input.label,
           target: input.target,
           ...(category ? { category } : {}),
+          ...(input.pinnedToTopbar ? { pinnedToTopbar: true } : {}),
           createdAt: now,
           updatedAt: now,
         });

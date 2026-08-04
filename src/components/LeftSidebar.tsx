@@ -1306,19 +1306,8 @@ export function LeftSidebar({
         gitUrl={repositoryAssociateModal.gitUrl}
         onGitUrlChange={repositoryAssociateModal.setGitUrl}
         submitOkText={repositoryAssociateModal.submitOkText}
-        associateSelectValue={repositoryAssociateModal.associateSelectValue}
-        onAssociateSelectValueChange={repositoryAssociateModal.setAssociateSelectValue}
-        onRepositoryTypeChange={repositoryAssociateModal.setRepositoryType}
         workspaceBootstrapSelection={repositoryAssociateModal.workspaceBootstrapSelection}
         onWorkspaceBootstrapSelectionChange={repositoryAssociateModal.setWorkspaceBootstrapSelection}
-        iconDisplayName={repositoryAssociateModal.iconDisplayName}
-        onIconDisplayNameChange={repositoryAssociateModal.setIconDisplayName}
-        iconColor={repositoryAssociateModal.iconColor}
-        onIconColorChange={repositoryAssociateModal.setIconColor}
-        presets={repositoryAssociateModal.presets}
-        selectOptions={repositoryAssociateModal.selectOptions}
-        resolvePresetSelectValue={repositoryAssociateModal.resolvePresetSelectValue}
-        onAddPreset={() => void repositoryAssociateModal.addPreset()}
         onCancel={repositoryAssociateModal.close}
         onSubmit={repositoryAssociateModal.submit}
       />
