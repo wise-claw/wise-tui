@@ -24,6 +24,7 @@ import {
 } from "../utils/workspaceMode";
 import { shouldKeepProjectFocusWhenSwitchingSession } from "../utils/workspaceSelectionState";
 import { findSessionByTabOrClaudeId } from "../utils/claudeSessionSelection";
+import { markExplicitSidebarSessionSelect } from "../utils/explicitSidebarSessionSelect";
 
 interface UseAppSessionRoutingOptions {
   repositories: Repository[];
@@ -267,7 +268,13 @@ export function useAppSessionRouting({
       const target = findSessionByTabOrClaudeId(sessionsLatestRef.current, sid);
       const canonicalId = target?.id ?? sid;
       const currentActive = activeSessionIdLatestRef.current?.trim() ?? "";
-      if (canonicalId === currentActive) {
+      const alreadyActive =
+        canonicalId === currentActive ||
+        (target != null &&
+          (target.id === currentActive || target.claudeSessionId?.trim() === currentActive));
+      // 侧栏显式点选：即使已是当前会话也打标，挡住随后 auto-ensure 抢焦。
+      markExplicitSidebarSessionSelect(canonicalId);
+      if (alreadyActive) {
         return;
       }
       if (!target?.repositoryPath) {

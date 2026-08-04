@@ -53,6 +53,7 @@ import {
   resolveClaudeWorkspaceMainSession,
   shouldKeepProjectFocusActiveSession,
 } from "../../utils/workspaceSelectionState";
+import { isRecentExplicitSidebarSessionSelect } from "../../utils/explicitSidebarSessionSelect";
 import { loadSessionOwnerHints } from "../../utils/sessionOwnerHints";
 import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
 import { type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
@@ -555,6 +556,10 @@ function ClaudeSessionsShell({
     if (activeWorkspaceFocus !== "project" || !activeProject || !mainSessionForDataLink) {
       return;
     }
+    // 侧栏刚点选的会话：短窗口内禁止拉回主会话（避免「要点两次」）。
+    if (isRecentExplicitSidebarSessionSelect(activeSessionId)) {
+      return;
+    }
     // 用户显式选中的会话（能在全量列表解析到）优先，不拉回项目主会话——
     // 与 resolveClaudePanelActiveSession 尊重 activeSessionId 的语义一致。
     // 仅当 activeSessionId 指向找不到的陈旧 id 时才拉回主会话，确保 live 订阅
@@ -581,6 +586,10 @@ function ClaudeSessionsShell({
   /** 打开仓库/项目时恢复已有主会话；无可用会话时自动新建。 */
   useEffect(() => {
     if (activeSession) {
+      return;
+    }
+    // 侧栏刚点选：短窗口内禁止 auto-ensure 抢焦（与「要点两次」同源）。
+    if (isRecentExplicitSidebarSessionSelect(activeSessionId)) {
       return;
     }
     // 侧栏刚点选的会话若在全量列表中，勿立刻回退主会话（panel 过滤偶发漏掉 worker 时会抢焦）。

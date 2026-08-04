@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type {
   ClaudeSession,
   EmployeeMonitorItem,
@@ -49,6 +49,13 @@ export type RepositoryWorkspaceSessionTreeProps = {
   onArchiveSession?: (sessionId: string) => void;
 };
 
+const WORKSPACE_SESSION_ROW_NESTED_ACTION_SELECTOR =
+  ".app-workspace-session-tree__stop, .app-workspace-session-tree__archive";
+
+function isWorkspaceSessionRowNestedActionTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(WORKSPACE_SESSION_ROW_NESTED_ACTION_SELECTOR));
+}
+
 function activateSession(
   sessionId: string,
   props: Pick<
@@ -67,6 +74,31 @@ function activateSession(
     return;
   }
   props.onHistoryDrawerSessionIdChange?.(sessionId);
+}
+
+/**
+ * 主按钮在 pointerdown 激活（与 SessionQuickActionsBar 同模式）：
+ * 焦点在 Composer 时，首次 click 常被失焦/重渲吞掉，导致要点两次。
+ * preventDefault 会抑制随后的 click，故键盘仍走 onClick。
+ */
+function handleWorkspaceSessionRowPointerDown(
+  event: ReactPointerEvent<HTMLButtonElement>,
+  activate: () => void,
+) {
+  if (event.button !== 0) return;
+  if (isWorkspaceSessionRowNestedActionTarget(event.target)) return;
+  event.preventDefault();
+  activate();
+}
+
+function handleNestedActionPointerDown(
+  event: ReactPointerEvent<HTMLElement>,
+  activate: () => void,
+) {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  event.stopPropagation();
+  activate();
 }
 
 function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTreeProps) {
@@ -133,18 +165,19 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
         if (row.kind === "employee") {
           const item = row.item;
           const running = item.status === "in_progress";
+          const openEmployee = () => {
+            const sid = item.sessionId?.trim();
+            if (sid) {
+              props.onHistoryDrawerSessionIdChange?.(sid);
+            }
+          };
           return (
             <button
               key={`emp:${item.employeeId}`}
               type="button"
               className={`app-workspace-session-tree__row${running ? " app-workspace-session-tree__row--running" : ""}`}
-              onClick={() => {
-                const sid = item.sessionId?.trim();
-                if (sid) {
-                  props.onHistoryDrawerSessionIdChange?.(sid);
-                  return;
-                }
-              }}
+              onPointerDown={(event) => handleWorkspaceSessionRowPointerDown(event, openEmployee)}
+              onClick={openEmployee}
             >
               <WorkspaceSessionRowStatusSlot liveStatus={item.status} />
               <span className="app-workspace-session-tree__kind" data-kind="terminal">
@@ -162,6 +195,11 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
                   role="button"
                   tabIndex={0}
                   aria-label="结束终端"
+                  onPointerDown={(event) =>
+                    handleNestedActionPointerDown(event, () => {
+                      props.onStopEmployeeMonitor?.(item.employeeId);
+                    })
+                  }
                   onClick={(event) => {
                     event.stopPropagation();
                     props.onStopEmployeeMonitor?.(item.employeeId);
@@ -188,29 +226,43 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
             onCancelOmcDirectBatchInvocation: props.onCancelOmcDirectBatchInvocation,
             onStopSessionConversationTask: props.onStopSessionConversationTask,
           });
+          const openDispatch = () => {
+            if (item.invocationKey && item.sessionId && item.repositoryPath) {
+              props.onOpenOmcBatchInvocationDetail?.({
+                sessionId: item.sessionId,
+                repositoryPath: item.repositoryPath,
+                invocationKey: item.invocationKey,
+              });
+              return;
+            }
+            const sid = item.sessionId?.trim();
+            if (!sid) return;
+            // 执行环境派发：打开会话窗口，不再进历史 drawer。
+            if (props.onSelectSession) {
+              props.onSelectSession(sid);
+              return;
+            }
+            props.onHistoryDrawerSessionIdChange?.(sid);
+          };
+          const stopDispatch = () => {
+            if (props.onStopSessionConversationTask) {
+              props.onStopSessionConversationTask(item);
+              return;
+            }
+            if (item.cancelMode === "invocation" && item.invocationKey) {
+              props.onCancelOmcDirectBatchInvocation?.(item.invocationKey);
+              return;
+            }
+            const sid = item.sessionId?.trim();
+            if (sid) props.onCancelSessionFromMonitor?.(sid);
+          };
           return (
             <button
               key={`dispatch:${item.key}`}
               type="button"
               className={`app-workspace-session-tree__row${running ? " app-workspace-session-tree__row--running" : ""}`}
-              onClick={() => {
-                if (item.invocationKey && item.sessionId && item.repositoryPath) {
-                  props.onOpenOmcBatchInvocationDetail?.({
-                    sessionId: item.sessionId,
-                    repositoryPath: item.repositoryPath,
-                    invocationKey: item.invocationKey,
-                  });
-                  return;
-                }
-                const sid = item.sessionId?.trim();
-                if (!sid) return;
-                // 执行环境派发：打开会话窗口，不再进历史 drawer。
-                if (props.onSelectSession) {
-                  props.onSelectSession(sid);
-                  return;
-                }
-                props.onHistoryDrawerSessionIdChange?.(sid);
-              }}
+              onPointerDown={(event) => handleWorkspaceSessionRowPointerDown(event, openDispatch)}
+              onClick={openDispatch}
             >
               <WorkspaceSessionRowStatusSlot liveStatus={item.status} />
               <span className="app-workspace-session-tree__kind" data-kind="dispatch">
@@ -228,18 +280,10 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
                   role="button"
                   tabIndex={0}
                   aria-label="停止派发"
+                  onPointerDown={(event) => handleNestedActionPointerDown(event, stopDispatch)}
                   onClick={(event) => {
                     event.stopPropagation();
-                    if (props.onStopSessionConversationTask) {
-                      props.onStopSessionConversationTask(item);
-                      return;
-                    }
-                    if (item.cancelMode === "invocation" && item.invocationKey) {
-                      props.onCancelOmcDirectBatchInvocation?.(item.invocationKey);
-                      return;
-                    }
-                    const sid = item.sessionId?.trim();
-                    if (sid) props.onCancelSessionFromMonitor?.(sid);
+                    stopDispatch();
                   }}
                   onKeyDown={(event) => {
                     if (event.key !== "Enter" && event.key !== " ") return;
@@ -258,12 +302,14 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
         if (row.kind === "team") {
           const item = row.item;
           const running = item.status === "in_progress";
+          const openTeam = () => props.onOpenTeamMonitorDetail?.(item.workflowId);
           return (
             <button
               key={`team:${item.workflowId}`}
               type="button"
               className={`app-workspace-session-tree__row${running ? " app-workspace-session-tree__row--running" : ""}`}
-              onClick={() => props.onOpenTeamMonitorDetail?.(item.workflowId)}
+              onPointerDown={(event) => handleWorkspaceSessionRowPointerDown(event, openTeam)}
+              onClick={openTeam}
             >
               <WorkspaceSessionRowStatusSlot liveStatus={item.status} />
               <span className="app-workspace-session-tree__kind" data-kind="workflow">
@@ -281,6 +327,11 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
                   role="button"
                   tabIndex={0}
                   aria-label="停止工作流"
+                  onPointerDown={(event) =>
+                    handleNestedActionPointerDown(event, () => {
+                      props.onStopTeamMonitor?.(item.workflowId);
+                    })
+                  }
                   onClick={(event) => {
                     event.stopPropagation();
                     props.onStopTeamMonitor?.(item.workflowId);
@@ -302,14 +353,19 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
         const session = row.item;
         const title = getSessionPreview(session);
         const updatedAt = workspaceSidebarSessionUpdatedAt(session);
-        const isActive = session.id === activeSessionId;
+        const activeKey = activeSessionId?.trim() ?? "";
+        const isActive =
+          Boolean(activeKey) &&
+          (session.id === activeKey || session.claudeSessionId?.trim() === activeKey);
         const running = session.status === "running" || session.status === "connecting";
+        const openSession = () => activateSession(session.id, props);
         return (
           <button
             key={`session:${session.id}`}
             type="button"
             className={`app-workspace-session-tree__row${isActive ? " app-workspace-session-tree__row--active" : ""}${running ? " app-workspace-session-tree__row--running" : ""}`}
-            onClick={() => activateSession(session.id, props)}
+            onPointerDown={(event) => handleWorkspaceSessionRowPointerDown(event, openSession)}
+            onClick={openSession}
           >
             <WorkspaceSessionRowStatusSlot liveStatus={session.status} />
             <span className="app-workspace-session-tree__title" title={title}>
@@ -326,6 +382,11 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
                   tabIndex={0}
                   aria-label="归档会话"
                   title="归档"
+                  onPointerDown={(event) =>
+                    handleNestedActionPointerDown(event, () => {
+                      props.onArchiveSession?.(session.id);
+                    })
+                  }
                   onClick={(event) => {
                     event.stopPropagation();
                     props.onArchiveSession?.(session.id);
