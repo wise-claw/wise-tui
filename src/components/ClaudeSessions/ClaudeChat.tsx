@@ -205,6 +205,11 @@ interface Props {
   onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
   /** Codex RPC 推理强度；写入会话并落盘 tabs.json。 */
   onUpdateSessionCodexReasoningEffort?: (sessionId: string, effort: string) => void;
+  /** Composer 切换执行环境：写入当前会话标签级引擎。 */
+  onUpdateSessionExecutionEngine?: (
+    sessionId: string,
+    engine: SessionExecutionEngine,
+  ) => void | Promise<void>;
   /** 全局 ultracode 状态，注入 composer 避免重复读 store。 */
   globalUltracodeEnabled?: boolean;
   onUpdateRepositoryExecutionEngine?: (
@@ -382,6 +387,7 @@ export function ClaudeChatInner({
   onSessionConnectionKindChange,
   onUpdateSessionUltracode,
   onUpdateSessionCodexReasoningEffort,
+  onUpdateSessionExecutionEngine,
   globalUltracodeEnabled,
   onUpdateRepositoryExecutionEngine,
   onUpdateEmployeeExecutionEngine,
@@ -1426,6 +1432,8 @@ export function ClaudeChatInner({
 
   const handleSessionExecutionEngineChange = useCallback(
     (engine: SessionExecutionEngine) => {
+      // 先写标签级引擎：当前会话下一回合立即按新引擎 spawn（此前只改仓库默认，须新建会话才生效）。
+      void onUpdateSessionExecutionEngine?.(session.id, engine);
       if (paneCount > 1 && onUpdatePaneRuntimeOverride) {
         onUpdatePaneRuntimeOverride(paneIndex, {
           executionEngine: engine,
@@ -1452,10 +1460,12 @@ export function ClaudeChatInner({
       employees,
       onUpdateEmployeeExecutionEngine,
       onUpdateRepositoryExecutionEngine,
+      onUpdateSessionExecutionEngine,
       onUpdatePaneRuntimeOverride,
       paneCount,
       paneIndex,
       paneRuntimeOverride?.claudeProxyRoute,
+      session.id,
       session.repositoryName,
       sessionRepository,
     ],

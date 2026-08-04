@@ -154,6 +154,7 @@ import { isTerminalWorkerWiseTab, sanitizeTerminalWorkerTranscriptMessages, wait
 import { isExecutionEnvironmentWorkerRepositoryName } from "../utils/executionEnvironmentDispatch";
 import { isFeedbackLoopWorkerRepositoryName } from "../utils/sessionFeedbackLoopDispatch";
 import { sessionShouldRetainMessagesWhenInactive } from "../utils/sessionMessagesRetainPolicy";
+import { normalizeSessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import {
   resolveDiskTranscriptSessionKey,
   resolveDiskTranscriptSource,
@@ -2749,6 +2750,59 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     });
   }, []);
 
+  /**
+   * Composer 切换执行环境：写入标签级 `executionEngine`，使当前会话下一回合立即生效
+   *（不再只改仓库默认、必须新建会话才吃到）。引擎族变化时结束旧子进程并清空 resume id。
+   */
+  const updateSessionExecutionEngine = useCallback(
+    async (sessionId: string, engine: SessionExecutionEngine) => {
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!session) return;
+
+      const nextEngine = normalizeSessionExecutionEngine(engine);
+      const prevEngine = resolveSessionExecutionEngine(session);
+      if (prevEngine === nextEngine && session.executionEngine === nextEngine) {
+        return;
+      }
+
+      if (session.status === "running" || session.status === "connecting") {
+        message.warning("会话运行中，请先点击「结束」后再切换执行环境。");
+        return;
+      }
+
+      const claudeSid =
+        session.claudeSessionId?.trim() ?? sessionIdMapRef.current.get(sessionId)?.trim() ?? null;
+
+      // 先同步写入标签级引擎，避免 await 清理旧进程期间用户发送仍读到旧 executionEngine。
+      const nextConnectionKind: ClaudeSessionConnectionKind =
+        nextEngine === "claude" ? "streaming" : "oneshot";
+      const globalDefault = defaultConnectionKindRef.current;
+      setSessions((prev) => {
+        const nextSessions = prev.map((s) => {
+          if (s.id !== sessionId) return s;
+          const withEngine: ClaudeSession = {
+            ...s,
+            executionEngine: nextEngine,
+            claudeSessionId: null,
+          };
+          return applyTabConnectionKindOverride(withEngine, nextConnectionKind, globalDefault);
+        });
+        sessionsRef.current = nextSessions;
+        return nextSessions;
+      });
+      streamingProcessByTabRef.current.delete(sessionId);
+      sessionIdMapRef.current.delete(sessionId);
+      detachClaudeInvocationsForSessionKey(sessionId);
+
+      if (claudeSid) {
+        await closeStreamingSession(claudeSid).catch(() => {
+          /* 进程可能已退出 */
+        });
+      }
+    },
+    [detachClaudeInvocationsForSessionKey, resolveSessionExecutionEngine],
+  );
+
   // Create a session without executing Claude (idle state); model from Claude Code settings.json
   const createSession = useCallback(
     async (
@@ -4325,6 +4379,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     updateSessionConnectionKind,
     updateSessionUltracodeOverride,
     updateSessionCodexReasoningEffort,
+    updateSessionExecutionEngine,
     executeSession,
     executeTerminalSession,
     resumeSessionFromMonitorDrawer,

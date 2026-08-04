@@ -132,6 +132,14 @@ export interface UseClaudeSessionsReturn {
   updateSessionUltracodeOverride: (sessionId: string, next: boolean | null) => void;
   /** Codex RPC 推理强度：写入会话并落盘 tabs.json。 */
   updateSessionCodexReasoningEffort: (sessionId: string, effort: string) => void;
+  /**
+   * Composer 切换执行环境：写入标签级 `executionEngine`，当前会话下一回合立即生效。
+   * 引擎族变化时结束旧子进程并清空 resume id。
+   */
+  updateSessionExecutionEngine: (
+    sessionId: string,
+    engine: SessionExecutionEngine,
+  ) => Promise<void>;
   /** 返回 false 表示未启动（例如并发门闸拦截）；其余路径为 true（含已安排重试的暂不可见会话）。 */
   executeSession: (sessionId: string, prompt: string, opts?: ClaudeComposerExecuteBubbleOptions) => boolean;
   executeTerminalSession: (

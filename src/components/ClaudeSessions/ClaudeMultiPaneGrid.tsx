@@ -238,6 +238,10 @@ export interface MultiPaneSharedChatProps {
   /** Per-session ultracode setter；多屏下每屏各自 toggle 自己的标签。 */
   onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
   onUpdateSessionCodexReasoningEffort?: (sessionId: string, effort: string) => void;
+  onUpdateSessionExecutionEngine?: (
+    sessionId: string,
+    engine: SessionExecutionEngine,
+  ) => void | Promise<void>;
   onUpdateRepositoryExecutionEngine?: (
     repositoryId: number,
     engine: SessionExecutionEngine,
@@ -489,6 +493,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onSessionConnectionKindChange={onSessionConnectionKindChange}
         onUpdateSessionUltracode={shared.onUpdateSessionUltracode}
         onUpdateSessionCodexReasoningEffort={shared.onUpdateSessionCodexReasoningEffort}
+        onUpdateSessionExecutionEngine={shared.onUpdateSessionExecutionEngine}
         onUpdateRepositoryExecutionEngine={shared.onUpdateRepositoryExecutionEngine}
         onUpdateEmployeeExecutionEngine={shared.onUpdateEmployeeExecutionEngine}
         codexAvailable={shared.codexAvailable}
@@ -877,6 +882,7 @@ const MultiPaneExtraPaneCell = memo(
             onSessionConnectionKindChange={(kind) => void shared.onUpdateSessionConnectionKind(sessionId, kind)}
             onUpdateSessionUltracode={shared.onUpdateSessionUltracode}
             onUpdateSessionCodexReasoningEffort={shared.onUpdateSessionCodexReasoningEffort}
+            onUpdateSessionExecutionEngine={shared.onUpdateSessionExecutionEngine}
             onUpdateRepositoryExecutionEngine={shared.onUpdateRepositoryExecutionEngine}
             onUpdateEmployeeExecutionEngine={shared.onUpdateEmployeeExecutionEngine}
             codexAvailable={shared.codexAvailable}
