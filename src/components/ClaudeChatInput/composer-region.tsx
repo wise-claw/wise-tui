@@ -710,6 +710,8 @@ function ComposerInner({
   /** clearComposerSurfaceSync 进行中：Tiptap 的 onContentChange 不应回流改 React 状态，否则会被 setContent("") 异步清空回调污染。 */
   const composerResettingRef = useRef(false);
   const cursorRef = useRef(0);
+  /** @ / 指令触发锚点矩形缓存：按 (mode, triggerStart) 复用，避免 @query 逐字符扩展时每键 getBoundingClientRect 强制回流。 */
+  const triggerRectCacheRef = useRef<{ key: string; rect: DOMRect | null } | null>(null);
   const dragOverLoggedRef = useRef(false);
   /** 权限/追问 dock 是否待处理：发送后重聚焦 effect 据此让出焦点给弹窗。值在渲染体回填。 */
   const showQuestionChromeRef = useRef(false);
@@ -1130,6 +1132,18 @@ function ComposerInner({
         suppressTriggerAfterPasteUntilRef.current = 0;
       }
       const detected = detectAtSlashTrigger(plain, c);
+      // 锚点矩形只在 (mode, triggerStart) 变化时重算：@query 逐字符扩展时 @ 位置不变，
+      // 复用上次 rect，避免每键 getBoundingClientRect 强制回流（事件处理器内算，非渲染期副作用）。
+      if (detected) {
+        const rectKey = `${detected.mode}:${detected.triggerStart}`;
+        if (triggerRectCacheRef.current?.key !== rectKey) {
+          triggerRectCacheRef.current = {
+            key: rectKey,
+            rect: resolveAtSlashTriggerAnchorRect(aiChatRef.current, shellRef.current, plain, c),
+          };
+        }
+      }
+      const cachedRect = triggerRectCacheRef.current?.rect ?? null;
       setTrigger((prev) => {
         if (!detected) {
           if (prev.mode === null && prev.query === "") return prev;
@@ -1139,7 +1153,7 @@ function ComposerInner({
         return {
           mode: detected.mode,
           query: detected.query,
-          rect: resolveAtSlashTriggerAnchorRect(aiChatRef.current, shellRef.current, plain, c),
+          rect: cachedRect,
         };
       });
     }
@@ -1441,9 +1455,13 @@ function ComposerInner({
     congested: congested || composerInteractionActive,
   });
 
+  // token 估算只由 session 身份决定，与草稿无关；session 引用不变则结果不变，
+  // 避免每次打字停顿（displayPlain 变化）都重跑 O(transcript) 的逐消息扫描。
+  const sessionContextMetrics = useMemo(() => getSessionContextMetrics(session), [session]);
+
   const bottomStatus = useMemo(() => {
     const sessionDuration = formatSessionDuration(session.createdAt);
-    const metrics = getSessionContextMetrics(session);
+    const metrics = sessionContextMetrics;
     const outgoing = displayPlain.trim();
     const ctxHint = formatContextStatusHint(
       metrics,
@@ -1465,7 +1483,7 @@ function ComposerInner({
       statusText,
       fullLine,
     };
-  }, [backgroundContextCompactInFlight, displayPlain, sessionMetricsFingerprint, session]);
+  }, [backgroundContextCompactInFlight, displayPlain, sessionMetricsFingerprint, sessionContextMetrics]);
   const hasComposerPayload = canSendComposer;
 
   useEffect(() => {
@@ -2906,6 +2924,11 @@ function ComposerInner({
     });
   }, []);
 
+  /** 稳定回调：ContextCompactProgressRing 已 memo，onBreakdownOpen 须引用稳定，否则内联箭头让 bail out 静默失效。 */
+  const handleContextBreakdownOpen = useCallback(() => {
+    void ensureBreakdown();
+  }, [ensureBreakdown]);
+
   /** 与 Semi 底栏同一行：左侧附件 / 截屏 */
   const renderSemiComposerConfigureArea = useCallback(() => {
     return (
@@ -3181,7 +3204,7 @@ function ComposerInner({
             breakdown={breakdown}
             breakdownLoading={contextBreakdownLoading}
             maintaining={backgroundContextCompactInFlight}
-            onBreakdownOpen={() => void ensureBreakdown()}
+            onBreakdownOpen={handleContextBreakdownOpen}
           />
         ) : null}
         {shouldShowStopButton(composerBusy, Boolean(_onCancel)) ? (

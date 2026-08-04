@@ -221,11 +221,13 @@ function composerHighlightMarksInSync(
 
 function buildComposerHighlightMarkSyncTransaction(
   state: EditorState,
+  /** 调用方已确认 mark 不同步（appendTransaction 路径复用同一次 inSync 判定），跳过内部重复检查。 */
+  knownOutOfSync = false,
 ): import("@tiptap/pm/state").Transaction | null {
   const { doc, schema } = state;
   const { at: atType, slash: slashType } = readHighlightMarkTypes(schema);
   if (!atType || !slashType) return null;
-  if (composerHighlightMarksInSync(doc, schema)) return null;
+  if (!knownOutOfSync && composerHighlightMarksInSync(doc, schema)) return null;
 
   const plain = docToHighlightPlain(doc);
   const desired = findComposerHighlightRanges(plain);
@@ -298,14 +300,18 @@ export function createComposerHighlightMarkSyncPlugin(): Plugin {
     appendTransaction(transactions, _oldState, newState) {
       if (transactions.some((tr) => tr.getMeta(COMPOSER_HIGHLIGHT_SYNC_META))) return null;
 
-      const docChanged = transactions.some((tr) => tr.docChanged);
+      // mark 只附着 doc 内容、与 selection 无关：仅光标移动/选区变化的 transaction 无需同步。
+      // 必须放在 inSync 全量计算之前，否则每键（含方向键/点击）都白付一次 O(n) 扫描。
+      if (!transactions.some((tr) => tr.docChanged)) return null;
+
       const { at: atType, slash: slashType } = readHighlightMarkTypes(newState.schema);
-      const marksMissing =
-        Boolean(atType && slashType) && !composerHighlightMarksInSync(newState.doc, newState.schema);
+      if (!atType || !slashType) return null;
 
-      if (!docChanged && !marksMissing) return null;
+      // 单次 inSync 判定兼作 build 前置，避免 appendTransaction 路径双重 O(n)；
+      // build 传 knownOutOfSync 复用本次判定（外部 syncComposerHighlightMarksOnEditor 仍走内部检查）。
+      if (composerHighlightMarksInSync(newState.doc, newState.schema)) return null;
 
-      return buildComposerHighlightMarkSyncTransaction(newState);
+      return buildComposerHighlightMarkSyncTransaction(newState, true);
     },
   });
 }

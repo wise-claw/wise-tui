@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Button, Popover } from "antd";
 import { ContextDetailPopover } from "./ContextDetailPopover";
 import type { ContextBreakdownSnapshot } from "../../services/claudeContextBreakdown";
@@ -21,7 +21,7 @@ export interface ContextCompactProgressRingProps {
 }
 
 /** 输入框底栏：上下文占用圆环（点击查看详情） */
-export function ContextCompactProgressRing({
+function ContextCompactProgressRingImpl({
   percent,
   toneClassName,
   ctxStatusLine,
@@ -118,3 +118,7 @@ export function ContextCompactProgressRing({
     </Popover>
   );
 }
+// React.memo：Semi AIChatInput 每 transaction setState 会重渲染整棵子树；props 引用稳定时叶子 bail out，避免底栏组件每键 reconcile。
+const MemoizedContextCompactProgressRing = memo(ContextCompactProgressRingImpl);
+MemoizedContextCompactProgressRing.displayName = "ContextCompactProgressRing";
+export const ContextCompactProgressRing = MemoizedContextCompactProgressRing;

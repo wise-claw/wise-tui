@@ -1,6 +1,6 @@
 import { Dropdown, Input, Spin, type MenuProps } from "antd";
 import { HoverHint } from "../shared/HoverHint";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { getClaudeModelPickerOptions } from "../../services/claude";
 import { listCursorModels, type CursorModelListItem } from "../../services/cursorAgent";
 import { listOpencodeModels, type OpencodeModelListItem } from "../../services/opencode";
@@ -168,7 +168,7 @@ interface Props {
   iconOnly?: boolean;
 }
 
-export function ComposerModelPicker({
+function ComposerModelPickerImpl({
   session,
   sessionExecutionEngine: sessionExecutionEngineProp,
   model,
@@ -686,3 +686,7 @@ export function ComposerModelPicker({
     </div>
   );
 }
+// React.memo：Semi AIChatInput 每 transaction setState 会重渲染整棵子树；props 引用稳定时叶子 bail out，避免底栏组件每键 reconcile。
+const MemoizedComposerModelPicker = memo(ComposerModelPickerImpl);
+MemoizedComposerModelPicker.displayName = "ComposerModelPicker";
+export const ComposerModelPicker = MemoizedComposerModelPicker;

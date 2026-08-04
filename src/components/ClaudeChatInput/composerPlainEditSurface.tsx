@@ -160,6 +160,8 @@ export function ComposerPlainEditSurface({
   const skipContentSyncRemainingRef = useRef(0);
   /** 文本粘贴后抑制 @ / 指令触发的截止时间戳（Date.now）。粘贴的邮箱/路径/单斜杠不应误开弹出面板或文件搜索。 */
   const suppressTriggerAfterPasteUntilRef = useRef(0);
+  /** @ / 指令触发锚点矩形缓存：按 (mode, triggerStart) 复用，避免 @query 逐字符扩展时每键强制回流。 */
+  const triggerRectCacheRef = useRef<{ key: string; rect: DOMRect | null } | null>(null);
   const [semiEditorReady, setSemiEditorReady] = useState(false);
   const [trigger, setTrigger] = useState<TriggerInfo>({ mode: null, query: "", rect: null });
   const triggerRef = useRef(trigger);
@@ -313,6 +315,18 @@ export function ComposerPlainEditSurface({
         suppressTriggerAfterPasteUntilRef.current = 0;
       }
       const detected = detectAtSlashTrigger(plain, cursor);
+      // 锚点矩形只在 (mode, triggerStart) 变化时重算：@query 逐字符扩展时 @ 位置不变，
+      // 复用上次 rect，避免每键 getBoundingClientRect 强制回流（事件处理器内算，非渲染期副作用）。
+      if (detected) {
+        const rectKey = `${detected.mode}:${detected.triggerStart}`;
+        if (triggerRectCacheRef.current?.key !== rectKey) {
+          triggerRectCacheRef.current = {
+            key: rectKey,
+            rect: resolveAtSlashTriggerAnchorRect(aiChatRef.current, shellRef.current, plain, cursor),
+          };
+        }
+      }
+      const cachedRect = triggerRectCacheRef.current?.rect ?? null;
       setTrigger((prev) => {
         if (!detected) {
           if (prev.mode === null && prev.query === "") return prev;
@@ -322,7 +336,7 @@ export function ComposerPlainEditSurface({
         return {
           mode: detected.mode,
           query: detected.query,
-          rect: resolveAtSlashTriggerAnchorRect(aiChatRef.current, shellRef.current, plain, cursor),
+          rect: cachedRect,
         };
       });
     },

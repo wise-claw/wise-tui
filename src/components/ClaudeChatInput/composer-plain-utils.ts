@@ -16,6 +16,8 @@ export function contentsToPlain(contents: Content[]): string {
 
 /** Semi/Tiptap 零宽字符；读写 plain 时统一剥离，避免与 React 状态不一致触发 setContent 回写。 */
 export function normalizeComposerEditorPlain(plain: string): string {
+  // 打字常态无零宽字符：includes 守卫避免每键 O(n) 全串拷贝（replace 会无条件复制整串）。
+  if (!plain.includes("\u200B") && !plain.includes("\uFEFF")) return plain;
   return plain.replace(/[\u200B\uFEFF]/g, "");
 }
 
@@ -76,7 +78,7 @@ export function detectAtSlashTrigger(
   plain: string,
   cursor: number,
 ): { mode: "at" | "slash"; query: string; triggerStart: number } | null {
-  const text = plain.replace(/\u200B/g, "");
+  const text = plain.includes("\u200B") ? plain.replace(/\u200B/g, "") : plain;
   const safeCursor = Math.max(0, Math.min(cursor, text.length));
   const lineStart = text.lastIndexOf("\n", safeCursor - 1) + 1;
   const currentLine = text.substring(lineStart, safeCursor);

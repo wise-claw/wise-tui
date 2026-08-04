@@ -110,9 +110,11 @@ function mergeSlashCommandOptions(items: SlashOption[]): SlashOption[] {
 
 export function buildRuntimeBuiltinCommands(
   omcInstalled: boolean,
-  detectedPluginLabels: ReadonlySet<string>,
+  _detectedPluginLabels: ReadonlySet<string>,
 ): SlashOption[] {
-  const key = `${omcInstalled ? 1 : 0}:${[...detectedPluginLabels].sort().join(",")}`;
+  // detectedPluginLabels 只参与拼 key 不参与结果（value 仅消费 CLAUDE_BUILTIN_COMMANDS），
+  // 是死输入——去掉它消除每键 sort+join 的 O(k log k) 字符串拼接。
+  const key = `${omcInstalled ? 1 : 0}`;
   if (runtimeBuiltinCache?.key === key) {
     return runtimeBuiltinCache.value;
   }

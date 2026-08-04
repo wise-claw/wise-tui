@@ -1,6 +1,6 @@
 import { Dropdown, type MenuProps } from "antd";
 import { HoverHint } from "../shared/HoverHint";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   CLAUDE_CONNECTION_KIND_LABELS,
   CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
@@ -94,7 +94,7 @@ function isConnectionKindKey(key: string): key is ClaudeSessionConnectionKind {
   return key === "streaming" || key === "oneshot";
 }
 
-export function ComposerRuntimeSettingsTrigger({
+function ComposerRuntimeSettingsTriggerImpl({
   engine: engineProp,
   codexAvailable = true,
   cursorAvailable = true,
@@ -415,3 +415,7 @@ export function ComposerRuntimeSettingsTrigger({
     </Dropdown>
   );
 }
+// React.memo：Semi AIChatInput 每 transaction setState 会重渲染整棵子树；props 引用稳定时叶子 bail out，避免底栏组件每键 reconcile。
+const MemoizedComposerRuntimeSettingsTrigger = memo(ComposerRuntimeSettingsTriggerImpl);
+MemoizedComposerRuntimeSettingsTrigger.displayName = "ComposerRuntimeSettingsTrigger";
+export const ComposerRuntimeSettingsTrigger = MemoizedComposerRuntimeSettingsTrigger;

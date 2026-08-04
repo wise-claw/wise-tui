@@ -1,12 +1,12 @@
 import { Popover } from "antd";
 import { HoverHint } from "../shared/HoverHint";
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { ComposerCommonPhrase } from "../../constants/composerCommonPhrase";
 import type { ComposerCommonPhrasesScopeLabel } from "../../hooks/useComposerCommonPhrases";
 import { ComposerCommonPhrasesPanel } from "./ComposerCommonPhrasesPanel";
 import "./ComposerCommonPhrasesManageTrigger.css";
 
-export function ComposerCommonPhrasesManageTrigger({
+function ComposerCommonPhrasesManageTriggerImpl({
   phrases,
   globalPhrases,
   loading,
@@ -89,3 +89,7 @@ export function ComposerCommonPhrasesManageTrigger({
     </Popover>
   );
 }
+// React.memo：Semi AIChatInput 每 transaction setState 会重渲染整棵子树；props 引用稳定时叶子 bail out，避免底栏组件每键 reconcile。
+const MemoizedComposerCommonPhrasesManageTrigger = memo(ComposerCommonPhrasesManageTriggerImpl);
+MemoizedComposerCommonPhrasesManageTrigger.displayName = "ComposerCommonPhrasesManageTrigger";
+export const ComposerCommonPhrasesManageTrigger = MemoizedComposerCommonPhrasesManageTrigger;
