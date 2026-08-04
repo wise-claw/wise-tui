@@ -23,7 +23,7 @@ import type { RefObject } from "react";
 import type { GitPanelOpenFileOptions } from "../GitPanel";
 import type { TaskCardsNavProps } from "../TaskCardsNav";
 import type { AuthorPane } from "../../types/viewMode";
-import type { MonitorPanelPlacement } from "../../services/wiseDefaultConfigStore";
+import type { RepoPanelVisibility, WorkspaceListPlacement } from "../../services/wiseDefaultConfigStore";
 import type { WorkspaceFileTreeRailContext } from "../WorkspaceFileTreeRail/types";
 
 export interface LeftSidebarProps {
@@ -47,6 +47,8 @@ export interface LeftSidebarProps {
   showLeftSidebarMonitorPanel?: boolean;
   /** 是否显示左栏工作区与仓库树；默认 true，由 `wise.defaultConfig.v1` 控制。 */
   showLeftSidebarWorkspaceList?: boolean;
+  /** 左栏工作区树纵向位置；默认 top。 */
+  workspaceListPlacement?: WorkspaceListPlacement;
   /** 是否显示左栏工作区列表中的仓库圆形角标；默认 false，由 `wise.defaultConfig.v1` 控制。 */
   showRepositoryIconBadgesInWorkspaceList?: boolean;
   mcpHubActive?: boolean;
@@ -212,10 +214,10 @@ export interface LeftSidebarProps {
   activeRepositoryPath?: string;
   activeRepositoryName?: string;
   onOpenActiveRepositoryFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
-  /** Git 变更面板默认栏位。 */
-  gitPanelPlacement?: MonitorPanelPlacement;
-  /** 仓库文件树默认栏位。 */
-  filesPanelPlacement?: MonitorPanelPlacement;
+  /** Git 变更面板是否在左栏显示。 */
+  gitPanelPlacement?: RepoPanelVisibility;
+  /** 仓库文件树是否在左栏显示。 */
+  filesPanelPlacement?: RepoPanelVisibility;
   /** Git 与文件树同栏时是否上下分栏展示（而非 Tab 切换）。 */
   repoPanelSplitMode?: boolean;
   /** Chat 模式是否存在右栏（Author / Cockpit 全屏时为 false）。 */

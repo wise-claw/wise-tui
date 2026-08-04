@@ -30,7 +30,7 @@ import {
   type ExplorerFocusRequestedDetail,
 } from "../constants/explorerUiEvents";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
-import { WORKSPACE_LIST_ROW_HEIGHT_PX } from "../constants/workspaceListLayout";
+import { WORKSPACE_LIST_ROW_HEIGHT_PX, isWorkspaceListVisibleRowsUnlimited } from "../constants/workspaceListLayout";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
 import { useWorkspaceListVisibleRows } from "../hooks/useWorkspaceListVisibleRows";
 import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
@@ -111,6 +111,7 @@ export function LeftSidebar({
   leftSidebarHubQuickEntryIds = [],
   showLeftSidebarMonitorPanel = true,
   showLeftSidebarWorkspaceList = true,
+  workspaceListPlacement = "top",
   showRepositoryIconBadgesInWorkspaceList = false,
   mcpHubActive = false,
   onOpenMcpHub,
@@ -221,8 +222,8 @@ export function LeftSidebar({
   activeRepositoryPath,
   activeRepositoryName,
   onOpenActiveRepositoryFile,
-  gitPanelPlacement = "left",
-  filesPanelPlacement = "left",
+  gitPanelPlacement = "visible",
+  filesPanelPlacement = "visible",
   repoPanelSplitMode = false,
   repoPanelRightRailAvailable = true,
   fileTreeRailOpen = false,
@@ -793,7 +794,7 @@ export function LeftSidebar({
 
   const showLeftRepoPanel = Boolean(
     effectiveRepoPanelPath &&
-      (gitPanelPlacement === "left" || filesPanelPlacement === "left"),
+      (gitPanelPlacement === "visible" || filesPanelPlacement === "visible"),
   );
   const showRepoPanel = Boolean(effectiveRepoPanelPath);
   const workspaceListEffectivelyCollapsed =
@@ -1022,6 +1023,10 @@ export function LeftSidebar({
       <div
         className="app-left-sidebar-project-and-files"
         data-has-files-explorer={showRepoPanel ? "true" : "false"}
+        data-workspace-list-placement={workspaceListPlacement}
+        data-workspace-list-unlimited={
+          isWorkspaceListVisibleRowsUnlimited(workspaceListVisibleRows) ? "true" : undefined
+        }
         data-workspace-list-section-collapsed={
           showRepoPanel && workspaceListEffectivelyCollapsed ? "true" : undefined
         }
@@ -1031,7 +1036,9 @@ export function LeftSidebar({
         style={
           {
             "--workspace-list-row-height": `${WORKSPACE_LIST_ROW_HEIGHT_PX}px`,
-            "--workspace-list-max-visible-rows": workspaceListVisibleRows,
+            ...(isWorkspaceListVisibleRowsUnlimited(workspaceListVisibleRows)
+              ? {}
+              : { "--workspace-list-max-visible-rows": workspaceListVisibleRows }),
           } as CSSProperties
         }
       >

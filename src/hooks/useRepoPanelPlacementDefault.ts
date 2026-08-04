@@ -2,22 +2,22 @@ import { useCallback, useEffect, useState } from "react";
 import {
   loadRepoPanelPlacementFromStore,
   loadRepoPanelSplitModeFromStore,
-  type MonitorPanelPlacement,
+  type RepoPanelVisibility,
   WISE_REPO_PANEL_PLACEMENT_CHANGED,
   WISE_REPO_PANEL_SPLIT_MODE_CHANGED,
 } from "../services/wiseDefaultConfigStore";
 
 export interface RepoPanelPlacementDefault {
-  gitPanelPlacement: MonitorPanelPlacement;
-  filesPanelPlacement: MonitorPanelPlacement;
+  gitPanelPlacement: RepoPanelVisibility;
+  filesPanelPlacement: RepoPanelVisibility;
   repoPanelSplitMode: boolean;
 }
 
-/** Git / 文件树默认栏位（`wise.defaultConfig.v1`）。 */
+/** Git / 文件树默认显示（`wise.defaultConfig.v1`）。 */
 export function useRepoPanelPlacementDefault(): RepoPanelPlacementDefault {
   const [state, setState] = useState<RepoPanelPlacementDefault>({
-    gitPanelPlacement: "left",
-    filesPanelPlacement: "left",
+    gitPanelPlacement: "visible",
+    filesPanelPlacement: "visible",
     repoPanelSplitMode: false,
   });
 
@@ -36,12 +36,14 @@ export function useRepoPanelPlacementDefault(): RepoPanelPlacementDefault {
     const onPlacementChanged = (event: Event) => {
       const detail = (
         event as CustomEvent<{
-          gitPanelPlacement?: MonitorPanelPlacement;
-          filesPanelPlacement?: MonitorPanelPlacement;
+          gitPanelPlacement?: RepoPanelVisibility;
+          filesPanelPlacement?: RepoPanelVisibility;
         }>
       ).detail;
-      if (detail?.gitPanelPlacement !== "left" && detail?.gitPanelPlacement !== "right") return;
-      if (detail?.filesPanelPlacement !== "left" && detail?.filesPanelPlacement !== "right") {
+      if (detail?.gitPanelPlacement !== "visible" && detail?.gitPanelPlacement !== "hidden") {
+        return;
+      }
+      if (detail?.filesPanelPlacement !== "visible" && detail?.filesPanelPlacement !== "hidden") {
         return;
       }
       setState((prev) => ({

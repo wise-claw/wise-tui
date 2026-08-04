@@ -3,13 +3,16 @@ import { useCallback, useEffect, useState } from "react";
 import {
   loadLeftSidebarWorkspaceListDefaultFromStore,
   saveLeftSidebarWorkspaceListVisibleToStore,
+  saveWorkspaceListPlacementToStore,
   saveWorkspaceListVisibleRowsToStore,
+  type WorkspaceListPlacement,
 } from "../../services/wiseDefaultConfigStore";
 import { WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT } from "../../constants/workspaceListLayout";
 
 export function useLeftSidebarWorkspaceListSetting() {
   const [visible, setVisible] = useState(true);
   const [visibleRows, setVisibleRows] = useState(WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT);
+  const [placement, setPlacement] = useState<WorkspaceListPlacement>("top");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -19,6 +22,7 @@ export function useLeftSidebarWorkspaceListSetting() {
       const loaded = await loadLeftSidebarWorkspaceListDefaultFromStore();
       setVisible(loaded.visible);
       setVisibleRows(loaded.visibleRows);
+      setPlacement(loaded.placement);
     } finally {
       setLoading(false);
     }
@@ -62,13 +66,32 @@ export function useLeftSidebarWorkspaceListSetting() {
     [visibleRows],
   );
 
+  const savePlacement = useCallback(
+    async (next: WorkspaceListPlacement) => {
+      if (next === placement) return;
+      setSaving(true);
+      try {
+        await saveWorkspaceListPlacementToStore(next);
+        setPlacement(next);
+      } catch (err) {
+        message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [placement],
+  );
+
   return {
     visible,
     visibleRows,
+    placement,
     loading,
     saving,
     refresh,
     saveVisible,
     saveVisibleRows,
+    savePlacement,
   };
 }

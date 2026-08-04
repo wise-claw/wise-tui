@@ -11,7 +11,7 @@ import {
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
 import { MONITOR_PANEL_VISIBLE_ROWS_OPTIONS } from "../../constants/monitorPanelLayout";
-import { WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS } from "../../constants/workspaceListLayout";
+import { WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS, formatWorkspaceListVisibleRowsLabel } from "../../constants/workspaceListLayout";
 import { WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_OPTIONS } from "../../constants/workspaceSidebarLayout";
 import { LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS } from "../../constants/leftSidebarHubQuickEntries";
 import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
@@ -722,8 +722,8 @@ export function DefaultConfigPanel() {
         <>
           <DefaultConfigRow
             title="工作区树"
-            hint="显隐 · 行数"
-            detail="左栏仓库工作区列表（展开显示会话与运行项）；与文件树并存时按可见行数限制高度"
+            hint="显隐 · 栏位 · 行数"
+            detail="左栏仓库工作区列表（展开显示会话与运行项）；可置于顶部或底部，与文件树并存时可按行数限制高度"
             control={
               <div className="app-default-config-row__control--monitor">
                 <div className="app-default-config-monitor-panel__field">
@@ -741,6 +741,25 @@ export function DefaultConfigPanel() {
                     }}
                   />
                 </div>
+                <div className="app-default-config-monitor-panel__field">
+                  <span className="app-default-config-monitor-panel__field-label">栏位</span>
+                  <DefaultConfigOptionPick<"top" | "bottom">
+                    aria-label="左栏工作区栏位"
+                    disabled={
+                      leftSidebarWorkspaceList.loading ||
+                      leftSidebarWorkspaceList.saving ||
+                      !leftSidebarWorkspaceList.visible
+                    }
+                    value={leftSidebarWorkspaceList.placement}
+                    options={[
+                      { label: "顶", value: "top" },
+                      { label: "底", value: "bottom" },
+                    ]}
+                    onChange={(value) => {
+                      void leftSidebarWorkspaceList.savePlacement(value);
+                    }}
+                  />
+                </div>
                 <div className="app-default-config-monitor-panel__field app-default-config-monitor-panel__field--rows">
                   <span className="app-default-config-monitor-panel__field-label">行数</span>
                   <Select
@@ -755,7 +774,7 @@ export function DefaultConfigPanel() {
                     value={leftSidebarWorkspaceList.visibleRows}
                     options={WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS.map((rows) => ({
                       value: rows,
-                      label: `${rows}`,
+                      label: formatWorkspaceListVisibleRowsLabel(rows),
                     }))}
                     onChange={(value) => {
                       void leftSidebarWorkspaceList.saveVisibleRows(value);
@@ -924,30 +943,30 @@ export function DefaultConfigPanel() {
       content: (
         <>
           <DefaultConfigRow
-            title="默认栏位"
+            title="默认显示"
             hint="Git / 文件"
-            detail="Git 与文件树默认栏位；同在左栏时 Tab 切换"
+            detail="Git 与文件树是否在左栏显示；同时显示时 Tab 切换"
             control={
               <div className="app-default-config-row__control--monitor">
-                <DefaultConfigOptionPick<"left" | "right">
-                  aria-label="Git 默认栏位"
+                <DefaultConfigOptionPick<"visible" | "hidden">
+                  aria-label="Git 默认显示"
                   disabled={repoPanelPlacement.loading || repoPanelPlacement.saving}
                   value={repoPanelPlacement.gitPanelPlacement}
                   options={[
-                    { label: "Git·左", value: "left" },
-                    { label: "Git·右", value: "right" },
+                    { label: "Git·显", value: "visible" },
+                    { label: "Git·隐", value: "hidden" },
                   ]}
                   onChange={(value) => {
                     void repoPanelPlacement.saveGitPlacement(value);
                   }}
                 />
-                <DefaultConfigOptionPick<"left" | "right">
-                  aria-label="文件树默认栏位"
+                <DefaultConfigOptionPick<"visible" | "hidden">
+                  aria-label="文件树默认显示"
                   disabled={repoPanelPlacement.loading || repoPanelPlacement.saving}
                   value={repoPanelPlacement.filesPanelPlacement}
                   options={[
-                    { label: "文件·左", value: "left" },
-                    { label: "文件·右", value: "right" },
+                    { label: "文件·显", value: "visible" },
+                    { label: "文件·隐", value: "hidden" },
                   ]}
                   onChange={(value) => {
                     void repoPanelPlacement.saveFilesPlacement(value);

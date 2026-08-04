@@ -1,13 +1,13 @@
 import { deriveRepoPanelRenderState } from "../components/LeftSidebar/repoPanelPlacement";
 import { readLeftBottomTabFromStorage } from "../components/LeftSidebar/sidebarStorage";
-import type { MonitorPanelPlacement } from "../services/wiseDefaultConfigStore";
+import type { RepoPanelVisibility } from "../services/wiseDefaultConfigStore";
 
 export type ExplorerRevealTarget = "workspace-rail" | "left-sidebar" | "right-rail";
 
 export interface ResolveExplorerRevealTargetInput {
   workspaceFileTreeRailOpen: boolean;
-  filesPanelPlacement: MonitorPanelPlacement;
-  gitPanelPlacement: MonitorPanelPlacement;
+  filesPanelPlacement: RepoPanelVisibility;
+  gitPanelPlacement: RepoPanelVisibility;
   leftSidebarCollapsed: boolean;
   leftSidebarParked: boolean;
   rightRailAvailable: boolean;
@@ -74,7 +74,7 @@ export function resolveExplorerRevealTargetForOpen(
   if (
     !input.leftSidebarCollapsed &&
     !input.leftSidebarParked &&
-    (renderState.showFilesOnLeft || input.filesPanelPlacement === "left")
+    (renderState.showFilesOnLeft || input.filesPanelPlacement === "visible")
   ) {
     return "left-sidebar";
   }

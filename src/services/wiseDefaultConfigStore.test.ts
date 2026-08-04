@@ -23,6 +23,7 @@ import {
   WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED,
   WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED,
   WISE_MONITOR_PANEL_PLACEMENT_CHANGED,
+  WISE_WORKSPACE_LIST_PLACEMENT_CHANGED,
   WISE_TOPBAR_CHROME_DEFAULT_CHANGED,
   WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED,
   WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED,
@@ -97,6 +98,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showLeftSidebarMonitorPanel).toBe(true);
     expect(config.showLeftSidebarWorkspaceList).toBe(true);
     expect(config.showRepositoryIconBadgesInWorkspaceList).toBe(false);
+    expect(config.workspaceListPlacement).toBe("top");
     expect(config.monitorPanelPlacement).toBe("left");
     expect(config.showWorkspaceQuickActionsPanel).toBe(true);
     expect(config.showWorkspaceTodosPanel).toBe(false);
@@ -111,8 +113,8 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showComposerFooterRuntimeSettings).toBe(true);
     expect(config.showComposerFooterModelPicker).toBe(true);
     expect(config.composerFooterTriggerDisplayMode).toBe("full");
-    expect(config.gitPanelPlacement).toBe("left");
-    expect(config.filesPanelPlacement).toBe("left");
+    expect(config.gitPanelPlacement).toBe("visible");
+    expect(config.filesPanelPlacement).toBe("visible");
     expect(config.terminalThemeMode).toBe("follow");
     expect(setAppSetting).toHaveBeenCalled();
     const payload = JSON.parse(String(setAppSetting.mock.calls[0]?.[1]));
@@ -230,6 +232,28 @@ describe("wiseDefaultConfigStore", () => {
     });
     await saveWiseDefaultConfig({ showLeftSidebarWorkspaceList: false });
     expect(seen).toEqual([false]);
+  });
+
+  test("save workspace list placement dispatches event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+          workspaceListPlacement: "top",
+        });
+      }
+      return null;
+    });
+    const seen: string[] = [];
+    window.addEventListener(WISE_WORKSPACE_LIST_PLACEMENT_CHANGED, (e: Event) => {
+      const placement = (e as CustomEvent<{ workspaceListPlacement?: string }>).detail
+        ?.workspaceListPlacement;
+      if (placement === "top" || placement === "bottom") seen.push(placement);
+    });
+    await saveWiseDefaultConfig({ workspaceListPlacement: "bottom" });
+    expect(seen).toEqual(["bottom"]);
   });
 
   test("save monitor panel placement dispatches event", async () => {

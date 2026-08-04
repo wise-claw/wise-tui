@@ -35,8 +35,8 @@ describe("explorerRevealTarget", () => {
   });
   const baseInput = {
     workspaceFileTreeRailOpen: false,
-    filesPanelPlacement: "left" as const,
-    gitPanelPlacement: "left" as const,
+    filesPanelPlacement: "visible" as const,
+    gitPanelPlacement: "visible" as const,
     leftSidebarCollapsed: false,
     leftSidebarParked: false,
     rightRailAvailable: true,

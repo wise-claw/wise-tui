@@ -91,6 +91,8 @@ export const WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED = "wise:left-sidebar-works
 
 export const WISE_WORKSPACE_LIST_VISIBLE_ROWS_CHANGED = "wise:workspace-list-visible-rows-changed";
 
+export const WISE_WORKSPACE_LIST_PLACEMENT_CHANGED = "wise:workspace-list-placement-changed";
+
 export const WISE_WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_CHANGED =
   "wise:workspace-sidebar-row-preview-limit-changed";
 
@@ -148,6 +150,12 @@ export interface SessionFeedbackLoopSettings {
 }
 
 export type MonitorPanelPlacement = "left" | "right";
+
+/** 左栏工作区树纵向位置：顶部（默认）或底部（Git/文件树下方）。 */
+export type WorkspaceListPlacement = "top" | "bottom";
+
+/** Git / 文件树是否在左栏显示（旧值 left/right 读入时迁移为 visible）。 */
+export type RepoPanelVisibility = "visible" | "hidden";
 
 /** 主会话底栏「执行环境」与「模型切换」触发器显示模式。 */
 export type ComposerFooterTriggerDisplayMode = "full" | "icon";
@@ -208,8 +216,10 @@ export interface WiseDefaultConfigV1 {
   showLeftSidebarMonitorPanel: boolean;
   /** 左栏工作区与仓库树是否显示；默认显示。 */
   showLeftSidebarWorkspaceList: boolean;
-  /** 左栏工作区树内容区默认可见行数（与文件树并存时封顶高度）。 */
+  /** 左栏工作区树内容区默认可见行数（与文件树并存时封顶高度；`0` = 不限）。 */
   workspaceListVisibleRows: number;
+  /** 左栏工作区树纵向位置；默认顶部。 */
+  workspaceListPlacement: WorkspaceListPlacement;
   /** 工作区展开子树默认展示行数（会话 + 运行项合计，不含 More）。 */
   workspaceSidebarRowPreviewLimit: number;
   /** 左栏工作区列表中是否显示仓库圆形角标；默认隐藏。 */
@@ -250,10 +260,10 @@ export interface WiseDefaultConfigV1 {
   showWorkspaceTodosPanel: boolean;
   /** 文件树点击文件时在新窗格打开，而非占用当前会话主区。 */
   fileTreeOpenInNewPane: boolean;
-  /** Git 变更面板默认栏位；默认左栏。 */
-  gitPanelPlacement: MonitorPanelPlacement;
-  /** 仓库文件树默认栏位；默认左栏（与 Git 同在左栏时 Tab 切换）。 */
-  filesPanelPlacement: MonitorPanelPlacement;
+  /** Git 变更面板是否在左栏显示；默认显示。 */
+  gitPanelPlacement: RepoPanelVisibility;
+  /** 仓库文件树是否在左栏显示；默认显示（与 Git 同时显示时 Tab 切换）。 */
+  filesPanelPlacement: RepoPanelVisibility;
   /** Git 与文件树同栏时上下分栏展示（而非 Tab 切换）。 */
   repoPanelSplitMode: boolean;
   /** Split 模式下 Git 面板高度（px）；由拖动把手调整并持久化。 */
@@ -314,6 +324,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showLeftSidebarMonitorPanel: true,
   showLeftSidebarWorkspaceList: true,
   workspaceListVisibleRows: WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT,
+  workspaceListPlacement: "top",
   workspaceSidebarRowPreviewLimit: WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_DEFAULT,
   showRepositoryIconBadgesInWorkspaceList: false,
   monitorPanelPlacement: "left",
@@ -334,8 +345,8 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceTodosPanel: false,
   fileTreeOpenInNewPane: false,
-  gitPanelPlacement: "left",
-  filesPanelPlacement: "left",
+  gitPanelPlacement: "visible",
+  filesPanelPlacement: "visible",
   repoPanelSplitMode: false,
   repoPanelSplitHeightPx: REPO_PANEL_SPLIT_HEIGHT_DEFAULT_PX,
   sessionFeedbackLoopEnabled: false,
@@ -360,6 +371,17 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
 
 function normalizeMonitorPanelPlacement(raw: unknown): MonitorPanelPlacement | null {
   return raw === "left" || raw === "right" ? raw : null;
+}
+
+function normalizeWorkspaceListPlacement(raw: unknown): WorkspaceListPlacement | null {
+  return raw === "top" || raw === "bottom" ? raw : null;
+}
+
+/** 兼容旧配置 left/right（均视为显示）。 */
+function normalizeRepoPanelVisibility(raw: unknown): RepoPanelVisibility | null {
+  if (raw === "visible" || raw === "hidden") return raw;
+  if (raw === "left" || raw === "right") return "visible";
+  return null;
 }
 
 function normalizeBoolean(raw: unknown, fallback = false): boolean {
@@ -472,6 +494,9 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.workspaceListVisibleRows === undefined
           ? DEFAULT_CONFIG.workspaceListVisibleRows
           : normalizeWorkspaceListVisibleRows(parsed.workspaceListVisibleRows),
+      workspaceListPlacement:
+        normalizeWorkspaceListPlacement(parsed.workspaceListPlacement) ??
+        DEFAULT_CONFIG.workspaceListPlacement,
       workspaceSidebarRowPreviewLimit:
         parsed.workspaceSidebarRowPreviewLimit === undefined
           ? DEFAULT_CONFIG.workspaceSidebarRowPreviewLimit
@@ -578,9 +603,9 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
           ? DEFAULT_CONFIG.fileTreeOpenInNewPane
           : normalizeBoolean(parsed.fileTreeOpenInNewPane, DEFAULT_CONFIG.fileTreeOpenInNewPane),
       gitPanelPlacement:
-        normalizeMonitorPanelPlacement(parsed.gitPanelPlacement) ?? DEFAULT_CONFIG.gitPanelPlacement,
+        normalizeRepoPanelVisibility(parsed.gitPanelPlacement) ?? DEFAULT_CONFIG.gitPanelPlacement,
       filesPanelPlacement:
-        normalizeMonitorPanelPlacement(parsed.filesPanelPlacement) ??
+        normalizeRepoPanelVisibility(parsed.filesPanelPlacement) ??
         DEFAULT_CONFIG.filesPanelPlacement,
       repoPanelSplitMode:
         typeof parsed.repoPanelSplitMode === "boolean"
@@ -810,6 +835,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
     showLeftSidebarWorkspaceList: DEFAULT_CONFIG.showLeftSidebarWorkspaceList,
     workspaceListVisibleRows: DEFAULT_CONFIG.workspaceListVisibleRows,
+    workspaceListPlacement: DEFAULT_CONFIG.workspaceListPlacement,
     workspaceSidebarRowPreviewLimit: DEFAULT_CONFIG.workspaceSidebarRowPreviewLimit,
     showRepositoryIconBadgesInWorkspaceList: DEFAULT_CONFIG.showRepositoryIconBadgesInWorkspaceList,
     monitorPanelPlacement: DEFAULT_CONFIG.monitorPanelPlacement,
@@ -922,6 +948,15 @@ function dispatchWorkspaceListVisibleRowsChanged(visibleRows: number): void {
   );
 }
 
+function dispatchWorkspaceListPlacementChanged(placement: WorkspaceListPlacement): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_WORKSPACE_LIST_PLACEMENT_CHANGED, {
+      detail: { workspaceListPlacement: placement },
+    }),
+  );
+}
+
 function dispatchWorkspaceSidebarRowPreviewLimitChanged(limit: number): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
@@ -948,8 +983,8 @@ function dispatchFileTreeOpenInNewPaneChanged(openInNewPane: boolean): void {
 }
 
 function dispatchRepoPanelPlacementChanged(
-  gitPanelPlacement: MonitorPanelPlacement,
-  filesPanelPlacement: MonitorPanelPlacement,
+  gitPanelPlacement: RepoPanelVisibility,
+  filesPanelPlacement: RepoPanelVisibility,
 ): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
@@ -1080,6 +1115,7 @@ export async function saveWiseDefaultConfig(
       | "showLeftSidebarMonitorPanel"
       | "showLeftSidebarWorkspaceList"
       | "workspaceListVisibleRows"
+      | "workspaceListPlacement"
       | "workspaceSidebarRowPreviewLimit"
       | "showRepositoryIconBadgesInWorkspaceList"
       | "monitorPanelPlacement"
@@ -1153,6 +1189,7 @@ export async function saveWiseDefaultConfig(
     showLeftSidebarWorkspaceList:
       patch.showLeftSidebarWorkspaceList ?? current.showLeftSidebarWorkspaceList,
     workspaceListVisibleRows: patch.workspaceListVisibleRows ?? current.workspaceListVisibleRows,
+    workspaceListPlacement: patch.workspaceListPlacement ?? current.workspaceListPlacement,
     workspaceSidebarRowPreviewLimit:
       patch.workspaceSidebarRowPreviewLimit ?? current.workspaceSidebarRowPreviewLimit,
     showRepositoryIconBadgesInWorkspaceList:
@@ -1317,6 +1354,10 @@ export async function saveWiseDefaultConfig(
   if (patch.workspaceListVisibleRows !== undefined) {
     next.workspaceListVisibleRows = normalizeWorkspaceListVisibleRows(patch.workspaceListVisibleRows);
   }
+  if (patch.workspaceListPlacement !== undefined) {
+    next.workspaceListPlacement =
+      normalizeWorkspaceListPlacement(patch.workspaceListPlacement) ?? current.workspaceListPlacement;
+  }
   if (patch.workspaceSidebarRowPreviewLimit !== undefined) {
     next.workspaceSidebarRowPreviewLimit = normalizeWorkspaceSidebarRowPreviewLimit(
       patch.workspaceSidebarRowPreviewLimit,
@@ -1401,11 +1442,11 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.gitPanelPlacement !== undefined) {
     next.gitPanelPlacement =
-      normalizeMonitorPanelPlacement(patch.gitPanelPlacement) ?? current.gitPanelPlacement;
+      normalizeRepoPanelVisibility(patch.gitPanelPlacement) ?? current.gitPanelPlacement;
   }
   if (patch.filesPanelPlacement !== undefined) {
     next.filesPanelPlacement =
-      normalizeMonitorPanelPlacement(patch.filesPanelPlacement) ?? current.filesPanelPlacement;
+      normalizeRepoPanelVisibility(patch.filesPanelPlacement) ?? current.filesPanelPlacement;
   }
   if (patch.repoPanelSplitMode !== undefined) {
     next.repoPanelSplitMode = normalizeBoolean(patch.repoPanelSplitMode);
@@ -1584,6 +1625,12 @@ export async function saveWiseDefaultConfig(
     next.workspaceListVisibleRows !== current.workspaceListVisibleRows
   ) {
     dispatchWorkspaceListVisibleRowsChanged(next.workspaceListVisibleRows);
+  }
+  if (
+    patch.workspaceListPlacement !== undefined &&
+    next.workspaceListPlacement !== current.workspaceListPlacement
+  ) {
+    dispatchWorkspaceListPlacementChanged(next.workspaceListPlacement);
   }
   if (
     patch.workspaceSidebarRowPreviewLimit !== undefined &&
@@ -1968,6 +2015,18 @@ export async function saveWorkspaceListVisibleRowsToStore(visibleRows: number): 
   await saveWiseDefaultConfig({ workspaceListVisibleRows: normalized });
 }
 
+export async function loadWorkspaceListPlacementFromStore(): Promise<WorkspaceListPlacement> {
+  return (await loadWiseDefaultConfig()).workspaceListPlacement;
+}
+
+export async function saveWorkspaceListPlacementToStore(
+  placement: WorkspaceListPlacement,
+): Promise<void> {
+  const normalized = normalizeWorkspaceListPlacement(placement);
+  if (!normalized) return;
+  await saveWiseDefaultConfig({ workspaceListPlacement: normalized });
+}
+
 export async function loadWorkspaceSidebarRowPreviewLimitFromStore(): Promise<number> {
   return (await loadWiseDefaultConfig()).workspaceSidebarRowPreviewLimit;
 }
@@ -1980,11 +2039,13 @@ export async function saveWorkspaceSidebarRowPreviewLimitToStore(limit: number):
 export async function loadLeftSidebarWorkspaceListDefaultFromStore(): Promise<{
   visible: boolean;
   visibleRows: number;
+  placement: WorkspaceListPlacement;
 }> {
   const config = await loadWiseDefaultConfig();
   return {
     visible: config.showLeftSidebarWorkspaceList,
     visibleRows: config.workspaceListVisibleRows,
+    placement: config.workspaceListPlacement,
   };
 }
 
@@ -2033,8 +2094,8 @@ export async function loadMonitorPanelDefaultFromStore(): Promise<{
 }
 
 export async function loadRepoPanelPlacementFromStore(): Promise<{
-  gitPanelPlacement: MonitorPanelPlacement;
-  filesPanelPlacement: MonitorPanelPlacement;
+  gitPanelPlacement: RepoPanelVisibility;
+  filesPanelPlacement: RepoPanelVisibility;
 }> {
   const config = await loadWiseDefaultConfig();
   return {
@@ -2045,18 +2106,18 @@ export async function loadRepoPanelPlacementFromStore(): Promise<{
 
 export async function saveRepoPanelPlacementToStore(
   patch: Partial<{
-    gitPanelPlacement: MonitorPanelPlacement;
-    filesPanelPlacement: MonitorPanelPlacement;
+    gitPanelPlacement: RepoPanelVisibility;
+    filesPanelPlacement: RepoPanelVisibility;
   }>,
 ): Promise<void> {
   const normalized: Partial<WiseDefaultConfigV1> = {};
   if (patch.gitPanelPlacement !== undefined) {
-    const placement = normalizeMonitorPanelPlacement(patch.gitPanelPlacement);
-    if (placement) normalized.gitPanelPlacement = placement;
+    const visibility = normalizeRepoPanelVisibility(patch.gitPanelPlacement);
+    if (visibility) normalized.gitPanelPlacement = visibility;
   }
   if (patch.filesPanelPlacement !== undefined) {
-    const placement = normalizeMonitorPanelPlacement(patch.filesPanelPlacement);
-    if (placement) normalized.filesPanelPlacement = placement;
+    const visibility = normalizeRepoPanelVisibility(patch.filesPanelPlacement);
+    if (visibility) normalized.filesPanelPlacement = visibility;
   }
   if (Object.keys(normalized).length === 0) return;
   await saveWiseDefaultConfig(normalized);

@@ -125,8 +125,8 @@
 }
 
 .app-default-config-monitor-panel__rows-select {
-  min-width: 52px;
-  flex: 0 1 60px;
+  min-width: 72px;
+  flex: 0 0 72px;
 }
 
 .app-default-config-session-preview-select {

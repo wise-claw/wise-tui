@@ -1608,8 +1608,8 @@ export function AppWorkspaceLayout({
 
     const revealTarget = resolveExplorerRevealTargetForOpen({
       workspaceFileTreeRailOpen: showWorkspaceFileTreeRail,
-      filesPanelPlacement: leftSidebarProps.filesPanelPlacement ?? "left",
-      gitPanelPlacement: leftSidebarProps.gitPanelPlacement ?? "left",
+      filesPanelPlacement: leftSidebarProps.filesPanelPlacement ?? "visible",
+      gitPanelPlacement: leftSidebarProps.gitPanelPlacement ?? "visible",
       leftSidebarCollapsed: collapsed,
       leftSidebarParked,
       rightRailAvailable: chatRightRailMode,
@@ -1682,8 +1682,8 @@ export function AppWorkspaceLayout({
       }
       const revealTarget = resolveExplorerRevealTargetForOpen({
         workspaceFileTreeRailOpen: showWorkspaceFileTreeRail,
-        filesPanelPlacement: leftSidebarProps.filesPanelPlacement ?? "left",
-        gitPanelPlacement: leftSidebarProps.gitPanelPlacement ?? "left",
+        filesPanelPlacement: leftSidebarProps.filesPanelPlacement ?? "visible",
+        gitPanelPlacement: leftSidebarProps.gitPanelPlacement ?? "visible",
         leftSidebarCollapsed: collapsed,
         leftSidebarParked,
         rightRailAvailable: chatRightRailMode,

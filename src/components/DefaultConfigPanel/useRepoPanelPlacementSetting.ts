@@ -5,12 +5,12 @@ import {
   loadRepoPanelSplitModeFromStore,
   saveRepoPanelPlacementToStore,
   saveRepoPanelSplitModeToStore,
-  type MonitorPanelPlacement,
+  type RepoPanelVisibility,
 } from "../../services/wiseDefaultConfigStore";
 
 export function useRepoPanelPlacementSetting() {
-  const [gitPanelPlacement, setGitPanelPlacement] = useState<MonitorPanelPlacement>("left");
-  const [filesPanelPlacement, setFilesPanelPlacement] = useState<MonitorPanelPlacement>("left");
+  const [gitPanelPlacement, setGitPanelPlacement] = useState<RepoPanelVisibility>("visible");
+  const [filesPanelPlacement, setFilesPanelPlacement] = useState<RepoPanelVisibility>("visible");
   const [repoPanelSplitMode, setRepoPanelSplitMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -35,7 +35,7 @@ export function useRepoPanelPlacementSetting() {
   }, [refresh]);
 
   const saveGitPlacement = useCallback(
-    async (next: MonitorPanelPlacement) => {
+    async (next: RepoPanelVisibility) => {
       if (next === gitPanelPlacement) return;
       setSaving(true);
       try {
@@ -52,7 +52,7 @@ export function useRepoPanelPlacementSetting() {
   );
 
   const saveFilesPlacement = useCallback(
-    async (next: MonitorPanelPlacement) => {
+    async (next: RepoPanelVisibility) => {
       if (next === filesPanelPlacement) return;
       setSaving(true);
       try {

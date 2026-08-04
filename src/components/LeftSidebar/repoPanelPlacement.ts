@@ -1,7 +1,7 @@
-import type { MonitorPanelPlacement } from "../../services/wiseDefaultConfigStore";
+import type { RepoPanelVisibility } from "../../services/wiseDefaultConfigStore";
 import type { LeftBottomTab } from "./sidebarStorage";
 
-export type RepoPanelPlacement = MonitorPanelPlacement;
+export type RepoPanelPlacement = RepoPanelVisibility;
 
 export interface RepoPanelRenderState {
   showGitOnLeft: boolean;
@@ -16,25 +16,23 @@ export interface RepoPanelRenderState {
 }
 
 export interface DeriveRepoPanelRenderStateOptions {
-  /** Chat 模式右栏是否可用；为 false 时仅隐藏右栏内容，不回退配置。 */
+  /** Chat 模式右栏是否可用；保留参数以兼容旧调用，Git/文件树已不再放到右栏。 */
   rightRailAvailable?: boolean;
   /** Git 与文件树同栏时是否上下分栏展示（而非 Tab 切换）。 */
   splitMode?: boolean;
 }
 
 export function deriveRepoPanelRenderState(
-  gitPlacement: RepoPanelPlacement,
-  filesPlacement: RepoPanelPlacement,
+  gitVisibility: RepoPanelPlacement,
+  filesVisibility: RepoPanelPlacement,
   activeTab: LeftBottomTab,
   options?: DeriveRepoPanelRenderStateOptions,
 ): RepoPanelRenderState {
-  const rightRailAvailable = options?.rightRailAvailable ?? true;
   const splitMode = options?.splitMode ?? false;
-  const leftTabMode = gitPlacement === "left" && filesPlacement === "left";
-  const rightTabMode = gitPlacement === "right" && filesPlacement === "right";
-  const usesRightRail = gitPlacement === "right" || filesPlacement === "right";
+  const gitVisible = gitVisibility === "visible";
+  const filesVisible = filesVisibility === "visible";
 
-  if (leftTabMode) {
+  if (gitVisible && filesVisible) {
     if (splitMode) {
       return {
         showGitOnLeft: true,
@@ -59,39 +57,14 @@ export function deriveRepoPanelRenderState(
     };
   }
 
-  if (rightTabMode) {
-    if (splitMode) {
-      return {
-        showGitOnLeft: false,
-        showFilesOnLeft: false,
-        showGitOnRight: rightRailAvailable,
-        showFilesOnRight: rightRailAvailable,
-        leftTabMode: false,
-        rightTabMode: false,
-        activeTab,
-        usesRightRail: true,
-      };
-    }
-    return {
-      showGitOnLeft: false,
-      showFilesOnLeft: false,
-      showGitOnRight: rightRailAvailable && activeTab === "git",
-      showFilesOnRight: rightRailAvailable && activeTab === "files",
-      leftTabMode: false,
-      rightTabMode: true,
-      activeTab,
-      usesRightRail: true,
-    };
-  }
-
   return {
-    showGitOnLeft: gitPlacement === "left",
-    showFilesOnLeft: filesPlacement === "left",
-    showGitOnRight: rightRailAvailable && gitPlacement === "right",
-    showFilesOnRight: rightRailAvailable && filesPlacement === "right",
+    showGitOnLeft: gitVisible,
+    showFilesOnLeft: filesVisible,
+    showGitOnRight: false,
+    showFilesOnRight: false,
     leftTabMode: false,
     rightTabMode: false,
     activeTab,
-    usesRightRail,
+    usesRightRail: false,
   };
 }

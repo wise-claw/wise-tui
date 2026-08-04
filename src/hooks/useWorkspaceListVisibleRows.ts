@@ -5,7 +5,7 @@ import {
   WISE_WORKSPACE_LIST_VISIBLE_ROWS_CHANGED,
 } from "../services/wiseDefaultConfigStore";
 
-/** 左栏工作区树内容区可见行数（与文件树并存时封顶高度）。 */
+/** 左栏工作区树内容区可见行数（与文件树并存时封顶高度；`0` = 不限）。 */
 export function useWorkspaceListVisibleRows(): number {
   const [visibleRows, setVisibleRows] = useState(WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT);
 
@@ -21,7 +21,7 @@ export function useWorkspaceListVisibleRows(): number {
     const onChanged = (event: Event) => {
       const next = (event as CustomEvent<{ workspaceListVisibleRows?: number }>).detail
         ?.workspaceListVisibleRows;
-      if (typeof next === "number" && Number.isFinite(next)) {
+      if (typeof next === "number" && Number.isFinite(next) && next >= 0) {
         apply(next);
       }
     };

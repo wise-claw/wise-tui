@@ -193,6 +193,7 @@ import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOver
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
 import { useLeftSidebarWorkspaceListDefault } from "./hooks/useLeftSidebarWorkspaceListDefault";
+import { useWorkspaceListPlacementDefault } from "./hooks/useWorkspaceListPlacementDefault";
 import { useLeftSidebarRepositoryIconBadgesDefault } from "./hooks/useLeftSidebarRepositoryIconBadgesDefault";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
 import { invalidateWorkflowRunCacheForRepository } from "./hooks/useWorkflowRun";
@@ -1604,6 +1605,7 @@ export default function App() {
   }, [enterAuthorPane]);
   const leftSidebarHubQuickEntries = useLeftSidebarHubQuickEntries();
   const showLeftSidebarWorkspaceList = useLeftSidebarWorkspaceListDefault();
+  const workspaceListPlacement = useWorkspaceListPlacementDefault();
   const showRepositoryIconBadgesInWorkspaceList = useLeftSidebarRepositoryIconBadgesDefault();
   const showMonitorOnLeft =
     monitorPanelDefault.visible && monitorPanelDefault.placement === "left";
@@ -2698,6 +2700,7 @@ export default function App() {
         leftSidebarHubQuickEntryIds: leftSidebarHubQuickEntries.enabledEntryIds,
         showLeftSidebarMonitorPanel: showLeftSidebarMonitorPanelMerged,
         showLeftSidebarWorkspaceList,
+        workspaceListPlacement,
         showRepositoryIconBadgesInWorkspaceList,
         mcpHubActive:
           viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "mcp-hub",

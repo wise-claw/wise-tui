@@ -2302,6 +2302,29 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   padding: 0;
 }
 
+/* 工作区置于底部：Git/文件在上，工作区贴底 */
+.app-left-sidebar-project-and-files[data-workspace-list-placement="bottom"] > .app-repository-header,
+.app-left-sidebar-project-and-files[data-workspace-list-placement="bottom"] > .app-repository-list,
+.app-left-sidebar-project-and-files[data-workspace-list-placement="bottom"]
+  > .app-left-sidebar-workspace-list-collapsed-row {
+  order: 3;
+}
+
+.app-left-sidebar-project-and-files[data-workspace-list-placement="bottom"] > .app-left-sidebar-monitor-panel {
+  order: 2;
+}
+
+.app-left-sidebar-project-and-files[data-workspace-list-placement="bottom"] > .app-left-sidebar-bottom-tabs {
+  order: 1;
+  border-top: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 88%, var(--ant-color-border));
+}
+
+.app-left-sidebar-project-and-files[data-workspace-list-placement="bottom"] > .app-repository-header {
+  border-bottom: none;
+  border-top: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
+}
+
 .app-left-sidebar-project-and-files > .app-left-sidebar-monitor-panel {
   flex-shrink: 0;
 }
@@ -2342,6 +2365,11 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   );
   padding: 0 !important;
   overflow-y: auto;
+}
+
+/* 行数「不限」：与文件树并存时也不封顶高度，按内容增长 */
+.app-left-sidebar-project-and-files[data-workspace-list-unlimited="true"] > .app-repository-list {
+  max-height: none;
 }
 
 /* 无文件树：Workspace 列表占满剩余高度并可滚动 */
