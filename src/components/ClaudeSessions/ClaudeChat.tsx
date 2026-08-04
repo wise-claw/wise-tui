@@ -45,6 +45,7 @@ import {
 } from "../ProgressMonitorPanel/SessionConversationTaskDetailDrawer";
 import { useExecutionEnvironmentDispatchTasksForChat } from "../../hooks/useExecutionEnvironmentDispatchTasksForChat";
 import { createDispatchFailureTracker } from "../../hooks/dispatchFailureTracker";
+import { claimPendingTaskQueueOwner } from "../../stores/pendingTaskQueueOwnerStore";
 import { hasActiveSessionTurn, subscribeSessionTurns } from "../../stores/sessionTurnStore";
 import {
   ClaudeChatSessionFeaturePanel,
@@ -639,6 +640,10 @@ export function ClaudeChatInner({
     session.repositoryPath,
   );
   const showPendingTaskQueue = pendingTasks.length > 0;
+
+  // 声明本窗格拥有该会话队列的前台消费权；切走 / 离屏卸挂后由后台 flush 接管。
+  useEffect(() => claimPendingTaskQueueOwner(session.id), [session.id]);
+
 
   const sessionRepository = useMemo(
     () =>

@@ -27,6 +27,7 @@ import { WorkspaceViewportLoading } from "../WorkspaceViewportLoading";
 import type { ResolvePaneAuxLayout } from "./paneAuxLayout";
 import { claudeSessionsChatHostPropsEqual } from "./claudeSessionsChatHostPropsEqual";
 import { getClaudeSessionSnapshot } from "../../stores/claudeSessionsLiveStore";
+import { useBackgroundPendingTaskQueueFlush } from "../../hooks/useBackgroundPendingTaskQueueFlush";
 
 const ClaudeMultiPaneGridLazy = lazy(() =>
   import("./ClaudeMultiPaneGrid").then((module) => ({ default: module.ClaudeMultiPaneGrid })),
@@ -327,6 +328,17 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   mainSessionForDataLink: _mainSessionForDataLink,
   paneTopbarShared,
 }: ClaudeSessionsChatHostProps) {
+  // 未选中 / 离屏无 ClaudeChat owner 的会话：空闲后继续消费待执行队列。
+  useBackgroundPendingTaskQueueFlush({
+    sessions: incomingSessions,
+    employees,
+    workflowTasks,
+    taskPendingEmployeesByTaskId,
+    workflowGraphStatusByWorkflowId,
+    omcBatchPipelineActive,
+    onExecute: onExecuteSession,
+  });
+
   const sessionById = useMemo(() => {
     const map = new Map<string, ClaudeSession>();
     for (const session of incomingSessions) {

@@ -26,10 +26,6 @@ export function usePendingTaskQueue(sessionId: string, repositoryPath: string) {
     };
   }, []);
 
-  useEffect(() => {
-    persistChainRef.current = Promise.resolve();
-  }, [sessionId, repositoryPath]);
-
   const bumpMutationEpoch = useCallback(() => {
     mutationEpochRef.current += 1;
   }, []);
@@ -44,11 +40,11 @@ export function usePendingTaskQueue(sessionId: string, repositoryPath: string) {
   }, []);
 
   const enqueueWrite = useCallback(
-    (snapshot: PendingExecutionTask[]) => {
+    (snapshot: PendingExecutionTask[], writeSessionId: string, writeRepositoryPath: string) => {
+      // 即使组件已卸载也必须落盘：多屏离屏壳会卸掉 ClaudeChat，若跳过写入则队列静默丢失。
       persistChainRef.current = persistChainRef.current
         .then(async () => {
-          if (!mountedRef.current) return;
-          const ok = await writePendingTaskQueue(sessionId, repositoryPath, snapshot);
+          const ok = await writePendingTaskQueue(writeSessionId, writeRepositoryPath, snapshot);
           if (!ok && mountedRef.current) {
             notifyWriteFailed();
           }
@@ -57,7 +53,7 @@ export function usePendingTaskQueue(sessionId: string, repositoryPath: string) {
           /* 避免链断裂 */
         });
     },
-    [sessionId, repositoryPath, notifyWriteFailed],
+    [notifyWriteFailed],
   );
 
   const reload = useCallback(async () => {
@@ -68,8 +64,10 @@ export function usePendingTaskQueue(sessionId: string, repositoryPath: string) {
     const seq = reloadSeqRef.current + 1;
     reloadSeqRef.current = seq;
     const epochBeforeRead = mutationEpochRef.current;
+    const loadSessionId = sessionId;
+    const loadRepositoryPath = repositoryPath;
     try {
-      const rows = await readPendingTaskQueue(sessionId, repositoryPath);
+      const rows = await readPendingTaskQueue(loadSessionId, loadRepositoryPath);
       if (!mountedRef.current || seq !== reloadSeqRef.current) {
         return;
       }
@@ -85,8 +83,13 @@ export function usePendingTaskQueue(sessionId: string, repositoryPath: string) {
   }, [sessionId, repositoryPath]);
 
   useEffect(() => {
+    // 切会话时立刻清空，避免短暂保留上一会话队列被新会话 gate flush 误派发。
+    // 不重置 persistChain：上一会话尚未完成的写入必须继续落到旧 key。
+    bumpMutationEpoch();
+    setTasks([]);
+    inFlightReloadRef.current = false;
     void reload();
-  }, [reload]);
+  }, [sessionId, repositoryPath, reload, bumpMutationEpoch]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -102,9 +105,9 @@ export function usePendingTaskQueue(sessionId: string, repositoryPath: string) {
     (next: PendingExecutionTask[]) => {
       bumpMutationEpoch();
       setTasks(next);
-      enqueueWrite(next);
+      enqueueWrite(next, sessionId, repositoryPath);
     },
-    [bumpMutationEpoch, enqueueWrite],
+    [bumpMutationEpoch, enqueueWrite, sessionId, repositoryPath],
   );
 
   const addTask = useCallback(
@@ -112,41 +115,47 @@ export function usePendingTaskQueue(sessionId: string, repositoryPath: string) {
       bumpMutationEpoch();
       const id = `ptq_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
       const row: PendingExecutionTask = { ...task, id, createdAt: Date.now() };
+      const writeSessionId = sessionId;
+      const writeRepositoryPath = repositoryPath;
       setTasks((prev) => {
         const next = [...prev, row];
-        enqueueWrite(next);
+        enqueueWrite(next, writeSessionId, writeRepositoryPath);
         return next;
       });
       return row;
     },
-    [bumpMutationEpoch, enqueueWrite],
+    [bumpMutationEpoch, enqueueWrite, sessionId, repositoryPath],
   );
 
   const removeTask = useCallback(
     (id: string) => {
       bumpMutationEpoch();
+      const writeSessionId = sessionId;
+      const writeRepositoryPath = repositoryPath;
       setTasks((prev) => {
         const next = prev.filter((t) => t.id !== id);
-        enqueueWrite(next);
+        enqueueWrite(next, writeSessionId, writeRepositoryPath);
         return next;
       });
     },
-    [bumpMutationEpoch, enqueueWrite],
+    [bumpMutationEpoch, enqueueWrite, sessionId, repositoryPath],
   );
 
   const pinTask = useCallback(
     (id: string) => {
       bumpMutationEpoch();
+      const writeSessionId = sessionId;
+      const writeRepositoryPath = repositoryPath;
       setTasks((prev) => {
         const idx = prev.findIndex((t) => t.id === id);
         if (idx <= 0) return prev;
         const item = prev[idx]!;
         const next = [item, ...prev.slice(0, idx), ...prev.slice(idx + 1)];
-        enqueueWrite(next);
+        enqueueWrite(next, writeSessionId, writeRepositoryPath);
         return next;
       });
     },
-    [bumpMutationEpoch, enqueueWrite],
+    [bumpMutationEpoch, enqueueWrite, sessionId, repositoryPath],
   );
 
   const updateTask = useCallback(
@@ -165,13 +174,15 @@ export function usePendingTaskQueue(sessionId: string, repositoryPath: string) {
       >,
     ) => {
       bumpMutationEpoch();
+      const writeSessionId = sessionId;
+      const writeRepositoryPath = repositoryPath;
       setTasks((prev) => {
         const next = prev.map((t) => (t.id === id ? { ...t, ...fields } : t));
-        enqueueWrite(next);
+        enqueueWrite(next, writeSessionId, writeRepositoryPath);
         return next;
       });
     },
-    [bumpMutationEpoch, enqueueWrite],
+    [bumpMutationEpoch, enqueueWrite, sessionId, repositoryPath],
   );
 
   const clearAll = useCallback(() => {
