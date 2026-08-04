@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "bunx tsc -p tsconfig.app.json --noEmit > /tmp/tsc-out.txt 2>&1; echo \"exit=$?\"; wc -l < /tmp/tsc-out.txt; head -20 /tmp/tsc-out.txt",
-    "testCommand": "bun test src/utils/workspaceSelectionState.test.ts src/components/LeftSidebar/leftSidebarPropsEqual.test.ts 2>&1 | tail -25",
+    "buildCommand": "bunx tsc -p tsconfig.app.json --noEmit 2>&1 | tail -30",
+    "testCommand": "bun test 2>&1 | grep -E \"\\(fail\\)|Unhandled error\" | sed -E 's/ \\[[0-9.]+ms\\]//' | sort > /tmp/wise-baseline-fails.txt; echo \"基线失败数: $(wc -l < /tmp/wise-baseline-fails.txt)\"; echo \"=== 差异（当前 vs 基线）===\"; diff /tmp/wise-baseline-fails.txt /tmp/wise-current-fails.txt && echo \"无差异：失败集完全一致\"; git stash pop && echo \"=== STASH POPPED ===\"",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -255,6 +255,12 @@
       "type": "file"
     },
     {
+      "path": "src/components/ClaudeChatInput/composer-region.tsx",
+      "accessCount": 58,
+      "lastAccessed": 1785832012317,
+      "type": "file"
+    },
+    {
       "path": "src/AppImpl.tsx",
       "accessCount": 46,
       "lastAccessed": 1785800406134,
@@ -348,12 +354,6 @@
       "path": "src/components/GitDiffMonacoPane.tsx",
       "accessCount": 9,
       "lastAccessed": 1785753473500,
-      "type": "file"
-    },
-    {
-      "path": "src/components/ClaudeChatInput/composer-region.tsx",
-      "accessCount": 9,
-      "lastAccessed": 1785754472203,
       "type": "file"
     },
     {
