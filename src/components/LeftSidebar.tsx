@@ -965,6 +965,7 @@ export function LeftSidebar({
     onWorkspaceFileTreeRailContextChange({
       repositoryPath: effectiveRepoPanelPath,
       repositoryName: repoPanelRepositoryName,
+      repositoryEntries: gitPanelRepositoryEntries,
       onOpenFile: handleOpenExplorerFile,
     });
     return () => {
@@ -972,6 +973,7 @@ export function LeftSidebar({
     };
   }, [
     effectiveRepoPanelPath,
+    gitPanelRepositoryEntries,
     handleOpenExplorerFile,
     onWorkspaceFileTreeRailContextChange,
     projects.length,

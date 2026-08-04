@@ -10,42 +10,44 @@
   overflow: hidden;
 }
 
-.app-workspace-file-tree-rail__header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 4px 0 8px;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
-  background: var(--ant-color-bg-container);
-}
-
-.app-workspace-file-tree-rail__title {
+/* 与左栏文件面板同一套布局：占满轨高、无顶部分隔线（轨本身已有右边框） */
+.app-workspace-file-tree-rail > .app-left-sidebar-files-explorer,
+.app-workspace-file-tree-rail__tabs {
   flex: 1 1 0;
-  min-width: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ant-color-text);
+  min-height: 0;
+  border-top: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-@media (display-mode: window-controls-overlay) {
-  .app-workspace-file-tree-rail--mac-titlebar-inset .app-workspace-file-tree-rail__header {
-    padding-left: max(14px, calc(env(titlebar-area-x, 0px) + env(titlebar-area-width, 0px) + 12px));
-  }
+.app-workspace-file-tree-rail__tabs .app-left-sidebar-bottom-tab-content {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
 }
 
-html.app-host-macos-chrome .app-workspace-file-tree-rail--mac-titlebar-inset .app-workspace-file-tree-rail__header {
-  padding-left: max(84px, calc(env(titlebar-area-x, 0px) + env(titlebar-area-width, 0px) + 8px));
+.app-workspace-file-tree-rail__tabs .app-left-sidebar-bottom-tab-pane {
+  min-height: 0;
 }
 
-.app-workspace-file-tree-rail-panel.git-files-mode--context-header-hidden .git-files-explorer-search {
+.app-workspace-file-tree-rail__tabs .app-left-sidebar-files-explorer {
+  flex: 1 1 0;
+  min-height: 0;
   border-top: none;
 }
 
-.app-workspace-file-tree-rail-panel .git-files-mode--context-header-hidden .git-files-explorer-search {
-  padding-top: 8px;
+.app-workspace-file-tree-rail .app-left-sidebar-files-explorer-body {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.app-workspace-file-tree-rail__prefix {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-right: auto;
 }
 
 .app-workspace-file-tree-rail__close {
@@ -53,8 +55,8 @@ html.app-host-macos-chrome .app-workspace-file-tree-rail--mac-titlebar-inset .ap
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: none;
   border-radius: 6px;
@@ -70,45 +72,20 @@ html.app-host-macos-chrome .app-workspace-file-tree-rail--mac-titlebar-inset .ap
 }
 
 .app-workspace-file-tree-rail__close svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
-.app-workspace-file-tree-rail__body {
-  flex: 1 1 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+@media (display-mode: window-controls-overlay) {
+  .app-workspace-file-tree-rail--mac-titlebar-inset .git-files-explorer-bar,
+  .app-workspace-file-tree-rail--mac-titlebar-inset .git-panel-header {
+    padding-left: max(14px, calc(env(titlebar-area-x, 0px) + env(titlebar-area-width, 0px) + 12px));
+  }
 }
 
-.app-workspace-file-tree-rail-panel {
-  flex: 1 1 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.app-workspace-file-tree-rail-panel-body {
-  flex: 1 1 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.app-workspace-file-tree-rail-panel .git-files-mode {
-  flex: 1 1 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.app-workspace-file-tree-rail-panel .git-files-explorer-scroll-region {
-  flex: 1 1 0;
-  min-height: 0;
+html.app-host-macos-chrome .app-workspace-file-tree-rail--mac-titlebar-inset .git-files-explorer-bar,
+html.app-host-macos-chrome .app-workspace-file-tree-rail--mac-titlebar-inset .git-panel-header {
+  padding-left: max(84px, calc(env(titlebar-area-x, 0px) + env(titlebar-area-width, 0px) + 8px));
 }
 
 .app-workspace-file-tree-rail-empty {

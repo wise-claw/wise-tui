@@ -66,11 +66,9 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
   }, [visible, activeRepositoryPath]);
 
   const rootClassName =
-    variant === "workspace-rail"
-      ? "app-workspace-file-tree-rail-panel"
-      : variant === "right-rail"
-        ? "app-right-panel-files-explorer"
-        : "app-left-sidebar-files-explorer";
+    variant === "right-rail"
+      ? "app-right-panel-files-explorer"
+      : "app-left-sidebar-files-explorer";
 
   return (
     <div
@@ -83,11 +81,9 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
     >
       <div
         className={
-          variant === "workspace-rail"
-            ? "app-workspace-file-tree-rail-panel-body"
-            : variant === "right-rail"
-              ? "app-right-panel-files-explorer-body"
-              : "app-left-sidebar-files-explorer-body"
+          variant === "right-rail"
+            ? "app-right-panel-files-explorer-body"
+            : "app-left-sidebar-files-explorer-body"
         }
       >
         <RepositoryFilesExplorer
@@ -104,7 +100,7 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
           onSearchChange={onSearchChange}
           onOpenFile={onOpenFile}
           onClearExplorerSearch={() => onSearchChange("")}
-          hideContextHeader={variant === "workspace-rail"}
+          hideContextHeader={false}
           explorerRevealTarget={EXPLORER_REVEAL_TARGET_BY_VARIANT[variant]}
         />
       </div>
