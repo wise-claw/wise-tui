@@ -1,5 +1,11 @@
 import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
-import { CLAUDE_BUILTIN_SLASH_COMMANDS } from "../constants/claudeCodeSlashCommands";
+import {
+  emptyQuerySlashHintsForEngine,
+  ENGINE_SLASH_GROUP_TITLES,
+  listBuiltinSlashCommandsForEngine,
+  resolveEngineSlashCatalogGroup,
+  type EngineSlashCatalogGroup,
+} from "../constants/engineSlashCommands";
 import { isSlashCommandName } from "./slashCommandName";
 import {
   COMPOSER_PLUGIN_SLASH_SUBCOMMANDS,
@@ -21,42 +27,24 @@ export interface SlashOption {
   isDir?: boolean;
   name?: string;
   workflowId?: string;
-  group?: "claude" | "skill" | "plugin" | "plugin-cmd";
+  group?: EngineSlashCatalogGroup | "skill" | "plugin" | "plugin-cmd";
   executionEngine?: SessionExecutionEngine;
   executionEngineAvailable?: boolean;
 }
 
 export const SLASH_POPOVER_MAX_OPTIONS = 48;
 
-/** 仅 `/` 空查询时展示的常用 Claude 内置命令，避免一次性渲染近百条 */
-const SLASH_EMPTY_QUERY_CLAUDE_HINTS = new Set([
-  "add-dir",
-  "agents",
-  "background",
-  "branch",
-  "btw",
-  "clear",
-  "code-review",
-  "compact",
-  "config",
-  "context",
-  "diff",
-  "doctor",
-  "help",
-  "mcp",
-  "model",
-  "plugin",
-  "resume",
-  "review",
-  "skills",
-]);
-
-const CLAUDE_BUILTIN_COMMANDS: SlashOption[] = CLAUDE_BUILTIN_SLASH_COMMANDS.map((cmd) => ({
-  type: "command",
-  group: "claude",
-  label: cmd.label,
-  description: cmd.description,
-}));
+function mapBuiltinSlashCommands(
+  engine: SessionExecutionEngine | null | undefined,
+): SlashOption[] {
+  const group = resolveEngineSlashCatalogGroup(engine);
+  return listBuiltinSlashCommandsForEngine(engine).map((cmd) => ({
+    type: "command" as const,
+    group,
+    label: cmd.label,
+    description: cmd.description,
+  }));
+}
 
 export const OMC_COMMANDS: SlashOption[] = [
   { type: "command", label: "ask", description: "OMC 多模型咨询路由" },
@@ -111,14 +99,16 @@ function mergeSlashCommandOptions(items: SlashOption[]): SlashOption[] {
 export function buildRuntimeBuiltinCommands(
   omcInstalled: boolean,
   _detectedPluginLabels: ReadonlySet<string>,
+  executionEngine: SessionExecutionEngine | null | undefined = "claude",
 ): SlashOption[] {
-  // detectedPluginLabels 只参与拼 key 不参与结果（value 仅消费 CLAUDE_BUILTIN_COMMANDS），
+  // detectedPluginLabels 只参与拼 key 不参与结果（value 仅消费引擎内置目录），
   // 是死输入——去掉它消除每键 sort+join 的 O(k log k) 字符串拼接。
-  const key = `${omcInstalled ? 1 : 0}`;
+  const group = resolveEngineSlashCatalogGroup(executionEngine);
+  const key = `${group}:${omcInstalled ? 1 : 0}`;
   if (runtimeBuiltinCache?.key === key) {
     return runtimeBuiltinCache.value;
   }
-  const value = mergeSlashCommandOptions([...CLAUDE_BUILTIN_COMMANDS]);
+  const value = mergeSlashCommandOptions([...mapBuiltinSlashCommands(executionEngine)]);
   runtimeBuiltinCache = { key, value };
   return value;
 }
@@ -207,14 +197,17 @@ function buildPluginSlashOptions(
   return [...subcommands, ...installed, ...installs];
 }
 
-function splitRuntimeBuiltins(runtimeBuiltins: SlashOption[]): {
-  claude: SlashOption[];
+function splitRuntimeBuiltins(
+  runtimeBuiltins: SlashOption[],
+  group: EngineSlashCatalogGroup,
+): {
+  builtins: SlashOption[];
 } {
-  const claude: SlashOption[] = [];
+  const builtins: SlashOption[] = [];
   for (const row of runtimeBuiltins) {
-    if (row.group === "claude") claude.push(row);
+    if (row.group === group) builtins.push(row);
   }
-  return { claude };
+  return { builtins };
 }
 
 function filterSlashCommandRows(rows: SlashOption[], query: string): SlashOption[] {
@@ -246,25 +239,35 @@ export function getFilteredSlashOptions(
   skillSlashOptions: SlashOption[],
   omcInstalled: boolean,
   detectedPluginLabels: ReadonlySet<string>,
+  executionEngine: SessionExecutionEngine | null | undefined = "claude",
 ): SlashFilteredResult {
-  const runtimeBuiltins = buildRuntimeBuiltinCommands(omcInstalled, detectedPluginLabels);
-  const { claude } = splitRuntimeBuiltins(runtimeBuiltins);
+  const catalogGroup = resolveEngineSlashCatalogGroup(executionEngine);
+  const runtimeBuiltins = buildRuntimeBuiltinCommands(
+    omcInstalled,
+    detectedPluginLabels,
+    executionEngine,
+  );
+  const { builtins } = splitRuntimeBuiltins(runtimeBuiltins, catalogGroup);
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
+  const emptyHints = emptyQuerySlashHintsForEngine(executionEngine);
 
-  const claudeFiltered = hasQuery
-    ? filterSlashCommandRows(claude, query)
-    : claude.filter((row) => SLASH_EMPTY_QUERY_CLAUDE_HINTS.has(row.label.trim().toLowerCase()));
-  const detectedFiltered = filterSlashCommandRows(detectedPluginSlashOptions, query);
-  const pluginFiltered = buildPluginSlashOptions(
-    query,
-    installedPluginSlashOptions,
-    installPluginSlashOptions,
-  );
-  const skillsFiltered = filterSkillRows(skillSlashOptions, query);
+  const builtinsFiltered = hasQuery
+    ? filterSlashCommandRows(builtins, query)
+    : builtins.filter((row) => emptyHints.has(row.label.trim().toLowerCase()));
+
+  // Claude 插件/技能目录仅在 Claude 引擎下展示；其它引擎只看各自内置命令。
+  const includeClaudeExtras = catalogGroup === "claude";
+  const detectedFiltered = includeClaudeExtras
+    ? filterSlashCommandRows(detectedPluginSlashOptions, query)
+    : [];
+  const pluginFiltered = includeClaudeExtras
+    ? buildPluginSlashOptions(query, installedPluginSlashOptions, installPluginSlashOptions)
+    : [];
+  const skillsFiltered = includeClaudeExtras ? filterSkillRows(skillSlashOptions, query) : [];
 
   const merged = [
-    ...claudeFiltered,
+    ...builtinsFiltered,
     ...detectedFiltered,
     ...pluginFiltered,
     ...skillsFiltered,
@@ -304,7 +307,7 @@ export function mapSlashCatalogToOptions(input: {
 }
 
 export const SLASH_GROUP_TITLES: Record<NonNullable<SlashOption["group"]>, string> = {
-  claude: "Claude 内置",
+  ...ENGINE_SLASH_GROUP_TITLES,
   "plugin-cmd": "已安装插件命令",
   plugin: "插件",
   skill: "Skills 技能",
@@ -321,7 +324,15 @@ export function buildSlashOptionSections(options: SlashOption[]): Array<{
     items: Array<{ option: SlashOption; flatIndex: number }>;
   }> = [];
 
-  for (const group of ["claude", "plugin-cmd", "plugin", "skill"] as const) {
+  for (const group of [
+    "claude",
+    "codex",
+    "cursor",
+    "opencode",
+    "plugin-cmd",
+    "plugin",
+    "skill",
+  ] as const) {
     const items = options
       .map((option, index) => ({ option, index }))
       .filter(({ option }) => option.type === "command" && option.group === group)

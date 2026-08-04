@@ -3,6 +3,11 @@ import {
   CLAUDE_PLUGIN_MARKET_CATALOG,
   claudePluginInstallRef,
 } from "../constants/claudePluginMarketCatalog";
+import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
+import {
+  resolveEngineSlashCatalogGroup,
+  rewriteSlashCommandForEngine,
+} from "../constants/engineSlashCommands";
 import { splitLeadingAtMentionPrefix } from "./composerDefaultInstruction";
 
 export type ComposerPluginSlashAction =
@@ -223,26 +228,63 @@ export function isComposerLocalSlashEligible(input: {
   imageCount?: number;
   contextCount?: number;
   codeSelectionRefCount?: number;
+  executionEngine?: SessionExecutionEngine | null;
 }): boolean {
   if ((input.imageCount ?? 0) > 0) return false;
   if ((input.contextCount ?? 0) > 0) return false;
   if ((input.codeSelectionRefCount ?? 0) > 0) return false;
-  return parseComposerLocalSlashCommand(input.text.trim()) != null;
+  return parseComposerLocalSlashCommand(input.text.trim(), input.executionEngine) != null;
 }
 
 function redirectCommand(raw: string, redirectMessage: string): ComposerLocalSlashCommand {
   return { kind: "redirect", raw, redirectMessage };
 }
 
+const CLAUDE_ONLY_LOCAL_HEADS = new Set([
+  "plugin",
+  "doctor",
+  "reload-plugins",
+  "reload-skills",
+  "ultracode",
+  "hooks",
+  "agents",
+  "compact",
+]);
+
 /**
- * 解析 Wise 本地处理的斜杠命令（嵌入式会话中 Claude Code TUI 不可用者）。
- * 要求整行仅为一条 `/command`（可带参数），与 Claude Code 会话内 slash 语义一致。
+ * 解析 Wise 本地处理的斜杠命令（嵌入式会话中原生 TUI 不可用者）。
+ * 非 Claude 引擎：只拦截跨引擎可用的本地命令，Claude 专用 redirect / 插件命令不再误伤。
  */
-export function parseComposerLocalSlashCommand(text: string): ComposerLocalSlashCommand | null {
+export function parseComposerLocalSlashCommand(
+  text: string,
+  executionEngine: SessionExecutionEngine | null | undefined = "claude",
+): ComposerLocalSlashCommand | null {
   const trimmed = text.trim();
   if (!trimmed.startsWith("/")) return null;
 
-  if (/^\/plugin\b/i.test(trimmed)) {
+  const catalogGroup = resolveEngineSlashCatalogGroup(executionEngine);
+  const isClaudeEngine = catalogGroup === "claude";
+  const head = trimmed.slice(1).split(/\s+/)[0]?.toLowerCase() ?? "";
+
+  // 非 Claude：Claude 专用本地命令改为明确提示，避免走 Claude IPC 或错误 redirect。
+  if (!isClaudeEngine && CLAUDE_ONLY_LOCAL_HEADS.has(head)) {
+    if (head === "compact") {
+      return redirectCommand(
+        trimmed,
+        "当前引擎不支持 Claude 式 /compact。\n" +
+          "可新建会话标签（/clear）释放上下文，或用自然语言请助手总结历史。",
+      );
+    }
+    const engineLabel =
+      catalogGroup === "codex" ? "Codex" : catalogGroup === "cursor" ? "Cursor" : "OpenCode";
+    return redirectCommand(
+      trimmed,
+      `「/${head}」为 Claude Code 专用命令，当前引擎为 ${engineLabel}。\n` +
+        `请输入 / 查看 ${engineLabel} 支持的斜杠命令。`,
+    );
+  }
+
+  if (isClaudeEngine && /^\/plugin\b/i.test(trimmed)) {
     const plugin = parseComposerPluginSlashCommand(trimmed);
     if (plugin) {
       return { kind: "plugin", raw: trimmed, plugin };
@@ -250,7 +292,7 @@ export function parseComposerLocalSlashCommand(text: string): ComposerLocalSlash
     return null;
   }
 
-  if (COMPACT_SLASH_RE.test(trimmed)) {
+  if (isClaudeEngine && COMPACT_SLASH_RE.test(trimmed)) {
     return { kind: "compact", raw: trimmed };
   }
 
@@ -263,7 +305,6 @@ export function parseComposerLocalSlashCommand(text: string): ComposerLocalSlash
     };
   }
 
-  const head = trimmed.slice(1).split(/\s+/)[0]?.toLowerCase() ?? "";
   if (CLEAR_ALIASES.has(head) && trimmed === `/${head}`) {
     return { kind: "clear", raw: trimmed };
   }
@@ -272,14 +313,17 @@ export function parseComposerLocalSlashCommand(text: string): ComposerLocalSlash
     if (trimmed === "/mcp" || /^\/mcp\s+list$/i.test(trimmed)) {
       return { kind: "mcp", raw: trimmed };
     }
-    return redirectCommand(trimmed, COMPOSER_MCP_SUBCOMMAND_HELP);
+    if (isClaudeEngine) {
+      return redirectCommand(trimmed, COMPOSER_MCP_SUBCOMMAND_HELP);
+    }
+    return null;
   }
 
   if (head === "skills" && trimmed === "/skills") {
     return { kind: "skills", raw: trimmed };
   }
 
-  if (head === "doctor" && trimmed === "/doctor") {
+  if (isClaudeEngine && head === "doctor" && trimmed === "/doctor") {
     return { kind: "doctor", raw: trimmed };
   }
 
@@ -291,19 +335,19 @@ export function parseComposerLocalSlashCommand(text: string): ComposerLocalSlash
     return { kind: "config", raw: trimmed };
   }
 
-  if (head === "reload-plugins" && trimmed === "/reload-plugins") {
+  if (isClaudeEngine && head === "reload-plugins" && trimmed === "/reload-plugins") {
     return { kind: "reload_plugins", raw: trimmed };
   }
 
-  if (head === "reload-skills" && trimmed === "/reload-skills") {
+  if (isClaudeEngine && head === "reload-skills" && trimmed === "/reload-skills") {
     return { kind: "reload_skills", raw: trimmed };
   }
 
-  if (head === "hooks" && (trimmed === "/hooks" || /^\/hooks\s+list$/i.test(trimmed))) {
+  if (isClaudeEngine && head === "hooks" && (trimmed === "/hooks" || /^\/hooks\s+list$/i.test(trimmed))) {
     return { kind: "hooks", raw: trimmed };
   }
 
-  if (head === "agents" && (trimmed === "/agents" || /^\/agents\s+list$/i.test(trimmed))) {
+  if (isClaudeEngine && head === "agents" && (trimmed === "/agents" || /^\/agents\s+list$/i.test(trimmed))) {
     return { kind: "agents", raw: trimmed };
   }
 
@@ -315,13 +359,8 @@ export function parseComposerLocalSlashCommand(text: string): ComposerLocalSlash
     return { kind: "models", raw: trimmed };
   }
 
-  // `/ultracode` 与 `/ultracode off` 与 `/ultracode <text>`。
-  // 解析规则（与 OMC 关键字语义一致）：
-  //   `/ultracode`             → ultracodePrompt = undefined（纯 toggle）
-  //   `/ultracode off`         → ultracodePrompt = ""     （显式关闭）
-  //   `/ultracode <其它文本>`   → ultracodePrompt = 文本  （启用并把文本作为 prompt 投递）
-  // typo（如 `/ultracodex`）不会匹配，进入原生 slash 兜底。
-  if (head === "ultracode") {
+  // `/ultracode` 仅 Claude/OMC。
+  if (isClaudeEngine && head === "ultracode") {
     const after = trimmed.replace(/^\/ultracode\s*/i, "");
     if (after === "") {
       return { kind: "ultracode", raw: trimmed, ultracodePrompt: null };
@@ -332,13 +371,45 @@ export function parseComposerLocalSlashCommand(text: string): ComposerLocalSlash
     return { kind: "ultracode", raw: trimmed, ultracodePrompt: after };
   }
 
-  for (const entry of TUI_SLASH_REDIRECTS) {
-    if (entry.test(trimmed)) {
-      return redirectCommand(trimmed, entry.message);
+  if (isClaudeEngine) {
+    for (const entry of TUI_SLASH_REDIRECTS) {
+      if (entry.test(trimmed)) {
+        return redirectCommand(trimmed, entry.message);
+      }
     }
+  } else {
+    // 非 Claude：/diff、/resume 等 TUI 命令给出引擎中立指引，不走 Claude 文案。
+    if (/^\/diff\b/i.test(trimmed)) {
+      return redirectCommand(
+        trimmed,
+        "交互式 /diff 在嵌入式会话中不可用。\n请使用侧栏 Git 面板查看改动。",
+      );
+    }
+    if (/^\/resume\b/i.test(trimmed) || /^\/continue\b/i.test(trimmed)) {
+      return redirectCommand(
+        trimmed,
+        "交互式会话恢复在嵌入式会话中不可用。\n请使用会话标签栏或历史会话弹窗恢复。",
+      );
+    }
+    // Codex / Cursor / OpenCode 的 /review 等：不本地拦截，交给 outbound 改写与引擎发送。
   }
 
   return null;
+}
+
+/**
+ * 发送前：非 Claude 引擎把斜杠命令改写为该引擎支持的形式；
+ * Claude 专用命令返回提示文案，由调用方本地展示而不发给引擎。
+ */
+export function prepareSlashCommandOutboundForEngine(
+  text: string,
+  executionEngine: SessionExecutionEngine | null | undefined,
+): { outbound: string; blockMessage?: string } {
+  const rewritten = rewriteSlashCommandForEngine(text, executionEngine);
+  if (rewritten.unsupportedMessage) {
+    return { outbound: rewritten.outbound, blockMessage: rewritten.unsupportedMessage };
+  }
+  return { outbound: rewritten.outbound };
 }
 
 /** 应交给 Claude Code CLI 原生斜杠处理器（非 Wise 本地拦截）的整行命令。 */

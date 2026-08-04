@@ -141,6 +141,21 @@ describe("parseComposerLocalSlashCommand", () => {
     expect(parseComposerLocalSlashCommand("/unknown-cmd")).toBeNull();
   });
 
+  test("codex-rpc does not Claude-redirect /review and blocks /plugin", () => {
+    expect(parseComposerLocalSlashCommand("/review", "codex-rpc")).toBeNull();
+    const plugin = parseComposerLocalSlashCommand("/plugin list", "codex-rpc");
+    expect(plugin?.kind).toBe("redirect");
+    expect(plugin?.redirectMessage).toContain("Codex");
+    expect(parseComposerLocalSlashCommand("/clear", "codex-rpc")?.kind).toBe("clear");
+    expect(parseComposerLocalSlashCommand("/model", "codex-rpc")?.kind).toBe("models");
+  });
+
+  test("cursor and opencode keep shared local commands", () => {
+    expect(parseComposerLocalSlashCommand("/new", "cursor")?.kind).toBe("clear");
+    expect(parseComposerLocalSlashCommand("/models", "opencode")?.kind).toBe("models");
+    expect(parseComposerLocalSlashCommand("/compact", "cursor")?.kind).toBe("redirect");
+  });
+
   test("parses /ultracode 三种语义", () => {
     // 纯 toggle
     expect(parseComposerLocalSlashCommand("/ultracode")).toEqual({

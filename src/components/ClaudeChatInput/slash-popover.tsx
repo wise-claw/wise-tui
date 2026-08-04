@@ -76,6 +76,8 @@ interface SlashPopoverProps {
   atMentionDefaultTarget?: AtMentionDefaultTarget;
   /** 在菜单内将执行环境 / 终端设为 @ 默认。 */
   onAtMentionDefaultTargetChange?: (target: AtMentionDefaultTarget) => void | Promise<void>;
+  /** 当前会话执行引擎：决定 `/` 补全展示哪套内置命令。 */
+  sessionExecutionEngine?: SessionExecutionEngine;
 }
 
 const CLAUDE_RESERVED_LABELS = new Set(
@@ -157,6 +159,7 @@ export function SlashPopover({
   qoderAvailable = false,
   atMentionDefaultTarget = DEFAULT_AT_MENTION_DEFAULT_TARGET,
   onAtMentionDefaultTargetChange,
+  sessionExecutionEngine = "claude",
 }: SlashPopoverProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [fileResults, setFileResults] = useState<SlashOption[]>([]);
@@ -304,6 +307,7 @@ export function SlashPopover({
       slashCatalogOptions.skillSlashOptions,
       omcInstalled,
       detectedPluginLabelSet,
+      sessionExecutionEngine,
     );
   }, [
     mode,
@@ -312,6 +316,7 @@ export function SlashPopover({
     slashCatalogOptionsKey,
     omcInstalled,
     detectedPluginLabelSet,
+    sessionExecutionEngine,
   ]);
 
   const options = useMemo(() => {

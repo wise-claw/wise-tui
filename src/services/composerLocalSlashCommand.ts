@@ -34,13 +34,18 @@ import {
 import {
   COMPOSER_LOCAL_SLASH_HELP,
   parseComposerLocalSlashCommand,
+  prepareSlashCommandOutboundForEngine,
   resolveComposerPluginInstallRef,
   type ComposerLocalSlashCommand,
   type ComposerPluginSlashCommand,
 } from "../utils/composerLocalSlashCommand";
 import { dispatchOpenModelPicker } from "./claudeModelProfiles";
 
-export { parseComposerLocalSlashCommand, COMPOSER_LOCAL_SLASH_HELP };
+export {
+  parseComposerLocalSlashCommand,
+  prepareSlashCommandOutboundForEngine,
+  COMPOSER_LOCAL_SLASH_HELP,
+};
 
 export interface ComposerLocalSlashDeps {
   sessionId: string;

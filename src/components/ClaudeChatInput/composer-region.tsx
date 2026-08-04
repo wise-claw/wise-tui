@@ -153,6 +153,7 @@ import {
   executeComposerLocalSlashCommand,
   composerLocalSlashPendingMessage,
   parseComposerLocalSlashCommand,
+  prepareSlashCommandOutboundForEngine,
   resolveUltracodeToggleDecision,
 } from "../../services/composerLocalSlashCommand";
 import type { ComposerLocalSlashCommand } from "../../utils/composerLocalSlashCommand";
@@ -1894,7 +1895,10 @@ function ComposerInner({
         void clearPromptContextSessionKey(draftBucketKey);
       };
 
-      const localSlashCommand = parseComposerLocalSlashCommand(logicalSnap);
+      const localSlashCommand = parseComposerLocalSlashCommand(
+        logicalSnap,
+        sessionExecutionEngine,
+      );
       if (
         localSlashCommand &&
         isComposerLocalSlashEligible({
@@ -1902,6 +1906,7 @@ function ComposerInner({
           imageCount: imagesSnap.length,
           contextCount: contextSnap.length,
           codeSelectionRefCount: codeSelectionRefs.length,
+          executionEngine: sessionExecutionEngine,
         })
       ) {
         // `/ultracode` 命令由本地拦截：先写 per-session override，再决定是否回投 prompt。
@@ -2305,6 +2310,18 @@ function ComposerInner({
       if (!outbound.trim()) {
         restoreComposerDraft(rollbackDraft);
         return;
+      }
+
+      // 非 Claude 引擎：把斜杠命令改写为该引擎支持的形式；Claude 专用命令本地拦截提示。
+      if (!isClaudeEngine && outbound.trim().startsWith("/")) {
+        const prepared = prepareSlashCommandOutboundForEngine(outbound, sessionExecutionEngine);
+        if (prepared.blockMessage) {
+          clearComposerSurfaceSync(logicalSnap.trim());
+          onAppendUserMessage?.(session.id, logicalSnap.trim());
+          onAppendSystemMessage?.(session.id, prepared.blockMessage);
+          return;
+        }
+        outbound = prepared.outbound;
       }
 
       const execPlanIdle = parseExecutionEnvironmentDispatch(logicalSnap);
@@ -3572,6 +3589,7 @@ function ComposerInner({
                 qoderAvailable={qoderAvailable}
                 atMentionDefaultTarget={atMentionDefaultTarget}
                 onAtMentionDefaultTargetChange={(next) => void saveAtMentionDefaultTarget(next)}
+                sessionExecutionEngine={sessionExecutionEngine}
               />
               {semiEditorReady ? (
                 <AIChatInput

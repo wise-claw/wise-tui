@@ -17,6 +17,7 @@ describe("getFilteredSlashOptions", () => {
       [],
       true,
       detected,
+      "claude",
     );
 
     expect(options.length).toBeLessThan(80);
@@ -36,9 +37,29 @@ describe("getFilteredSlashOptions", () => {
       [],
       false,
       detected,
+      "claude",
     );
 
     expect(options.some((row) => row.label === "autofix-pr")).toBe(true);
+  });
+
+  test("codex-rpc empty query shows Codex builtins not Claude plugin", () => {
+    const detected = new Set<string>();
+    const { options } = getFilteredSlashOptions(
+      "",
+      [{ type: "command", group: "plugin-cmd", label: "demo-skill", description: "demo" }],
+      [],
+      [],
+      [],
+      false,
+      detected,
+      "codex-rpc",
+    );
+
+    expect(options.every((row) => row.group === "codex")).toBe(true);
+    expect(options.some((row) => row.label === "review")).toBe(true);
+    expect(options.some((row) => row.label === "plugin")).toBe(false);
+    expect(options.some((row) => row.label === "demo-skill")).toBe(false);
   });
 
   test("orders groups as claude, plugin-cmd, plugin", () => {
@@ -51,6 +72,7 @@ describe("getFilteredSlashOptions", () => {
       [{ type: "command", group: "skill", label: "should-not-show", description: "skill" }],
       true,
       detected,
+      "claude",
     );
 
     const groups = options.map((row) => row.group);
@@ -67,7 +89,7 @@ describe("getFilteredSlashOptions", () => {
 
   test("caps visible slash options", () => {
     const detected = new Set<string>();
-    const runtime = buildRuntimeBuiltinCommands(true, detected);
+    const runtime = buildRuntimeBuiltinCommands(true, detected, "claude");
     const manySkills = Array.from({ length: 80 }, (_, index) => ({
       type: "command" as const,
       group: "skill" as const,
@@ -83,6 +105,7 @@ describe("getFilteredSlashOptions", () => {
       manySkills,
       true,
       detected,
+      "claude",
     );
 
     expect(options.length).toBe(SLASH_POPOVER_MAX_OPTIONS);
