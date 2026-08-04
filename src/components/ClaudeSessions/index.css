@@ -4694,8 +4694,7 @@
   line-height: 22px;
 }
 
-.app-claude-messages .app-message-part--text .app-markdown > :first-child,
-.app-claude-messages .app-claude-user-message-display .app-message-part--text .app-markdown-host:first-child {
+.app-claude-messages .app-message-part--text .app-markdown > :first-child {
   margin-top: 0;
 }
 
@@ -4712,6 +4711,17 @@
   max-width: 100%;
 }
 
+.app-claude-user-message-plain {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 22px;
+  color: var(--ant-color-text);
+  min-width: 0;
+  max-width: 100%;
+}
+
 .app-claude-user-message-inline-row {
   display: flex;
   flex-wrap: wrap;
@@ -4722,16 +4732,11 @@
   max-width: 100%;
 }
 
-.app-claude-user-message-inline-row .app-markdown-host {
+.app-claude-user-message-inline-row .app-claude-user-message-plain {
   width: auto;
   max-width: 100%;
   flex: 0 1 auto;
   min-width: 0;
-}
-
-.app-claude-user-message-inline-row .app-markdown p:only-child {
-  display: inline;
-  margin: 0;
 }
 
 .app-claude-user-message-default-instruction {

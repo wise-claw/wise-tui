@@ -3,12 +3,12 @@ import type { ClaudeMessage } from "../../types";
 import { userMessagePlainTextForDisplay } from "../../utils/claudeChatMessageDisplay";
 import { stripAppliedDefaultInstructionFromDisplayText } from "../../utils/composerDefaultInstruction";
 import { extractImportantUserInputForDisplay } from "../../utils/userMessageImportantInput";
-import { Markdown } from "./Markdown";
 import { UserMessageCollapsibleBody } from "./UserMessageCollapsibleBody";
 
 interface Props {
   msg: ClaudeMessage;
-  streaming: boolean;
+  /** 保留与调用方签名一致；用户消息按纯文本展示，不走 Markdown / 流式渲染管线。 */
+  streaming?: boolean;
 }
 
 function userMessageDisplayKey(msg: ClaudeMessage): string {
@@ -22,8 +22,14 @@ function userMessageDisplayKey(msg: ClaudeMessage): string {
   return msg.content ?? "";
 }
 
+/** 用户消息正文：按原文纯文本展示，避免 lint 日志等被 Markdown 误解析。 */
+function UserMessagePlainText({ text }: { text: string }) {
+  if (!text) return null;
+  return <div className="app-claude-user-message-plain">{text}</div>;
+}
+
 /** 用户消息列表展示：默认仅重要输入（Cursor 风格），可展开完整原文。 */
-export const UserMessageDisplayBody = memo(function UserMessageDisplayBody({ msg, streaming }: Props) {
+export const UserMessageDisplayBody = memo(function UserMessageDisplayBody({ msg }: Props) {
   const sourceKey = useMemo(() => userMessageDisplayKey(msg), [msg]);
   const fullText = useMemo(() => userMessagePlainTextForDisplay(msg), [sourceKey]);
   const display = useMemo(() => extractImportantUserInputForDisplay(fullText), [fullText]);
@@ -47,12 +53,10 @@ export const UserMessageDisplayBody = memo(function UserMessageDisplayBody({ msg
               >
                 {defaultInstructionApplied}
               </span>
-              {bodyText ? (
-                <Markdown text={bodyText} streaming={streaming} showPendingHint={false} />
-              ) : null}
+              <UserMessagePlainText text={bodyText} />
             </div>
           ) : (
-            <Markdown text={visibleText} streaming={streaming} showPendingHint={false} />
+            <UserMessagePlainText text={visibleText} />
           )}
           {display.attachmentPaths.length > 0 ? (
             <div
