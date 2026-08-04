@@ -40,6 +40,8 @@ import {
   contentsToPlain,
   detectAtSlashTrigger,
   ensureSpaceAfterAtInsert,
+  isAtSlashTriggerSuppressedByPaste,
+  PASTE_TRIGGER_SUPPRESS_MS,
   promptToDisplayPlain,
   normalizeComposerEditorPlain,
   singleTextPrompt,
@@ -697,6 +699,8 @@ function ComposerInner({
   const skipContentSyncRemainingRef = useRef(0);
   /** 文件树/附件程序化插入 @路径后：吞掉当次 onContentChange 的 at-trigger，避免打开文件搜索面板。 */
   const suppressAtTriggerAfterMentionInsertRef = useRef(false);
+  /** 文本粘贴后抑制 @ / 指令触发的截止时间戳（Date.now）。粘贴的邮箱/路径/单斜杠不应误开弹出面板或文件搜索。 */
+  const suppressTriggerAfterPasteUntilRef = useRef(0);
   const composerSendInFlightRef = useRef(false);
   /** 会话切换 generation token：每次切换 bump，在途 rAF setContent tick 据此判 stale 提前作废。 */
   const composerSessionGenerationRef = useRef(0);
@@ -1114,7 +1118,17 @@ function ComposerInner({
       setTrigger((prev) =>
         prev.mode === null && prev.query === "" ? prev : { mode: null, query: "", rect: null },
       );
+    } else if (
+      isAtSlashTriggerSuppressedByPaste(suppressTriggerAfterPasteUntilRef.current, Date.now())
+    ) {
+      // 粘贴后的短窗口：整块插入内容（邮箱/路径/单斜杠除法等）不应误开 @ / 指令弹出与文件搜索查询
+      setTrigger((prev) =>
+        prev.mode === null && prev.query === "" ? prev : { mode: null, query: "", rect: null },
+      );
     } else {
+      if (suppressTriggerAfterPasteUntilRef.current > 0) {
+        suppressTriggerAfterPasteUntilRef.current = 0;
+      }
       const detected = detectAtSlashTrigger(plain, c);
       setTrigger((prev) => {
         if (!detected) {
@@ -2710,10 +2724,22 @@ function ComposerInner({
   const handleInputAreaPaste = useCallback(
     (e: ClipboardEvent | React.ClipboardEvent) => {
       const imageFiles = collectClipboardImageFiles(e.clipboardData);
-      if (imageFiles.length === 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-      addImageFilesFromList(imageFiles);
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        addImageFilesFromList(imageFiles);
+        return;
+      }
+      // 纯文本粘贴：整块插入内容不应触发 @ / 指令弹出，否则粘贴的邮箱/路径/单斜杠会误开
+      // 弹出面板与文件搜索查询造成卡顿。仅当用户未处于主动 @ / 指令补全中才抑制——
+      // 若已在补全（如已输入 `@src/` 想粘贴补全路径），保留 trigger 让 detect 扩展 query。
+      // 取舍：粘贴的合法 `/cmd` 也按字面插入、不自动弹出补全（继续输入仍会正常触发）。
+      if (!triggerRef.current.mode) {
+        suppressTriggerAfterPasteUntilRef.current = Date.now() + PASTE_TRIGGER_SUPPRESS_MS;
+        setTrigger((prev) =>
+          prev.mode === null && prev.query === "" ? prev : { mode: null, query: "", rect: null },
+        );
+      }
     },
     [addImageFilesFromList],
   );

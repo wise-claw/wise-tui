@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   buildComposerAtPathMentionsInsertion,
   detectAtSlashTrigger,
+  isAtSlashTriggerSuppressedByPaste,
+  PASTE_TRIGGER_SUPPRESS_MS,
   replaceSlashCommandLine,
   reportAtSlashTriggerFromPlain,
 } from "./composer-plain-utils";
@@ -118,6 +120,22 @@ describe("detectAtSlashTrigger", () => {
       query: "loom:",
       triggerStart: 0,
     });
+  });
+});
+
+describe("isAtSlashTriggerSuppressedByPaste", () => {
+  test("suppress window is active only within the paste window", () => {
+    const until = 1200;
+    expect(isAtSlashTriggerSuppressedByPaste(0, 1000)).toBe(false);
+    expect(isAtSlashTriggerSuppressedByPaste(until, 1000)).toBe(true);
+    // 窗口边界：到达 until 即放行
+    expect(isAtSlashTriggerSuppressedByPaste(until, 1200)).toBe(false);
+    expect(isAtSlashTriggerSuppressedByPaste(until, 1300)).toBe(false);
+  });
+
+  test("suppress window constant is positive and sane", () => {
+    expect(PASTE_TRIGGER_SUPPRESS_MS).toBeGreaterThan(0);
+    expect(PASTE_TRIGGER_SUPPRESS_MS).toBeLessThan(1000);
   });
 });
 

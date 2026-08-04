@@ -12,7 +12,9 @@ import { composerTokenHighlightExtensions } from "./composerTokenHighlightExtens
 import {
   contentsToPlain,
   detectAtSlashTrigger,
+  isAtSlashTriggerSuppressedByPaste,
   normalizeComposerEditorPlain,
+  PASTE_TRIGGER_SUPPRESS_MS,
 } from "./composer-plain-utils";
 import { shouldSkipStaleComposerSetContent } from "./composerSetContentGuard";
 import { syncComposerHighlightMarksOnEditor } from "./composerTokenHighlight";
@@ -156,14 +158,34 @@ export function ComposerPlainEditSurface({
   const cursorRef = useRef(0);
   const ignoreNextContentSyncRef = useRef(false);
   const skipContentSyncRemainingRef = useRef(0);
+  /** 文本粘贴后抑制 @ / 指令触发的截止时间戳（Date.now）。粘贴的邮箱/路径/单斜杠不应误开弹出面板或文件搜索。 */
+  const suppressTriggerAfterPasteUntilRef = useRef(0);
   const [semiEditorReady, setSemiEditorReady] = useState(false);
   const [trigger, setTrigger] = useState<TriggerInfo>({ mode: null, query: "", rect: null });
+  const triggerRef = useRef(trigger);
+  triggerRef.current = trigger;
   const { target: atMentionDefaultTarget, save: saveAtMentionDefaultTarget } =
     useAtMentionDefaultTarget();
 
   useEffect(() => {
     setSemiEditorReady(true);
     return () => setSemiEditorReady(false);
+  }, []);
+
+  useEffect(() => {
+    const el = shellRef.current;
+    if (!el) return;
+    // 纯文本粘贴整块内容不应触发 @ / 指令弹出；capture 阶段先于 Tiptap 消费事件，只设窗口不拦截。
+    // 用户已在主动 @ / 指令补全中（如输入 `@src/` 想粘贴补全路径）时保留 trigger，让 detect 扩展 query。
+    const onPasteCapture = () => {
+      if (triggerRef.current.mode) return;
+      suppressTriggerAfterPasteUntilRef.current = Date.now() + PASTE_TRIGGER_SUPPRESS_MS;
+      setTrigger((prev) =>
+        prev.mode === null && prev.query === "" ? prev : { mode: null, query: "", rect: null },
+      );
+    };
+    el.addEventListener("paste", onPasteCapture, true);
+    return () => el.removeEventListener("paste", onPasteCapture, true);
   }, []);
 
   useEffect(() => {
@@ -280,6 +302,16 @@ export function ComposerPlainEditSurface({
       cursorRef.current = cursor;
       lastEditorPlainRef.current = plain;
       onChange(plain);
+      if (isAtSlashTriggerSuppressedByPaste(suppressTriggerAfterPasteUntilRef.current, Date.now())) {
+        // 粘贴后的短窗口：整块插入内容（邮箱/路径/单斜杠除法等）不应误开 @ / 指令弹出与文件搜索查询
+        setTrigger((prev) =>
+          prev.mode === null && prev.query === "" ? prev : { mode: null, query: "", rect: null },
+        );
+        return;
+      }
+      if (suppressTriggerAfterPasteUntilRef.current > 0) {
+        suppressTriggerAfterPasteUntilRef.current = 0;
+      }
       const detected = detectAtSlashTrigger(plain, cursor);
       setTrigger((prev) => {
         if (!detected) {

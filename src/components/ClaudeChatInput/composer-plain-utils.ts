@@ -103,6 +103,22 @@ export function detectAtSlashTrigger(
   return null;
 }
 
+/**
+ * 文本粘贴后抑制 @ / 指令触发的短窗口（ms）。
+ * 粘贴是大段整块插入，内容里的邮箱（user@x.com）、路径、单斜杠除法（a / b）等
+ * 不应误开指令/文件搜索面板；而 Tiptap 对粘贴可能触发多次 onContentChange，
+ * 用固定时间窗口而非单次布尔能覆盖整串回调。
+ */
+export const PASTE_TRIGGER_SUPPRESS_MS = 200;
+
+/** 是否处于「粘贴后短窗口」：窗口内忽略光标前的 @ / 触发。 */
+export function isAtSlashTriggerSuppressedByPaste(
+  suppressUntil: number,
+  now: number,
+): boolean {
+  return suppressUntil > 0 && now < suppressUntil;
+}
+
 export function reportAtSlashTriggerFromPlain(
   plain: string,
   cursor: number,
