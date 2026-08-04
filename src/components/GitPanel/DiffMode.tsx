@@ -41,6 +41,18 @@ import type { FileTreeNode, GitPanelOpenFileOptions, UnstagedViewMode } from "./
 const { TextArea } = Input;
 const { Text } = Typography;
 
+function collectTreeDirPaths(files: GitFileStatus[]): string[] {
+  const dirs: string[] = [];
+  function collect(node: FileTreeNode) {
+    if (node.isDir) {
+      dirs.push(node.path);
+      node.children?.forEach(collect);
+    }
+  }
+  buildFileTree(files).forEach(collect);
+  return dirs;
+}
+
 interface DiffModeProps {
   repositoryPath: string;
   /** 仓库默认执行引擎；AI 生成提交信息时使用。 */
@@ -165,36 +177,44 @@ function DiffModeInner({
 
   const useTreeView = unstagedViewMode === "tree";
 
-  const treeDirPaths = useMemo(() => {
+  const stagedTreeDirPaths = useMemo(() => {
     if (!useTreeView) return [];
-    const dirs: string[] = [];
-    const tree = buildFileTree([...status.staged, ...status.unstaged]);
-    function collect(node: FileTreeNode) {
-      if (node.isDir) {
-        dirs.push(node.path);
-        node.children?.forEach(collect);
-      }
-    }
-    tree.forEach(collect);
-    return dirs;
-  }, [status.staged, status.unstaged, useTreeView]);
+    return collectTreeDirPaths(status.staged);
+  }, [status.staged, useTreeView]);
 
-  const {
-    expandedDirs,
-    toggleDir: handleToggleDir,
-    toggleDirRecursive: handleToggleDirRecursive,
-    expandAll: handleExpandAll,
-    collapseAll: handleCollapseAll,
-    isTreeAllExpanded: treeAllExpanded,
-  } = useDiffModeExpandedDirs(repositoryPath, treeDirPaths);
+  const unstagedTreeDirPaths = useMemo(() => {
+    if (!useTreeView) return [];
+    return collectTreeDirPaths(status.unstaged);
+  }, [status.unstaged, useTreeView]);
 
-  const handleToggleTree = useCallback(() => {
-    if (treeAllExpanded) {
-      handleCollapseAll();
+  const stagedExpand = useDiffModeExpandedDirs(repositoryPath, stagedTreeDirPaths, "staged");
+  const unstagedExpand = useDiffModeExpandedDirs(repositoryPath, unstagedTreeDirPaths, "unstaged");
+
+  const handleToggleStagedTree = useCallback(() => {
+    if (stagedExpand.isTreeAllExpanded) {
+      stagedExpand.collapseAll();
     } else {
-      handleExpandAll(treeDirPaths);
+      stagedExpand.expandAll(stagedTreeDirPaths);
     }
-  }, [treeAllExpanded, handleCollapseAll, handleExpandAll, treeDirPaths]);
+  }, [
+    stagedExpand.isTreeAllExpanded,
+    stagedExpand.collapseAll,
+    stagedExpand.expandAll,
+    stagedTreeDirPaths,
+  ]);
+
+  const handleToggleUnstagedTree = useCallback(() => {
+    if (unstagedExpand.isTreeAllExpanded) {
+      unstagedExpand.collapseAll();
+    } else {
+      unstagedExpand.expandAll(unstagedTreeDirPaths);
+    }
+  }, [
+    unstagedExpand.isTreeAllExpanded,
+    unstagedExpand.collapseAll,
+    unstagedExpand.expandAll,
+    unstagedTreeDirPaths,
+  ]);
 
   const generateCommitMessageByAi = useCallback(async (): Promise<{ message: string; aiFailed: boolean }> => {
     const fallback = buildCommitDraftFromStatus(status);
@@ -651,13 +671,13 @@ function DiffModeInner({
             </Text>
             <Space size={4} className="git-section-header-actions-space">
               {useTreeView && (
-                <HoverHint title={treeAllExpanded ? "收起目录树" : "展开目录树"} placement="top">
+                <HoverHint title={stagedExpand.isTreeAllExpanded ? "收起目录树" : "展开目录树"} placement="top">
                   <Button
                     type="text"
                     size="small"
                     className="git-section-action-btn"
-                    icon={treeAllExpanded ? <VerticalAlignBottomOutlined /> : <VerticalAlignTopOutlined />}
-                    onClick={handleToggleTree}
+                    icon={stagedExpand.isTreeAllExpanded ? <VerticalAlignBottomOutlined /> : <VerticalAlignTopOutlined />}
+                    onClick={handleToggleStagedTree}
                   />
                 </HoverHint>
               )}
@@ -689,9 +709,9 @@ function DiffModeInner({
               <FileTreeView
                 files={status.staged}
                 section="staged"
-                expandedDirs={expandedDirs}
-                onToggleDir={handleToggleDir}
-                onToggleDirRecursive={handleToggleDirRecursive}
+                expandedDirs={stagedExpand.expandedDirs}
+                onToggleDir={stagedExpand.toggleDir}
+                onToggleDirRecursive={stagedExpand.toggleDirRecursive}
                 onUnstage={onUnstage}
                 onOpenFile={onOpenFile}
               />
@@ -710,13 +730,13 @@ function DiffModeInner({
             </Text>
             <Space size={4} className="git-section-header-actions-space">
               {useTreeView && (
-                <HoverHint title={treeAllExpanded ? "收起目录树" : "展开目录树"} placement="top">
+                <HoverHint title={unstagedExpand.isTreeAllExpanded ? "收起目录树" : "展开目录树"} placement="top">
                   <Button
                     type="text"
                     size="small"
                     className="git-section-action-btn"
-                    icon={treeAllExpanded ? <VerticalAlignBottomOutlined /> : <VerticalAlignTopOutlined />}
-                    onClick={handleToggleTree}
+                    icon={unstagedExpand.isTreeAllExpanded ? <VerticalAlignBottomOutlined /> : <VerticalAlignTopOutlined />}
+                    onClick={handleToggleUnstagedTree}
                   />
                 </HoverHint>
               )}
@@ -760,9 +780,9 @@ function DiffModeInner({
             <FileTreeView
               files={status.unstaged}
               section="unstaged"
-              expandedDirs={expandedDirs}
-              onToggleDir={handleToggleDir}
-              onToggleDirRecursive={handleToggleDirRecursive}
+              expandedDirs={unstagedExpand.expandedDirs}
+              onToggleDir={unstagedExpand.toggleDir}
+              onToggleDirRecursive={unstagedExpand.toggleDirRecursive}
               onStage={onStage}
               onDiscard={onDiscard}
               onOpenFile={onOpenFile}

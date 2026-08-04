@@ -2,7 +2,11 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { Window } from "happy-dom";
 import { act, create } from "react-test-renderer";
 import { useLayoutEffect, useState } from "react";
-import { useDiffModeExpandedDirs, type UseDiffModeExpandedDirsApi } from "./useDiffModeExpandedDirs";
+import {
+  useDiffModeExpandedDirs,
+  type DiffModeTreeSection,
+  type UseDiffModeExpandedDirsApi,
+} from "./useDiffModeExpandedDirs";
 
 const STORAGE_PREFIX = "wise.gitPanel.expanded.v1:";
 
@@ -19,6 +23,10 @@ function assignGlobal(key: string, value: unknown): void {
   }
 }
 
+function sectionStorageKey(section: DiffModeTreeSection, repositoryPath: string): string {
+  return `${STORAGE_PREFIX}${section}:${repositoryPath}`;
+}
+
 interface Harness {
   get api(): UseDiffModeExpandedDirsApi;
   /** 重设 treeDirPaths，触发 hook 的依赖更新。 */
@@ -26,7 +34,11 @@ interface Harness {
   unmount(): void;
 }
 
-function makeHarness(repositoryPath: string, initialTree: string[]): Harness {
+function makeHarness(
+  repositoryPath: string,
+  initialTree: string[],
+  section: DiffModeTreeSection = "unstaged",
+): Harness {
   let api: UseDiffModeExpandedDirsApi | null = null;
   const setterRef: { current: ((paths: string[]) => void) | null } = { current: null };
   let renderer: ReturnType<typeof create> | undefined;
@@ -34,7 +46,7 @@ function makeHarness(repositoryPath: string, initialTree: string[]): Harness {
   function Probe() {
     const [paths, setPaths] = useState<string[]>(initialTree);
     setterRef.current = setPaths;
-    const result = useDiffModeExpandedDirs(repositoryPath, paths);
+    const result = useDiffModeExpandedDirs(repositoryPath, paths, section);
     useLayoutEffect(() => {
       api = result;
     });
@@ -108,7 +120,7 @@ describe("useDiffModeExpandedDirs", () => {
       harness.api.toggleDir("src");
     });
     expect(harness.api.expandedDirs.has("src")).toBe(false);
-    const stored = JSON.parse(sessionStorage.getItem(`${STORAGE_PREFIX}/repo/b`) ?? "[]");
+    const stored = JSON.parse(sessionStorage.getItem(sectionStorageKey("unstaged", "/repo/b")) ?? "[]");
     expect(stored).toEqual([]);
     harness.unmount();
   });
@@ -124,7 +136,7 @@ describe("useDiffModeExpandedDirs", () => {
     });
     expect(harness.api.expandedDirs.has("src/components")).toBe(true);
     expect(harness.api.expandedDirs.has("src")).toBe(false);
-    const stored = JSON.parse(sessionStorage.getItem(`${STORAGE_PREFIX}/repo/c`) ?? "[]");
+    const stored = JSON.parse(sessionStorage.getItem(sectionStorageKey("unstaged", "/repo/c")) ?? "[]");
     expect(stored).toEqual(["src/components"]);
     harness.unmount();
   });
@@ -184,7 +196,7 @@ describe("useDiffModeExpandedDirs", () => {
   });
 
   test("sessionStorage 损坏数据时降级到默认", () => {
-    sessionStorage.setItem(`${STORAGE_PREFIX}/repo/h`, "{not json");
+    sessionStorage.setItem(sectionStorageKey("unstaged", "/repo/h"), "{not json");
     const harness = makeHarness("/repo/h", ["src", "tests"]);
     expect(harness.api.expandedDirs.has("src")).toBe(true);
     expect(harness.api.expandedDirs.has("tests")).toBe(true);
@@ -218,5 +230,34 @@ describe("useDiffModeExpandedDirs", () => {
     expect(harness.api.expandedDirs.has("src/components/Button")).toBe(true);
     expect(harness.api.expandedDirs.has("tests")).toBe(true);
     harness.unmount();
+  });
+
+  test("已暂存与更改 section 展开状态互不影响", () => {
+    const staged = makeHarness("/repo/j", ["src", "src/components"], "staged");
+    const unstaged = makeHarness("/repo/j", ["src", "src/components"], "unstaged");
+
+    act(() => {
+      staged.api.collapseAll();
+    });
+    expect(staged.api.expandedDirs.has("src")).toBe(false);
+    // 更改区仍保持默认顶层展开
+    expect(unstaged.api.expandedDirs.has("src")).toBe(true);
+
+    act(() => {
+      unstaged.api.toggleDir("src/components");
+    });
+    expect(unstaged.api.expandedDirs.has("src/components")).toBe(true);
+    expect(staged.api.expandedDirs.has("src/components")).toBe(false);
+
+    const stagedStored = JSON.parse(sessionStorage.getItem(sectionStorageKey("staged", "/repo/j")) ?? "[]");
+    const unstagedStored = JSON.parse(
+      sessionStorage.getItem(sectionStorageKey("unstaged", "/repo/j")) ?? "[]",
+    );
+    expect(stagedStored).toEqual([]);
+    expect(unstagedStored).toContain("src");
+    expect(unstagedStored).toContain("src/components");
+
+    staged.unmount();
+    unstaged.unmount();
   });
 });

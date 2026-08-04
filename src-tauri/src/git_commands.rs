@@ -1,6 +1,7 @@
 use crate::project_workspace_paths::{canonicalize_existing_dir, validate_repository_folder_name};
 use git2::build::CheckoutBuilder;
 use git2::{BranchType, Oid, Repository, Sort, Status, StatusOptions};
+use rayon::prelude::*;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
@@ -458,11 +459,30 @@ pub(crate) async fn git_status(path: String) -> Result<GitStatusResponse, String
             .statuses(Some(&mut opts))
             .map_err(|e| format!("Failed to get status: {}", e))?;
 
-        let mut staged: Vec<GitFileStatus> = Vec::new();
-        let mut unstaged: Vec<GitFileStatus> = Vec::new();
-
         let staged_line_stats = collect_staged_line_stats(&path);
         let unstaged_line_stats = collect_unstaged_line_stats(&path);
+
+        // 先收集需要按文件读盘计行的 untracked path，再并行扫描，避免几百个文件串行 fs::read。
+        let mut untracked_need_count: Vec<String> = Vec::new();
+        for entry in statuses.iter() {
+            let status = entry.status();
+            let file_path = entry.path().unwrap_or("");
+            if file_path.is_empty() {
+                continue;
+            }
+            let is_wt_new = status.is_wt_new();
+            if !is_wt_new {
+                continue;
+            }
+            if unstaged_line_stats.contains_key(file_path) {
+                continue;
+            }
+            untracked_need_count.push(file_path.to_string());
+        }
+        let untracked_line_stats = count_untracked_line_stats_parallel(&path, &untracked_need_count);
+
+        let mut staged: Vec<GitFileStatus> = Vec::new();
+        let mut unstaged: Vec<GitFileStatus> = Vec::new();
 
         for entry in statuses.iter() {
             let status = entry.status();
@@ -502,11 +522,10 @@ pub(crate) async fn git_status(path: String) -> Result<GitStatusResponse, String
                         .get(&file_path)
                         .copied()
                         .unwrap_or_else(|| {
-                            if status.is_wt_new() {
-                                count_file_lines_for_untracked(&path, &file_path)
-                            } else {
-                                (0, 0)
-                            }
+                            untracked_line_stats
+                                .get(&file_path)
+                                .copied()
+                                .unwrap_or((0, 0))
                         });
                     unstaged.push(GitFileStatus {
                         additions: wt_adds,
@@ -520,11 +539,10 @@ pub(crate) async fn git_status(path: String) -> Result<GitStatusResponse, String
                     .get(&file_path)
                     .copied()
                     .unwrap_or_else(|| {
-                        if status.is_wt_new() {
-                            count_file_lines_for_untracked(&path, &file_path)
-                        } else {
-                            (0, 0)
-                        }
+                        untracked_line_stats
+                            .get(&file_path)
+                            .copied()
+                            .unwrap_or((0, 0))
                     });
                 unstaged.push(GitFileStatus {
                     additions: adds,
@@ -675,8 +693,7 @@ fn collect_all_untracked_line_totals(repo_path: &str) -> (usize, usize) {
         Ok(r) => r,
         Err(_) => return (0, 0),
     };
-    let mut adds = 0usize;
-    let mut dels = 0usize;
+    let mut paths: Vec<String> = Vec::new();
     let mut opts = StatusOptions::new();
     opts.include_untracked(true);
     opts.include_ignored(false);
@@ -691,16 +708,49 @@ fn collect_all_untracked_line_totals(repo_path: &str) -> (usize, usize) {
             continue;
         }
         if status.is_wt_new() && !status.is_index_new() {
-            let (a, d) = count_file_lines_for_untracked(repo_path, file_path);
-            adds += a;
-            dels += d;
+            paths.push(file_path.to_string());
         }
+    }
+    let stats = count_untracked_line_stats_parallel(repo_path, &paths);
+    let mut adds = 0usize;
+    let mut dels = 0usize;
+    for (_, (a, d)) in stats {
+        adds += a;
+        dels += d;
     }
     (adds, dels)
 }
 
+/// 超过该大小的 untracked 文件跳过精确行数（常见于 `.next` / 构建产物），避免整文件读盘拖垮 status。
+const MAX_UNTRACKED_LINE_COUNT_BYTES: u64 = 2 * 1024 * 1024;
+
+fn count_untracked_line_stats_parallel(
+    repo_path: &str,
+    paths: &[String],
+) -> HashMap<String, (usize, usize)> {
+    if paths.is_empty() {
+        return HashMap::new();
+    }
+    paths
+        .par_iter()
+        .map(|rel| {
+            let stats = count_file_lines_for_untracked(repo_path, rel);
+            (rel.clone(), stats)
+        })
+        .collect()
+}
+
 fn count_file_lines_for_untracked(repo_path: &str, rel_path: &str) -> (usize, usize) {
     let full_path = Path::new(repo_path).join(rel_path);
+    let Ok(meta) = fs::metadata(&full_path) else {
+        return (0, 0);
+    };
+    if !meta.is_file() {
+        return (0, 0);
+    }
+    if meta.len() > MAX_UNTRACKED_LINE_COUNT_BYTES {
+        return (0, 0);
+    }
     // 走字节级扫描：untracked 可能含 binary / 非 UTF-8 内容，
     // 用 `\n` 个数代替 `lines().count()` 避免整文件解码失败导致行数归零。
     let Ok(bytes) = fs::read(&full_path) else {
@@ -734,25 +784,31 @@ fn normalize_stage_pathspec(repo_path: &str, rel_path: &str) -> String {
 }
 
 #[tauri::command]
-pub(crate) fn git_stage(path: String, file_path: String) -> Result<(), String> {
-    let spec = normalize_stage_pathspec(&path, &file_path);
-    git_stage_paths_inner(&path, &[spec.as_str()])
+pub(crate) async fn git_stage(path: String, file_path: String) -> Result<(), String> {
+    run_git_blocking("git_stage", move || {
+        let spec = normalize_stage_pathspec(&path, &file_path);
+        git_stage_paths_inner(&path, &[spec.as_str()])
+    })
+    .await
 }
 
 /// 按多个 pathspec 一次性暂存（目录项会展开为 `dir/**`），单次 IPC。
 #[tauri::command]
-pub(crate) fn git_stage_paths(path: String, file_paths: Vec<String>) -> Result<(), String> {
-    if file_paths.is_empty() {
-        return Ok(());
-    }
-    let mut specs: Vec<String> = file_paths
-        .iter()
-        .map(|p| normalize_stage_pathspec(&path, p))
-        .collect();
-    specs.sort();
-    specs.dedup();
-    let refs: Vec<&str> = specs.iter().map(|s| s.as_str()).collect();
-    git_stage_paths_inner(&path, &refs)
+pub(crate) async fn git_stage_paths(path: String, file_paths: Vec<String>) -> Result<(), String> {
+    run_git_blocking("git_stage_paths", move || {
+        if file_paths.is_empty() {
+            return Ok(());
+        }
+        let mut specs: Vec<String> = file_paths
+            .iter()
+            .map(|p| normalize_stage_pathspec(&path, p))
+            .collect();
+        specs.sort();
+        specs.dedup();
+        let refs: Vec<&str> = specs.iter().map(|s| s.as_str()).collect();
+        git_stage_paths_inner(&path, &refs)
+    })
+    .await
 }
 
 /// 一次性暂存工作区全部变更（等价于仓库根目录 `git add .`），避免逐文件 IPC。
@@ -775,28 +831,34 @@ fn git_stage_paths_inner(path: &str, pathspecs: &[&str]) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub(crate) fn git_unstage(path: String, file_path: String) -> Result<(), String> {
-    let repo = open_repo(&path)?;
-    let target = repo
-        .head()
-        .ok()
-        .and_then(|h| h.peel_to_commit().ok())
-        .map(|c| c.into_object());
-    repo.reset_default(target.as_ref(), [&file_path])
-        .map_err(|e| e.to_string())
+pub(crate) async fn git_unstage(path: String, file_path: String) -> Result<(), String> {
+    run_git_blocking("git_unstage", move || {
+        let repo = open_repo(&path)?;
+        let target = repo
+            .head()
+            .ok()
+            .and_then(|h| h.peel_to_commit().ok())
+            .map(|c| c.into_object());
+        repo.reset_default(target.as_ref(), [&file_path])
+            .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-pub(crate) fn git_unstage_all(path: String) -> Result<(), String> {
-    let repo = open_repo(&path)?;
-    let head = repo
-        .head()
-        .ok()
-        .and_then(|h| h.peel_to_commit().ok())
-        .map(|c| c.into_object())
-        .ok_or_else(|| "No commits in repository, nothing to unstage".to_string())?;
-    repo.reset(&head, git2::ResetType::Mixed, None)
-        .map_err(|e| e.to_string())
+pub(crate) async fn git_unstage_all(path: String) -> Result<(), String> {
+    run_git_blocking("git_unstage_all", move || {
+        let repo = open_repo(&path)?;
+        let head = repo
+            .head()
+            .ok()
+            .and_then(|h| h.peel_to_commit().ok())
+            .map(|c| c.into_object())
+            .ok_or_else(|| "No commits in repository, nothing to unstage".to_string())?;
+        repo.reset(&head, git2::ResetType::Mixed, None)
+            .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -983,48 +1045,57 @@ fn git_pull_blocking(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub(crate) fn git_fetch(path: String) -> Result<(), String> {
-    open_repo(&path)?;
-    run_git_command(&path, &["fetch", "--all", "--prune"], "Fetch")
+pub(crate) async fn git_fetch(path: String) -> Result<(), String> {
+    run_git_blocking("git_fetch", move || {
+        open_repo(&path)?;
+        run_git_command(&path, &["fetch", "--all", "--prune"], "Fetch")
+    })
+    .await
 }
 
 #[tauri::command]
-pub(crate) fn git_discard(path: String, file_path: String) -> Result<(), String> {
-    open_repo(&path)?;
-    let restore = Command::new("git")
-        .arg("-C")
-        .arg(&path)
-        .args(["restore", "--worktree", "--", &file_path])
-        .output()
-        .map_err(|e| format!("Discard failed to start: {}", e))?;
-    if !restore.status.success() {
-        let stderr = String::from_utf8_lossy(&restore.stderr);
-        let s = stderr.to_lowercase();
-        if !s.contains("did not match any file")
-            && !s.contains("did not match any files")
-            && !stderr.contains("未匹配")
-        {
-            return Err(format!("Discard failed: {}", stderr.trim()));
+pub(crate) async fn git_discard(path: String, file_path: String) -> Result<(), String> {
+    run_git_blocking("git_discard", move || {
+        open_repo(&path)?;
+        let restore = Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .args(["restore", "--worktree", "--", &file_path])
+            .output()
+            .map_err(|e| format!("Discard failed to start: {}", e))?;
+        if !restore.status.success() {
+            let stderr = String::from_utf8_lossy(&restore.stderr);
+            let s = stderr.to_lowercase();
+            if !s.contains("did not match any file")
+                && !s.contains("did not match any files")
+                && !stderr.contains("未匹配")
+            {
+                return Err(format!("Discard failed: {}", stderr.trim()));
+            }
         }
-    }
-    run_git_command(
-        &path,
-        &["clean", "-fd", "--", &file_path],
-        "Discard (clean)",
-    )
+        run_git_command(
+            &path,
+            &["clean", "-fd", "--", &file_path],
+            "Discard (clean)",
+        )
+    })
+    .await
 }
 
 #[tauri::command]
-pub(crate) fn git_discard_all(path: String) -> Result<(), String> {
-    let repo = open_repo(&path)?;
-    let mut checkout_opts = CheckoutBuilder::new();
-    checkout_opts.force();
-    repo.checkout_index(None, Some(&mut checkout_opts))
-        .map_err(|e| format!("Failed to discard changes: {}", e))?;
-    let mut remove_opts = git2::build::CheckoutBuilder::new();
-    remove_opts.remove_untracked(true);
-    repo.checkout_head(Some(&mut remove_opts))
-        .map_err(|e| e.to_string())
+pub(crate) async fn git_discard_all(path: String) -> Result<(), String> {
+    run_git_blocking("git_discard_all", move || {
+        let repo = open_repo(&path)?;
+        let mut checkout_opts = CheckoutBuilder::new();
+        checkout_opts.force();
+        repo.checkout_index(None, Some(&mut checkout_opts))
+            .map_err(|e| format!("Failed to discard changes: {}", e))?;
+        let mut remove_opts = git2::build::CheckoutBuilder::new();
+        remove_opts.remove_untracked(true);
+        repo.checkout_head(Some(&mut remove_opts))
+            .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// 与 `project_relative_files::MAX_EDITOR_FILE_BYTES` 对齐：编辑器/Diff 不接收超大 blob。

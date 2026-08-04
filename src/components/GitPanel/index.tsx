@@ -30,6 +30,7 @@ import { refreshGitRepositoryExplorerStatus } from "../../stores/gitRepositoryEx
 import type { GitStatusResponse } from "../../types";
 import { normalizeConventionalCommitMessage } from "../../utils/conventionalCommitMessage";
 import { runGitSyncAction, type GitSyncActionKind } from "./gitSyncActionRunner";
+import { runGitPanelAction } from "./runGitPanelAction";
 import { DiffMode } from "./DiffMode";
 import { GitHistoryDrawer } from "./GitHistoryDrawer";
 import { GitPanelMoreMenu } from "./GitPanelMoreMenu";
@@ -288,37 +289,19 @@ function GitSingleRepoPanel({
   }, [repositoryPath, loadStatus]);
 
   const runAction = useCallback(
-    async (action: string, fn: () => Promise<void>) => {
-      const now = Date.now();
-      const lastTime = lastActionTime.current.get(action) || 0;
-      if (action !== "commit" && now - lastTime < DEBOUNCE_MS) return;
-      if (runningActions.current.has(action)) return;
-
-      runningActions.current.add(action);
-      lastActionTime.current.set(action, now);
-      setLoading((prev) => ({ ...prev, [action]: true }));
-
-      const tracksSync = action === "commit" || action === "commitAndPush" || action === "fetch";
-      if (tracksSync) beginGitSyncOperation();
-
-      try {
-        await fn();
-        await loadStatus({ silent: true });
-        setErrors((prev) => {
-          if (!prev[action]) return prev;
-          const next = { ...prev };
-          delete next[action];
-          return next;
-        });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setErrors((prev) => ({ ...prev, [action]: msg }));
-      } finally {
-        if (tracksSync) endGitSyncOperation();
-        runningActions.current.delete(action);
-        setLoading((prev) => ({ ...prev, [action]: false }));
-      }
-    },
+    (action: string, fn: () => Promise<void>) =>
+      runGitPanelAction({
+        action,
+        debounceMs: DEBOUNCE_MS,
+        lastActionTime: lastActionTime.current,
+        runningActions: runningActions.current,
+        setLoading,
+        setErrors,
+        beginGitSyncOperation,
+        endGitSyncOperation,
+        refreshStatus: () => loadStatus({ silent: true, force: true }),
+        fn,
+      }),
     [beginGitSyncOperation, endGitSyncOperation, loadStatus],
   );
 

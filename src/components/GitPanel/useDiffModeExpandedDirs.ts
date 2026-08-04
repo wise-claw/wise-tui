@@ -8,15 +8,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
  *    写入 expandedDirs。子目录保持收起，避免一次性展示几百行。
  *    顶层判定：path 中不含分隔符（`/`）。
  * 2. **持久化**：仿 `explorerUtils.ts` 的 `wise.repoExplorer.expanded.v1:${repositoryPath}`
- *    命名，DiffMode 用 `wise.gitPanel.expanded.v1:${repositoryPath}`，sessionStorage 写入。
+ *    命名，DiffMode 用 `wise.gitPanel.expanded.v1:${section}:${repositoryPath}`，sessionStorage 写入。
+ *    已暂存 / 更改各自独立，同名目录互不影响。
  * 3. **prune 过期**：当前 tree 重新计算后，过滤掉不在 treeDirPaths 集合里的 path，
  *    防止 commit 后目录消失但仍占着 expandedDirs 内存与持久化条目。
  */
 
+export type DiffModeTreeSection = "staged" | "unstaged";
+
 const STORAGE_PREFIX = "wise.gitPanel.expanded.v1:";
 
-function storageKey(repositoryPath: string): string {
-  return `${STORAGE_PREFIX}${repositoryPath}`;
+function storageKey(repositoryPath: string, section: DiffModeTreeSection): string {
+  return `${STORAGE_PREFIX}${section}:${repositoryPath}`;
 }
 
 /** 顶层目录 = path 不含分隔符 */
@@ -24,10 +27,10 @@ function topLevelDirs(treeDirPaths: readonly string[]): string[] {
   return treeDirPaths.filter((p) => p.indexOf("/") === -1);
 }
 
-function readPersisted(repositoryPath: string): Set<string> | null {
+function readPersisted(repositoryPath: string, section: DiffModeTreeSection): Set<string> | null {
   try {
     if (typeof sessionStorage === "undefined") return null;
-    const raw = sessionStorage.getItem(storageKey(repositoryPath));
+    const raw = sessionStorage.getItem(storageKey(repositoryPath, section));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return null;
@@ -37,10 +40,14 @@ function readPersisted(repositoryPath: string): Set<string> | null {
   }
 }
 
-function writePersisted(repositoryPath: string, expanded: Set<string>): void {
+function writePersisted(
+  repositoryPath: string,
+  section: DiffModeTreeSection,
+  expanded: Set<string>,
+): void {
   try {
     if (typeof sessionStorage === "undefined") return;
-    sessionStorage.setItem(storageKey(repositoryPath), JSON.stringify([...expanded]));
+    sessionStorage.setItem(storageKey(repositoryPath, section), JSON.stringify([...expanded]));
   } catch {
     /* ignore quota / private mode */
   }
@@ -68,10 +75,11 @@ export interface UseDiffModeExpandedDirsApi {
 export function useDiffModeExpandedDirs(
   repositoryPath: string,
   treeDirPaths: readonly string[],
+  section: DiffModeTreeSection,
 ): UseDiffModeExpandedDirsApi {
   /** expandedDirs 状态：内部持有当前展开目录集合。 */
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
-    const persisted = readPersisted(repositoryPath);
+    const persisted = readPersisted(repositoryPath, section);
     if (persisted) return new Set(persisted);
     // 首次默认：展开所有顶层目录（不递归）
     return new Set(topLevelDirs(treeDirPaths));
@@ -79,10 +87,12 @@ export function useDiffModeExpandedDirs(
 
   /** 持久化：用 ref 跟踪 expandedDirs，写入防抖为同步写（数据量小，写入开销可忽略）。 */
   const repoRef = useRef(repositoryPath);
+  const sectionRef = useRef(section);
   repoRef.current = repositoryPath;
+  sectionRef.current = section;
 
   useEffect(() => {
-    writePersisted(repoRef.current, expandedDirs);
+    writePersisted(repoRef.current, sectionRef.current, expandedDirs);
   }, [expandedDirs]);
 
   /** treeDirPaths 变化时 prune：移除不再存在的目录路径。 */
