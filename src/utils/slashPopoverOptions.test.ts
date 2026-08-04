@@ -43,23 +43,45 @@ describe("getFilteredSlashOptions", () => {
     expect(options.some((row) => row.label === "autofix-pr")).toBe(true);
   });
 
-  test("codex-rpc empty query shows Codex builtins not Claude plugin", () => {
+  test("codex-rpc keeps extras but hides Claude plugin templates and colliding labels", () => {
     const detected = new Set<string>();
-    const { options } = getFilteredSlashOptions(
+    const extras = {
+      detected: [{ type: "command" as const, group: "plugin-cmd" as const, label: "demo-skill", description: "demo" }],
+      installed: [{ type: "command" as const, group: "plugin" as const, label: "plugin install demo", description: "install" }],
+      skills: [
+        { type: "command" as const, group: "skill" as const, label: "my-skill", description: "skill" },
+        { type: "command" as const, group: "skill" as const, label: "review", description: "collides with codex builtin" },
+      ],
+    };
+
+    const empty = getFilteredSlashOptions(
       "",
-      [{ type: "command", group: "plugin-cmd", label: "demo-skill", description: "demo" }],
+      extras.detected,
+      extras.installed,
       [],
-      [],
-      [],
+      extras.skills,
       false,
       detected,
       "codex-rpc",
     );
+    expect(empty.options.some((row) => row.group === "codex" && row.label === "review")).toBe(true);
+    expect(empty.options.some((row) => row.group === "plugin-cmd" && row.label === "demo-skill")).toBe(true);
+    // Claude 插件管理模板不混入 Codex
+    expect(empty.options.some((row) => row.group === "plugin")).toBe(false);
 
-    expect(options.every((row) => row.group === "codex")).toBe(true);
-    expect(options.some((row) => row.label === "review")).toBe(true);
-    expect(options.some((row) => row.label === "plugin")).toBe(false);
-    expect(options.some((row) => row.label === "demo-skill")).toBe(false);
+    const typed = getFilteredSlashOptions(
+      "skill",
+      extras.detected,
+      extras.installed,
+      [],
+      extras.skills,
+      false,
+      detected,
+      "codex-rpc",
+    );
+    expect(typed.options.some((row) => row.group === "skill" && row.label === "my-skill")).toBe(true);
+    // 与 Codex 内置同名的 skill 不展示，避免冲突
+    expect(typed.options.some((row) => row.group === "skill" && row.label === "review")).toBe(false);
   });
 
   test("orders groups as claude, plugin-cmd, plugin", () => {

@@ -14,7 +14,7 @@ import {
 } from "../../constants/atMentionDefault";
 import { resolveAtMentionSelectedIndex } from "../../utils/atMentionDefaultSelection";
 import type { TriggerInfo } from "./slash-trigger";
-import { CLAUDE_BUILTIN_SLASH_COMMANDS } from "../../constants/claudeCodeSlashCommands";
+import { listBuiltinSlashCommandsForEngine } from "../../constants/engineSlashCommands";
 import {
   buildSlashOptionSections,
   getFilteredAtOptions,
@@ -80,9 +80,13 @@ interface SlashPopoverProps {
   sessionExecutionEngine?: SessionExecutionEngine;
 }
 
-const CLAUDE_RESERVED_LABELS = new Set(
-  CLAUDE_BUILTIN_SLASH_COMMANDS.map((cmd) => cmd.label.trim().toLowerCase()),
-);
+function reservedSlashLabelsForEngine(
+  engine: SessionExecutionEngine | null | undefined,
+): Set<string> {
+  return new Set(
+    listBuiltinSlashCommandsForEngine(engine).map((cmd) => cmd.label.trim().toLowerCase()),
+  );
+}
 
 const EMPTY_SLASH_OPTIONS = {
   detectedPluginSlashOptions: [] as SlashOption[],
@@ -196,7 +200,7 @@ export function SlashPopover({
         const detectedLabels = new Set(
           snapshot.detectedPluginCommands.map((row) => row.label.trim().toLowerCase()),
         );
-        const reserved = new Set(CLAUDE_RESERVED_LABELS);
+        const reserved = reservedSlashLabelsForEngine(sessionExecutionEngine);
         for (const label of detectedLabels) reserved.add(label);
         if (snapshot.omcInstalled) {
           for (const cmd of OMC_COMMANDS) {
@@ -230,7 +234,7 @@ export function SlashPopover({
     return () => {
       cancelled = true;
     };
-  }, [mode, repositoryPath]);
+  }, [mode, repositoryPath, sessionExecutionEngine]);
 
   useEffect(() => {
     if (mode !== "at" || !repositoryPath) {

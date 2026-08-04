@@ -256,15 +256,24 @@ export function getFilteredSlashOptions(
     ? filterSlashCommandRows(builtins, query)
     : builtins.filter((row) => emptyHints.has(row.label.trim().toLowerCase()));
 
-  // Claude 插件/技能目录仅在 Claude 引擎下展示；其它引擎只看各自内置命令。
-  const includeClaudeExtras = catalogGroup === "claude";
-  const detectedFiltered = includeClaudeExtras
-    ? filterSlashCommandRows(detectedPluginSlashOptions, query)
-    : [];
-  const pluginFiltered = includeClaudeExtras
-    ? buildPluginSlashOptions(query, installedPluginSlashOptions, installPluginSlashOptions)
-    : [];
-  const skillsFiltered = includeClaudeExtras ? filterSkillRows(skillSlashOptions, query) : [];
+  // Skills / 已安装插件命令：各引擎都展示。Claude 插件管理模板仅 Claude 引擎展示。
+  // 与当前引擎内置同名时以内置为准，避免跨终端命令冲突。
+  const reservedBuiltinLabels = new Set(
+    builtins.map((row) => row.label.trim().toLowerCase()).filter(Boolean),
+  );
+  const withoutBuiltinCollision = (rows: SlashOption[]) =>
+    rows.filter((row) => !reservedBuiltinLabels.has(row.label.trim().toLowerCase()));
+
+  const detectedFiltered = withoutBuiltinCollision(
+    filterSlashCommandRows(detectedPluginSlashOptions, query),
+  );
+  const pluginFiltered =
+    catalogGroup === "claude"
+      ? withoutBuiltinCollision(
+          buildPluginSlashOptions(query, installedPluginSlashOptions, installPluginSlashOptions),
+        )
+      : [];
+  const skillsFiltered = withoutBuiltinCollision(filterSkillRows(skillSlashOptions, query));
 
   const merged = [
     ...builtinsFiltered,
