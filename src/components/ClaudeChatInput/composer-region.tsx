@@ -208,6 +208,7 @@ import { scheduleInsertComposerCodeSelectionRef } from "./scheduleInsertComposer
 import { AutoApproveBadge } from "./AutoApproveBadge";
 import { ClaudePermissionModeBadge } from "./ClaudePermissionModeBadge";
 import { CodexPermissionModeBadge } from "./CodexPermissionModeBadge";
+import { ComposerCodexReasoningEffortBadge } from "./ComposerCodexReasoningEffortBadge";
 import { CodexApprovalDock } from "./dock/codex-approval-dock";
 import { useCodexApprovalPending } from "../../hooks/useCodexApprovalPending";
 import { expandComposerCodeSelectionRefs } from "../../utils/expandComposerCodeSelectionRefs";
@@ -276,6 +277,10 @@ interface ComposerInnerProps {
    * 不存在时 composer 不响应 `/ultracode` 拦截。
    */
   onUpdateSessionUltracode?: (next: boolean | null) => void;
+  /**
+   * Codex RPC 推理强度；写入当前会话并落盘 tabs.json。
+   */
+  onUpdateSessionCodexReasoningEffort?: (effort: string) => void;
   /**
    * 全局 ultracode 状态；由顶层注入以避免在 composer 内重复读 store。
    * 未提供时回退到 `false`。
@@ -618,6 +623,7 @@ function ComposerInner({
   onSessionModelChange,
   onSessionConnectionKindChange,
   onUpdateSessionUltracode,
+  onUpdateSessionCodexReasoningEffort,
   globalUltracodeEnabled = false,
   allowSendWhileBusy,
   sessionExecutionEngine = "claude",
@@ -3064,6 +3070,19 @@ function ComposerInner({
             }
           />
         ) : null}
+        {sessionExecutionEngine === "codex-rpc" ? (
+          <ComposerCodexReasoningEffortBadge
+            sessionId={session.id}
+            effort={session.codexReasoningEffort}
+            onEffortChange={onUpdateSessionCodexReasoningEffort}
+            disabled={isSessionBusy}
+            iconOnly={
+              compactFooterChrome ||
+              paneCount > 1 ||
+              composerFooterChrome.composerFooterTriggerDisplayMode === "icon"
+            }
+          />
+        ) : null}
         {isClaudeEngine ? (
           <ClaudePermissionModeBadge
             iconOnly={
@@ -3170,6 +3189,10 @@ function ComposerInner({
     isClaudeEngine,
     isCodexEngineFamily,
     isSessionBusy,
+    session.id,
+    session.codexReasoningEffort,
+    sessionExecutionEngine,
+    onUpdateSessionCodexReasoningEffort,
     _onCancel,
     speechDictation.engine,
     speechDictation.listening,
@@ -3593,6 +3616,8 @@ export interface ComposerRegionProps {
    * 与 connectionKind 一致：单标签临时覆盖，per-session false beats global true。
    */
   onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
+  /** Codex RPC 推理强度；顶层 `(sessionId, effort)` 签名。 */
+  onUpdateSessionCodexReasoningEffort?: (sessionId: string, effort: string) => void;
   /**
    * 全局 ultracode 状态；由顶层 hook 读 store 注入，避免每个 composer 都自己读 app_settings。
    */
@@ -3686,7 +3711,13 @@ export interface ComposerRegionProps {
   compactFooterChrome?: boolean;
 }
 
-export function ComposerRegion({ session, draftBucketKey, onUpdateSessionUltracode, ...rest }: ComposerRegionProps) {
+export function ComposerRegion({
+  session,
+  draftBucketKey,
+  onUpdateSessionUltracode,
+  onUpdateSessionCodexReasoningEffort,
+  ...rest
+}: ComposerRegionProps) {
   // 将顶层 `(sessionId, next) => void` 签名的 setter 适配为 Inner 期望的 `(next) => void`；
   // Inner 通过 session.id 直接访问当前 session，因此顶层传 sessionId 的形式更对称于 connectionKind。
   const boundUpdateSessionUltracode = useCallback(
@@ -3695,11 +3726,22 @@ export function ComposerRegion({ session, draftBucketKey, onUpdateSessionUltraco
     },
     [onUpdateSessionUltracode, session.id],
   );
+  const boundUpdateSessionCodexReasoningEffort = useCallback(
+    (effort: string) => {
+      onUpdateSessionCodexReasoningEffort?.(session.id, effort);
+    },
+    [onUpdateSessionCodexReasoningEffort, session.id],
+  );
   return (
     <PromptProvider sessionId={session.id} draftBucketKey={draftBucketKey}>
       <ComposerInner
         session={session}
         onUpdateSessionUltracode={onUpdateSessionUltracode ? boundUpdateSessionUltracode : undefined}
+        onUpdateSessionCodexReasoningEffort={
+          onUpdateSessionCodexReasoningEffort
+            ? boundUpdateSessionCodexReasoningEffort
+            : undefined
+        }
         {...rest}
       />
     </PromptProvider>

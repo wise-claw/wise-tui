@@ -37,6 +37,10 @@ import { resolveOpencodeResumeSessionId } from "../utils/opencodeSessionId";
 import { resolveQoderResumeSessionId } from "../utils/qoderSessionId";
 import { getCachedModelProfileStore } from "../stores/modelProfileStoreCache";
 import {
+  setCodexRpcReasoningEffort,
+} from "../stores/codexRpcReasoningEffortStore";
+import { normalizeCodexReasoningEffort } from "../constants/codexReasoningEffort";
+import {
   WISE_CLAUDE_USER_SETTINGS_CHANGED,
   type ClaudeUserSettingsChangedDetail,
 } from "../services/claudeModelProfiles";
@@ -1947,6 +1951,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
               : normalizedWithModels[0]!.id;
           memoryKeepSessionIdsRef.current = new Set<string>([active]);
 
+          for (const s of normalizedWithModels) {
+            if (s.codexReasoningEffort) {
+              setCodexRpcReasoningEffort(s.id, s.codexReasoningEffort);
+            }
+          }
           setSessions(normalizedWithModels);
           setActiveSessionId(active);
         }
@@ -2722,6 +2731,23 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     },
     [],
   );
+
+  const updateSessionCodexReasoningEffort = useCallback((sessionId: string, effort: string) => {
+    const next = normalizeCodexReasoningEffort(effort);
+    setCodexRpcReasoningEffort(sessionId, next);
+    setSessions((prev) => {
+      let changed = false;
+      const nextSessions = prev.map((s) => {
+        if (s.id !== sessionId) return s;
+        if ((s.codexReasoningEffort ?? "") === next) return s;
+        changed = true;
+        return { ...s, codexReasoningEffort: next };
+      });
+      if (!changed) return prev;
+      sessionsRef.current = nextSessions;
+      return nextSessions;
+    });
+  }, []);
 
   // Create a session without executing Claude (idle state); model from Claude Code settings.json
   const createSession = useCallback(
@@ -4298,6 +4324,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     updateSessionModel,
     updateSessionConnectionKind,
     updateSessionUltracodeOverride,
+    updateSessionCodexReasoningEffort,
     executeSession,
     executeTerminalSession,
     resumeSessionFromMonitorDrawer,

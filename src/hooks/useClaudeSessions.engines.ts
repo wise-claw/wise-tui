@@ -23,6 +23,14 @@ import { resolveOpencodeResumeSessionId } from "../utils/opencodeSessionId";
 import { resolveQoderResumeSessionId } from "../utils/qoderSessionId";
 import { formatQoderModelLabel, resolveQoderExecModelId } from "../utils/qoderModel";
 import { getCachedModelProfileStore } from "../stores/modelProfileStoreCache";
+import {
+  getCodexRpcReasoningEffort,
+  setCodexRpcReasoningEffort,
+} from "../stores/codexRpcReasoningEffortStore";
+import {
+  codexReasoningEffortLabel,
+  normalizeCodexReasoningEffort,
+} from "../constants/codexReasoningEffort";
 import { resolveCursorResumeAgentId } from "../utils/cursorAgentId";
 import {
   sessionUsesStreamingConnection,
@@ -343,13 +351,19 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       contextExecutionEngine,
       store: getCachedModelProfileStore(),
     });
+    const effort = normalizeCodexReasoningEffort(
+      sessionsRef.current.find((s) => s.id === tabSessionId)?.codexReasoningEffort ??
+        getCodexRpcReasoningEffort(tabSessionId),
+    );
+    setCodexRpcReasoningEffort(tabSessionId, effort);
     const codexModelLabel = codexModel?.trim() || "默认";
+    const effortLabel = codexReasoningEffortLabel(effort);
     const resumeLabel = codexResumeSessionId?.trim() ? "续接会话" : "新会话";
     commitSessions((prev) =>
       appendSystemMessageBySessionId(
         prev,
         tabSessionId,
-        `Codex RPC 执行中（${resumeLabel}，模型：${codexModelLabel}）…`,
+        `Codex RPC 执行中（${resumeLabel}，模型：${codexModelLabel}，推理：${effortLabel}）…`,
       ),
     );
     try {
@@ -360,6 +374,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         invocationKey,
         tabSessionId,
         codexResumeSessionId ?? undefined,
+        effort,
       );
     } catch (e) {
       detach?.();

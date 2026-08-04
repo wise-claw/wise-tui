@@ -130,6 +130,8 @@ export interface UseClaudeSessionsReturn {
    * 不影响已 spawn 的回合——下次 spawn 读新值。
    */
   updateSessionUltracodeOverride: (sessionId: string, next: boolean | null) => void;
+  /** Codex RPC 推理强度：写入会话并落盘 tabs.json。 */
+  updateSessionCodexReasoningEffort: (sessionId: string, effort: string) => void;
   /** 返回 false 表示未启动（例如并发门闸拦截）；其余路径为 true（含已安排重试的暂不可见会话）。 */
   executeSession: (sessionId: string, prompt: string, opts?: ClaudeComposerExecuteBubbleOptions) => boolean;
   executeTerminalSession: (

@@ -18,6 +18,7 @@ function sessionComposerTrayKey(session: ClaudeSession): string {
     session.model?.trim() ?? "",
     session.connectionKind ?? "",
     session.ultracodeEnabled === undefined ? "" : String(session.ultracodeEnabled),
+    session.codexReasoningEffort ?? "",
     session.repositoryPath ?? "",
   ].join("\n");
 }
@@ -69,6 +70,7 @@ export function claudeChatComposerTrayPropsEqual(
     "onSessionModelChange",
     "onSessionConnectionKindChange",
     "onUpdateSessionUltracode",
+    "onUpdateSessionCodexReasoningEffort",
     "onOpenExecutionEnvironment",
     "onSessionExecutionEngineChange",
     "onUpdatePaneRuntimeOverride",

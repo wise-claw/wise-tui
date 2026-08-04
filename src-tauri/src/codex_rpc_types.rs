@@ -117,6 +117,10 @@ pub struct TurnStartParams {
     pub thread_id: String,
     /// App-server expects an array of input items, e.g. `[{ "type": "text", "text": "…" }]`.
     pub input: Vec<TurnInputItem>,
+    /// Per-turn reasoning effort override (`minimal` / `low` / `medium` / `high` / `xhigh` / `ultra`).
+    /// When set, becomes the default for later turns on the same thread.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
 }
 
 /// One user input item for `turn/start` / `turn/steer`.
@@ -1676,11 +1680,24 @@ mod tests {
         let params = TurnStartParams {
             thread_id: "thr_123".to_string(),
             input: vec![TurnInputItem::text("hello")],
+            effort: None,
         };
         let value = serde_json::to_value(&params).expect("serialize");
         assert_eq!(value["threadId"], "thr_123");
         assert_eq!(value["input"][0]["type"], "text");
         assert_eq!(value["input"][0]["text"], "hello");
+        assert!(value.get("effort").is_none());
+    }
+
+    #[test]
+    fn serializes_turn_start_effort() {
+        let params = TurnStartParams {
+            thread_id: "thr_123".to_string(),
+            input: vec![TurnInputItem::text("hello")],
+            effort: Some("xhigh".to_string()),
+        };
+        let value = serde_json::to_value(&params).expect("serialize");
+        assert_eq!(value["effort"], "xhigh");
     }
 
     #[test]
@@ -1692,6 +1709,7 @@ mod tests {
                 TurnInputItem::local_image("/tmp/shot.png"),
                 TurnInputItem::image_data_url("data:image/png;base64,abc"),
             ],
+            effort: None,
         };
         let value = serde_json::to_value(&params).expect("serialize");
         assert_eq!(value["input"][0]["type"], "text");

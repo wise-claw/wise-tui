@@ -103,6 +103,7 @@ export interface ClaudeSessionsChatHostProps {
   ) => void | Promise<void>;
   /** Per-session ultracode setter（顶层 (sessionId, next) 签名）。 */
   onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
+  onUpdateSessionCodexReasoningEffort?: (sessionId: string, effort: string) => void;
   onUpdateRepositoryExecutionEngine?: (
     repositoryId: number,
     engine: import("../../types").SessionExecutionEngine,
@@ -246,6 +247,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   onUpdateSessionModel,
   onUpdateSessionConnectionKind,
   onUpdateSessionUltracode,
+  onUpdateSessionCodexReasoningEffort,
   onUpdateRepositoryExecutionEngine,
   onUpdateEmployeeExecutionEngine,
   codexAvailable = true,
@@ -556,6 +558,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
     onUpdateSessionModel,
     onUpdateSessionConnectionKind,
     onUpdateSessionUltracode,
+    onUpdateSessionCodexReasoningEffort,
     onUpdateRepositoryExecutionEngine,
     onUpdateEmployeeExecutionEngine,
     codexAvailable,
@@ -724,6 +727,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
             void onUpdateSessionConnectionKind(activeSession.id, kind)
           }
           onUpdateSessionUltracode={onUpdateSessionUltracode}
+          onUpdateSessionCodexReasoningEffort={onUpdateSessionCodexReasoningEffort}
           onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
           onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
           codexAvailable={codexAvailable}

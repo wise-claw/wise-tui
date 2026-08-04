@@ -93,6 +93,8 @@ export interface ClaudeSessionsProps {
   ) => void | Promise<void>;
   /** Per-session ultracode setter；顶层 (sessionId, next) 签名，per-session false beats global true。 */
   onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
+  /** Codex RPC 推理强度；写入会话并落盘 tabs.json。 */
+  onUpdateSessionCodexReasoningEffort?: (sessionId: string, effort: string) => void;
   onUpdateRepositoryExecutionEngine?: (
     repositoryId: number,
     engine: import("../../types").SessionExecutionEngine,
@@ -283,6 +285,7 @@ function ClaudeSessionsShell({
   onUpdateSessionModel,
   onUpdateSessionConnectionKind,
   onUpdateSessionUltracode,
+  onUpdateSessionCodexReasoningEffort,
   onUpdateRepositoryExecutionEngine,
   onUpdateEmployeeExecutionEngine,
   codexAvailable = true,
@@ -889,6 +892,7 @@ function ClaudeSessionsShell({
           onUpdateSessionModel={onUpdateSessionModel}
           onUpdateSessionConnectionKind={onUpdateSessionConnectionKind}
           onUpdateSessionUltracode={onUpdateSessionUltracode}
+          onUpdateSessionCodexReasoningEffort={onUpdateSessionCodexReasoningEffort}
           onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
           onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
           codexAvailable={codexAvailable}

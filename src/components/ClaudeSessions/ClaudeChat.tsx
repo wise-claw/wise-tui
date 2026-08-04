@@ -202,6 +202,8 @@ interface Props {
    * 多屏下每屏各自 toggle 自己的 session。
    */
   onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
+  /** Codex RPC 推理强度；写入会话并落盘 tabs.json。 */
+  onUpdateSessionCodexReasoningEffort?: (sessionId: string, effort: string) => void;
   /** 全局 ultracode 状态，注入 composer 避免重复读 store。 */
   globalUltracodeEnabled?: boolean;
   onUpdateRepositoryExecutionEngine?: (
@@ -378,6 +380,7 @@ export function ClaudeChatInner({
   onSessionModelChange,
   onSessionConnectionKindChange,
   onUpdateSessionUltracode,
+  onUpdateSessionCodexReasoningEffort,
   globalUltracodeEnabled,
   onUpdateRepositoryExecutionEngine,
   onUpdateEmployeeExecutionEngine,
@@ -2096,6 +2099,7 @@ export function ClaudeChatInner({
               onSessionModelChange={onSessionModelChange}
               onSessionConnectionKindChange={onSessionConnectionKindChange}
               onUpdateSessionUltracode={onUpdateSessionUltracode}
+              onUpdateSessionCodexReasoningEffort={onUpdateSessionCodexReasoningEffort}
               globalUltracodeEnabled={resolvedGlobalUltracodeEnabled}
               sessionExecutionEngine={sessionExecutionEngine}
               codexAvailable={codexAvailable}

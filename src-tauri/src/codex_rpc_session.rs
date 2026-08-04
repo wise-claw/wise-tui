@@ -252,17 +252,23 @@ impl CodexRpcSession {
     ///
     /// Vision models: `附图：@/abs/path` → inline `image` / `localImage`.
     /// Non-vision models: keep path text only (avoids `[Unsupported Image]`).
-    pub async fn start_turn(&mut self, input: &str) -> Result<String> {
+    ///
+    /// `effort` maps to app-server `turn/start.effort` (ChatGPT-style reasoning intensity).
+    pub async fn start_turn(&mut self, input: &str, effort: Option<&str>) -> Result<String> {
         let items =
             crate::codex_rpc_types::build_turn_input_items_from_composer_prompt_for_model(
                 input,
                 self.active_model.as_deref(),
             );
-        self.start_turn_with_items(items).await
+        self.start_turn_with_items(items, effort).await
     }
 
     /// Start a new turn with pre-built app-server input items.
-    pub async fn start_turn_with_items(&mut self, input: Vec<TurnInputItem>) -> Result<String> {
+    pub async fn start_turn_with_items(
+        &mut self,
+        input: Vec<TurnInputItem>,
+        effort: Option<&str>,
+    ) -> Result<String> {
         let thread_id = self
             .current_thread_id
             .clone()
@@ -280,13 +286,22 @@ impl CodexRpcSession {
                 TurnInputItem::Image { .. } => "image",
             })
             .collect();
+        let effort_trimmed = effort
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
         eprintln!(
-            "[codex_rpc] turn/start input items: {} {:?}",
+            "[codex_rpc] turn/start input items: {} {:?} effort={:?}",
             summary.len(),
-            summary
+            summary,
+            effort_trimmed.as_deref()
         );
 
-        let params = TurnStartParams { thread_id, input };
+        let params = TurnStartParams {
+            thread_id,
+            input,
+            effort: effort_trimmed,
+        };
         let params_value =
             serde_json::to_value(&params).context("Failed to serialize turn/start params")?;
 

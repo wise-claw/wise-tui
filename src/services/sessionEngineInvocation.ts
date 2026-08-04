@@ -15,6 +15,7 @@ import { executeCodexCode, executeCodexRpcCode } from "./codex";
 import { executeCursorCode } from "./cursorAgentExecution";
 import { executeOpencodeCode } from "./opencode";
 import { executeQoderCode } from "./qoder";
+import { getCodexRpcReasoningEffort } from "../stores/codexRpcReasoningEffortStore";
 
 /** 支持 oneshot 等待的引擎；Gemini 主会话派发尚未落地。 */
 export function supportsSessionEngineOneshotWait(engine: SessionExecutionEngine): boolean {
@@ -56,6 +57,8 @@ async function spawnSessionEngineOneshot(input: {
         model,
         invocationKey,
         tabSessionId,
+        undefined,
+        tabSessionId ? getCodexRpcReasoningEffort(tabSessionId) : undefined,
       );
       return;
     case "cursor":

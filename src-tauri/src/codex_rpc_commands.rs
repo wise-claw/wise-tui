@@ -79,6 +79,9 @@ pub(crate) struct ExecuteCodexRpcParams {
     project_path: String,
     #[serde(default)]
     model: Option<String>,
+    /// App-server `turn/start.effort`（minimal/low/medium/high/xhigh/ultra）。
+    #[serde(default)]
+    effort: Option<String>,
     #[serde(default)]
     invocation_key: Option<String>,
     #[serde(default)]
@@ -329,7 +332,12 @@ pub(crate) async fn execute_codex_rpc(
 
     // Start the turn.
     // DeepSeek 等模型的 API 不接受 image 内容块时，start_turn 会保留 `附图：@path` 文本，不发 image item。
-    let turn_result = session.start_turn(trimmed_prompt).await;
+    let effort = params
+        .effort
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let turn_result = session.start_turn(trimmed_prompt, effort).await;
     if let Err(e) = turn_result {
         let msg = format!("Codex turn 启动失败: {e}");
         eprintln!("[codex_rpc] {msg}");

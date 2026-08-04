@@ -4,6 +4,7 @@ import { foldToolResultUserMessagesIntoAssistant } from "./claudeStreamAssembler
 import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
 import { getCurrentMainWorkspaceWindowLabel } from "./mainWindow";
 import { isTauriIpcAlive } from "../utils/tauriEnv";
+import { isCodexReasoningEffort } from "../constants/codexReasoningEffort";
 
 export function normalizePersistedSession(raw: unknown): ClaudeSession {
   const v = raw as Record<string, unknown>;
@@ -20,6 +21,9 @@ export function normalizePersistedSession(raw: unknown): ClaudeSession {
   // 避免运行时 `typeof !== "boolean"` 的额外分支污染。
   if (typeof v.ultracodeEnabled !== "boolean") {
     delete out.ultracodeEnabled;
+  }
+  if (!isCodexReasoningEffort(v.codexReasoningEffort)) {
+    delete out.codexReasoningEffort;
   }
   const session = out as unknown as ClaudeSession;
   if (Array.isArray(session.messages) && session.messages.length > 0) {

@@ -48,3 +48,27 @@ describe("normalizePersistedSession ultracodeEnabled coercion", () => {
     expect("ultracodeEnabled" in out).toBe(false);
   });
 });
+
+describe("normalizePersistedSession codexReasoningEffort coercion", () => {
+  it("保留合法 effort", () => {
+    const out = normalizePersistedSession({
+      id: "s1",
+      repositoryPath: "/work/repo",
+      repositoryName: "repo",
+      codexReasoningEffort: "xhigh",
+    });
+    expect(out.codexReasoningEffort).toBe("xhigh");
+  });
+
+  it("非法值被剥除", () => {
+    for (const dirty of ["max", "", 1, null, true]) {
+      const out = normalizePersistedSession({
+        id: "s2",
+        repositoryPath: "/work/repo",
+        repositoryName: "repo",
+        codexReasoningEffort: dirty,
+      });
+      expect(out.codexReasoningEffort).toBeUndefined();
+    }
+  });
+});

@@ -816,6 +816,11 @@ export interface ClaudeSession {
    * 落盘到 tabs.json，重启后恢复。runtime 不影响已 spawn 的回合——下次 spawn 读新值。
    */
   ultracodeEnabled?: boolean;
+  /**
+   * Codex RPC 推理强度（`turn/start.effort`）：minimal/low/medium/high/xhigh/ultra。
+   * 仅 `executionEngine === "codex-rpc"` 时有意义；落盘到 tabs.json，按会话恢复。
+   */
+  codexReasoningEffort?: string;
 }
 
 /** One session row from `list_claude_disk_sessions` (Claude Code on-disk index). */
