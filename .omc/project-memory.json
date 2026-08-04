@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1785753046968,
+  "lastScanned": 1785845132830,
   "projectRoot": "/Users/sjl/Documents/github/wise-tui",
   "techStack": {
     "languages": [
@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "bunx tsc -p tsconfig.app.json --noEmit 2>&1 | tail -30",
-    "testCommand": "bun test 2>&1 | grep -E \"\\(fail\\)|Unhandled error\" | sed -E 's/ \\[[0-9.]+ms\\]//' | sort > /tmp/wise-baseline-fails.txt; echo \"基线失败数: $(wc -l < /tmp/wise-baseline-fails.txt)\"; echo \"=== 差异（当前 vs 基线）===\"; diff /tmp/wise-baseline-fails.txt /tmp/wise-current-fails.txt && echo \"无差异：失败集完全一致\"; git stash pop && echo \"=== STASH POPPED ===\"",
+    "buildCommand": "echo \"=== tsc 类型检查结果 ===\"; cat /private/tmp/claude-501/-Users-sjl-Documents-github-wise-tui/034fe66a-5084-4c76-92c7-d0c11dc9656c/tasks/bv1e614cz.output\necho \"\"; echo \"=== bun test 结果 ===\"; cat /private/tmp/claude-501/-Users-sjl-Documents-github-wise-tui/034fe66a-5084-4c76-92c7-d0c11dc9656c/tasks/bw29kut17.output",
+    "testCommand": "echo \"=== tsc 类型检查结果 ===\"; cat /private/tmp/claude-501/-Users-sjl-Documents-github-wise-tui/034fe66a-5084-4c76-92c7-d0c11dc9656c/tasks/bv1e614cz.output\necho \"\"; echo \"=== bun test 结果 ===\"; cat /private/tmp/claude-501/-Users-sjl-Documents-github-wise-tui/034fe66a-5084-4c76-92c7-d0c11dc9656c/tasks/bw29kut17.output",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -86,14 +86,14 @@
       "path": "browser-extensions",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1785753046952,
+      "lastAccessed": 1785845132823,
       "keyFiles": []
     },
     "design": {
       "path": "design",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1785753046953,
+      "lastAccessed": 1785845132823,
       "keyFiles": [
         "product-ux-engineering-audit-2026-05-14.md"
       ]
@@ -102,7 +102,7 @@
       "path": "dist",
       "purpose": "Distribution/build output",
       "fileCount": 4,
-      "lastAccessed": 1785753046955,
+      "lastAccessed": 1785845132826,
       "keyFiles": [
         "index.html",
         "mascot.html",
@@ -114,21 +114,21 @@
       "path": "docs",
       "purpose": "Documentation",
       "fileCount": 0,
-      "lastAccessed": 1785753046955,
+      "lastAccessed": 1785845132826,
       "keyFiles": []
     },
     "examples": {
       "path": "examples",
       "purpose": "Example code",
       "fileCount": 0,
-      "lastAccessed": 1785753046955,
+      "lastAccessed": 1785845132826,
       "keyFiles": []
     },
     "extras": {
       "path": "extras",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1785753046955,
+      "lastAccessed": 1785845132826,
       "keyFiles": [
         "check-prd-split-evolution.mjs"
       ]
@@ -137,7 +137,7 @@
       "path": "imgs",
       "purpose": null,
       "fileCount": 6,
-      "lastAccessed": 1785753046955,
+      "lastAccessed": 1785845132826,
       "keyFiles": [
         "add-execution-env.gif",
         "add-workspace.gif",
@@ -150,7 +150,7 @@
       "path": "public",
       "purpose": "Public files",
       "fileCount": 2,
-      "lastAccessed": 1785753046955,
+      "lastAccessed": 1785845132826,
       "keyFiles": [
         "tauri.svg",
         "vite.svg"
@@ -160,7 +160,7 @@
       "path": "scripts",
       "purpose": "Build/utility scripts",
       "fileCount": 7,
-      "lastAccessed": 1785753046956,
+      "lastAccessed": 1785845132826,
       "keyFiles": [
         "_tmp_sim_stream.mts",
         "build-claude-settings-schema-zh.mjs",
@@ -173,7 +173,7 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 9,
-      "lastAccessed": 1785753046956,
+      "lastAccessed": 1785845132826,
       "keyFiles": [
         "App.css",
         "App.tsx",
@@ -186,7 +186,7 @@
       "path": "src-tauri",
       "purpose": null,
       "fileCount": 7,
-      "lastAccessed": 1785753046956,
+      "lastAccessed": 1785845132827,
       "keyFiles": [
         "Cargo.lock",
         "Cargo.toml",
@@ -198,19 +198,19 @@
     "dist/assets": {
       "path": "dist/assets",
       "purpose": "Static assets",
-      "fileCount": 300,
-      "lastAccessed": 1785753046957,
+      "fileCount": 307,
+      "lastAccessed": 1785845132827,
       "keyFiles": [
-        "ActiveRepositoryFilesPanel-3fPgV6Iv.js",
         "ApiOutlined-29EXlQ9S.js",
-        "AppImpl-BxQ7N4Tj.js"
+        "AppImpl-By5GcoHA.js",
+        "AppImpl-Dn1bjZT9.css"
       ]
     },
     "src/__tests__": {
       "path": "src/__tests__",
       "purpose": "Test files",
       "fileCount": 1,
-      "lastAccessed": 1785753046960,
+      "lastAccessed": 1785845132828,
       "keyFiles": [
         "codexProviderPresets.test.ts"
       ]
@@ -219,7 +219,7 @@
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 1,
-      "lastAccessed": 1785753046963,
+      "lastAccessed": 1785845132828,
       "keyFiles": [
         "react.svg"
       ]
@@ -228,7 +228,7 @@
       "path": "src/components",
       "purpose": "UI components",
       "fileCount": 24,
-      "lastAccessed": 1785753046966,
+      "lastAccessed": 1785845132828,
       "keyFiles": [
         "AppWorkspaceLayout.lazy.ts",
         "AppWorkspaceLayout.tsx",
@@ -239,7 +239,7 @@
       "path": "src/data",
       "purpose": "Data files",
       "fileCount": 5,
-      "lastAccessed": 1785753046968,
+      "lastAccessed": 1785845132828,
       "keyFiles": [
         "claude-code-settings.schema.en.json",
         "claude-code-settings.schema.json",
@@ -393,6 +393,12 @@
       "type": "file"
     },
     {
+      "path": "package.json",
+      "accessCount": 7,
+      "lastAccessed": 1785845440845,
+      "type": "file"
+    },
+    {
       "path": "src/components/ClaudeSessions/ExternalTerminalCommandPopover.tsx",
       "accessCount": 5,
       "lastAccessed": 1785647590837,
@@ -474,12 +480,6 @@
       "path": "src/stores/terminalCenterPanelStore.ts",
       "accessCount": 2,
       "lastAccessed": 1785754355678,
-      "type": "file"
-    },
-    {
-      "path": "package.json",
-      "accessCount": 1,
-      "lastAccessed": 1785484811316,
       "type": "file"
     },
     {

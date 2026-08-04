@@ -7,7 +7,7 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 
 /** 仅按需打开的功能块，不应出现在 index 入口的 modulepreload 里。 */
 const DEFERRED_MODULE_PRELOAD_CHUNK =
-  /(?:^|\/)assets\/(?:composer-region|milkdown-vendor|codemirror-vendor|monaco-vendor|terminal-vendor|graph-vendor|mermaid-vendor|AuthorPanel|x6-vendor|driver-vendor)/;
+  /(?:^|\/)assets\/(?:composer-region|milkdown-vendor|codemirror-vendor|monaco-vendor|terminal-vendor|graph-vendor|mermaid-vendor|AuthorPanel|x6-vendor)/;
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -18,11 +18,6 @@ export default defineConfig(async () => ({
   resolve: {
     /** 避免多份 React 进入不同 chunk，引发 `useLayoutEffect` of undefined。 */
     dedupe: ["react", "react-dom"],
-  },
-  optimizeDeps: {
-    include: [
-      "driver.js",
-    ],
   },
   build: {
     modulePreload: {
@@ -50,9 +45,6 @@ export default defineConfig(async () => ({
             id.includes("@sigma/")
           ) {
             return "graph-vendor";
-          }
-          if (id.includes("driver.js")) {
-            return "driver-vendor";
           }
           // 仅匹配核心 react / react-dom，勿用 `/react/`（会误伤 @milkdown/react 等）。
           if (id.includes("node_modules/react-dom/") || id.includes("node_modules/react/")) {
