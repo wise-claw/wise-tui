@@ -12,6 +12,21 @@ import {
   resolveFileEditorKeepAliveLimit,
 } from "../utils/monacoLargeFile";
 
+/** keydown 目标或当前焦点任一在面板内（md 预览切换瞬间焦点可能短暂落在 body）。 */
+function isKeyboardEventInsidePanel(panel: HTMLElement, event: KeyboardEvent): boolean {
+  const target = event.target;
+  const active = document.activeElement;
+  const targetInPanel = target instanceof Node && panel.contains(target);
+  const activeInPanel = active instanceof Node && panel.contains(active);
+  return targetInPanel || activeInPanel;
+}
+
+function fileEditorRevealShortcutLabel(): string {
+  return typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform)
+    ? "⌥L"
+    : "Alt+L";
+}
+
 interface Props {
   activePath: string | null;
   activeSessionId: string | null;
@@ -147,8 +162,7 @@ export function RepositoryFileEditorPanel({
         return;
       }
       const panel = panelRef.current;
-      const target = event.target;
-      if (!panel || !(target instanceof Node) || !panel.contains(target)) {
+      if (!panel || !isKeyboardEventInsidePanel(panel, event)) {
         return;
       }
       event.preventDefault();
@@ -158,6 +172,32 @@ export function RepositoryFileEditorPanel({
     window.addEventListener("keydown", handleCloseTabShortcut, { capture: true });
     return () => window.removeEventListener("keydown", handleCloseTabShortcut, { capture: true });
   }, [activePath, onCloseTab, tabs.length]);
+
+  // ⌥L / Alt+L：焦点在文件编辑器内时，在文件树中定位当前文件（与顶栏瞄准按钮一致）。
+  useEffect(() => {
+    if (!onRevealInExplorer) return;
+    function handleRevealShortcut(event: KeyboardEvent) {
+      if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) {
+        return;
+      }
+      if (event.key !== "l" && event.key !== "L" && event.code !== "KeyL") {
+        return;
+      }
+      const tab = tabs.find((item) => item.relativePath === activePath) ?? null;
+      if (!tab?.rootPath) {
+        return;
+      }
+      const panel = panelRef.current;
+      if (!panel || !isKeyboardEventInsidePanel(panel, event)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      onRevealInExplorer(tab.rootPath, tab.relativePath);
+    }
+    window.addEventListener("keydown", handleRevealShortcut, { capture: true });
+    return () => window.removeEventListener("keydown", handleRevealShortcut, { capture: true });
+  }, [activePath, onRevealInExplorer, tabs]);
 
   const handleTabContentChange = useCallback(
     (relativePath: string, content: string) => {
@@ -201,18 +241,20 @@ export function RepositoryFileEditorPanel({
     [onRevealInExplorer],
   );
 
+  const revealShortcutLabel = fileEditorRevealShortcutLabel();
+
   const buildTabContextMenuItems = useCallback(
     (tab: FileEditorTab): MenuProps["items"] => {
       return [
         {
           key: "reveal-in-explorer",
-          label: "在文件树中定位",
+          label: `在文件树中定位（${revealShortcutLabel}）`,
           disabled: !onRevealInExplorer || !tab.rootPath,
           onClick: () => revealTab(tab),
         },
       ];
     },
-    [onRevealInExplorer, revealTab],
+    [onRevealInExplorer, revealShortcutLabel, revealTab],
   );
 
   /** 切换 tab：立即切激活路径；文件树定位防抖，避免连切时展开/滚动挤占首帧。 */
@@ -271,12 +313,12 @@ export function RepositoryFileEditorPanel({
           </div>
           <div className="app-file-editor-tab-bar-actions">
             {onRevealInExplorer ? (
-              <HoverHint title="在文件树中定位">
+              <HoverHint title={`在文件树中定位（${revealShortcutLabel}）`}>
                 <Button
                   type="text"
                   size="small"
                   icon={<AimOutlined />}
-                  aria-label="在文件树中定位"
+                  aria-label={`在文件树中定位（${revealShortcutLabel}）`}
                   disabled={!activeTab?.rootPath}
                   onClick={() => {
                     if (activeTab) revealTab(activeTab);

@@ -1,4 +1,5 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import type { IDisposable } from "monaco-editor";
 import { Button, Spin } from "antd";
 import { ReloadOutlined, WarningOutlined, EyeOutlined, EditOutlined } from "@ant-design/icons";
@@ -162,6 +163,7 @@ function RepositoryFileEditorTabSurface({
 }: RepositoryFileEditorTabSurfaceProps) {
   const monacoRef = useRef<typeof Monaco | null>(null);
   const editorRef = useRef<MonacoEditorNamespace.IStandaloneCodeEditor | null>(null);
+  const mdPreviewRef = useRef<HTMLDivElement | null>(null);
   const lastAppliedFocusRef = useRef<string | null>(null);
   const monacoMountGuardRef = useRef<IDisposable | null>(null);
   const contentInjectionCancelRef = useRef<(() => void) | null>(null);
@@ -197,6 +199,23 @@ function RepositoryFileEditorTabSurface({
   // 大文件全量 Markdown + rehypeRaw 会卡死主线程，禁止预览。
   const mdPreviewBlocked = isMdFile && contentLength >= MONACO_LARGE_FILE_CHAR_THRESHOLD;
   const mdPreview = isMdFile && mdPreviewRequested && !mdPreviewBlocked;
+
+  // 预览态无 Monaco textarea：把焦点留在预览容器内，否则 ⌘W 的 panel.contains(target) 会失败。
+  useEffect(() => {
+    if (!mdPreview || !isActive) return;
+    mdPreviewRef.current?.focus({ preventScroll: true });
+  }, [mdPreview, isActive, tab.relativePath]);
+
+  const handleMdPreviewMouseDown = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest("a, button, input, textarea, select, [contenteditable='true'], [contenteditable='']")
+    ) {
+      return;
+    }
+    mdPreviewRef.current?.focus({ preventScroll: true });
+  }, []);
 
   const [monacoSurfaceReady, setMonacoSurfaceReady] = useState(true);
   const [monacoEditorSurface, setMonacoEditorSurface] = useState<{
@@ -598,7 +617,14 @@ function RepositoryFileEditorTabSurface({
           </div>
         ) : null}
         {mdPreview && isActive ? (
-          <div className="app-file-editor-md-preview">
+          <div
+            ref={mdPreviewRef}
+            className="app-file-editor-md-preview"
+            tabIndex={-1}
+            role="document"
+            aria-label={`${tab.relativePath} 预览`}
+            onMouseDown={handleMdPreviewMouseDown}
+          >
             <div className="app-markdown app-markdown--file-doc">
               <MarkdownBody source={tab.content} rehypePlugins={[rehypeRaw]} />
             </div>
