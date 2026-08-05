@@ -33,7 +33,9 @@ export function hydrateStreamingProcessRegistryFromHost(
   claudeProcesses: ReadonlyArray<Pick<ClaudeHostProcess, "sessionId" | "pid" | "projectPath">>,
   streamingProcessByTab: Map<string, { claudeSessionId: string | null }>,
   defaultConnectionKind: ClaudeSessionConnectionKind,
+  activityByTab?: Map<string, { lastActivityAtMs: number; spawnedAtMs: number; pinned?: boolean }>,
 ): void {
+  const now = Date.now();
   for (const session of sessions) {
     if (!sessionUsesStreamingConnection(session, defaultConnectionKind)) continue;
     if (!isClaudeSessionRunningByHostProcesses(session, claudeProcesses)) continue;
@@ -42,6 +44,12 @@ export function hydrateStreamingProcessRegistryFromHost(
       streamingProcessByTab.get(session.id)?.claudeSessionId ??
       null;
     streamingProcessByTab.set(session.id, { claudeSessionId: sid });
+    if (activityByTab && !activityByTab.has(session.id)) {
+      activityByTab.set(session.id, { lastActivityAtMs: now, spawnedAtMs: now });
+    } else if (activityByTab) {
+      const prev = activityByTab.get(session.id)!;
+      activityByTab.set(session.id, { ...prev, lastActivityAtMs: now });
+    }
   }
 }
 

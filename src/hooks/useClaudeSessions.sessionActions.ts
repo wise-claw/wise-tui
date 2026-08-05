@@ -30,6 +30,10 @@ import type { CursorSdkAttachment } from "../services/cursorComposerPrompt";
 import type { SessionExecutionEngine } from "../types";
 import { resolveSessionForExecuteKey } from "../utils/sessionExecuteResolve";
 import { markClaudeRegistryBootstrapWarmup, persistWorkflowBindings } from "./useClaudeSessions.helpers";
+import {
+  deleteStreamingProcessEntry,
+  type StreamingProcessActivityEntry,
+} from "./useClaudeSessions.streamingReclaim";
 import type {
   PendingTurnFailoverContext,
   SessionExecuteOpts,
@@ -42,6 +46,7 @@ export type SessionActionHandlersDeps = {
   executeSessionRetryCountRef: MutableRefObject<Map<string, number>>;
   recentExecutePromptBySessionRef: MutableRefObject<Map<string, { prompt: string; at: number }>>;
   streamingProcessByTabRef: MutableRefObject<Map<string, { claudeSessionId: string | null }>>;
+  streamingProcessActivityByTabRef: MutableRefObject<Map<string, StreamingProcessActivityEntry>>;
   streamingTargetIdRef: MutableRefObject<string | null>;
   streamTurnSeqRef: MutableRefObject<number>;
   lastUserSendNonceRef: MutableRefObject<number>;
@@ -95,6 +100,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     executeSessionRetryCountRef,
     recentExecutePromptBySessionRef,
     streamingProcessByTabRef,
+    streamingProcessActivityByTabRef,
     streamingTargetIdRef,
     streamTurnSeqRef,
     lastUserSendNonceRef,
@@ -174,7 +180,11 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
       // 勿 cancelClaudeExecution(tabSessionId)：Rust 会对 Wise tab id 发 success=false complete，误判为本轮失败。
       if (cancelSessionIds.size > 0 || wasActive) {
         terminalFreshTeardown = { cancelSessionIds, wasActive };
-        streamingProcessByTabRef.current.delete(tabSessionId);
+        deleteStreamingProcessEntry(
+          streamingProcessByTabRef.current,
+          streamingProcessActivityByTabRef.current,
+          tabSessionId,
+        );
       }
     }
     const claudeSidRaw = session.claudeSessionId ?? sessionIdMapRef.current.get(tabSessionId) ?? null;
@@ -590,7 +600,11 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
         /* 进程可能已结束 */
       });
     }
-    streamingProcessByTabRef.current.delete(sessionId);
+    deleteStreamingProcessEntry(
+      streamingProcessByTabRef.current,
+      streamingProcessActivityByTabRef.current,
+      sessionId,
+    );
     streamingSessionStreamDetachByTabRef.current.get(sessionId)?.();
     streamingSessionStreamDetachByTabRef.current.delete(sessionId);
     diskLoadDoneRef.current.delete(sessionId);
@@ -632,7 +646,11 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     void closeStreamingSession(realSessionId ?? sessionId).catch(() => {
       /* 长驻进程可能已退出 */
     });
-    streamingProcessByTabRef.current.delete(sessionId);
+    deleteStreamingProcessEntry(
+      streamingProcessByTabRef.current,
+      streamingProcessActivityByTabRef.current,
+      sessionId,
+    );
     purgeStreamSidecarsForSession(sessionId, session?.claudeSessionId);
     clearStreamStallTimer(sessionId);
     setSessions((prev) => {

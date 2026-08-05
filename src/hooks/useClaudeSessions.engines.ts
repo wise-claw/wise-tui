@@ -48,6 +48,13 @@ import {
   type ClaudeStreamRuntimeHandlers,
 } from "./useClaudeSessions.helpers";
 import type { UseClaudeSessionsOptions } from "./useClaudeSessions.types";
+import {
+  applyStreamingProcessReclaim,
+  deleteStreamingProcessEntry,
+  setStreamingProcessEntry,
+  touchStreamingProcessActivity,
+  type StreamingProcessActivityEntry,
+} from "./useClaudeSessions.streamingReclaim";
 
 export type ClaudeEngineHandlersDeps = {
   streamRuntimeRef: MutableRefObject<ClaudeStreamRuntimeHandlers | null>;
@@ -58,6 +65,8 @@ export type ClaudeEngineHandlersDeps = {
   >;
   expectedTurnNonceByTabIdRef: MutableRefObject<Map<string, number>>;
   streamingProcessByTabRef: MutableRefObject<Map<string, { claudeSessionId: string | null }>>;
+  streamingProcessActivityByTabRef: MutableRefObject<Map<string, StreamingProcessActivityEntry>>;
+  streamingSessionStreamDetachByTabRef: MutableRefObject<Map<string, () => void>>;
   streamingTargetIdRef: MutableRefObject<string | null>;
   defaultConnectionKindRef: MutableRefObject<ClaudeSessionConnectionKind>;
   claudeSessionsOptionsRef: MutableRefObject<UseClaudeSessionsOptions | undefined>;
@@ -116,6 +125,8 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     claudeInvocationInflightRef,
     expectedTurnNonceByTabIdRef,
     streamingProcessByTabRef,
+    streamingProcessActivityByTabRef,
+    streamingSessionStreamDetachByTabRef,
     streamingTargetIdRef,
     defaultConnectionKindRef,
     claudeSessionsOptionsRef,
@@ -125,6 +136,20 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     commitSessions,
     scheduleStreamStallTimer,
   } = deps;
+
+  const reclaimStreamingProcessesBeforeSpawn = async () => {
+    await applyStreamingProcessReclaim({
+      reserveSlotForSpawn: true,
+      streamingProcessByTab: streamingProcessByTabRef.current,
+      activityByTab: streamingProcessActivityByTabRef.current,
+      sessions: sessionsRef.current.map((s) => ({ id: s.id, status: s.status })),
+      getPendingCount: (tabId) => notificationHub.getBlockingControlPendingCount(tabId),
+      detachSessionStream: (tabId) => {
+        streamingSessionStreamDetachByTabRef.current.get(tabId)?.();
+        streamingSessionStreamDetachByTabRef.current.delete(tabId);
+      },
+    });
+  };
 
   const runClaudeOneshotWithInvocation = async (params: ClaudeOneshotInvokeParams) => {
     const {
@@ -651,6 +676,10 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         }
       }
       try {
+        touchStreamingProcessActivity(
+          streamingProcessActivityByTabRef.current,
+          tabSessionId,
+        );
         await sendStreamingUserMessage(liveSid, prompt);
         return;
       } catch (err) {
@@ -660,7 +689,11 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         const stdinGone = errText.includes("没有可写 stdin") || errText.includes("stdin");
         const conversationMissing = isClaudeConversationMissingError(err);
         if (!stdinGone && !conversationMissing) {
-          streamingProcessByTabRef.current.delete(tabSessionId);
+          deleteStreamingProcessEntry(
+            streamingProcessByTabRef.current,
+            streamingProcessActivityByTabRef.current,
+            tabSessionId,
+          );
           throw err;
         }
         // 长驻子进程可能已退出，或 Claude 侧会话已清理（No conversation found）；
@@ -673,7 +706,11 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         /* 旧进程可能已退出 */
       });
     }
-    streamingProcessByTabRef.current.delete(tabSessionId);
+    deleteStreamingProcessEntry(
+      streamingProcessByTabRef.current,
+      streamingProcessActivityByTabRef.current,
+      tabSessionId,
+    );
 
     const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;
@@ -706,6 +743,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     const cliExtras = await resolveSpawnExtrasForClaudePrompt(tabSessionId, prompt);
 
     try {
+      await reclaimStreamingProcessesBeforeSpawn();
       await spawnStreamingSession({
         repositoryPath,
         initialPrompt: prompt,
@@ -716,12 +754,19 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         concurrencyLimit: lim,
         cliExtras,
       });
-      streamingProcessByTabRef.current.set(tabSessionId, {
-        claudeSessionId: liveSid,
-      });
+      setStreamingProcessEntry(
+        streamingProcessByTabRef.current,
+        streamingProcessActivityByTabRef.current,
+        tabSessionId,
+        liveSid,
+      );
     } catch (e) {
       detach?.();
-      streamingProcessByTabRef.current.delete(tabSessionId);
+      deleteStreamingProcessEntry(
+        streamingProcessByTabRef.current,
+        streamingProcessActivityByTabRef.current,
+        tabSessionId,
+      );
       throw e;
     }
   };

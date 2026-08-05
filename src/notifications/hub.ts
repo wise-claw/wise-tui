@@ -344,6 +344,24 @@ class NotificationHub {
     return n;
   }
 
+  /**
+   * 仅统计会阻塞 agent 续跑的权限 / AskUserQuestion（不含 todo / followup）。
+   * 供长驻进程自动回收：有未完成 todo 不应阻止杀空闲子进程。
+   */
+  getBlockingControlPendingCount(sessionId: string): number {
+    const bSelf = this.buckets.get(sessionId);
+    const bCtrl = this.controlBucketForViewer(sessionId);
+    if (!bSelf && !bCtrl) return 0;
+    let n = 0;
+    const ctrl = bCtrl ?? bSelf;
+    if (ctrl?.permissionRequest && this.controlRequestCountsAsPending(ctrl.permissionRequest.id)) n += 1;
+    if (ctrl?.questionRequest && this.controlRequestCountsAsPending(ctrl.questionRequest.id)) n += 1;
+    for (const q of ctrl?.questionRequestQueue ?? []) {
+      if (this.controlRequestCountsAsPending(q.id)) n += 1;
+    }
+    return n;
+  }
+
   /** 解析助手文本中的 Dock 线索（与原先 parseDockFromOutput 行为一致） */
   ingestStreamAssistText(sessionId: string, text: string) {
     if (!sessionId || !text) return;
