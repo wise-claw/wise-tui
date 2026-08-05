@@ -821,6 +821,11 @@ export interface ClaudeSession {
    * 仅 `executionEngine === "codex-rpc"` 时有意义；落盘到 tabs.json，按会话恢复。
    */
   codexReasoningEffort?: string;
+  /**
+   * Claude Code 推理强度（CLI `--effort`）：low/medium/high/xhigh/max/ultracode。
+   * 仅 Claude 引擎有意义；OMC UltracodeChip 开启时 spawn 仍强制 max。落盘到 tabs.json。
+   */
+  claudeReasoningEffort?: string;
 }
 
 /** One session row from `list_claude_disk_sessions` (Claude Code on-disk index). */

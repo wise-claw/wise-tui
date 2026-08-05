@@ -6,7 +6,7 @@ import type { ClaudeSessionsChatHostProps } from "./ClaudeSessionsChatHost";
 
 function repositoryScopeFingerprint(repo: Repository | undefined): string {
   if (!repo) return "";
-  return `${repo.id}|${repo.path}|${repo.name ?? ""}`;
+  return `${repo.id}|${repo.path}|${repo.name ?? ""}|${repo.executionEngine ?? ""}`;
 }
 
 function activeSessionStructureEqual(

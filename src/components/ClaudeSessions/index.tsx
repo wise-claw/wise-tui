@@ -95,6 +95,8 @@ export interface ClaudeSessionsProps {
   onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
   /** Codex RPC 推理强度；写入会话并落盘 tabs.json。 */
   onUpdateSessionCodexReasoningEffort?: (sessionId: string, effort: string) => void;
+  /** Claude Code 推理强度；写入会话并落盘 tabs.json。 */
+  onUpdateSessionClaudeReasoningEffort?: (sessionId: string, effort: string) => void;
   /** Composer 切换执行环境：写入当前会话标签级引擎，立即生效。 */
   onUpdateSessionExecutionEngine?: (
     sessionId: string,
@@ -291,6 +293,7 @@ function ClaudeSessionsShell({
   onUpdateSessionConnectionKind,
   onUpdateSessionUltracode,
   onUpdateSessionCodexReasoningEffort,
+  onUpdateSessionClaudeReasoningEffort,
   onUpdateSessionExecutionEngine,
   onUpdateRepositoryExecutionEngine,
   onUpdateEmployeeExecutionEngine,
@@ -899,6 +902,7 @@ function ClaudeSessionsShell({
           onUpdateSessionConnectionKind={onUpdateSessionConnectionKind}
           onUpdateSessionUltracode={onUpdateSessionUltracode}
           onUpdateSessionCodexReasoningEffort={onUpdateSessionCodexReasoningEffort}
+          onUpdateSessionClaudeReasoningEffort={onUpdateSessionClaudeReasoningEffort}
           onUpdateSessionExecutionEngine={onUpdateSessionExecutionEngine}
           onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
           onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}

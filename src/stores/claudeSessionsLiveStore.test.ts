@@ -105,6 +105,35 @@ describe("claudeSessionsLiveStore", () => {
     unsub();
   });
 
+  test("structure key changes when session executionEngine changes", async () => {
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    publishClaudeSessions([
+      {
+        ...stubSession("engine-a", 0),
+        status: "idle",
+        messages: [],
+      },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const key1 = getClaudeSessionsStructureKey();
+    let structureRevision = 0;
+    const unsub = subscribeClaudeSessionsStructure(() => {
+      structureRevision += 1;
+    });
+    publishClaudeSessions([
+      {
+        ...stubSession("engine-a", 0),
+        status: "idle",
+        messages: [],
+        executionEngine: "codex",
+      },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(getClaudeSessionsStructureKey()).not.toBe(key1);
+    expect(structureRevision).toBe(1);
+    unsub();
+  });
+
   test("defers live flush while document is hidden", async () => {
     if (typeof document === "undefined") return;
     const originalDescriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");

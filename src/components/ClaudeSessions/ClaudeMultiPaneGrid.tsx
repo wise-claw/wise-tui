@@ -238,6 +238,7 @@ export interface MultiPaneSharedChatProps {
   /** Per-session ultracode setter；多屏下每屏各自 toggle 自己的标签。 */
   onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
   onUpdateSessionCodexReasoningEffort?: (sessionId: string, effort: string) => void;
+  onUpdateSessionClaudeReasoningEffort?: (sessionId: string, effort: string) => void;
   onUpdateSessionExecutionEngine?: (
     sessionId: string,
     engine: SessionExecutionEngine,
@@ -329,6 +330,11 @@ interface MultiPanePrimaryPaneProps {
   shared: MultiPaneSharedChatProps;
   /** 直接传入：shared 为稳定 ref 原地更新，memo 不能靠 shared.paneCount 感知变化。 */
   paneCount: PaneCount;
+  /**
+   * 直接传入：shared 原地 Object.assign，memo 比较 shared.primaryPaneRuntimeOverride
+   * 时 prev/next 已是同一引用上的新值，恒相等，导致切换执行环境 UI 不刷新。
+   */
+  primaryPaneRuntimeOverride?: import("../../types/paneRuntimeOverride").PaneRuntimeOverride | null;
   initialNotificationPanelCollapsed: boolean;
   onCreateNewSession: () => void;
   paneAuxLayout: PaneAuxLayout;
@@ -341,6 +347,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   workflowTasks,
   shared,
   paneCount,
+  primaryPaneRuntimeOverride = null,
   initialNotificationPanelCollapsed,
   onCreateNewSession,
   paneAuxLayout,
@@ -493,6 +500,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onSessionConnectionKindChange={onSessionConnectionKindChange}
         onUpdateSessionUltracode={shared.onUpdateSessionUltracode}
         onUpdateSessionCodexReasoningEffort={shared.onUpdateSessionCodexReasoningEffort}
+        onUpdateSessionClaudeReasoningEffort={shared.onUpdateSessionClaudeReasoningEffort}
         onUpdateSessionExecutionEngine={shared.onUpdateSessionExecutionEngine}
         onUpdateRepositoryExecutionEngine={shared.onUpdateRepositoryExecutionEngine}
         onUpdateEmployeeExecutionEngine={shared.onUpdateEmployeeExecutionEngine}
@@ -559,7 +567,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onCompactSessionHistory={shared.onCompactSessionHistory}
         paneIndex={0}
         paneCount={paneCount}
-        paneRuntimeOverride={shared.primaryPaneRuntimeOverride}
+        paneRuntimeOverride={primaryPaneRuntimeOverride}
         onUpdatePaneRuntimeOverride={shared.onUpdatePaneRuntimeOverride}
       />
       </CenterViewControlContext.Provider>
@@ -579,7 +587,8 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   prev.paneAuxLayout.hideMessages === next.paneAuxLayout.hideMessages &&
   prev.paneAuxLayout.hideSessionTools === next.paneAuxLayout.hideSessionTools &&
   prev.paneCount === next.paneCount &&
-  prev.shared.primaryPaneRuntimeOverride === next.shared.primaryPaneRuntimeOverride &&
+  // 必须用直接 prop：shared 原地 mutate 后 shared.primaryPaneRuntimeOverride 的 prev/next 恒相等。
+  prev.primaryPaneRuntimeOverride === next.primaryPaneRuntimeOverride &&
   prev.shared.onUpdatePaneRuntimeOverride === next.shared.onUpdatePaneRuntimeOverride &&
   prev.shared === next.shared,
 );
@@ -882,6 +891,7 @@ const MultiPaneExtraPaneCell = memo(
             onSessionConnectionKindChange={(kind) => void shared.onUpdateSessionConnectionKind(sessionId, kind)}
             onUpdateSessionUltracode={shared.onUpdateSessionUltracode}
             onUpdateSessionCodexReasoningEffort={shared.onUpdateSessionCodexReasoningEffort}
+            onUpdateSessionClaudeReasoningEffort={shared.onUpdateSessionClaudeReasoningEffort}
             onUpdateSessionExecutionEngine={shared.onUpdateSessionExecutionEngine}
             onUpdateRepositoryExecutionEngine={shared.onUpdateRepositoryExecutionEngine}
             onUpdateEmployeeExecutionEngine={shared.onUpdateEmployeeExecutionEngine}
@@ -1121,6 +1131,9 @@ const MultiPaneExtraPaneCell = memo(
     prev.slot.slotId === next.slot.slotId &&
     prev.slot.sessionId === next.slot.sessionId &&
     prev.slot.repositoryId === next.slot.repositoryId &&
+    // 窗格执行环境切换只改这两项；漏比较会导致 ClaudeChat 仍读旧 paneRuntimeOverride。
+    prev.slot.executionEngine === next.slot.executionEngine &&
+    prev.slot.claudeProxyRoute === next.slot.claudeProxyRoute &&
     prev.paneSession === next.paneSession &&
     prev.paneRepo?.id === next.paneRepo?.id &&
     prev.workflowTasks === next.workflowTasks &&
@@ -1147,6 +1160,11 @@ export interface ClaudeMultiPaneGridProps {
   activeSessionWorkflowTasks: WorkflowTaskItem[];
   paneWorkflowTasks: WorkflowTaskItem[][];
   shared: MultiPaneSharedChatProps;
+  /**
+   * 主窗格执行环境覆盖：必须作为独立 prop。
+   * shared 是稳定 ref 原地更新，默认 shallow memo 看不到 shared 字段变化。
+   */
+  primaryPaneRuntimeOverride?: import("../../types/paneRuntimeOverride").PaneRuntimeOverride | null;
   projects: ProjectItem[];
   paneRepoTreeData: PaneRepoTreeNode[];
   projectsById: Map<string, ProjectItem>;
@@ -1179,6 +1197,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
   activeSessionWorkflowTasks,
   paneWorkflowTasks,
   shared,
+  primaryPaneRuntimeOverride = null,
   projects,
   paneRepoTreeData,
   projectsById,
@@ -1340,6 +1359,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
         workflowTasks={activeSessionWorkflowTasks}
         shared={shared}
         paneCount={paneCount}
+        primaryPaneRuntimeOverride={primaryPaneRuntimeOverride}
         initialNotificationPanelCollapsed={
           pendingCollapseNotificationForSessionId === activeSession.id
         }

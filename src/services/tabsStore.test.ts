@@ -120,6 +120,40 @@ describe("normalizePersistedSession codexReasoningEffort coercion", () => {
   });
 });
 
+describe("normalizePersistedSession claudeReasoningEffort coercion", () => {
+  it("保留合法 effort", () => {
+    const out = normalizePersistedSession({
+      id: "s1",
+      repositoryPath: "/work/repo",
+      repositoryName: "repo",
+      claudeReasoningEffort: "xhigh",
+    });
+    expect(out.claudeReasoningEffort).toBe("xhigh");
+  });
+
+  it("非法值被剥除", () => {
+    for (const dirty of ["minimal", "ultra", "", 1, null, true]) {
+      const out = normalizePersistedSession({
+        id: "s2",
+        repositoryPath: "/work/repo",
+        repositoryName: "repo",
+        claudeReasoningEffort: dirty,
+      });
+      expect(out.claudeReasoningEffort).toBeUndefined();
+    }
+  });
+
+  it("保留 ultracode", () => {
+    const out = normalizePersistedSession({
+      id: "s3",
+      repositoryPath: "/work/repo",
+      repositoryName: "repo",
+      claudeReasoningEffort: "ultracode",
+    });
+    expect(out.claudeReasoningEffort).toBe("ultracode");
+  });
+});
+
 describe("saveSessionTabsState coalesce", () => {
   beforeEach(() => {
     resetSessionTabsPersistForTests();

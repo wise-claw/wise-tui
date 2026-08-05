@@ -213,6 +213,7 @@ import { AutoApproveBadge } from "./AutoApproveBadge";
 import { ClaudePermissionModeBadge } from "./ClaudePermissionModeBadge";
 import { CodexPermissionModeBadge } from "./CodexPermissionModeBadge";
 import { ComposerCodexReasoningEffortBadge } from "./ComposerCodexReasoningEffortBadge";
+import { ComposerClaudeReasoningEffortBadge } from "./ComposerClaudeReasoningEffortBadge";
 import { CodexApprovalDock } from "./dock/codex-approval-dock";
 import { useCodexApprovalPending } from "../../hooks/useCodexApprovalPending";
 import { expandComposerCodeSelectionRefs } from "../../utils/expandComposerCodeSelectionRefs";
@@ -285,6 +286,10 @@ interface ComposerInnerProps {
    * Codex RPC 推理强度；写入当前会话并落盘 tabs.json。
    */
   onUpdateSessionCodexReasoningEffort?: (effort: string) => void;
+  /**
+   * Claude Code 推理强度；写入当前会话并落盘 tabs.json。
+   */
+  onUpdateSessionClaudeReasoningEffort?: (effort: string) => void;
   /**
    * 全局 ultracode 状态；由顶层注入以避免在 composer 内重复读 store。
    * 未提供时回退到 `false`。
@@ -628,6 +633,7 @@ function ComposerInner({
   onSessionConnectionKindChange,
   onUpdateSessionUltracode,
   onUpdateSessionCodexReasoningEffort,
+  onUpdateSessionClaudeReasoningEffort,
   globalUltracodeEnabled = false,
   allowSendWhileBusy,
   sessionExecutionEngine = "claude",
@@ -3161,6 +3167,18 @@ function ComposerInner({
             }
           />
         ) : null}
+        {isClaudeEngine ? (
+          <ComposerClaudeReasoningEffortBadge
+            effort={session.claudeReasoningEffort}
+            onEffortChange={onUpdateSessionClaudeReasoningEffort}
+            disabled={isSessionBusy}
+            iconOnly={
+              compactFooterChrome ||
+              paneCount > 1 ||
+              composerFooterChrome.composerFooterTriggerDisplayMode === "icon"
+            }
+          />
+        ) : null}
         {dualPaneRepositoryPicker ? (
           <Select
             size="small"
@@ -3260,8 +3278,10 @@ function ComposerInner({
     isSessionBusy,
     session.id,
     session.codexReasoningEffort,
+    session.claudeReasoningEffort,
     sessionExecutionEngine,
     onUpdateSessionCodexReasoningEffort,
+    onUpdateSessionClaudeReasoningEffort,
     _onCancel,
     speechDictation.engine,
     speechDictation.listening,
@@ -3688,6 +3708,8 @@ export interface ComposerRegionProps {
   onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
   /** Codex RPC 推理强度；顶层 `(sessionId, effort)` 签名。 */
   onUpdateSessionCodexReasoningEffort?: (sessionId: string, effort: string) => void;
+  /** Claude Code 推理强度；顶层 `(sessionId, effort)` 签名。 */
+  onUpdateSessionClaudeReasoningEffort?: (sessionId: string, effort: string) => void;
   /**
    * 全局 ultracode 状态；由顶层 hook 读 store 注入，避免每个 composer 都自己读 app_settings。
    */
@@ -3786,6 +3808,7 @@ export function ComposerRegion({
   draftBucketKey,
   onUpdateSessionUltracode,
   onUpdateSessionCodexReasoningEffort,
+  onUpdateSessionClaudeReasoningEffort,
   ...rest
 }: ComposerRegionProps) {
   // 将顶层 `(sessionId, next) => void` 签名的 setter 适配为 Inner 期望的 `(next) => void`；
@@ -3802,6 +3825,12 @@ export function ComposerRegion({
     },
     [onUpdateSessionCodexReasoningEffort, session.id],
   );
+  const boundUpdateSessionClaudeReasoningEffort = useCallback(
+    (effort: string) => {
+      onUpdateSessionClaudeReasoningEffort?.(session.id, effort);
+    },
+    [onUpdateSessionClaudeReasoningEffort, session.id],
+  );
   return (
     <PromptProvider sessionId={session.id} draftBucketKey={draftBucketKey}>
       <ComposerInner
@@ -3810,6 +3839,11 @@ export function ComposerRegion({
         onUpdateSessionCodexReasoningEffort={
           onUpdateSessionCodexReasoningEffort
             ? boundUpdateSessionCodexReasoningEffort
+            : undefined
+        }
+        onUpdateSessionClaudeReasoningEffort={
+          onUpdateSessionClaudeReasoningEffort
+            ? boundUpdateSessionClaudeReasoningEffort
             : undefined
         }
         {...rest}

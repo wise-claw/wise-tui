@@ -943,6 +943,12 @@ describe("sessionsReactiveStructureKey", () => {
     });
     expect(sessionsReactiveStructureKey([before])).toBe(sessionsReactiveStructureKey([after]));
   });
+
+  test("executionEngine change advances structure key so Composer engine UI can refresh", () => {
+    const before = session({ id: "main", messages: [] });
+    const after = session({ id: "main", messages: [], executionEngine: "codex" });
+    expect(sessionsReactiveStructureKey([before])).not.toBe(sessionsReactiveStructureKey([after]));
+  });
 });
 
 describe("executionEnvironmentWorkerSessionsFingerprint", () => {

@@ -40,6 +40,7 @@ import {
   setCodexRpcReasoningEffort,
 } from "../stores/codexRpcReasoningEffortStore";
 import { normalizeCodexReasoningEffort } from "../constants/codexReasoningEffort";
+import { normalizeClaudeReasoningEffort } from "../constants/claudeReasoningEffort";
 import {
   WISE_CLAUDE_USER_SETTINGS_CHANGED,
   type ClaudeUserSettingsChangedDetail,
@@ -2860,6 +2861,22 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     });
   }, []);
 
+  const updateSessionClaudeReasoningEffort = useCallback((sessionId: string, effort: string) => {
+    const next = normalizeClaudeReasoningEffort(effort);
+    setSessions((prev) => {
+      let changed = false;
+      const nextSessions = prev.map((s) => {
+        if (s.id !== sessionId) return s;
+        if ((s.claudeReasoningEffort ?? "") === next) return s;
+        changed = true;
+        return { ...s, claudeReasoningEffort: next };
+      });
+      if (!changed) return prev;
+      sessionsRef.current = nextSessions;
+      return nextSessions;
+    });
+  }, []);
+
   /**
    * Composer 切换执行环境：写入标签级 `executionEngine`，使当前会话下一回合立即生效
    *（不再只改仓库默认、必须新建会话才吃到）。引擎族变化时结束旧子进程并清空 resume id。
@@ -4434,6 +4451,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     updateSessionConnectionKind,
     updateSessionUltracodeOverride,
     updateSessionCodexReasoningEffort,
+    updateSessionClaudeReasoningEffort,
     updateSessionExecutionEngine,
     executeSession,
     executeTerminalSession,

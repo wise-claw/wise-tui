@@ -1,6 +1,6 @@
 import { Dropdown, type MenuProps } from "antd";
 import { HoverHint } from "../shared/HoverHint";
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   CLAUDE_CONNECTION_KIND_LABELS,
   CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
@@ -25,7 +25,9 @@ import {
 } from "./composerPaneRuntimePresetMenu";
 import {
   isPaneExtraExecutionEngine,
+  mergePaneRuntimeOverride,
   PANE_EXTRA_EXECUTION_ENGINES,
+  paneRuntimePresetToOverride,
   resolvePaneEffectiveEngine,
   resolvePaneExecutionEnvironmentMenuSelection,
   resolvePaneRuntimePreset,
@@ -114,17 +116,44 @@ function ComposerRuntimeSettingsTriggerImpl({
   iconOnly = false,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const engine = normalizeSessionExecutionEngine(engineProp);
+  /**
+   * 乐观引擎：单屏路径靠 live-store structureKey 才能把 session.executionEngine 灌回 Composer；
+   * 结构指纹漏字段或 rAF 延迟时，按钮文案会短暂（或一直）停在旧值。本地先切，prop 追上后清掉。
+   */
+  const [optimisticEngine, setOptimisticEngine] = useState<SessionExecutionEngine | null>(null);
+  const [optimisticPaneOverride, setOptimisticPaneOverride] = useState<PaneRuntimeOverride | null>(
+    null,
+  );
+  const engineFromProp = normalizeSessionExecutionEngine(engineProp);
+  const engine = optimisticEngine ?? engineFromProp;
+  const resolvedPaneOverride = optimisticPaneOverride ?? paneRuntimeOverride;
+  useEffect(() => {
+    if (optimisticEngine != null && engineFromProp === optimisticEngine) {
+      setOptimisticEngine(null);
+    }
+  }, [engineFromProp, optimisticEngine]);
+  useEffect(() => {
+    if (!optimisticPaneOverride) return;
+    if (
+      (paneRuntimeOverride?.executionEngine ?? null) ===
+        (optimisticPaneOverride.executionEngine ?? null) &&
+      (paneRuntimeOverride?.claudeProxyRoute ?? null) ===
+        (optimisticPaneOverride.claudeProxyRoute ?? null)
+    ) {
+      setOptimisticPaneOverride(null);
+    }
+  }, [paneRuntimeOverride, optimisticPaneOverride]);
   const showPaneRuntimePresets = Boolean(onUpdatePaneRuntimeOverride);
   const activePanePreset = showPaneRuntimePresets
-    ? resolvePaneRuntimePreset(paneRuntimeOverride, engine)
+    ? resolvePaneRuntimePreset(resolvedPaneOverride, engine)
     : null;
   const effectiveEngine = showPaneRuntimePresets
-    ? resolvePaneEffectiveEngine(paneRuntimeOverride, engine)
+    ? resolvePaneEffectiveEngine(resolvedPaneOverride, engine)
     : engine;
 
   const activeProxyRoute = useComposerActiveProxyRoute(effectiveEngine, {
-    claudeProxyBypass: claudeProxyRoute === "bypass",
+    claudeProxyBypass:
+      (resolvedPaneOverride?.claudeProxyRoute ?? claudeProxyRoute) === "bypass",
   });
 
   // 多屏 pane 无显式 override（或仅 claude/codex）时，根据生效引擎与代理路由推断默认选中预设，
@@ -134,16 +163,24 @@ function ComposerRuntimeSettingsTriggerImpl({
   const inferredPanePreset = useMemo<PaneRuntimePreset | null>(() => {
     if (!showPaneRuntimePresets) return null;
     if (activePanePreset) return activePanePreset;
-    const overrideEngine = paneRuntimeOverride?.executionEngine;
+    const overrideEngine = resolvedPaneOverride?.executionEngine;
     const effectiveOverrideEngine = overrideEngine ?? effectiveEngine;
     if (isPaneExtraExecutionEngine(effectiveOverrideEngine)) {
       return null;
     }
     if (effectiveOverrideEngine === "codex") return "codex";
-    const route = paneRuntimeOverride?.claudeProxyRoute ?? claudeProxyRoute ?? "auto";
+    const route =
+      resolvedPaneOverride?.claudeProxyRoute ?? claudeProxyRoute ?? "auto";
     if (route === "bypass") return "claude-direct";
     return activeProxyRoute ? "claude-proxy" : "claude-direct";
-  }, [showPaneRuntimePresets, activePanePreset, paneRuntimeOverride, effectiveEngine, claudeProxyRoute, activeProxyRoute]);
+  }, [
+    showPaneRuntimePresets,
+    activePanePreset,
+    resolvedPaneOverride,
+    effectiveEngine,
+    claudeProxyRoute,
+    activeProxyRoute,
+  ]);
 
   const paneMenuSelection = useMemo(() => {
     if (!showPaneRuntimePresets) {
@@ -154,11 +191,11 @@ function ComposerRuntimeSettingsTriggerImpl({
       };
     }
     return resolvePaneExecutionEnvironmentMenuSelection({
-      override: paneRuntimeOverride,
+      override: resolvedPaneOverride,
       fallbackEngine: engine,
       inferredPreset: inferredPanePreset,
     });
-  }, [showPaneRuntimePresets, paneRuntimeOverride, engine, inferredPanePreset]);
+  }, [showPaneRuntimePresets, resolvedPaneOverride, engine, inferredPanePreset]);
 
   const showExtraPaneEngines =
     showPaneRuntimePresets &&
@@ -185,7 +222,7 @@ function ComposerRuntimeSettingsTriggerImpl({
   const tooltip = useMemo(() => {
     const parts: string[] = [];
     if (showPaneRuntimePresets) {
-      parts.push(`执行环境：${resolvePaneRuntimePresetLabel(paneRuntimeOverride, engine)}`);
+      parts.push(`执行环境：${resolvePaneRuntimePresetLabel(resolvedPaneOverride, engine)}`);
     } else if (showEngine) {
       parts.push(`执行引擎：${SESSION_EXECUTION_ENGINE_LABELS[engine].title}`);
     }
@@ -203,7 +240,7 @@ function ComposerRuntimeSettingsTriggerImpl({
   }, [
     activeProxyRoute,
     engine,
-    paneRuntimeOverride,
+    resolvedPaneOverride,
     resolvedConnectionKind,
     showConnection,
     showEngine,
@@ -319,7 +356,7 @@ function ComposerRuntimeSettingsTriggerImpl({
   const triggerLabel = iconOnly
     ? null
     : showPaneRuntimePresets
-      ? resolvePaneRuntimePresetLabel(paneRuntimeOverride, engine)
+      ? resolvePaneRuntimePresetLabel(resolvedPaneOverride, engine)
       : showEngine
         ? SESSION_EXECUTION_ENGINE_LABELS[engine].title
         : null;
@@ -340,6 +377,9 @@ function ComposerRuntimeSettingsTriggerImpl({
           if (typeof key !== "string") return;
           if (showPaneRuntimePresets && isPaneRuntimePresetKey(key)) {
             if (key !== activePanePreset && onUpdatePaneRuntimeOverride) {
+              const nextOverride = paneRuntimePresetToOverride(key);
+              setOptimisticPaneOverride(nextOverride);
+              setOptimisticEngine(nextOverride.executionEngine ?? null);
               applyPaneRuntimePreset(paneIndex, key, onUpdatePaneRuntimeOverride);
             }
             return;
@@ -347,11 +387,17 @@ function ComposerRuntimeSettingsTriggerImpl({
           if (isSessionExecutionEngineKey(key)) {
             if (showPaneRuntimePresets && onUpdatePaneRuntimeOverride) {
               if (key !== effectiveEngine) {
+                const nextOverride = mergePaneRuntimeOverride(resolvedPaneOverride, {
+                  executionEngine: key,
+                });
+                setOptimisticPaneOverride(nextOverride);
+                setOptimisticEngine(key);
                 onUpdatePaneRuntimeOverride(paneIndex, { executionEngine: key });
               }
               return;
             }
             if (key !== engine) {
+              setOptimisticEngine(key);
               onEngineChange?.(key);
               setMenuOpen(false);
             }

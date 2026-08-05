@@ -105,6 +105,7 @@ export interface ClaudeSessionsChatHostProps {
   /** Per-session ultracode setter（顶层 (sessionId, next) 签名）。 */
   onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
   onUpdateSessionCodexReasoningEffort?: (sessionId: string, effort: string) => void;
+  onUpdateSessionClaudeReasoningEffort?: (sessionId: string, effort: string) => void;
   onUpdateSessionExecutionEngine?: (
     sessionId: string,
     engine: import("../../types").SessionExecutionEngine,
@@ -253,6 +254,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   onUpdateSessionConnectionKind,
   onUpdateSessionUltracode,
   onUpdateSessionCodexReasoningEffort,
+  onUpdateSessionClaudeReasoningEffort,
   onUpdateSessionExecutionEngine,
   onUpdateRepositoryExecutionEngine,
   onUpdateEmployeeExecutionEngine,
@@ -576,6 +578,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
     onUpdateSessionConnectionKind,
     onUpdateSessionUltracode,
     onUpdateSessionCodexReasoningEffort,
+    onUpdateSessionClaudeReasoningEffort,
     onUpdateSessionExecutionEngine,
     onUpdateRepositoryExecutionEngine,
     onUpdateEmployeeExecutionEngine,
@@ -693,6 +696,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
           activeSessionWorkflowTasks={activeSessionWorkflowTasks}
           paneWorkflowTasks={paneWorkflowTasks}
           shared={multiPaneSharedChatRef.current}
+          primaryPaneRuntimeOverride={primaryPaneRuntimeOverride}
           projects={projects ?? []}
           paneRepoTreeData={paneRepoTreeData}
           projectsById={projectsById}
@@ -746,6 +750,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
           }
           onUpdateSessionUltracode={onUpdateSessionUltracode}
           onUpdateSessionCodexReasoningEffort={onUpdateSessionCodexReasoningEffort}
+          onUpdateSessionClaudeReasoningEffort={onUpdateSessionClaudeReasoningEffort}
           onUpdateSessionExecutionEngine={onUpdateSessionExecutionEngine}
           onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
           onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}

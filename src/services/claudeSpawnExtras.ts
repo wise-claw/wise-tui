@@ -13,6 +13,7 @@ import { buildFeedbackGlobalRulesSystemPromptBlock } from "../utils/sessionFeedb
 import { loadSessionFeedbackLoopSettingsFromStore } from "./wiseDefaultConfigStore";
 import { getAppSetting, WISE_CLAUDE_DEFAULT_SETTINGS_KEY } from "./appSettingsStore";
 import { isSessionUltracodeActive } from "../constants/claudeConnection";
+import { normalizeClaudeReasoningEffort } from "../constants/claudeReasoningEffort";
 import { ULTRACODE_SPAWN_CLI_EFFORT } from "../constants/ultracodeEffort";
 import { ULTRACODE_SYSTEM_PROMPT_BLOCK } from "../constants/ultracodeSystemPrompt";
 import { isUltracodeEnabledInSettings } from "../components/DefaultConfigPanel/claudeDefaultSettings";
@@ -197,6 +198,21 @@ export async function loadGlobalUltracodeEnabled(): Promise<boolean> {
 }
 
 /**
+ * Per-session Claude `--effort`：写入 spawn extras（默认 high）。
+ * 须在 `mergeUltracodeIntoSpawnExtras` 之前调用，以便 ultracode 可后置覆盖为 max。
+ */
+function mergeClaudeReasoningEffortIntoSpawnExtras(
+  base: ClaudeSpawnCliExtras | null,
+  session: Pick<ClaudeSession, "claudeReasoningEffort">,
+): ClaudeSpawnCliExtras | null {
+  const effort = normalizeClaudeReasoningEffort(session.claudeReasoningEffort);
+  return compactClaudeSpawnCliExtras({
+    ...(base ?? {}),
+    effort,
+  });
+}
+
+/**
  * Per-session ultracode 合并：当 `isSessionUltracodeActive(session, globalEnabled)` 为 true 时，
  * 把 `ULTRACODE_SYSTEM_PROMPT_BLOCK` 追加到 `appendSystemPrompt`。
  *
@@ -224,10 +240,13 @@ async function mergeUltracodeIntoSpawnExtras(
  * 主会话 spawn：按 Cockpit 当前助手 + 会话归属项目/仓库解析 CLI 扩展；
  * 反馈神经网开启且启用注入时，将仓库/会话习惯追加到 `--append-system-prompt`；
  * 全局规则（跨仓库）在 injectGlobalRules 开启时一并注入；
- * ultracode（OMC 多代理编排模式）按 per-session override > 全局开关的优先级注入 system-prompt 块。
+ * 会话级推理强度先注入 `--effort`；ultracode（OMC）开启时后置覆盖为 max 并追加 system-prompt 块。
  */
 export async function resolveClaudeSpawnExtrasForSession(params: {
-  session: Pick<ClaudeSession, "id" | "repositoryPath" | "repositoryName" | "ultracodeEnabled">;
+  session: Pick<
+    ClaudeSession,
+    "id" | "repositoryPath" | "repositoryName" | "ultracodeEnabled" | "claudeReasoningEffort"
+  >;
   projects: ProjectItem[];
   repositories: Repository[];
   preferredProjectId: string | null;
@@ -251,6 +270,7 @@ export async function resolveClaudeSpawnExtrasForSession(params: {
   }
   let result = await mergeFeedbackLoopHabitsIntoSpawnExtras(base, params.session);
   result = await mergeFeedbackLoopGlobalRulesIntoSpawnExtras(result);
+  result = mergeClaudeReasoningEffortIntoSpawnExtras(result, params.session);
   const globalUltracodeEnabled = await loadGlobalUltracodeEnabled();
   result = await mergeUltracodeIntoSpawnExtras(result, params.session, globalUltracodeEnabled);
   return result;

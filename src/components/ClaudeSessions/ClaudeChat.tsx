@@ -205,6 +205,8 @@ interface Props {
   onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
   /** Codex RPC 推理强度；写入会话并落盘 tabs.json。 */
   onUpdateSessionCodexReasoningEffort?: (sessionId: string, effort: string) => void;
+  /** Claude Code 推理强度；写入会话并落盘 tabs.json。 */
+  onUpdateSessionClaudeReasoningEffort?: (sessionId: string, effort: string) => void;
   /** Composer 切换执行环境：写入当前会话标签级引擎。 */
   onUpdateSessionExecutionEngine?: (
     sessionId: string,
@@ -387,6 +389,7 @@ export function ClaudeChatInner({
   onSessionConnectionKindChange,
   onUpdateSessionUltracode,
   onUpdateSessionCodexReasoningEffort,
+  onUpdateSessionClaudeReasoningEffort,
   onUpdateSessionExecutionEngine,
   globalUltracodeEnabled,
   onUpdateRepositoryExecutionEngine,
@@ -2115,6 +2118,7 @@ export function ClaudeChatInner({
               onSessionConnectionKindChange={onSessionConnectionKindChange}
               onUpdateSessionUltracode={onUpdateSessionUltracode}
               onUpdateSessionCodexReasoningEffort={onUpdateSessionCodexReasoningEffort}
+              onUpdateSessionClaudeReasoningEffort={onUpdateSessionClaudeReasoningEffort}
               globalUltracodeEnabled={resolvedGlobalUltracodeEnabled}
               sessionExecutionEngine={sessionExecutionEngine}
               codexAvailable={codexAvailable}

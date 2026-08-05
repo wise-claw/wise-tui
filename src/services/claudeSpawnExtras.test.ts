@@ -149,4 +149,71 @@ describe("claudeSpawnExtras", () => {
       expect(extras?.appendSystemPrompt ?? "").not.toContain(ULTRACODE_SYSTEM_PROMPT_BLOCK);
     });
   });
+
+  describe("resolveClaudeSpawnExtrasForSession claudeReasoningEffort", () => {
+    const baseSession = {
+      id: "s1",
+      repositoryPath: "/repo/a",
+      repositoryName: "repo",
+    };
+    const baseParams = {
+      session: baseSession,
+      projects: [],
+      repositories: [],
+      preferredProjectId: null,
+      activeAssistantId: null,
+    };
+
+    test("未设档位 → 默认 high", async () => {
+      mockedGlobalUltracodeRaw = '{"ultracode": false}';
+      const extras = await resolveClaudeSpawnExtrasForSession(baseParams);
+      expect(extras?.effort).toBe("high");
+    });
+
+    test("会话档位透传", async () => {
+      mockedGlobalUltracodeRaw = '{"ultracode": false}';
+      const extras = await resolveClaudeSpawnExtrasForSession({
+        ...baseParams,
+        session: { ...baseSession, claudeReasoningEffort: "xhigh" },
+      });
+      expect(extras?.effort).toBe("xhigh");
+    });
+
+    test("会话档位透传 ultracode", async () => {
+      mockedGlobalUltracodeRaw = '{"ultracode": false}';
+      const extras = await resolveClaudeSpawnExtrasForSession({
+        ...baseParams,
+        session: { ...baseSession, claudeReasoningEffort: "ultracode" },
+      });
+      expect(extras?.effort).toBe("ultracode");
+    });
+
+    test("ultracode 开启时后置覆盖为 max", async () => {
+      mockedGlobalUltracodeRaw = '{"ultracode": false}';
+      const extras = await resolveClaudeSpawnExtrasForSession({
+        ...baseParams,
+        session: {
+          ...baseSession,
+          claudeReasoningEffort: "low",
+          ultracodeEnabled: true,
+        },
+      });
+      expect(extras?.effort).toBe("max");
+      expect(extras?.appendSystemPrompt).toContain(ULTRACODE_SYSTEM_PROMPT_BLOCK);
+    });
+
+    test("per-session 关 ultracode 时保留会话档位", async () => {
+      mockedGlobalUltracodeRaw = '{"ultracode": true}';
+      const extras = await resolveClaudeSpawnExtrasForSession({
+        ...baseParams,
+        session: {
+          ...baseSession,
+          claudeReasoningEffort: "medium",
+          ultracodeEnabled: false,
+        },
+      });
+      expect(extras?.effort).toBe("medium");
+      expect(extras?.appendSystemPrompt ?? "").not.toContain(ULTRACODE_SYSTEM_PROMPT_BLOCK);
+    });
+  });
 });

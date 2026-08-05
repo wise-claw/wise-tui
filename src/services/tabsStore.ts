@@ -9,6 +9,7 @@ import {
 } from "./mainWindow";
 import { isTauriIpcAlive } from "../utils/tauriEnv";
 import { isCodexReasoningEffort } from "../constants/codexReasoningEffort";
+import { isClaudeReasoningEffort } from "../constants/claudeReasoningEffort";
 import { PERSIST_SESSION_MESSAGES_MAX } from "../constants/claudeMessageListWindow";
 
 /** @deprecated 旧版全局 tabs 备份；仅主窗启动时迁入按窗键。 */
@@ -87,6 +88,9 @@ export function normalizePersistedSession(raw: unknown): ClaudeSession {
   }
   if (!isCodexReasoningEffort(v.codexReasoningEffort)) {
     delete out.codexReasoningEffort;
+  }
+  if (!isClaudeReasoningEffort(v.claudeReasoningEffort)) {
+    delete out.claudeReasoningEffort;
   }
   const session = out as unknown as ClaudeSession;
   if (Array.isArray(session.messages) && session.messages.length > 0) {

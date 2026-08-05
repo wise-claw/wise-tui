@@ -132,6 +132,8 @@ export interface UseClaudeSessionsReturn {
   updateSessionUltracodeOverride: (sessionId: string, next: boolean | null) => void;
   /** Codex RPC 推理强度：写入会话并落盘 tabs.json。 */
   updateSessionCodexReasoningEffort: (sessionId: string, effort: string) => void;
+  /** Claude Code 推理强度：写入会话并落盘 tabs.json。 */
+  updateSessionClaudeReasoningEffort: (sessionId: string, effort: string) => void;
   /**
    * Composer 切换执行环境：写入标签级 `executionEngine`，当前会话下一回合立即生效。
    * 引擎族变化时结束旧子进程并清空 resume id。
