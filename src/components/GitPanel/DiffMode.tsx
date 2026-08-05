@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { useDiffModeExpandedDirs } from "./useDiffModeExpandedDirs";
 import { HoverHint } from "../shared/HoverHint";
-import { Badge, Button, Input, Modal, message, notification, Popconfirm, Space, Typography } from "antd";
+import { Button, Input, Modal, message, notification, Popconfirm, Space, Typography } from "antd";
 import {
   ApartmentOutlined,
   CheckOutlined,
@@ -22,13 +22,10 @@ import {
   normalizeConventionalCommitMessage,
 } from "../../utils/conventionalCommitMessage";
 import { openCodeReviewDrawer } from "../../constants/workflowUiEvents";
-import { useCodeReviewFindingsSnapshot } from "../../hooks/useCodeReviewFindingsSnapshot";
 import {
   buildCodeReviewToastContent,
   evaluatePrePushCodeReview,
-  probeCodeReviewFindingsFreshness,
 } from "../../services/codeReview";
-import { countCodeReviewFindingSeverities } from "../../stores/codeReviewFindingsStore";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { buildFileTree } from "./fileTree";
@@ -114,38 +111,6 @@ function DiffModeInner({
   });
   const ahead = status.ahead ?? 0;
   hasChangesRef.current = hasChanges;
-  const canStartCodeReview = hasChanges || ahead > 0;
-  const codeReviewSnapshot = useCodeReviewFindingsSnapshot(repositoryPath);
-  const codeReviewBadgeCount = useMemo(() => {
-    if (!codeReviewSnapshot) return 0;
-    return countCodeReviewFindingSeverities(codeReviewSnapshot.findings).highOrCritical;
-  }, [codeReviewSnapshot]);
-  const codeReviewStale = Boolean(codeReviewSnapshot?.stale);
-  const codeReviewStatusKey = useMemo(() => {
-    const paths = [
-      ...status.staged.map((file) => `s:${file.path}`),
-      ...status.unstaged.map((file) => `u:${file.path}`),
-    ].join("|");
-    return `${ahead}:${paths}`;
-  }, [ahead, status.staged, status.unstaged]);
-
-  useEffect(() => {
-    if (!codeReviewSnapshot?.run.diffFingerprint) return;
-    const scope = hasChanges ? "uncommitted" : "branch";
-    const timer = window.setTimeout(() => {
-      void probeCodeReviewFindingsFreshness({
-        repositoryPath,
-        scope,
-      });
-    }, 1200);
-    return () => window.clearTimeout(timer);
-  }, [
-    codeReviewSnapshot?.run.diffFingerprint,
-    codeReviewSnapshot?.runId,
-    codeReviewStatusKey,
-    hasChanges,
-    repositoryPath,
-  ]);
 
   const canCommit = commitMsg.trim().length > 0 && hasChanges && !loading.commit && !loading.commitAndPush;
   const canPush =
@@ -516,45 +481,6 @@ function DiffModeInner({
               autoSize={{ minRows: 1, maxRows: 2 }}
             />
             <div className="git-commit-card__footer">
-              <Badge
-                count={
-                  codeReviewStale
-                    ? "过期"
-                    : codeReviewBadgeCount > 0
-                      ? codeReviewBadgeCount
-                      : 0
-                }
-                size="small"
-                overflowCount={99}
-                color={codeReviewStale ? "#fa8c16" : "#ff4d4f"}
-                offset={[-2, 2]}
-              >
-                <Button
-                  type="text"
-                  size="small"
-                  className="git-ai-summary-btn"
-                  title={
-                    codeReviewStale
-                      ? "工作区已变，审查结果可能过期 — 点击查看并重新审查"
-                      : codeReviewBadgeCount > 0
-                        ? `AI 审查变更（当前 ${codeReviewBadgeCount} 项高危未清）`
-                        : "AI 审查变更（对标 Cursor /review）：未提交或相对主干"
-                  }
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    openCodeReviewDrawer({
-                      repositoryPath,
-                      executionEngine,
-                      autoStart: codeReviewStale || !(codeReviewSnapshot?.findings.length),
-                      initialScope: hasChanges ? "uncommitted" : "branch",
-                      seededRun: codeReviewStale ? null : codeReviewSnapshot?.run ?? null,
-                    });
-                  }}
-                  disabled={aiSummaryLoading || loading.commitAndPush || !canStartCodeReview}
-                >
-                  AI 审查
-                </Button>
-              </Badge>
               <Button
                 type="text"
                 size="small"

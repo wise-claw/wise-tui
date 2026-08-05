@@ -29,11 +29,10 @@ import type { GitFlowInfo } from "../../types";
 /** 更多菜单项标识 */
 export type MoreMenuItemId = "history" | "browser" | "git-flow" | "code-review";
 
-/** 默认提到工具栏的项；「代码审查」留在更多菜单 */
+/** 默认提到工具栏的项；Git Flow / 代码审查留在更多菜单 */
 const DEFAULT_INLINE_KEYS: ReadonlySet<MoreMenuItemId> = new Set([
   "history",
   "browser",
-  "git-flow",
 ]);
 
 interface GitPanelMoreMenuProps {

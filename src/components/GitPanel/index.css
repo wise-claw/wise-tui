@@ -3004,16 +3004,24 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 }
 
 .git-panel-more-menu-dropdown .ant-dropdown-menu {
-  min-width: 168px;
+  min-width: 148px;
+  padding: 2px 0 !important;
 }
 
 .git-panel-more-menu-dropdown .ant-dropdown-menu-item {
   font-size: var(--git-graph-ui-font-size, 11px) !important;
   line-height: var(--git-graph-ui-line-height, 18px) !important;
+  padding: 1px 8px !important;
+  min-height: 22px !important;
+  height: auto !important;
 }
 
 .git-panel-more-menu-dropdown .ant-dropdown-menu-item .anticon {
-  font-size: 12px;
+  font-size: 11px !important;
+}
+
+.git-panel-more-menu-dropdown .ant-dropdown-menu-item-divider {
+  margin: 1px 0 !important;
 }
 
 .git-panel-more-menu__item--active {

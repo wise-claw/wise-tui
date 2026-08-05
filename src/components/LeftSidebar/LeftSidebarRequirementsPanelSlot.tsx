@@ -5,7 +5,7 @@ import {
   SendOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
-import { App as AntdApp } from "antd";
+import { App as AntdApp, Popconfirm } from "antd";
 import {
   memo,
   useCallback,
@@ -158,16 +158,26 @@ function RequirementsPanelRow({
             <EditOutlined />
           </button>
         </DeferredHoverTooltip>
-        <DeferredHoverTooltip title="删除">
+        <Popconfirm
+          title="删除该需求？"
+          description={item.title}
+          okText="删除"
+          cancelText="取消"
+          okButtonProps={{ danger: true, size: "small" }}
+          cancelButtonProps={{ size: "small" }}
+          placement="bottomLeft"
+          getPopupContainer={() => document.body}
+          onConfirm={onDelete}
+        >
           <button
             type="button"
             className="app-left-sidebar-requirements-panel__action-btn app-left-sidebar-requirements-panel__action-btn--danger"
             aria-label="删除需求"
-            onClick={onDelete}
+            title="删除"
           >
             <DeleteOutlined />
           </button>
-        </DeferredHoverTooltip>
+        </Popconfirm>
       </div>
     </div>
   );
@@ -180,7 +190,7 @@ function LeftSidebarRequirementsPanelSlotInner({
   repositories,
   activeRepositoryId,
 }: LeftSidebarRequirementsPanelSlotProps) {
-  const { message, modal } = AntdApp.useApp();
+  const { message } = AntdApp.useApp();
   const scrollRootRef = useRef<HTMLDivElement>(null);
   const visibleRows = useRequirementsPanelVisibleRows();
   const memoPanelOpen = useWorkspaceMemoPanelOpen();
@@ -273,26 +283,15 @@ function LeftSidebarRequirementsPanelSlotInner({
   }, []);
 
   const handleDelete = useCallback(
-    (item: WorkspaceRequirementItem) => {
-      modal.confirm({
-        title: "删除该需求？",
-        content: item.title,
-        okText: "删除",
-        okType: "danger",
-        cancelText: "取消",
-        autoFocusButton: "cancel",
-        onOk: async () => {
-          try {
-            await persist(itemsRef.current.filter((row) => row.id !== item.id));
-          } catch (err) {
-            console.error("[LeftSidebarRequirements] delete failed", err);
-            message.error(err instanceof Error ? err.message : "删除失败");
-            throw err;
-          }
-        },
-      });
+    async (item: WorkspaceRequirementItem) => {
+      try {
+        await persist(itemsRef.current.filter((row) => row.id !== item.id));
+      } catch (err) {
+        console.error("[LeftSidebarRequirements] delete failed", err);
+        message.error(err instanceof Error ? err.message : "删除失败");
+      }
     },
-    [message, modal, persist],
+    [message, persist],
   );
 
   const handleDispatch = useCallback(
@@ -410,7 +409,9 @@ function LeftSidebarRequirementsPanelSlotInner({
             <div className="app-left-sidebar-requirements-panel__empty">加载中…</div>
           ) : displayItems.length === 0 ? (
             <div className="app-left-sidebar-requirements-panel__empty app-left-sidebar-requirements-panel__empty--with-action">
-              <span>暂无需求</span>
+              <span className="app-left-sidebar-requirements-panel__empty-text">
+                暂无需求
+              </span>
               <button
                 type="button"
                 className="app-left-sidebar-requirements-panel__empty-add-btn"
@@ -433,7 +434,7 @@ function LeftSidebarRequirementsPanelSlotInner({
                       onOpen={handleOpenFull}
                       onDispatch={() => void handleDispatch(item)}
                       onEdit={() => handleEdit(item)}
-                      onDelete={() => handleDelete(item)}
+                      onDelete={() => void handleDelete(item)}
                     />
                   </li>
                 );
