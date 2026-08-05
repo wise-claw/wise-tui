@@ -724,7 +724,7 @@ export function DefaultConfigPanel() {
           <DefaultConfigRow
             title="工作区树"
             hint="显隐 · 栏位 · 行数"
-            detail="左栏仓库工作区列表（展开显示会话与运行项）；可置于顶部或底部，与文件树并存时可按行数限制高度"
+            detail="左栏仓库工作区列表（展开显示会话与运行项）；栏位顶/底会同步分区顺序，也可在左栏直接拖拽各分区标题重排；与文件树并存时可按行数限制高度"
             control={
               <div className="app-default-config-row__control--monitor">
                 <div className="app-default-config-monitor-panel__field">

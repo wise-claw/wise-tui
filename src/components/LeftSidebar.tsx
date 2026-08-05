@@ -31,8 +31,18 @@ import {
 } from "../constants/explorerUiEvents";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { WORKSPACE_LIST_ROW_HEIGHT_PX, isWorkspaceListVisibleRowsUnlimited } from "../constants/workspaceListLayout";
+import {
+  LEFT_SIDEBAR_SECTION_ORDER_DEFAULT,
+  LEFT_SIDEBAR_SECTION_ORDER_WORKSPACE_BOTTOM,
+  leftSidebarSectionOrderIndex,
+  normalizeLeftSidebarSectionOrder,
+  type LeftSidebarSectionId,
+} from "../constants/leftSidebarSectionOrder";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
 import { useWorkspaceListVisibleRows } from "../hooks/useWorkspaceListVisibleRows";
+import {
+  persistLeftSidebarSectionReorder,
+} from "../hooks/useLeftSidebarSectionOrder";
 import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
 import {
   projectMainSessionBindingKey,
@@ -90,6 +100,7 @@ import {
   preloadLeftSidebarMonitorPanel,
 } from "./LeftSidebar/LeftSidebarMonitorPanelSlot";
 import { LeftSidebarRequirementsPanelSlot } from "./LeftSidebar/LeftSidebarRequirementsPanelSlot";
+import { LeftSidebarSortableSection } from "./LeftSidebar/LeftSidebarSortableSection";
 import { prefetchClaudeCodeToolsSurface } from "./ClaudeSessions/prefetchClaudeCodeToolsSurface";
 import { useChromePanelHoverHandlers } from "../hooks/useChromePanelHoverHandlers";
 import { useMonitorSidebarFingerprints } from "../hooks/useMonitorSessionsForOverview";
@@ -115,6 +126,7 @@ export function LeftSidebar({
   showLeftSidebarMonitorPanel = true,
   showLeftSidebarWorkspaceList = true,
   showLeftSidebarRequirementsPanel = true,
+  leftSidebarSectionOrder: leftSidebarSectionOrderProp,
   workspaceListPlacement = "top",
   showRepositoryIconBadgesInWorkspaceList = false,
   mcpHubActive = false,
@@ -237,6 +249,33 @@ export function LeftSidebar({
 }: LeftSidebarProps) {
   const { message, modal } = AntdApp.useApp();
   const chromePanelHoverHandlers = useChromePanelHoverHandlers("left");
+
+  const leftSidebarSectionOrder = useMemo(
+    () =>
+      normalizeLeftSidebarSectionOrder(
+        leftSidebarSectionOrderProp ??
+          (workspaceListPlacement === "bottom"
+            ? LEFT_SIDEBAR_SECTION_ORDER_WORKSPACE_BOTTOM
+            : LEFT_SIDEBAR_SECTION_ORDER_DEFAULT),
+      ),
+    [leftSidebarSectionOrderProp, workspaceListPlacement],
+  );
+
+  const sectionOrderIndex = useCallback(
+    (id: LeftSidebarSectionId) => leftSidebarSectionOrderIndex(leftSidebarSectionOrder, id),
+    [leftSidebarSectionOrder],
+  );
+
+  const handleSectionReorder = useCallback(
+    (fromId: LeftSidebarSectionId, toId: LeftSidebarSectionId, placeAfter: boolean) => {
+      void persistLeftSidebarSectionReorder(leftSidebarSectionOrder, fromId, toId, placeAfter).catch(
+        (err: unknown) => {
+          message.error(`调整左栏分区顺序失败：${err instanceof Error ? err.message : String(err)}`);
+        },
+      );
+    },
+    [leftSidebarSectionOrder, message],
+  );
 
   const openPathInPreferredEditor = useCallback(
     (
@@ -1035,7 +1074,6 @@ export function LeftSidebar({
       <div
         className="app-left-sidebar-project-and-files"
         data-has-files-explorer={showRepoPanel ? "true" : "false"}
-        data-workspace-list-placement={workspaceListPlacement}
         data-workspace-list-unlimited={
           isWorkspaceListVisibleRowsUnlimited(workspaceListVisibleRows) ? "true" : undefined
         }
@@ -1054,231 +1092,261 @@ export function LeftSidebar({
           } as CSSProperties
         }
       >
-        <LeftSidebarWorkspaceListSlot
-          showLeftSidebarWorkspaceList={showLeftSidebarWorkspaceList}
-          projects={projects}
-          repositories={repositories}
-          floatingRepositories={floatingRepositories}
-          workspaceRepositoryOrder={workspaceRepositoryOrder}
-          activeProjectId={activeProjectId}
-          activeWorkspaceFocus={activeWorkspaceFocus}
-          activeRepositoryId={activeRepositoryId}
-          showRepositoryIconBadgesInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
-          pinnedProjectIds={pinnedProjectIds}
-          sectionCollapsed={showRepoPanel ? workspaceListSectionCollapsed : false}
-          onSectionCollapsedChange={
-            showRepoPanel ? handleWorkspaceListSectionCollapsedChange : undefined
-          }
-          sessionsStructureKey={sessionsStructureKey}
-          sessionsRef={sessionsLiveRef}
-          repositoryMainSessionBindings={repositoryMainSessionBindings}
-          claudeProcesses={systemResourceSessions.systemSummary.claudeProcesses}
-          claudeProcessFingerprint={claudeProcessFingerprint}
-          claudeRegistryRunningFingerprint={claudeRegistryRunningFingerprint}
-          registryRunningClaudeSessionIds={systemResourceSessions.claudeRegistryRunningIds}
-          onMoveRepositoryToProject={onMoveRepositoryToProject}
-          onProjectSelect={handleProjectSelectAndSyncRepoPanel}
-          onRepositorySelect={handleRepositorySelectAndSyncRepoPanel}
-          onCreateProjectClick={() => {
-            setProjectNameInput("");
-            setCreateProjectRootPath("");
-            setWorkspaceBootstrapSelection({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION });
-            setCreateProjectOpen(true);
-          }}
-          onAddFloatingRepositoryClick={
-            onAddFloatingRepository ? openAddFloatingRepositoryModal : undefined
-          }
-          onAddRepositoryToProjectClick={
-            onAddRepositoryToProject ? openAddRepositoryModal : undefined
-          }
-          onReconcileProject={onReconcileProject}
-          onTogglePinProject={onTogglePinProject}
-          onRenameProject={(project) => {
-            setEditProject(project);
-            setProjectNameInput(project.name);
-          }}
-          onDeleteProject={(project) => {
-            modal.confirm({
-              title: "确认删除项目？",
-              content: `工作区「${project.name}」将被删除，但仓库本身不会被移除。`,
-              okText: "删除",
-              okType: "danger",
-              cancelText: "取消",
-              onOk: async () => {
-                try {
-                  await onDeleteProject(project.id);
-                } catch (err: unknown) {
-                  const detail = err instanceof Error ? err.message : String(err);
-                  message.error(`删除工作区失败：${detail}`);
-                  throw err;
-                }
-              },
-            });
-          }}
-          onOpenPromptsProject={onOpenPromptsProject}
-          onCreateProjectTask={onCreateProjectTask}
-          onOpenWorkspaceRequirements={onOpenWorkspaceRequirements}
-          onOpenRepositoryRequirements={
-            onOpenRepositoryRequirementsProp ?? ((repository) => onCreateRepositoryTask(repository, "split"))
-          }
-          onOpenInFinder={onOpenInFinder}
-          onOpenProjectInFinder={onOpenProjectInFinder}
-          onOpenInTerminal={onOpenInTerminal}
-          onOpenProjectInTerminal={onOpenProjectInTerminal}
-          onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
-          openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
-          openProjectInPreferredEditor={openProjectInPreferredEditor}
-          onOpenPromptsRepository={onOpenPromptsRepository}
-          onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
-          onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
-          onStartRepositoryRunCommand={onStartRepositoryRunCommand}
-          onStopRepositoryRunCommand={onStopRepositoryRunCommand}
-          onConfigureRepositorySddMode={onUpdateRepositorySddMode ? repositorySddModeModal.open : undefined}
-          onConfigureRepositoryIconBadge={
-            onUpdateRepositoryIconBadge ? repositoryIconBadgeModal.open : undefined
-          }
-          onConfigureProjectSddMode={onUpdateProjectSddMode ? projectSddModeModal.open : undefined}
-          onConfigureRepositoryOpenApp={
-            onUpdateRepositoryOpenAppId ? handleConfigureRepositoryOpenApp : undefined
-          }
-          onConfigureProjectOpenApp={
-            onUpdateProjectOpenAppId ? handleConfigureProjectOpenApp : undefined
-          }
-          onNewPaneSessionForRepository={onNewPaneSessionForRepository}
-          onOpenSplitSessionForRepository={onOpenSplitSessionForRepository}
-          onNewPaneSessionForProject={onNewPaneSessionForProject}
-          onOpenSplitSessionForProject={onOpenSplitSessionForProject}
-          onPromoteFloatingRepository={
-            onPromoteFloatingRepositoryToProject
-              ? (repo) => {
-                  setPromotingFloatingRepo(repo);
-                  setPromotingFloatingRepoName(repositoryFolderBasename(repo));
-                }
-              : undefined
-          }
-          onRemoveFloatingRepository={(repo) => {
-            if (!onRemoveRepository) return;
-            modal.confirm({
-              title: "确认移除单仓？",
-              content: `单仓「${repositoryFolderBasename(repo)}」将从 Wise 列表移除（不会删除磁盘文件，也不会动 .trellis）。`,
-              okText: "移除",
-              okType: "danger",
-              cancelText: "取消",
-              onOk: () => onRemoveRepository(repo),
-            });
-          }}
-          onDetachRepositoryFromProject={onDetachRepositoryFromProject}
-          onReorderRepositoriesInProject={onReorderRepositoriesInProject}
-          onReorderWorkspaceRepositories={onReorderWorkspaceRepositories}
-          onMoveRepositoryError={(text, err) => {
-            message.error(text);
-            console.error(err);
-          }}
-          onOpenScheduledTasksForRepository={openScheduledTasksForRepository}
-          onOpenScheduledTasksForProject={onOpenScheduledTasksForProjectProp}
-          onOpenExecutableTasksForProject={openExecutableTasksForProject}
-          onOpenExecutableTasksForRepository={openExecutableTasksForRepository}
-          onStopProjectMainSession={handleStopProjectMainSession}
-          onStopRepositoryMainSession={handleStopRepositoryMainSession}
-          workspaceSessions={monitorPanelSessions ?? sessions}
-          activeSessionId={activeSessionId}
-          showWorkspaceRunItems={showLeftSidebarMonitorPanel}
-          employeeMonitorItems={employeeMonitorItems}
-          sessionConversationTaskItems={sessionConversationTaskItems}
-          teamMonitorItems={teamMonitorItems}
-          onSelectSession={_onSelectSession}
-          onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
-          onArchiveSession={onArchiveWorkspaceSession}
-          onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
-          onRefreshHistorySessions={onRefreshHistorySessions}
-          onStopEmployeeMonitor={onStopEmployeeMonitor}
-          onStopTeamMonitor={onStopTeamMonitor}
-          onOpenTeamMonitorDetail={onOpenTeamMonitorDetail}
-          onCancelSessionFromMonitor={onCancelSessionFromMonitor}
-          onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
-          onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
-          onStopSessionConversationTask={onStopSessionConversationTask}
-        />
+        {showLeftSidebarWorkspaceList ? (
+          <LeftSidebarSortableSection
+            sectionId="workspace"
+            orderIndex={sectionOrderIndex("workspace")}
+            onReorder={handleSectionReorder}
+          >
+            <LeftSidebarWorkspaceListSlot
+              showLeftSidebarWorkspaceList={showLeftSidebarWorkspaceList}
+              projects={projects}
+              repositories={repositories}
+              floatingRepositories={floatingRepositories}
+              workspaceRepositoryOrder={workspaceRepositoryOrder}
+              activeProjectId={activeProjectId}
+              activeWorkspaceFocus={activeWorkspaceFocus}
+              activeRepositoryId={activeRepositoryId}
+              showRepositoryIconBadgesInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
+              pinnedProjectIds={pinnedProjectIds}
+              sectionCollapsed={showRepoPanel ? workspaceListSectionCollapsed : false}
+              onSectionCollapsedChange={
+                showRepoPanel ? handleWorkspaceListSectionCollapsedChange : undefined
+              }
+              sessionsStructureKey={sessionsStructureKey}
+              sessionsRef={sessionsLiveRef}
+              repositoryMainSessionBindings={repositoryMainSessionBindings}
+              claudeProcesses={systemResourceSessions.systemSummary.claudeProcesses}
+              claudeProcessFingerprint={claudeProcessFingerprint}
+              claudeRegistryRunningFingerprint={claudeRegistryRunningFingerprint}
+              registryRunningClaudeSessionIds={systemResourceSessions.claudeRegistryRunningIds}
+              onMoveRepositoryToProject={onMoveRepositoryToProject}
+              onProjectSelect={handleProjectSelectAndSyncRepoPanel}
+              onRepositorySelect={handleRepositorySelectAndSyncRepoPanel}
+              onCreateProjectClick={() => {
+                setProjectNameInput("");
+                setCreateProjectRootPath("");
+                setWorkspaceBootstrapSelection({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION });
+                setCreateProjectOpen(true);
+              }}
+              onAddFloatingRepositoryClick={
+                onAddFloatingRepository ? openAddFloatingRepositoryModal : undefined
+              }
+              onAddRepositoryToProjectClick={
+                onAddRepositoryToProject ? openAddRepositoryModal : undefined
+              }
+              onReconcileProject={onReconcileProject}
+              onTogglePinProject={onTogglePinProject}
+              onRenameProject={(project) => {
+                setEditProject(project);
+                setProjectNameInput(project.name);
+              }}
+              onDeleteProject={(project) => {
+                modal.confirm({
+                  title: "确认删除项目？",
+                  content: `工作区「${project.name}」将被删除，但仓库本身不会被移除。`,
+                  okText: "删除",
+                  okType: "danger",
+                  cancelText: "取消",
+                  onOk: async () => {
+                    try {
+                      await onDeleteProject(project.id);
+                    } catch (err: unknown) {
+                      const detail = err instanceof Error ? err.message : String(err);
+                      message.error(`删除工作区失败：${detail}`);
+                      throw err;
+                    }
+                  },
+                });
+              }}
+              onOpenPromptsProject={onOpenPromptsProject}
+              onCreateProjectTask={onCreateProjectTask}
+              onOpenWorkspaceRequirements={onOpenWorkspaceRequirements}
+              onOpenRepositoryRequirements={
+                onOpenRepositoryRequirementsProp ?? ((repository) => onCreateRepositoryTask(repository, "split"))
+              }
+              onOpenInFinder={onOpenInFinder}
+              onOpenProjectInFinder={onOpenProjectInFinder}
+              onOpenInTerminal={onOpenInTerminal}
+              onOpenProjectInTerminal={onOpenProjectInTerminal}
+              onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
+              openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
+              openProjectInPreferredEditor={openProjectInPreferredEditor}
+              onOpenPromptsRepository={onOpenPromptsRepository}
+              onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
+              onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
+              onStartRepositoryRunCommand={onStartRepositoryRunCommand}
+              onStopRepositoryRunCommand={onStopRepositoryRunCommand}
+              onConfigureRepositorySddMode={onUpdateRepositorySddMode ? repositorySddModeModal.open : undefined}
+              onConfigureRepositoryIconBadge={
+                onUpdateRepositoryIconBadge ? repositoryIconBadgeModal.open : undefined
+              }
+              onConfigureProjectSddMode={onUpdateProjectSddMode ? projectSddModeModal.open : undefined}
+              onConfigureRepositoryOpenApp={
+                onUpdateRepositoryOpenAppId ? handleConfigureRepositoryOpenApp : undefined
+              }
+              onConfigureProjectOpenApp={
+                onUpdateProjectOpenAppId ? handleConfigureProjectOpenApp : undefined
+              }
+              onNewPaneSessionForRepository={onNewPaneSessionForRepository}
+              onOpenSplitSessionForRepository={onOpenSplitSessionForRepository}
+              onNewPaneSessionForProject={onNewPaneSessionForProject}
+              onOpenSplitSessionForProject={onOpenSplitSessionForProject}
+              onPromoteFloatingRepository={
+                onPromoteFloatingRepositoryToProject
+                  ? (repo) => {
+                      setPromotingFloatingRepo(repo);
+                      setPromotingFloatingRepoName(repositoryFolderBasename(repo));
+                    }
+                  : undefined
+              }
+              onRemoveFloatingRepository={(repo) => {
+                if (!onRemoveRepository) return;
+                modal.confirm({
+                  title: "确认移除单仓？",
+                  content: `单仓「${repositoryFolderBasename(repo)}」将从 Wise 列表移除（不会删除磁盘文件，也不会动 .trellis）。`,
+                  okText: "移除",
+                  okType: "danger",
+                  cancelText: "取消",
+                  onOk: () => onRemoveRepository(repo),
+                });
+              }}
+              onDetachRepositoryFromProject={onDetachRepositoryFromProject}
+              onReorderRepositoriesInProject={onReorderRepositoriesInProject}
+              onReorderWorkspaceRepositories={onReorderWorkspaceRepositories}
+              onMoveRepositoryError={(text, err) => {
+                message.error(text);
+                console.error(err);
+              }}
+              onOpenScheduledTasksForRepository={openScheduledTasksForRepository}
+              onOpenScheduledTasksForProject={onOpenScheduledTasksForProjectProp}
+              onOpenExecutableTasksForProject={openExecutableTasksForProject}
+              onOpenExecutableTasksForRepository={openExecutableTasksForRepository}
+              onStopProjectMainSession={handleStopProjectMainSession}
+              onStopRepositoryMainSession={handleStopRepositoryMainSession}
+              workspaceSessions={monitorPanelSessions ?? sessions}
+              activeSessionId={activeSessionId}
+              showWorkspaceRunItems={showLeftSidebarMonitorPanel}
+              employeeMonitorItems={employeeMonitorItems}
+              sessionConversationTaskItems={sessionConversationTaskItems}
+              teamMonitorItems={teamMonitorItems}
+              onSelectSession={_onSelectSession}
+              onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+              onArchiveSession={onArchiveWorkspaceSession}
+              onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
+              onRefreshHistorySessions={onRefreshHistorySessions}
+              onStopEmployeeMonitor={onStopEmployeeMonitor}
+              onStopTeamMonitor={onStopTeamMonitor}
+              onOpenTeamMonitorDetail={onOpenTeamMonitorDetail}
+              onCancelSessionFromMonitor={onCancelSessionFromMonitor}
+              onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
+              onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+              onStopSessionConversationTask={onStopSessionConversationTask}
+            />
+          </LeftSidebarSortableSection>
+        ) : null}
 
-        <LeftSidebarRequirementsPanelSlot
-          visible={showLeftSidebarRequirementsPanel}
-          sectionCollapsed={requirementsPanelSectionCollapsed}
-          onSectionCollapsedChange={handleRequirementsPanelSectionCollapsedChange}
-          repositories={repositories}
-          activeRepositoryId={activeRepositoryId}
-        />
+        {showLeftSidebarRequirementsPanel ? (
+          <LeftSidebarSortableSection
+            sectionId="requirements"
+            orderIndex={sectionOrderIndex("requirements")}
+            onReorder={handleSectionReorder}
+          >
+            <LeftSidebarRequirementsPanelSlot
+              visible={showLeftSidebarRequirementsPanel}
+              sectionCollapsed={requirementsPanelSectionCollapsed}
+              onSectionCollapsedChange={handleRequirementsPanelSectionCollapsedChange}
+              repositories={repositories}
+              activeRepositoryId={activeRepositoryId}
+            />
+          </LeftSidebarSortableSection>
+        ) : null}
 
         {/* 工作区列表已合并运行项；仅在关闭工作区列表时保留独立运行面板区块 */}
         {monitorPanelMounted && !showLeftSidebarWorkspaceList ? (
-          <LeftSidebarMonitorPanelSlot
-            visible={showLeftSidebarMonitorPanel}
-            monitorPanelSectionCollapsed={monitorPanelSectionCollapsed}
-            onMonitorPanelSectionCollapsedChange={handleMonitorPanelSectionCollapsedChange}
-            monitorPanelSessions={monitorPanelSessions ?? sessions}
-            transcriptSourceSessions={sessions}
-            employeeMonitorItems={employeeMonitorItems}
-            repositoryMemberMonitorItems={repositoryMemberMonitorItems}
-            sessionConversationTaskItems={sessionConversationTaskItems}
-            showSessionConversationTasks
-            executionEnvironmentDispatchHistoryDays={executionEnvironmentDispatchHistoryDays}
-            onExecutionEnvironmentDispatchHistoryDaysChange={
-              onExecutionEnvironmentDispatchHistoryDaysChange
-            }
-            executionEnvironmentDispatchHistoryDaysSaving={executionEnvironmentDispatchHistoryDaysSaving}
-            teamMonitorItems={teamMonitorItems}
-            activeSessionId={activeSessionId}
-            monitorActiveTarget={monitorActiveTarget}
-            onOpenTeamMonitorDetail={onOpenTeamMonitorDetail}
-            onOpenEmployeeConfig={onOpenEmployeeConfig}
-            onOpenWorkflowConfig={onOpenWorkflowConfig}
-            onStopEmployeeMonitor={onStopEmployeeMonitor}
-            onStopTeamMonitor={onStopTeamMonitor}
-            hideEmployeeUi={hideEmployeeUi}
-            onCancelSessionFromMonitor={onCancelSessionFromMonitor}
-            onOpenTaskDetailFromMonitor={onOpenTaskDetailFromMonitor}
-            onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
-            onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
-            onStopSessionConversationTask={onStopSessionConversationTask}
-            onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-            onRefreshHistorySessions={onRefreshHistorySessions}
-            onCompactSessionHistory={onCompactSessionHistory}
-            projectId={projectId}
-            historyDrawerSessionId={historyDrawerSessionId}
-            onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
-            onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
-            onCreateTerminalEmployeeSession={onCreateTerminalEmployeeSession}
-            onResumeSession={onResumeSession}
-            onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
-            onRespondToQuestion={onRespondToQuestion}
-            onDismissQuestion={onDismissQuestion}
-            onRespondToPermission={onRespondToPermission}
-            onToggleTodo={onToggleTodo}
-            onSendFollowup={onSendFollowup}
-            onRestoreRevert={onRestoreRevert}
-            onClearFollowups={onClearFollowups}
-            onClearRevertItems={onClearRevertItems}
-            repositoryMainSessionBindings={repositoryMainSessionBindings}
-            repositories={repositories}
-            monitorSessionsFingerprint={monitorSessionsFingerprint}
-            transcriptSessionsFingerprint={transcriptSessionsFingerprint}
-          />
+          <LeftSidebarSortableSection
+            sectionId="monitor"
+            orderIndex={sectionOrderIndex("monitor")}
+            onReorder={handleSectionReorder}
+          >
+            <LeftSidebarMonitorPanelSlot
+              visible={showLeftSidebarMonitorPanel}
+              monitorPanelSectionCollapsed={monitorPanelSectionCollapsed}
+              onMonitorPanelSectionCollapsedChange={handleMonitorPanelSectionCollapsedChange}
+              monitorPanelSessions={monitorPanelSessions ?? sessions}
+              transcriptSourceSessions={sessions}
+              employeeMonitorItems={employeeMonitorItems}
+              repositoryMemberMonitorItems={repositoryMemberMonitorItems}
+              sessionConversationTaskItems={sessionConversationTaskItems}
+              showSessionConversationTasks
+              executionEnvironmentDispatchHistoryDays={executionEnvironmentDispatchHistoryDays}
+              onExecutionEnvironmentDispatchHistoryDaysChange={
+                onExecutionEnvironmentDispatchHistoryDaysChange
+              }
+              executionEnvironmentDispatchHistoryDaysSaving={executionEnvironmentDispatchHistoryDaysSaving}
+              teamMonitorItems={teamMonitorItems}
+              activeSessionId={activeSessionId}
+              monitorActiveTarget={monitorActiveTarget}
+              onOpenTeamMonitorDetail={onOpenTeamMonitorDetail}
+              onOpenEmployeeConfig={onOpenEmployeeConfig}
+              onOpenWorkflowConfig={onOpenWorkflowConfig}
+              onStopEmployeeMonitor={onStopEmployeeMonitor}
+              onStopTeamMonitor={onStopTeamMonitor}
+              hideEmployeeUi={hideEmployeeUi}
+              onCancelSessionFromMonitor={onCancelSessionFromMonitor}
+              onOpenTaskDetailFromMonitor={onOpenTaskDetailFromMonitor}
+              onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
+              onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+              onStopSessionConversationTask={onStopSessionConversationTask}
+              onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+              onRefreshHistorySessions={onRefreshHistorySessions}
+              onCompactSessionHistory={onCompactSessionHistory}
+              projectId={projectId}
+              historyDrawerSessionId={historyDrawerSessionId}
+              onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
+              onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+              onCreateTerminalEmployeeSession={onCreateTerminalEmployeeSession}
+              onResumeSession={onResumeSession}
+              onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
+              onRespondToQuestion={onRespondToQuestion}
+              onDismissQuestion={onDismissQuestion}
+              onRespondToPermission={onRespondToPermission}
+              onToggleTodo={onToggleTodo}
+              onSendFollowup={onSendFollowup}
+              onRestoreRevert={onRestoreRevert}
+              onClearFollowups={onClearFollowups}
+              onClearRevertItems={onClearRevertItems}
+              repositoryMainSessionBindings={repositoryMainSessionBindings}
+              repositories={repositories}
+              monitorSessionsFingerprint={monitorSessionsFingerprint}
+              transcriptSessionsFingerprint={transcriptSessionsFingerprint}
+            />
+          </LeftSidebarSortableSection>
         ) : null}
 
-        <LeftSidebarRepoPanelBottomSlot
-          showLeftRepoPanel={showLeftRepoPanel}
-          showLeftSidebarWorkspaceList={showLeftSidebarWorkspaceList}
-          repoPanelRenderState={repoPanelRenderState}
-          workspaceListEffectivelyCollapsed={workspaceListEffectivelyCollapsed}
-          leftBottomTab={leftBottomTab}
-          onLeftBottomTabChange={handleLeftBottomTabChange}
-          bottomTabPanelsReady={bottomTabPanelsReady}
-          effectiveRepoPanelPath={effectiveRepoPanelPath}
-          repoPanelRepositoryName={repoPanelRepositoryName}
-          gitPanelRepositoryEntries={gitPanelRepositoryEntries}
-          handleOpenExplorerFile={handleOpenExplorerFile}
-          repositoryFileTreeSearch={repositoryFileTreeSearch}
-          onRepositoryFileTreeSearchChange={setRepositoryFileTreeSearch}
-        />
+        {showLeftRepoPanel ? (
+          <LeftSidebarSortableSection
+            sectionId="repoPanel"
+            orderIndex={sectionOrderIndex("repoPanel")}
+            onReorder={handleSectionReorder}
+          >
+            <LeftSidebarRepoPanelBottomSlot
+              showLeftRepoPanel={showLeftRepoPanel}
+              showLeftSidebarWorkspaceList={showLeftSidebarWorkspaceList}
+              repoPanelRenderState={repoPanelRenderState}
+              workspaceListEffectivelyCollapsed={workspaceListEffectivelyCollapsed}
+              leftBottomTab={leftBottomTab}
+              onLeftBottomTabChange={handleLeftBottomTabChange}
+              bottomTabPanelsReady={bottomTabPanelsReady}
+              effectiveRepoPanelPath={effectiveRepoPanelPath}
+              repoPanelRepositoryName={repoPanelRepositoryName}
+              gitPanelRepositoryEntries={gitPanelRepositoryEntries}
+              handleOpenExplorerFile={handleOpenExplorerFile}
+              repositoryFileTreeSearch={repositoryFileTreeSearch}
+              onRepositoryFileTreeSearchChange={setRepositoryFileTreeSearch}
+            />
+          </LeftSidebarSortableSection>
+        ) : null}
       </div>
 
 

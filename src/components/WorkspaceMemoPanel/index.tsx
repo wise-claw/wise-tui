@@ -8,24 +8,12 @@ import {
 } from "@ant-design/icons";
 import { Button, Checkbox, Empty, Modal, Spin, Tag, Typography, message } from "antd";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import {
-  Suspense,
-  lazy,
-  memo,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { dispatchRequirementToExecutionEnvironment } from "../../constants/pendingTaskQueueEvents";
 import {
   buildRequirementDispatchPayload,
-  countMarkdownImages,
-  materializeRequirementBodyImages,
   stripMarkdownImages,
 } from "../../services/workspaceRequirementDispatch";
-import { readComposerImageAsDataUrl } from "../../services/readComposerImage";
 import {
   loadWorkspaceRequirements,
   saveWorkspaceRequirements,
@@ -33,53 +21,14 @@ import {
 } from "../../services/workspaceRequirementsStore";
 import {
   closeWorkspaceMemoPanel,
-  consumeWorkspaceRequirementEditRequest,
   requestWorkspaceRequirementCreate,
-  useWorkspaceRequirementEditRequestEpoch,
+  requestWorkspaceRequirementEdit,
 } from "../../stores/workspaceMemoPanelStore";
 import { loadRepositories } from "../../services/repository";
 import type { Repository } from "../../types";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
-import { ErrorBoundary } from "../ErrorBoundary";
-import type { MilkdownEditorHandle } from "../MilkdownViewer";
-import { MilkdownSyntaxToolbar } from "../MilkdownViewer/MilkdownSyntaxToolbar";
-import {
-  createWorkspaceRequirementItem,
-  deriveRequirementTitle,
-  type WorkspaceRequirementItem,
-  type WorkspaceRequirementsPayloadV1,
-} from "../../types/workspaceRequirements";
+import type { WorkspaceRequirementItem, WorkspaceRequirementsPayloadV1 } from "../../types/workspaceRequirements";
 import "./index.css";
-
-const MilkdownEditor = lazy(() =>
-  import("../MilkdownViewer").then((module) => ({ default: module.MilkdownEditor })),
-);
-
-function RequirementMilkdownEditor({
-  editorRef,
-  editorKey,
-  initialBody,
-  onChange,
-}: {
-  editorRef: RefObject<MilkdownEditorHandle | null>;
-  editorKey: number;
-  initialBody: string;
-  onChange: (markdown: string) => void;
-}) {
-  return (
-    <div className="app-workspace-requirements-panel__editor-wrap">
-      <MilkdownSyntaxToolbar editorRef={editorRef} />
-      <MilkdownEditor
-        ref={editorRef}
-        key={editorKey}
-        text={initialBody}
-        onChange={onChange}
-        floatingToolbar
-        blockEdit={false}
-      />
-    </div>
-  );
-}
 
 function previewText(item: WorkspaceRequirementItem): string {
   const body = stripMarkdownImages(item.bodyMarkdown || item.description || "");
@@ -224,38 +173,18 @@ const RequirementRow = memo(function RequirementRow({
   );
 }, requirementRowEqual);
 
-async function hydrateMarkdownImagesForEditor(markdown: string): Promise<string> {
-  let next = markdown;
-  const paths = [...markdown.matchAll(/!\[[^\]]*\]\((\/[^)\s]+)\)/g)].map((m) => m[1]!.trim());
-  for (const path of paths) {
-    if (!path.startsWith("/")) continue;
-    const dataUrl = await readComposerImageAsDataUrl(path);
-    if (!dataUrl) continue;
-    next = next.split(`](${path})`).join(`](${dataUrl})`);
-  }
-  return next;
-}
-
 /**
- * 中栏需求管理：图文 Markdown 编辑；派发时落盘本地图片并以「文字 + @路径」入队。
+ * 中栏需求管理：列表、完成态、派发；新增/编辑走全局独立弹窗，不依赖本面板。
  */
 export function WorkspaceMemoPanel() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<WorkspaceRequirementItem[]>([]);
   const [repositories, setRepositories] = useState<Repository[]>([]);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftBody, setDraftBody] = useState("");
-  const [editorKey, setEditorKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const itemsRef = useRef(items);
   itemsRef.current = items;
-  const draftBodyRef = useRef("");
-  const editorRef = useRef<MilkdownEditorHandle | null>(null);
-  const editorOpenRef = useRef(editorOpen);
-  editorOpenRef.current = editorOpen;
 
   const persist = useCallback(async (next: WorkspaceRequirementItem[]) => {
     setSaving(true);
@@ -307,7 +236,7 @@ export function WorkspaceMemoPanel() {
     [repositories],
   );
 
-  // 全局新增弹窗保存后同步列表（不依赖本面板是否打开过 create）。
+  // 全局新增/编辑弹窗保存后同步列表。
   useEffect(() => {
     function onRequirementsChanged(event: Event) {
       const detail = (event as CustomEvent<WorkspaceRequirementsPayloadV1>).detail;
@@ -326,93 +255,8 @@ export function WorkspaceMemoPanel() {
   }, []);
 
   const openEdit = useCallback((item: WorkspaceRequirementItem) => {
-    const body = item.bodyMarkdown || item.description || item.title;
-    setEditingId(item.id);
-    setDraftBody(body);
-    draftBodyRef.current = body;
-    setEditorKey((k) => k + 1);
-    setEditorOpen(true);
-    void hydrateMarkdownImagesForEditor(body).then((hydrated) => {
-      if (!mountedRef.current) return;
-      if (draftBodyRef.current !== body) return;
-      setDraftBody(hydrated);
-      draftBodyRef.current = hydrated;
-      setEditorKey((k) => k + 1);
-    });
+    requestWorkspaceRequirementEdit(item.id);
   }, []);
-
-  const pendingEditIdRef = useRef<string | null>(null);
-  const editRequestEpoch = useWorkspaceRequirementEditRequestEpoch();
-  useEffect(() => {
-    if (editRequestEpoch <= 0) return;
-    const id = consumeWorkspaceRequirementEditRequest();
-    if (!id) return;
-    const readyItem = itemsRef.current.find((row) => row.id === id);
-    if (readyItem) {
-      pendingEditIdRef.current = null;
-      openEdit(readyItem);
-      return;
-    }
-    pendingEditIdRef.current = id;
-  }, [editRequestEpoch, openEdit]);
-
-  useEffect(() => {
-    const id = pendingEditIdRef.current;
-    if (!id || loading) return;
-    const item = items.find((row) => row.id === id);
-    if (!item) {
-      pendingEditIdRef.current = null;
-      message.warning("未找到要编辑的需求");
-      return;
-    }
-    pendingEditIdRef.current = null;
-    openEdit(item);
-  }, [items, loading, openEdit]);
-
-  const saveEditor = useCallback(async () => {
-    const rawBody = draftBodyRef.current.trim();
-    if (!rawBody) {
-      message.warning("请填写需求图文内容（可粘贴/拖入图片）");
-      return;
-    }
-    setSaving(true);
-    try {
-      const materialized = await materializeRequirementBodyImages(rawBody);
-      if (!stripMarkdownImages(materialized.bodyMarkdown) && materialized.imagePaths.length === 0) {
-        message.warning("请填写文字或插入图片");
-        return;
-      }
-      const title = deriveRequirementTitle(materialized.bodyMarkdown);
-      const now = Date.now();
-      let next: WorkspaceRequirementItem[];
-      if (editingId) {
-        next = itemsRef.current.map((row) =>
-          row.id === editingId
-            ? {
-                ...row,
-                title,
-                bodyMarkdown: materialized.bodyMarkdown,
-                imagePaths: materialized.imagePaths,
-                updatedAt: now,
-              }
-            : row,
-        );
-      } else {
-        const created = createWorkspaceRequirementItem(materialized.bodyMarkdown, now);
-        created.title = title;
-        created.imagePaths = materialized.imagePaths;
-        next = [...itemsRef.current, created];
-      }
-      await persist(next);
-      setEditorOpen(false);
-      setEditingId(null);
-    } catch (err) {
-      console.error("[WorkspaceRequirements] editor save failed", err);
-      message.error(err instanceof Error ? err.message : "保存需求失败");
-    } finally {
-      if (mountedRef.current) setSaving(false);
-    }
-  }, [editingId, persist]);
 
   const handleToggleDone = useCallback(
     async (item: WorkspaceRequirementItem) => {
@@ -488,13 +332,12 @@ export function WorkspaceMemoPanel() {
     closeWorkspaceMemoPanel();
   }, []);
 
-  // ⌘W / Ctrl+W：关闭需求面板。新增走 AppImpl 全局 ⌘A（仅弹窗，不切 tab）。
+  // ⌘W / Ctrl+W：关闭需求面板。新增/编辑走全局独立弹窗（不切 tab）。
   useEffect(() => {
     function handleCloseShortcut(event: KeyboardEvent) {
       const mod = event.metaKey || event.ctrlKey;
       if (!mod || event.shiftKey || event.altKey) return;
       if (event.key !== "w" && event.key !== "W" && event.code !== "KeyW") return;
-      if (editorOpenRef.current) return;
 
       const target = event.target;
       if (target instanceof Element && target.closest(".terminal-panel")) return;
@@ -509,7 +352,6 @@ export function WorkspaceMemoPanel() {
 
   const openItems = items.filter((item) => item.status === "open");
   const doneItems = items.filter((item) => item.status === "done");
-  const draftImageCount = countMarkdownImages(draftBody);
   const isMacShortcut =
     typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform);
   const closeShortcutLabel = isMacShortcut ? "⌘W" : "Ctrl+W";
@@ -621,53 +463,6 @@ export function WorkspaceMemoPanel() {
           </div>
         )}
       </div>
-
-      <Modal
-        title="编辑需求"
-        open={editorOpen && editingId != null}
-        onOk={() => void saveEditor()}
-        onCancel={() => {
-          setEditorOpen(false);
-          setEditingId(null);
-        }}
-        okText="保存"
-        cancelText="取消"
-        confirmLoading={saving}
-        destroyOnHidden
-        width={720}
-        centered
-        zIndex={10000}
-        getContainer={() => document.body}
-        mask={{ closable: false }}
-        keyboard
-        className="app-workspace-requirements-edit-modal"
-        rootClassName="app-workspace-requirements-edit-modal-root"
-      >
-        <Typography.Paragraph type="secondary" className="app-workspace-requirements-panel__edit-hint">
-          支持粘贴 / 拖入图片。保存后图片会落到本地 `~/.wise/composer-images/`，派发时以
-          `@当前执行环境` + 文字 + 本地路径开 worker，不占主会话。
-          {draftImageCount > 0 ? ` 当前草稿含 ${draftImageCount} 张图。` : null}
-        </Typography.Paragraph>
-        <ErrorBoundary type="local" fallbackTitle="需求编辑器加载失败">
-          <Suspense
-            fallback={
-              <div className="app-file-editor-loading">
-                <Spin size="small" />
-              </div>
-            }
-          >
-            <RequirementMilkdownEditor
-              editorRef={editorRef}
-              editorKey={editorKey}
-              initialBody={draftBody}
-              onChange={(md) => {
-                draftBodyRef.current = md;
-                setDraftBody(md);
-              }}
-            />
-          </Suspense>
-        </ErrorBoundary>
-      </Modal>
     </div>
   );
 }

@@ -18,6 +18,7 @@ import type {
 } from "../../types";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
+import type { LeftSidebarSectionId } from "../../constants/leftSidebarSectionOrder";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import type { RefObject } from "react";
 import type { GitPanelOpenFileOptions } from "../GitPanel";
@@ -49,7 +50,12 @@ export interface LeftSidebarProps {
   showLeftSidebarWorkspaceList?: boolean;
   /** 是否显示左栏需求列表面板；默认 true，由 `wise.defaultConfig.v1` 控制。 */
   showLeftSidebarRequirementsPanel?: boolean;
-  /** 左栏工作区树纵向位置；默认 top。 */
+  /**
+   * 左栏分区纵向顺序（工作区 / 需求 / Git·文件 / 运行）；
+   * 可拖拽重排，默认 workspace → requirements → repoPanel → monitor。
+   */
+  leftSidebarSectionOrder?: readonly LeftSidebarSectionId[];
+  /** @deprecated 由 leftSidebarSectionOrder 取代；保留仅兼容旧调用方。 */
   workspaceListPlacement?: WorkspaceListPlacement;
   /** 是否显示左栏工作区列表中的仓库圆形角标；默认 false，由 `wise.defaultConfig.v1` 控制。 */
   showRepositoryIconBadgesInWorkspaceList?: boolean;

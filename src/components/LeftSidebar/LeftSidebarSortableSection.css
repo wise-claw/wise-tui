@@ -1,0 +1,59 @@
+.app-left-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.app-left-sidebar-section--workspace {
+  flex: 0 1 auto;
+}
+
+.app-left-sidebar-section--requirements,
+.app-left-sidebar-section--monitor {
+  flex: 0 0 auto;
+}
+
+.app-left-sidebar-section--repoPanel {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.app-left-sidebar-section--repoPanel > .app-left-sidebar-bottom-tabs {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.app-left-sidebar-section__drag-handle {
+  cursor: grab;
+}
+
+.app-left-sidebar-section__drag-handle:active {
+  cursor: grabbing;
+}
+
+.app-left-sidebar-section--dragging {
+  opacity: 0.55;
+}
+
+.app-left-sidebar-section--drop-before::before,
+.app-left-sidebar-section--drop-after::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ant-color-primary);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.app-left-sidebar-section--drop-before::before {
+  top: 0;
+}
+
+.app-left-sidebar-section--drop-after::after {
+  bottom: 0;
+}

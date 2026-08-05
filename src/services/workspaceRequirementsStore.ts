@@ -100,6 +100,28 @@ export async function appendWorkspaceRequirement(
   });
 }
 
+/**
+ * 在写锁内按 id 更新一条需求，避免弹窗与面板整表覆盖互相踩踏。
+ */
+export async function updateWorkspaceRequirement(
+  id: string,
+  updater: (item: WorkspaceRequirementItem) => WorkspaceRequirementItem,
+): Promise<WorkspaceRequirementsPayloadV1> {
+  return enqueueRequirementsWrite(async () => {
+    const current = await readRequirementsPayload();
+    let found = false;
+    const next = current.items.map((row) => {
+      if (row.id !== id) return row;
+      found = true;
+      return updater(row);
+    });
+    if (!found) {
+      throw new Error("未找到要更新的需求");
+    }
+    return writeRequirementsPayload(next);
+  });
+}
+
 /** @internal test helper */
 export function resetWorkspaceRequirementsWriteQueueForTests(): void {
   requirementsWriteChain = Promise.resolve();

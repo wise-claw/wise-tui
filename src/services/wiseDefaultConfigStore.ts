@@ -41,6 +41,12 @@ import {
   normalizeWorkspaceListVisibleRows,
 } from "../constants/workspaceListLayout";
 import {
+  LEFT_SIDEBAR_SECTION_ORDER_DEFAULT,
+  LEFT_SIDEBAR_SECTION_ORDER_WORKSPACE_BOTTOM,
+  normalizeLeftSidebarSectionOrder,
+  type LeftSidebarSectionId,
+} from "../constants/leftSidebarSectionOrder";
+import {
   WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_DEFAULT,
   normalizeWorkspaceSidebarRowPreviewLimit,
 } from "../constants/workspaceSidebarLayout";
@@ -102,6 +108,8 @@ export const WISE_REQUIREMENTS_PANEL_VISIBLE_ROWS_CHANGED =
 export const WISE_WORKSPACE_LIST_VISIBLE_ROWS_CHANGED = "wise:workspace-list-visible-rows-changed";
 
 export const WISE_WORKSPACE_LIST_PLACEMENT_CHANGED = "wise:workspace-list-placement-changed";
+
+export const WISE_LEFT_SIDEBAR_SECTION_ORDER_CHANGED = "wise:left-sidebar-section-order-changed";
 
 export const WISE_WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_CHANGED =
   "wise:workspace-sidebar-row-preview-limit-changed";
@@ -232,8 +240,10 @@ export interface WiseDefaultConfigV1 {
   requirementsPanelVisibleRows: number;
   /** 左栏工作区树内容区默认可见行数（与文件树并存时封顶高度；`0` = 不限）。 */
   workspaceListVisibleRows: number;
-  /** 左栏工作区树纵向位置；默认顶部。 */
+  /** 左栏工作区树纵向位置；默认顶部。拖拽重排后仍会同步写回以便旧入口兼容。 */
   workspaceListPlacement: WorkspaceListPlacement;
+  /** 左栏分区（工作区 / 需求 / Git·文件 / 运行面板）纵向顺序；可拖拽调整。 */
+  leftSidebarSectionOrder: LeftSidebarSectionId[];
   /** 工作区展开子树默认展示行数（会话 + 运行项合计，不含 More）。 */
   workspaceSidebarRowPreviewLimit: number;
   /** 左栏工作区列表中是否显示仓库圆形角标；默认隐藏。 */
@@ -341,6 +351,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   requirementsPanelVisibleRows: REQUIREMENTS_PANEL_VISIBLE_ROWS_DEFAULT,
   workspaceListVisibleRows: WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT,
   workspaceListPlacement: "top",
+  leftSidebarSectionOrder: [...LEFT_SIDEBAR_SECTION_ORDER_DEFAULT],
   workspaceSidebarRowPreviewLimit: WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_DEFAULT,
   showRepositoryIconBadgesInWorkspaceList: false,
   monitorPanelPlacement: "left",
@@ -524,6 +535,13 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
       workspaceListPlacement:
         normalizeWorkspaceListPlacement(parsed.workspaceListPlacement) ??
         DEFAULT_CONFIG.workspaceListPlacement,
+      leftSidebarSectionOrder:
+        parsed.leftSidebarSectionOrder === undefined
+          ? parsed.workspaceListPlacement !== undefined &&
+            normalizeWorkspaceListPlacement(parsed.workspaceListPlacement) === "bottom"
+            ? [...LEFT_SIDEBAR_SECTION_ORDER_WORKSPACE_BOTTOM]
+            : [...DEFAULT_CONFIG.leftSidebarSectionOrder]
+          : normalizeLeftSidebarSectionOrder(parsed.leftSidebarSectionOrder),
       workspaceSidebarRowPreviewLimit:
         parsed.workspaceSidebarRowPreviewLimit === undefined
           ? DEFAULT_CONFIG.workspaceSidebarRowPreviewLimit
@@ -865,6 +883,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     requirementsPanelVisibleRows: DEFAULT_CONFIG.requirementsPanelVisibleRows,
     workspaceListVisibleRows: DEFAULT_CONFIG.workspaceListVisibleRows,
     workspaceListPlacement: DEFAULT_CONFIG.workspaceListPlacement,
+    leftSidebarSectionOrder: [...DEFAULT_CONFIG.leftSidebarSectionOrder],
     workspaceSidebarRowPreviewLimit: DEFAULT_CONFIG.workspaceSidebarRowPreviewLimit,
     showRepositoryIconBadgesInWorkspaceList: DEFAULT_CONFIG.showRepositoryIconBadgesInWorkspaceList,
     monitorPanelPlacement: DEFAULT_CONFIG.monitorPanelPlacement,
@@ -1002,6 +1021,36 @@ function dispatchWorkspaceListPlacementChanged(placement: WorkspaceListPlacement
       detail: { workspaceListPlacement: placement },
     }),
   );
+}
+
+function dispatchLeftSidebarSectionOrderChanged(order: LeftSidebarSectionId[]): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_LEFT_SIDEBAR_SECTION_ORDER_CHANGED, {
+      detail: { leftSidebarSectionOrder: order },
+    }),
+  );
+}
+
+function deriveWorkspaceListPlacementFromSectionOrder(
+  order: readonly LeftSidebarSectionId[],
+): WorkspaceListPlacement {
+  const normalized = normalizeLeftSidebarSectionOrder(order);
+  const workspaceIndex = normalized.indexOf("workspace");
+  if (workspaceIndex < 0) return "top";
+  return workspaceIndex >= Math.ceil(normalized.length / 2) ? "bottom" : "top";
+}
+
+function withSectionOrderSyncedToWorkspacePlacement(
+  order: readonly LeftSidebarSectionId[],
+  placement: WorkspaceListPlacement,
+): LeftSidebarSectionId[] {
+  const normalized = normalizeLeftSidebarSectionOrder(order);
+  const withoutWorkspace = normalized.filter((id) => id !== "workspace");
+  if (placement === "bottom") {
+    return normalizeLeftSidebarSectionOrder([...withoutWorkspace, "workspace"]);
+  }
+  return normalizeLeftSidebarSectionOrder(["workspace", ...withoutWorkspace]);
 }
 
 function dispatchWorkspaceSidebarRowPreviewLimitChanged(limit: number): void {
@@ -1165,6 +1214,7 @@ export async function saveWiseDefaultConfig(
       | "requirementsPanelVisibleRows"
       | "workspaceListVisibleRows"
       | "workspaceListPlacement"
+      | "leftSidebarSectionOrder"
       | "workspaceSidebarRowPreviewLimit"
       | "showRepositoryIconBadgesInWorkspaceList"
       | "monitorPanelPlacement"
@@ -1243,6 +1293,7 @@ export async function saveWiseDefaultConfig(
       patch.requirementsPanelVisibleRows ?? current.requirementsPanelVisibleRows,
     workspaceListVisibleRows: patch.workspaceListVisibleRows ?? current.workspaceListVisibleRows,
     workspaceListPlacement: patch.workspaceListPlacement ?? current.workspaceListPlacement,
+    leftSidebarSectionOrder: patch.leftSidebarSectionOrder ?? current.leftSidebarSectionOrder,
     workspaceSidebarRowPreviewLimit:
       patch.workspaceSidebarRowPreviewLimit ?? current.workspaceSidebarRowPreviewLimit,
     showRepositoryIconBadgesInWorkspaceList:
@@ -1418,6 +1469,19 @@ export async function saveWiseDefaultConfig(
   if (patch.workspaceListPlacement !== undefined) {
     next.workspaceListPlacement =
       normalizeWorkspaceListPlacement(patch.workspaceListPlacement) ?? current.workspaceListPlacement;
+    // 旧「栏位」开关仍可用：同步把工作区挪到顶/底。
+    if (patch.leftSidebarSectionOrder === undefined) {
+      next.leftSidebarSectionOrder = withSectionOrderSyncedToWorkspacePlacement(
+        current.leftSidebarSectionOrder,
+        next.workspaceListPlacement,
+      );
+    }
+  }
+  if (patch.leftSidebarSectionOrder !== undefined) {
+    next.leftSidebarSectionOrder = normalizeLeftSidebarSectionOrder(patch.leftSidebarSectionOrder);
+    next.workspaceListPlacement = deriveWorkspaceListPlacementFromSectionOrder(
+      next.leftSidebarSectionOrder,
+    );
   }
   if (patch.workspaceSidebarRowPreviewLimit !== undefined) {
     next.workspaceSidebarRowPreviewLimit = normalizeWorkspaceSidebarRowPreviewLimit(
@@ -1704,6 +1768,21 @@ export async function saveWiseDefaultConfig(
     next.workspaceListPlacement !== current.workspaceListPlacement
   ) {
     dispatchWorkspaceListPlacementChanged(next.workspaceListPlacement);
+  }
+  if (
+    patch.leftSidebarSectionOrder !== undefined ||
+    (patch.workspaceListPlacement !== undefined &&
+      JSON.stringify(next.leftSidebarSectionOrder) !== JSON.stringify(current.leftSidebarSectionOrder))
+  ) {
+    if (JSON.stringify(next.leftSidebarSectionOrder) !== JSON.stringify(current.leftSidebarSectionOrder)) {
+      dispatchLeftSidebarSectionOrderChanged(next.leftSidebarSectionOrder);
+    }
+    if (
+      patch.leftSidebarSectionOrder !== undefined &&
+      next.workspaceListPlacement !== current.workspaceListPlacement
+    ) {
+      dispatchWorkspaceListPlacementChanged(next.workspaceListPlacement);
+    }
   }
   if (
     patch.workspaceSidebarRowPreviewLimit !== undefined &&
@@ -2126,6 +2205,17 @@ export async function saveWorkspaceListPlacementToStore(
   const normalized = normalizeWorkspaceListPlacement(placement);
   if (!normalized) return;
   await saveWiseDefaultConfig({ workspaceListPlacement: normalized });
+}
+
+export async function loadLeftSidebarSectionOrderFromStore(): Promise<LeftSidebarSectionId[]> {
+  return (await loadWiseDefaultConfig()).leftSidebarSectionOrder;
+}
+
+export async function saveLeftSidebarSectionOrderToStore(
+  order: readonly LeftSidebarSectionId[],
+): Promise<void> {
+  const normalized = normalizeLeftSidebarSectionOrder(order);
+  await saveWiseDefaultConfig({ leftSidebarSectionOrder: normalized });
 }
 
 export async function loadWorkspaceSidebarRowPreviewLimitFromStore(): Promise<number> {

@@ -6,6 +6,7 @@ import {
   saveWorkspaceListPlacementToStore,
   saveWorkspaceListVisibleRowsToStore,
   type WorkspaceListPlacement,
+  WISE_WORKSPACE_LIST_PLACEMENT_CHANGED,
 } from "../../services/wiseDefaultConfigStore";
 import { WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT } from "../../constants/workspaceListLayout";
 
@@ -31,6 +32,18 @@ export function useLeftSidebarWorkspaceListSetting() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const onPlacementChanged = (event: Event) => {
+      const next = (event as CustomEvent<{ workspaceListPlacement?: WorkspaceListPlacement }>).detail
+        ?.workspaceListPlacement;
+      if (next === "top" || next === "bottom") {
+        setPlacement(next);
+      }
+    };
+    window.addEventListener(WISE_WORKSPACE_LIST_PLACEMENT_CHANGED, onPlacementChanged);
+    return () => window.removeEventListener(WISE_WORKSPACE_LIST_PLACEMENT_CHANGED, onPlacementChanged);
+  }, []);
 
   const saveVisible = useCallback(
     async (next: boolean) => {

@@ -2290,7 +2290,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 /* ── Project List with Sessions（紧凑；项目/仓库选择态分层，无左侧竖条） ── */
-/* 列本身不滚动：自上而下「工作区列表 → 运行面板 → Git/文件」；各自滚动，避免在运行面板上滚带动整列重绘 */
+/* 列本身不滚动：分区顺序由 leftSidebarSectionOrder / CSS order 控制；各分区内部滚动 */
 .app-left-sidebar-project-and-files {
   flex: 1;
   min-height: 0;
@@ -2302,38 +2302,15 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   padding: 0;
 }
 
-/* 工作区置于底部：Git/文件在上，工作区贴底 */
-.app-left-sidebar-project-and-files[data-workspace-list-placement="bottom"] > .app-repository-header,
-.app-left-sidebar-project-and-files[data-workspace-list-placement="bottom"] > .app-repository-list,
-.app-left-sidebar-project-and-files[data-workspace-list-placement="bottom"]
-  > .app-left-sidebar-workspace-list-collapsed-row {
-  order: 3;
-}
-
-.app-left-sidebar-project-and-files[data-workspace-list-placement="bottom"] > .app-left-sidebar-monitor-panel {
-  order: 2;
-}
-
-.app-left-sidebar-project-and-files[data-workspace-list-placement="bottom"] > .app-left-sidebar-bottom-tabs {
-  order: 1;
-  border-top: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 88%, var(--ant-color-border));
-}
-
-.app-left-sidebar-project-and-files[data-workspace-list-placement="bottom"] > .app-repository-header {
-  border-bottom: none;
-  border-top: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
-}
-
-.app-left-sidebar-project-and-files > .app-left-sidebar-monitor-panel {
+.app-left-sidebar-project-and-files > .app-left-sidebar-section--monitor {
   flex-shrink: 0;
 }
 
-.app-left-sidebar-project-and-files > .app-left-sidebar-requirements-panel {
+.app-left-sidebar-project-and-files > .app-left-sidebar-section--requirements {
   flex-shrink: 0;
 }
 
-.app-left-sidebar-project-and-files > .app-repository-header {
+.app-left-sidebar-project-and-files .app-left-sidebar-section--workspace > .app-repository-header {
   flex-shrink: 0;
   min-height: 24px;
   margin: 0;
@@ -2342,24 +2319,24 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   border-bottom: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
 }
 
-.app-left-sidebar-project-and-files > .app-repository-header .app-repository-header-title {
+.app-left-sidebar-project-and-files .app-left-sidebar-section--workspace > .app-repository-header .app-repository-header-title {
   /* 标题样式见文末 Unified Left Sidebar Section Headers */
   line-height: 1.2;
 }
 
-.app-left-sidebar-project-and-files > .app-repository-header .app-repository-header-btn {
+.app-left-sidebar-project-and-files .app-left-sidebar-section--workspace > .app-repository-header .app-repository-header-btn {
   width: 22px;
   height: 22px;
   border-radius: 6px;
 }
 
-.app-left-sidebar-project-and-files > .app-repository-header .app-repository-header-btn svg {
+.app-left-sidebar-project-and-files .app-left-sidebar-section--workspace > .app-repository-header .app-repository-header-btn svg {
   width: 14px;
   height: 14px;
 }
 
 /* 项目列表按内容高度；多项目时按配置可见行数封顶并内部滚动，剩余高度给文件树 */
-.app-left-sidebar-project-and-files > .app-repository-list {
+.app-left-sidebar-project-and-files .app-left-sidebar-section--workspace > .app-repository-list {
   flex: 0 1 auto;
   align-self: stretch;
   min-height: var(--workspace-list-min-height, 50px);
@@ -2372,12 +2349,22 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 /* 行数「不限」：与文件树并存时也不封顶高度，按内容增长 */
-.app-left-sidebar-project-and-files[data-workspace-list-unlimited="true"] > .app-repository-list {
+.app-left-sidebar-project-and-files[data-workspace-list-unlimited="true"]
+  .app-left-sidebar-section--workspace
+  > .app-repository-list {
   max-height: none;
 }
 
 /* 无文件树：Workspace 列表占满剩余高度并可滚动 */
-.app-left-sidebar-project-and-files:not([data-has-files-explorer="true"]) > .app-repository-list {
+.app-left-sidebar-project-and-files:not([data-has-files-explorer="true"])
+  > .app-left-sidebar-section--workspace {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.app-left-sidebar-project-and-files:not([data-has-files-explorer="true"])
+  .app-left-sidebar-section--workspace
+  > .app-repository-list {
   flex: 1 1 0;
   max-height: none;
 }
@@ -2388,18 +2375,23 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   overflow: hidden;
 }
 
-.app-left-sidebar-project-and-files[data-files-explorer-section-collapsed="true"] > .app-repository-header {
+.app-left-sidebar-project-and-files[data-files-explorer-section-collapsed="true"]
+  .app-left-sidebar-section--workspace
+  > .app-repository-header {
   flex-shrink: 0;
 }
 
-.app-left-sidebar-project-and-files[data-files-explorer-section-collapsed="true"] > .app-repository-list {
+.app-left-sidebar-project-and-files[data-files-explorer-section-collapsed="true"]
+  .app-left-sidebar-section--workspace
+  > .app-repository-list {
   flex: 1 1 0;
   min-height: 0;
   max-height: none;
   overflow-y: auto;
 }
 
-.app-left-sidebar-project-and-files[data-files-explorer-section-collapsed="true"] > .app-left-sidebar-files-explorer--section-collapsed {
+.app-left-sidebar-project-and-files[data-files-explorer-section-collapsed="true"]
+  .app-left-sidebar-files-explorer--section-collapsed {
   flex: 0 0 auto;
   margin-top: auto;
   flex-shrink: 0;
@@ -2410,15 +2402,23 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   gap: 0;
 }
 
-.app-left-sidebar-project-and-files[data-workspace-list-section-collapsed="true"] > .app-left-sidebar-bottom-tabs {
+.app-left-sidebar-project-and-files[data-workspace-list-section-collapsed="true"]
+  > .app-left-sidebar-section--repoPanel,
+.app-left-sidebar-project-and-files[data-monitor-panel-section-collapsed="true"]
+  > .app-left-sidebar-section--repoPanel {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.app-left-sidebar-project-and-files[data-workspace-list-section-collapsed="true"]
+  .app-left-sidebar-section--repoPanel
+  > .app-left-sidebar-bottom-tabs,
+.app-left-sidebar-project-and-files[data-monitor-panel-section-collapsed="true"]
+  .app-left-sidebar-section--repoPanel
+  > .app-left-sidebar-bottom-tabs {
   flex: 1 1 0;
   min-height: 0;
   margin-top: 0;
-}
-
-.app-left-sidebar-project-and-files[data-monitor-panel-section-collapsed="true"] > .app-left-sidebar-bottom-tabs {
-  flex: 1 1 0;
-  min-height: 0;
 }
 
 .app-left-sidebar-workspace-list-collapsed-row {
@@ -4395,7 +4395,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 /* ── Unified Left Sidebar Section Headers ─────────────────────────────────── */
-.app-left-sidebar-project-and-files > .app-repository-header,
+.app-left-sidebar-project-and-files .app-left-sidebar-section--workspace > .app-repository-header,
 .app-left-sidebar-requirements-panel .app-repository-header,
 .app-left-sidebar-monitor-panel .app-monitor-panel__head,
 .app-left-sidebar-repo-panel-header,
@@ -4410,7 +4410,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 /* Headers titles to uppercase & secondary style */
-.app-left-sidebar-project-and-files > .app-repository-header .app-repository-header-title,
+.app-left-sidebar-project-and-files .app-left-sidebar-section--workspace > .app-repository-header .app-repository-header-title,
 .app-left-sidebar-requirements-panel .app-repository-header-title,
 .app-left-sidebar-monitor-panel .app-monitor-panel__title,
 .git-files-explorer-title {

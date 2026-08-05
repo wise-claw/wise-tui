@@ -199,6 +199,7 @@ import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
 import { useLeftSidebarWorkspaceListDefault } from "./hooks/useLeftSidebarWorkspaceListDefault";
 import { useLeftSidebarRequirementsPanelDefault } from "./hooks/useLeftSidebarRequirementsPanelDefault";
 import { useWorkspaceListPlacementDefault } from "./hooks/useWorkspaceListPlacementDefault";
+import { useLeftSidebarSectionOrder } from "./hooks/useLeftSidebarSectionOrder";
 import { useLeftSidebarRepositoryIconBadgesDefault } from "./hooks/useLeftSidebarRepositoryIconBadgesDefault";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
 import { invalidateWorkflowRunCacheForRepository } from "./hooks/useWorkflowRun";
@@ -1614,6 +1615,7 @@ export default function App() {
   const showLeftSidebarWorkspaceList = useLeftSidebarWorkspaceListDefault();
   const showLeftSidebarRequirementsPanel = useLeftSidebarRequirementsPanelDefault();
   const workspaceListPlacement = useWorkspaceListPlacementDefault();
+  const leftSidebarSectionOrder = useLeftSidebarSectionOrder();
   const showRepositoryIconBadgesInWorkspaceList = useLeftSidebarRepositoryIconBadgesDefault();
   const showMonitorOnLeft =
     monitorPanelDefault.visible && monitorPanelDefault.placement === "left";
@@ -2738,6 +2740,7 @@ export default function App() {
         showLeftSidebarMonitorPanel: showLeftSidebarMonitorPanelMerged,
         showLeftSidebarWorkspaceList,
         showLeftSidebarRequirementsPanel,
+        leftSidebarSectionOrder,
         workspaceListPlacement,
         showRepositoryIconBadgesInWorkspaceList,
         mcpHubActive:
