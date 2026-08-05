@@ -175,7 +175,8 @@ export function RepositoryFileEditorPanel({
 
   // ⌥L / Alt+L：焦点在文件编辑器内时，在文件树中定位当前文件（与顶栏瞄准按钮一致）。
   useEffect(() => {
-    if (!onRevealInExplorer) return;
+    const reveal = onRevealInExplorer;
+    if (!reveal) return;
     function handleRevealShortcut(event: KeyboardEvent) {
       if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) {
         return;
@@ -193,7 +194,7 @@ export function RepositoryFileEditorPanel({
       }
       event.preventDefault();
       event.stopPropagation();
-      onRevealInExplorer(tab.rootPath, tab.relativePath);
+      reveal(tab.rootPath, tab.relativePath);
     }
     window.addEventListener("keydown", handleRevealShortcut, { capture: true });
     return () => window.removeEventListener("keydown", handleRevealShortcut, { capture: true });
