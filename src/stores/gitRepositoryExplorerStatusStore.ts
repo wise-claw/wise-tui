@@ -22,6 +22,8 @@ const HIDDEN_POLL_INTERVAL_MS = 30000;
 type PathEntry = {
   index: ExplorerGitStatusIndex;
   generation: number;
+  /** 每次发起 refresh 递增；await 后仅最新 seq 可写回，防止慢请求覆盖快请求。 */
+  refreshSeq: number;
   consumers: number;
 };
 
@@ -32,6 +34,7 @@ const listenersByPath = new Map<string, Set<Listener>>();
 let disposePoll: (() => void) | null = null;
 let pollConsumerPaths = 0;
 let gitChangedUnlisten: (() => void) | null = null;
+let gitChangedListenPromise: Promise<void> | null = null;
 let gitChangedListenerConsumers = 0;
 let gitChangedRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -54,9 +57,15 @@ function publish(pathKey: string): void {
 async function refreshPath(pathKey: string): Promise<void> {
   const entry = entriesByPath.get(pathKey);
   if (!entry || entry.consumers <= 0) return;
+  const seq = ++entry.refreshSeq;
   try {
     const warm = consumeWarmGitStatus(pathKey);
     const status = warm ? await warm : await gitStatus(pathKey);
+    const current = entriesByPath.get(pathKey);
+    // 路径已释放重建、或有更新的 refresh 在途时，丢弃本轮结果。
+    if (!current || current !== entry || current.consumers <= 0 || current.refreshSeq !== seq) {
+      return;
+    }
     applyGitRepositoryStatsFromStatus(pathKey, {
       additions: status.additions,
       deletions: status.deletions,
@@ -64,22 +73,26 @@ async function refreshPath(pathKey: string): Promise<void> {
       behind: status.behind,
     });
     const nextIndex = buildExplorerGitStatusIndex(status);
-    if (explorerGitStatusIndexEqual(entry.index, nextIndex)) {
+    if (explorerGitStatusIndexEqual(current.index, nextIndex)) {
       return;
     }
-    entry.index = nextIndex;
-    entry.generation += 1;
+    current.index = nextIndex;
+    current.generation += 1;
     publish(pathKey);
   } catch {
+    const current = entriesByPath.get(pathKey);
+    if (!current || current !== entry || current.consumers <= 0 || current.refreshSeq !== seq) {
+      return;
+    }
     applyGitRepositoryStatsEmpty(pathKey);
     if (
-      entry.index.fileStatusByPath.size === 0 &&
-      entry.index.dirsWithChanges.size === 0
+      current.index.fileStatusByPath.size === 0 &&
+      current.index.dirsWithChanges.size === 0
     ) {
       return;
     }
-    entry.index = EMPTY_EXPLORER_GIT_STATUS_INDEX;
-    entry.generation += 1;
+    current.index = EMPTY_EXPLORER_GIT_STATUS_INDEX;
+    current.generation += 1;
     publish(pathKey);
   }
 }
@@ -120,14 +133,24 @@ function stopPollLoopIfIdle(): void {
 }
 
 function ensureGitChangedListener(): void {
-  if (gitChangedUnlisten) return;
-  void listen<{ path?: string }>("git-changed", () => {
+  if (gitChangedUnlisten || gitChangedListenPromise) return;
+  gitChangedListenPromise = listen<{ path?: string }>("git-changed", () => {
     scheduleGitChangedRefresh();
-  }).then((unlisten) => {
-    gitChangedUnlisten = () => {
-      safeUnlisten(unlisten);
-    };
-  });
+  })
+    .then((unlisten) => {
+      gitChangedListenPromise = null;
+      // await 期间消费者可能已全部释放：勿把孤儿 listener 挂上。
+      if (gitChangedListenerConsumers <= 0) {
+        safeUnlisten(unlisten);
+        return;
+      }
+      gitChangedUnlisten = () => {
+        safeUnlisten(unlisten);
+      };
+    })
+    .catch(() => {
+      gitChangedListenPromise = null;
+    });
 }
 
 function releaseGitChangedListener(): void {
@@ -151,6 +174,7 @@ function acquirePath(pathKey: string): PathEntry {
   const created: PathEntry = {
     index: EMPTY_EXPLORER_GIT_STATUS_INDEX,
     generation: 0,
+    refreshSeq: 0,
     consumers: 1,
   };
   entriesByPath.set(pathKey, created);
@@ -228,6 +252,7 @@ export function resetGitRepositoryExplorerStatusStoreForTests(): void {
     gitChangedUnlisten();
     gitChangedUnlisten = null;
   }
+  gitChangedListenPromise = null;
   entriesByPath.clear();
   listenersByPath.clear();
   pollConsumerPaths = 0;

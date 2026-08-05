@@ -1,4 +1,6 @@
 import { useVirtualListVisibleRange } from "../../hooks/useVirtualListVisibleRange";
+import { useScrollEndClass } from "../../hooks/useScrollEndClass";
+import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { useRef, type ReactNode } from "react";
 import type { GitFileStatus } from "../../types";
 import { GIT_PANEL_FILE_ROW_HEIGHT } from "./gitPanelUtils";
@@ -17,6 +19,10 @@ export function GitVirtualFileList({
   renderRow,
 }: GitVirtualFileListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  useScrollEndClass(scrollRef, LEFT_SIDEBAR_SCROLLING_CLASS, 180, {
+    relieveSidePanelPriority: true,
+    relieveFileTreePriority: true,
+  });
   const range = useVirtualListVisibleRange({
     scrollRootRef: scrollRef,
     rowCount: files.length,

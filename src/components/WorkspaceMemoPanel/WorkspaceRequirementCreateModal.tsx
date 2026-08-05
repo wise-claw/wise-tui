@@ -6,8 +6,7 @@ import {
   stripMarkdownImages,
 } from "../../services/workspaceRequirementDispatch";
 import {
-  loadWorkspaceRequirements,
-  saveWorkspaceRequirements,
+  appendWorkspaceRequirement,
 } from "../../services/workspaceRequirementsStore";
 import {
   closeWorkspaceRequirementCreateModal,
@@ -92,8 +91,7 @@ export function WorkspaceRequirementCreateModal() {
       const created = createWorkspaceRequirementItem(materialized.bodyMarkdown, now);
       created.title = title;
       created.imagePaths = materialized.imagePaths;
-      const payload = await loadWorkspaceRequirements();
-      await saveWorkspaceRequirements([...payload.items, created]);
+      await appendWorkspaceRequirement(created);
       message.success("需求已新增");
       closeWorkspaceRequirementCreateModal();
     } catch (err) {

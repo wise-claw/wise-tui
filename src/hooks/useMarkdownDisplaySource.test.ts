@@ -32,6 +32,15 @@ describe("resolveStreamingRebuildMinMs", () => {
     expect(resolveStreamingRebuildMinMs(100000, true)).toBe(220);
   });
 
+  test("侧栏滚动让路强于拥堵", () => {
+    expect(
+      resolveStreamingRebuildMinMs(10, { congested: true, scrollRelief: true }),
+    ).toBe(360);
+    expect(
+      resolveStreamingRebuildMinMs(10, { congested: false, scrollRelief: true }),
+    ).toBe(360);
+  });
+
   test("空闲时按正文规模放宽", () => {
     expect(resolveStreamingRebuildMinMs(10, false)).toBe(100);
     expect(resolveStreamingRebuildMinMs(5999, false)).toBe(100);

@@ -112,6 +112,62 @@ describe("shouldShowListEndThinkingHint", () => {
       ),
     ).toBe(true);
   });
+
+  test("shows when trailing engine「执行中」system noise follows user (Codex/Cursor/OpenCode/Qoder)", () => {
+    expect(
+      shouldShowListEndThinkingHint(
+        [
+          msg({ id: 1, role: "user", content: "hi" }),
+          msg({ id: 2, role: "system", content: "Codex 执行中（新会话，模型：默认）…" }),
+        ],
+        "running",
+      ),
+    ).toBe(true);
+    expect(
+      shouldShowListEndThinkingHint(
+        [
+          msg({ id: 1, role: "user", content: "hi" }),
+          msg({ id: 2, role: "system", content: "Cursor Agent 执行中…" }),
+        ],
+        "running",
+      ),
+    ).toBe(true);
+    expect(
+      shouldShowListEndThinkingHint(
+        [
+          msg({ id: 1, role: "user", content: "hi" }),
+          msg({ id: 2, role: "system", content: "OpenCode 执行中（续接会话，模型：默认）…" }),
+        ],
+        "running",
+      ),
+    ).toBe(true);
+    expect(
+      shouldShowListEndThinkingHint(
+        [
+          msg({ id: 1, role: "user", content: "hi" }),
+          msg({ id: 2, role: "system", content: "Qoder CLI 执行中（新会话，模型：auto）…" }),
+        ],
+        "running",
+      ),
+    ).toBe(true);
+  });
+
+  test("still hides when blank-reasoning assistant is followed by engine running noise", () => {
+    expect(
+      shouldShowListEndThinkingHint(
+        [
+          msg({ id: 1, role: "user", content: "hi" }),
+          msg({
+            id: 2,
+            role: "assistant",
+            parts: [{ type: "reasoning", text: "" }],
+          }),
+          msg({ id: 3, role: "system", content: "Cursor Agent 执行中…" }),
+        ],
+        "running",
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("buildChatMessageListRows", () => {
@@ -682,5 +738,95 @@ describe("tryPatchChatMessageListRowsTail", () => {
         (p) => p.type === "tool_use" && p.id === "r2" && p.status === "completed",
       ),
     ).toBe(true);
+  });
+
+  test("appends a new assistant with incremental fold and reuses prefix rows", () => {
+    const user = msg({ id: 1, role: "user", content: "hi" });
+    const assistant = msg({ id: 2, role: "assistant", content: "hello" });
+    const prevMessages = [user, assistant];
+    const nextMessages = [
+      user,
+      assistant,
+      msg({
+        id: 3,
+        role: "assistant",
+        parts: [{ type: "tool_use", id: "t1", name: "Bash", status: "running", input: {} }],
+      }),
+    ];
+    const options = { sessionStatus: "running" as const, showListEndThinkingHint: true };
+    const initialRows = buildChatMessageListRows(prevMessages, options);
+    const prevFolded = foldChatMessagesForList(prevMessages);
+    const patched = tryPatchChatMessageListRowsTail(
+      prevMessages,
+      nextMessages,
+      initialRows,
+      options,
+      prevFolded,
+    );
+    expect(patched).not.toBeNull();
+    // 连续 assistant 会 coalesce：folded 长度不变，末条变为合并对象。
+    expect(patched!.folded.length).toBe(prevFolded.length);
+    expect(patched!.folded[0]).toBe(prevFolded[0]);
+    expect(patched!.folded[1]).not.toBe(prevFolded[1]);
+    expect(foldChatMessagesForList(nextMessages)).toEqual(patched!.folded);
+    const full = buildChatMessageListRows(nextMessages, options);
+    expect(patched!.rows.filter((r) => r.kind === "message")).toHaveLength(
+      full.filter((r) => r.kind === "message").length,
+    );
+  });
+
+  test("appends tool_result user and absorbs into prior tool_use without full fold", () => {
+    const user = msg({ id: 1, role: "user", content: "read it" });
+    const assistantToolUse = msg({
+      id: 2,
+      role: "assistant",
+      parts: [
+        {
+          type: "tool_use",
+          id: "toolu_abs",
+          name: "Read",
+          status: "running",
+          input: { file_path: "/a.ts" },
+        },
+      ],
+    });
+    const prevMessages = [user, assistantToolUse];
+    const nextMessages = [
+      user,
+      assistantToolUse,
+      msg({
+        id: 3,
+        role: "user",
+        content: "Read result",
+        parts: [
+          {
+            type: "tool_use",
+            id: "toolu_abs",
+            name: "",
+            input: {},
+            output: "file body",
+            status: "completed",
+          },
+        ],
+      }),
+    ];
+    const options = { sessionStatus: "running" as const, showListEndThinkingHint: false };
+    const initialRows = buildChatMessageListRows(prevMessages, options);
+    const prevFolded = foldChatMessagesForList(prevMessages);
+    const patched = tryPatchChatMessageListRowsTail(
+      prevMessages,
+      nextMessages,
+      initialRows,
+      options,
+      prevFolded,
+    );
+    expect(patched).not.toBeNull();
+    expect(patched!.folded).toHaveLength(2);
+    expect(
+      patched!.folded[1]!.parts?.some(
+        (p) => p.type === "tool_use" && p.id === "toolu_abs" && p.status === "completed",
+      ),
+    ).toBe(true);
+    expect(foldChatMessagesForList(nextMessages)).toEqual(patched!.folded);
   });
 });

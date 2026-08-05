@@ -36,6 +36,7 @@ import {
   shouldDebounceMonacoEditorContentChange,
 } from "../utils/monacoLargeFile";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
+import { shouldDeferAdaptivePollTick } from "../utils/adaptivePoll";
 import { setRepositoryEditorDirtyPaths } from "../stores/repositoryEditorDirtyPathsStore";
 import { requestPaneCenterView } from "../stores/paneCenterViewControlStore";
 import { refreshGitRepositoryUi } from "../services/gitRepositoryUiRefresh";
@@ -1558,6 +1559,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
       if (typeof document !== "undefined" && document.visibilityState !== "visible") {
         return;
       }
+      if (shouldDeferAdaptivePollTick()) return;
       refreshOpenEditorTabsFromDisk({ trigger: "poll" });
     }, EDITOR_FOREGROUND_POLL_MS);
     return () => {

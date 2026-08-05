@@ -33,6 +33,7 @@ pub(crate) fn sanitize_window_label_for_filename(label: &str) -> String {
 }
 
 /// 主窗口沿用 `tabs.json`；辅助主窗口使用 `tabs/<label>.json` 独立持久化。
+/// 非主工作区窗口（如 mascot）不得落到主窗 `tabs.json`，避免串写。
 pub(crate) fn wise_tabs_json_for_window(window_label: Option<&str>) -> Result<PathBuf, String> {
     let wise = wise_dir()?;
     match window_label.map(str::trim).filter(|s| !s.is_empty()) {
@@ -41,7 +42,9 @@ pub(crate) fn wise_tabs_json_for_window(window_label: Option<&str>) -> Result<Pa
             wise.join("tabs")
                 .join(format!("{}.json", sanitize_window_label_for_filename(label))),
         ),
-        Some(_) => Ok(wise.join("tabs.json")),
+        Some(other) => Err(format!(
+            "unsupported window label for session tabs: {other}"
+        )),
     }
 }
 
@@ -57,4 +60,30 @@ pub(crate) fn write_file_atomic(path: &Path, contents: &str) -> Result<(), Strin
     }
     fs::rename(&tmp, path).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wise_tabs_json_for_window;
+
+    #[test]
+    fn primary_and_missing_label_use_tabs_json() {
+        let primary = wise_tabs_json_for_window(Some("main")).expect("main");
+        let missing = wise_tabs_json_for_window(None).expect("none");
+        assert!(primary.ends_with("tabs.json"));
+        assert_eq!(primary, missing);
+    }
+
+    #[test]
+    fn aux_dock_label_uses_isolated_tabs_file() {
+        let path = wise_tabs_json_for_window(Some("main-dock-123")).expect("dock");
+        assert!(path.to_string_lossy().contains("tabs"));
+        assert!(path.file_name().unwrap().to_string_lossy().starts_with("main-dock-123"));
+    }
+
+    #[test]
+    fn unsupported_label_does_not_fall_through_to_main_tabs() {
+        let err = wise_tabs_json_for_window(Some("mascot")).expect_err("mascot");
+        assert!(err.contains("unsupported window label"));
+    }
 }

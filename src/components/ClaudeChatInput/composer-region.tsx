@@ -75,6 +75,7 @@ import { chordMatchesKeyboardEvent } from "../../utils/atMentionShortcutChord";
 import { isWiseAppFocused } from "../../utils/isWiseAppFocused";
 import {
   clearComposerInteraction,
+  markComposerFocused,
   markComposerInteraction,
   isComposerInteractionActive,
   subscribeComposerInteraction,
@@ -1032,12 +1033,14 @@ function ComposerInner({
       debouncedPromptSyncRef.current.flush();
     };
     const onFocusIn = () => {
+      markComposerFocused(true);
       markComposerInteraction();
     };
     const onFocusOut = (event: FocusEvent) => {
       flushPromptSync();
       const next = event.relatedTarget;
       if (next instanceof Node && shell.contains(next)) return;
+      markComposerFocused(false);
       clearComposerInteraction();
     };
     const onComposerInput = () => {

@@ -1,5 +1,6 @@
 import type { ClaudeMessage, ClaudeSession, ToolUsePart } from "../types";
 import {
+  applyToolResultPartsToMessages,
   coalesceConsecutiveAssistantMessages,
   foldToolResultUserMessagesIntoAssistant,
   isToolResultUpdatePart,
@@ -65,7 +66,17 @@ export function shouldShowListEndThinkingHint(
   if (status !== "running" && status !== "connecting") return false;
   // 长驻子进程仍 alive 但本轮已失败落盘时，勿再展示「正在思考」。
   if (sessionHadRecentClaudeTurnFailureNotice(messages)) return false;
-  const last = messages[messages.length - 1]!;
+  // 跳过末尾不可渲染噪声（Codex/Cursor/OpenCode/Qoder 的「执行中…」系统占位）。
+  // 这些文案在列表里被隐藏，但若仍按 raw 末条 system 判定，会误关 thinking-hint，
+  // 造成非 Claude Code 发送后用户气泡与首段回复之间的空白断层。
+  let last: ClaudeMessage | undefined;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (hasRenderableChatMessageBody(messages[i]!)) {
+      last = messages[i];
+      break;
+    }
+  }
+  if (!last) return false;
   if (last.role !== "user" && last.role !== "assistant") return false;
   // 末条 assistant 含 reasoning 时，reasoning 卡片本身已是明确的「正在思考」指示
   // （正文为空时也渲染「思考中」，作为消息内容的一部分），底部不再叠加 thinking-hint，
@@ -230,12 +241,11 @@ function appendFilesChangedSummaryRows(
   }
 }
 
-export function buildChatMessageListRowsWithFolded(
-  messages: readonly ClaudeMessage[],
+/** 从已 fold 的消息构建列表行（不再次 fold）。 */
+export function buildChatMessageListRowsFromFolded(
+  foldedMessages: readonly ClaudeMessage[],
   options: ChatMessageListRowsBuildOptions,
-): ChatMessageListRowsBuildResult {
-  // fold tool_result 后再合并连续 assistant，避免 Cursor 流式落盘碎片在内存态仍按多气泡渲染。
-  const foldedMessages = foldChatMessagesForList(messages);
+): ChatMessageListRow[] {
   const rows: ChatMessageListRow[] = [];
 
   for (let originalIndex = 0; originalIndex < foldedMessages.length; originalIndex += 1) {
@@ -250,7 +260,51 @@ export function buildChatMessageListRowsWithFolded(
     coalesced.push(THINKING_HINT_ROW);
   }
 
-  return { rows: coalesced, folded: foldedMessages };
+  return coalesced;
+}
+
+export function buildChatMessageListRowsWithFolded(
+  messages: readonly ClaudeMessage[],
+  options: ChatMessageListRowsBuildOptions,
+): ChatMessageListRowsBuildResult {
+  // fold tool_result 后再合并连续 assistant，避免 Cursor 流式落盘碎片在内存态仍按多气泡渲染。
+  const foldedMessages = foldChatMessagesForList(messages);
+  return {
+    rows: buildChatMessageListRowsFromFolded(foldedMessages, options),
+    folded: foldedMessages,
+  };
+}
+
+/**
+ * 在已 fold 结果上追加一条原始消息（镜像 fold 循环的单步），避免每条新消息全量扫历史 tool_result。
+ */
+export function foldAppendOntoFolded(
+  prevFolded: readonly ClaudeMessage[],
+  appended: ClaudeMessage,
+): ClaudeMessage[] {
+  if (!isToolOnlyUserMessage(appended)) {
+    const last = prevFolded[prevFolded.length - 1];
+    if (!last) return [appended];
+    // 仅对末两条做 coalesce，O(1)；前缀原样保留。
+    return [...prevFolded.slice(0, -1), ...coalesceConsecutiveAssistantMessages([last, appended])];
+  }
+  const updates = (appended.parts ?? []).filter(
+    (part): part is ToolUsePart => part.type === "tool_use" && isToolResultUpdatePart(part),
+  );
+  if (updates.length === 0) {
+    return [...prevFolded, appended];
+  }
+  const applied = applyToolResultPartsToMessages(prevFolded, updates);
+  const orphans = updates.filter((update) => !applied.matchedIds.has(update.id));
+  if (orphans.length === 0) return applied.messages as ClaudeMessage[];
+  return [
+    ...(applied.messages as ClaudeMessage[]),
+    {
+      ...appended,
+      parts: orphans,
+      content: "",
+    },
+  ];
 }
 
 /** tool_result fold + 连续 assistant 合并；列表构建与 tail-patch 共用。 */
@@ -292,6 +346,25 @@ export function tryPatchChatMessageListRowsTail(
     };
   }
   if (prevMessages.length === 0 || nextMessages.length === 0) return null;
+
+  // 追加一条：前缀引用全相同 → 增量 fold，再尽量复用前缀 rows。
+  if (nextMessages.length === prevMessages.length + 1 && prevFolded !== undefined) {
+    for (let i = 0; i < prevMessages.length; i += 1) {
+      if (prevMessages[i] !== nextMessages[i]) return null;
+    }
+    const appended = nextMessages[nextMessages.length - 1]!;
+    const nextFolded = foldAppendOntoFolded(prevFolded, appended);
+    const patchedRows = tryPatchRowsAfterFoldAppend(prevFolded, nextFolded, prevRows, options);
+    if (patchedRows) {
+      return { rows: patchedRows, folded: nextFolded };
+    }
+    // fold 已增量完成；行构建仍全量但省去历史 tool_result 扫描。
+    return {
+      rows: buildChatMessageListRowsFromFolded(nextFolded, options),
+      folded: nextFolded,
+    };
+  }
+
   if (prevMessages.length !== nextMessages.length) return null;
   for (let i = 0; i < nextMessages.length - 1; i += 1) {
     if (prevMessages[i] !== nextMessages[i]) return null;
@@ -307,7 +380,9 @@ export function tryPatchChatMessageListRowsTail(
 
   // 增量 fold：prev 末条被原样 push（prevFolded 末 === prevLast，精确判别 fold CASE A/B）且
   // next 末条也会被原样 push（非 tool-only，或 tool-only 无 tool_use result updates）时，
-  // nextFolded = [...foldPrefix, nextLast]，foldPrefix = prevFolded.slice(0,-1) = fold(前缀)。
+  // nextFolded = [...foldPrefix, nextLast]。
+  // prevLastPushedAsIs 已保证「前缀末若为 assistant，不会与 prevLast 再合并」——否则
+  // prevFolded 末条会是合成对象而非 prevLast。因此此处无需再跑全量 coalesce（每 token O(n)）。
   // 否则回退全量 fold（末条 tool-only 有 updates 的合并/orphan 场景）。
   // 若前缀已含连续 assistant 合并，prevFolded 末条是合成对象（!== prevLast），走全量路径。
   const prevLastPushedAsIs =
@@ -319,7 +394,7 @@ export function tryPatchChatMessageListRowsTail(
     !(nextLast.parts ?? []).some((part) => part.type === "tool_use" && isToolResultUpdatePart(part));
   let nextFolded: ClaudeMessage[];
   if (prevLastPushedAsIs && nextLastPushedAsIs && prevFolded !== undefined) {
-    nextFolded = coalesceConsecutiveAssistantMessages([...prevFolded.slice(0, -1), nextLast]);
+    nextFolded = [...prevFolded.slice(0, -1), nextLast];
   } else {
     nextFolded = foldChatMessagesForList(nextMessages);
   }
@@ -373,4 +448,78 @@ export function tryPatchChatMessageListRowsTail(
     nextRows.push(THINKING_HINT_ROW);
   }
   return { rows: nextRows, folded: nextFolded };
+}
+
+/**
+ * fold 追加后的行 patch：纯追加保留全部前缀；吸收/改写时从首个变更下标起重建。
+ */
+function tryPatchRowsAfterFoldAppend(
+  prevFolded: readonly ClaudeMessage[],
+  nextFolded: readonly ClaudeMessage[],
+  prevRows: readonly ChatMessageListRow[],
+  options: ChatMessageListRowsBuildOptions,
+): ChatMessageListRow[] | null {
+  let firstChanged = 0;
+  const shared = Math.min(prevFolded.length, nextFolded.length);
+  while (firstChanged < shared && prevFolded[firstChanged] === nextFolded[firstChanged]) {
+    firstChanged += 1;
+  }
+
+  // 纯追加：folded 前缀全同，仅多末条。
+  if (
+    firstChanged === prevFolded.length &&
+    nextFolded.length === prevFolded.length + 1
+  ) {
+    const prefixRows: ChatMessageListRow[] = [];
+    for (const row of prevRows) {
+      if (row.kind === "thinking-hint") continue;
+      if (row.kind === "files-changed-summary") {
+        prefixRows.push(row);
+        continue;
+      }
+      if (row.kind === "message") {
+        const covered = messageRowCoveredIndexes(row);
+        if (covered.some((idx) => idx >= prevFolded.length)) return null;
+        prefixRows.push(row);
+      }
+    }
+    const lastIndex = nextFolded.length - 1;
+    const lastRow = buildSingleChatMessageListRow(nextFolded, lastIndex, options);
+    const patched = lastRow ? [...prefixRows, lastRow] : [...prefixRows];
+    const nextRows = coalesceConsecutiveToolActivityRows(patched);
+    if (options.showListEndThinkingHint) {
+      nextRows.push(THINKING_HINT_ROW);
+    }
+    return nextRows;
+  }
+
+  // tool_result 吸收等：从首个变更下标起丢掉旧行，重建后缀。
+  if (firstChanged >= nextFolded.length) return null;
+  const prefixRows: ChatMessageListRow[] = [];
+  for (const row of prevRows) {
+    if (row.kind === "thinking-hint") continue;
+    if (row.kind === "message") {
+      const covered = messageRowCoveredIndexes(row);
+      if (covered.some((idx) => idx >= firstChanged)) continue;
+      if (covered.length === 1 && row.msg !== nextFolded[row.originalIndex]) return null;
+      prefixRows.push(row);
+      continue;
+    }
+    if (row.kind === "files-changed-summary") {
+      // 仅保留落在未变更前缀内的摘要；后缀摘要由全量路径补。
+      continue;
+    }
+  }
+
+  const suffix: ChatMessageListRow[] = [];
+  for (let i = firstChanged; i < nextFolded.length; i += 1) {
+    const row = buildSingleChatMessageListRow(nextFolded, i, options);
+    if (row) suffix.push(row);
+  }
+  const nextRows = coalesceConsecutiveToolActivityRows([...prefixRows, ...suffix]);
+  // 吸收路径可能改写已完成工具状态；files-changed 仍 defer 到 idle 全量重建。
+  if (options.showListEndThinkingHint) {
+    nextRows.push(THINKING_HINT_ROW);
+  }
+  return nextRows;
 }

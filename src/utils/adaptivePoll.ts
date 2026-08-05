@@ -35,6 +35,17 @@ export function scalePollIntervalMs(baseMs: number, devtoolsMultiplier = 2.5): n
  */
 export const congestionCheckRef: { current: (() => boolean) | null } = { current: null };
 
+/**
+ * 侧栏滚动 / 输入硬推迟窗：轮询 tick 让路。
+ * 由 wireAdaptivePollInteractionRelief 注入，避免与 chrome/composer store 循环依赖。
+ */
+export const pollInteractionReliefRef: { current: (() => boolean) | null } = { current: null };
+
+/** 非关键轮询是否应跳过本拍（滚动/打字让路）。 */
+export function shouldDeferAdaptivePollTick(): boolean {
+  return pollInteractionReliefRef.current?.() === true;
+}
+
 export function readVisiblePollIntervalMs(visibleMs: number, hiddenMs: number): number {
   if (typeof document === "undefined") return visibleMs;
   const base = document.visibilityState === "visible" ? visibleMs : hiddenMs;
@@ -43,6 +54,7 @@ export function readVisiblePollIntervalMs(visibleMs: number, hiddenMs: number): 
 
 /**
  * 创建随 visibility / DevTools 调整间隔的轮询；隐藏时跳过 tick。
+ * 侧栏滚动或正在输入时也跳过，避免与流式/hit-test 抢主线程与 IPC。
  * 返回 dispose：清 interval 并移除 visibility 监听。
  */
 export function startAdaptiveInterval(
@@ -54,6 +66,7 @@ export function startAdaptiveInterval(
 
   const tick = () => {
     if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    if (shouldDeferAdaptivePollTick()) return;
     onTick();
   };
 

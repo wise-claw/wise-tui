@@ -6,6 +6,9 @@ let fileTreeScrollActive = false;
 let workspaceScrollActive = false;
 let workspacePointerActive = false;
 const listeners = new Set<() => void>();
+const pendingScrollIdleRuns: Array<() => void> = [];
+let scrollIdleDrainRaf: number | null = null;
+let scrollIdlePollTimer: ReturnType<typeof setTimeout> | null = null;
 
 function notify(): void {
   for (const listener of listeners) {
@@ -27,6 +30,7 @@ export function setLeftSidebarScrollActive(active: boolean): void {
   if (leftScrollActive === active) return;
   leftScrollActive = active;
   notify();
+  if (!active) ensureChromeScrollIdleDrainScheduled();
 }
 
 /** 文件树滚动（比通用左栏滚动让路更强）。 */
@@ -34,6 +38,7 @@ export function setFileTreeScrollActive(active: boolean): void {
   if (fileTreeScrollActive === active) return;
   fileTreeScrollActive = active;
   notify();
+  if (!active) ensureChromeScrollIdleDrainScheduled();
 }
 
 /** 工作区列表滚动。 */
@@ -41,6 +46,7 @@ export function setWorkspaceScrollActive(active: boolean): void {
   if (workspaceScrollActive === active) return;
   workspaceScrollActive = active;
   notify();
+  if (!active) ensureChromeScrollIdleDrainScheduled();
 }
 
 /** 指针在工作区列表内（含快速划过未触发滚动时）。 */
@@ -60,6 +66,11 @@ export function isFileTreeScrollActive(): boolean {
 
 export function isWorkspaceScrollActive(): boolean {
   return workspaceScrollActive;
+}
+
+/** 左栏 / 文件树 / 工作区正在滚动（不含纯 hover）：live flush 硬推迟。 */
+export function isChromeScrollReliefActive(): boolean {
+  return leftScrollActive || fileTreeScrollActive || workspaceScrollActive;
 }
 
 /** 工作区滚动或指针在列表内：聊天区更强降频。 */
@@ -83,4 +94,65 @@ export function subscribeChromePanelHover(onStoreChange: () => void): () => void
   return () => {
     listeners.delete(onStoreChange);
   };
+}
+
+function drainChromeScrollIdleRuns(): void {
+  scrollIdleDrainRaf = null;
+  if (isChromeScrollReliefActive()) {
+    if (scrollIdlePollTimer !== null) return;
+    scrollIdlePollTimer = setTimeout(() => {
+      scrollIdlePollTimer = null;
+      ensureChromeScrollIdleDrainScheduled();
+    }, 40);
+    return;
+  }
+  const next = pendingScrollIdleRuns.shift();
+  if (next) next();
+  if (pendingScrollIdleRuns.length > 0) {
+    if (typeof requestAnimationFrame === "undefined") {
+      drainChromeScrollIdleRuns();
+      return;
+    }
+    scrollIdleDrainRaf = requestAnimationFrame(drainChromeScrollIdleRuns);
+  }
+}
+
+function ensureChromeScrollIdleDrainScheduled(): void {
+  if (scrollIdleDrainRaf !== null || scrollIdlePollTimer !== null) return;
+  if (pendingScrollIdleRuns.length === 0) return;
+  if (typeof requestAnimationFrame === "undefined") {
+    drainChromeScrollIdleRuns();
+    return;
+  }
+  scrollIdleDrainRaf = requestAnimationFrame(drainChromeScrollIdleRuns);
+}
+
+/** 侧栏/文件树滚动时推迟 live flush，停稳后再补刷。 */
+export function scheduleAfterChromeScrollIdle(run: () => void): void {
+  if (!isChromeScrollReliefActive()) {
+    run();
+    return;
+  }
+  pendingScrollIdleRuns.push(run);
+  ensureChromeScrollIdleDrainScheduled();
+}
+
+/** @internal test helper */
+export function resetChromePanelHoverStoreForTests(): void {
+  leftHovered = false;
+  rightHovered = false;
+  leftScrollActive = false;
+  fileTreeScrollActive = false;
+  workspaceScrollActive = false;
+  workspacePointerActive = false;
+  pendingScrollIdleRuns.length = 0;
+  if (scrollIdleDrainRaf !== null && typeof cancelAnimationFrame !== "undefined") {
+    cancelAnimationFrame(scrollIdleDrainRaf);
+    scrollIdleDrainRaf = null;
+  }
+  if (scrollIdlePollTimer !== null) {
+    clearTimeout(scrollIdlePollTimer);
+    scrollIdlePollTimer = null;
+  }
+  listeners.clear();
 }

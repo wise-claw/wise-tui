@@ -18,6 +18,8 @@ export const MAX_OMC_WORKFLOW_INVOCATIONS_IN_MEMORY = 32;
 const MAX_DISPATCH_PROMPT_CHARS = 48_000;
 
 let persistDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+/** debounce 窗口内的最新快照；卸载 flush 时若未带 list 可取此值。 */
+let pendingPersistList: WorkflowInvocationStreamDetail[] | null = null;
 const PERSIST_DEBOUNCE_MS = 640;
 
 export function sortOmcDirectBatchInvocationsForStore(list: WorkflowInvocationStreamDetail[]): WorkflowInvocationStreamDetail[] {
@@ -288,6 +290,7 @@ export async function clearOmcDirectBatchInvocationsPersisted(): Promise<void> {
     clearTimeout(persistDebounceTimer);
     persistDebounceTimer = null;
   }
+  pendingPersistList = null;
   removeLocalStorageRaw();
   try {
     await deleteAppSetting(STORAGE_KEY);
@@ -312,6 +315,7 @@ function buildPersistedOmcDirectBatchJson(
 /** 同步写入 localStorage；pagehide / visibility hidden 时使用，避免 unload 阶段 IPC 被拦截。 */
 export function flushPersistOmcDirectBatchInvocationsLocal(list: WorkflowInvocationStreamDetail[]): void {
   cancelOmcDirectBatchInvocationsPersistSchedule();
+  pendingPersistList = null;
   const payload = buildPersistedOmcDirectBatchJson(list);
   if (!payload) {
     removeLocalStorageRaw();
@@ -325,6 +329,7 @@ export async function flushPersistOmcDirectBatchInvocations(
   options?: { persistAppSetting?: boolean },
 ): Promise<void> {
   cancelOmcDirectBatchInvocationsPersistSchedule();
+  pendingPersistList = null;
   const payload = buildPersistedOmcDirectBatchJson(list);
   if (!payload) {
     removeLocalStorageRaw();
@@ -368,12 +373,14 @@ export function cancelOmcDirectBatchInvocationsPersistSchedule(): void {
 }
 
 export function schedulePersistOmcDirectBatchInvocations(list: WorkflowInvocationStreamDetail[]): void {
+  pendingPersistList = list;
   if (persistDebounceTimer != null) {
     clearTimeout(persistDebounceTimer);
   }
-  const snapshot = list;
   persistDebounceTimer = setTimeout(() => {
     persistDebounceTimer = null;
-    void flushPersistOmcDirectBatchInvocations(snapshot);
+    const snapshot = pendingPersistList;
+    pendingPersistList = null;
+    if (snapshot) void flushPersistOmcDirectBatchInvocations(snapshot);
   }, PERSIST_DEBOUNCE_MS);
 }

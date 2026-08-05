@@ -10,6 +10,8 @@ import {
   gitRevert,
 } from "../../services/git";
 import type { GitBranchEntry, GitGraphCommit } from "../../types";
+import { useScrollEndClass } from "../../hooks/useScrollEndClass";
+import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { GraphCreateBranchDialog, GraphCreateTagDialog, GraphResetDialog } from "./GraphCommitActionDialogs";
 import { GraphComparePanel } from "./GraphComparePanel";
 import { GraphCommitDetail } from "./GraphCommitDetail";
@@ -69,6 +71,9 @@ export function GraphMode({
   const [error, setError] = useState<string | null>(null);
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: 48 });
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  useScrollEndClass(scrollRef, LEFT_SIDEBAR_SCROLLING_CLASS, 220, {
+    relieveSidePanelPriority: true,
+  });
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const scrollRafRef = useRef<number | null>(null);
   const loadInFlightRef = useRef<Promise<void> | null>(null);

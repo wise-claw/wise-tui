@@ -13,10 +13,16 @@ import {
   isMainThreadCongested,
   subscribeMainThreadCongestion,
 } from "../stores/mainThreadCongestionStore";
+import {
+  isChromeScrollReliefActive,
+  subscribeChromePanelHover,
+} from "../stores/chromePanelHoverStore";
 
 /** 流式 Markdown 重建最短间隔：偏短以提升贴底展示流畅度；拥堵时仍由 defer 路径让步。 */
 const STREAMING_MIN_REBUILD_MS = 100;
 const STREAMING_MIN_REBUILD_CONGESTED_MS = 220;
+/** 侧栏/文件树滚动让路：比拥堵更强，优先保证滚动 hit-test。 */
+const STREAMING_MIN_REBUILD_SCROLL_RELIEF_MS = 360;
 /** 超长正文放宽重建间隔，抵消每 tick 全量重解析的成本（替代此前的纯文本降级）。 */
 const STREAMING_MIN_REBUILD_LARGE_MS = 240;
 const STREAMING_LARGE_TEXT_CHARS = 6000;
@@ -59,15 +65,38 @@ export function shouldDegradeStreamingToPlain(text: string, congested: boolean):
   return congested && text.length >= STREAMING_PLAIN_DEGRADE_CHARS;
 }
 
-/** 流式重建节流间隔：拥堵优先让步，其次按正文规模放宽。 */
-export function resolveStreamingRebuildMinMs(textLength: number, congested: boolean): number {
-  if (congested) return STREAMING_MIN_REBUILD_CONGESTED_MS;
+export type StreamingMarkdownRelief = {
+  congested: boolean;
+  scrollRelief: boolean;
+};
+
+/** 流式重建节流间隔：侧栏滚动优先让步，其次拥堵，再次按正文规模放宽。 */
+export function resolveStreamingRebuildMinMs(
+  textLength: number,
+  congestedOrRelief: boolean | StreamingMarkdownRelief,
+): number {
+  const relief =
+    typeof congestedOrRelief === "boolean"
+      ? { congested: congestedOrRelief, scrollRelief: false }
+      : congestedOrRelief;
+  if (relief.scrollRelief) return STREAMING_MIN_REBUILD_SCROLL_RELIEF_MS;
+  if (relief.congested) return STREAMING_MIN_REBUILD_CONGESTED_MS;
   if (textLength >= STREAMING_LARGE_TEXT_CHARS) return STREAMING_MIN_REBUILD_LARGE_MS;
   return STREAMING_MIN_REBUILD_MS;
 }
 
-function subscribeCongestionAlways(onStoreChange: () => void): () => void {
-  return subscribeMainThreadCongestion(onStoreChange);
+const noopSubscribe = (): (() => void) => () => {};
+
+function subscribeCongestionForMarkdown(
+  streaming: boolean,
+): (onStoreChange: () => void) => (() => void) {
+  return streaming ? subscribeMainThreadCongestion : noopSubscribe;
+}
+
+function subscribeScrollReliefForMarkdown(
+  streaming: boolean,
+): (onStoreChange: () => void) => (() => void) {
+  return streaming ? subscribeChromePanelHover : noopSubscribe;
 }
 
 export type MarkdownDisplaySourceResult = {
@@ -79,15 +108,22 @@ export type MarkdownDisplaySourceResult = {
 /** 构建聊天 Markdown 展示源码（预处理后交给 ReactMarkdown）。 */
 export function useMarkdownDisplaySource(text: string, streaming: boolean): MarkdownDisplaySourceResult {
   const safeText = coerceMarkdownSourceText(text);
+  // 历史消息不订拥堵/滚动：否则主线程卡顿翻转时整屏已结算 Markdown 会集体重渲。
   const congested = useSyncExternalStore(
-    subscribeCongestionAlways,
-    isMainThreadCongested,
+    subscribeCongestionForMarkdown(streaming),
+    () => (streaming ? isMainThreadCongested() : false),
     () => false,
   );
+  const scrollRelief = useSyncExternalStore(
+    subscribeScrollReliefForMarkdown(streaming),
+    () => (streaming ? isChromeScrollReliefActive() : false),
+    () => false,
+  );
+  const yieldToInteraction = congested || scrollRelief;
   const deferredText = useDeferredValue(safeText);
-  // 流式默认即时渲染，避免 useDeferredValue 叠 thrrottle 造成「顿一下才出字」；
-  // 仅主线程拥堵时改走 deferred，优先保证滚动/输入响应。
-  const renderText = streaming && congested ? deferredText : safeText;
+  // 流式默认即时渲染，避免 useDeferredValue 叠 throttle 造成「顿一下才出字」；
+  // 仅主线程拥堵或侧栏滚动时改走 deferred，优先保证滚动/输入响应。
+  const renderText = streaming && yieldToInteraction ? deferredText : safeText;
   const stabilizedText = useMemo(
     () => (streaming ? stabilizeStreamingMarkdown(renderText) : renderText),
     [renderText, streaming],
@@ -120,7 +156,10 @@ export function useMarkdownDisplaySource(text: string, streaming: boolean): Mark
 
     const prev = lastBuiltRef.current;
     const now = performance.now();
-    const rebuildMinMs = resolveStreamingRebuildMinMs(stabilizedText.length, congested);
+    const rebuildMinMs = resolveStreamingRebuildMinMs(stabilizedText.length, {
+      congested,
+      scrollRelief,
+    });
     const degradeToPlain = shouldDegradeStreamingToPlain(stabilizedText, congested);
     const withinThrottle =
       prev.text
@@ -146,5 +185,5 @@ export function useMarkdownDisplaySource(text: string, streaming: boolean): Mark
     const source = prepareMarkdownForDisplay(stabilizedText, { streaming: true });
     lastBuiltRef.current = { text: stabilizedText, source, plain: false, at: now };
     return { source, plain: false };
-  }, [stabilizedText, streaming, congested]);
+  }, [stabilizedText, streaming, congested, scrollRelief]);
 }

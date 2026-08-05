@@ -3,6 +3,7 @@ import {
   cacheKeyForPid,
   createClaudeProcessWorkspaceLabelCache,
   lookupClaudeProcessLabelCache,
+  mergeClaudeProcessLabelCacheStates,
   pruneClaudeProcessLabelCache,
   rememberClaudeProcessLabelCache,
 } from "./claudeProcessWorkspaceLabelCache";
@@ -87,5 +88,46 @@ describe("claudeProcessWorkspaceLabelCache", () => {
     expect(state.byKey.size).toBe(96);
     expect(lookupClaudeProcessLabelCache(state, { pid: 100 })?.scopeTitle).toBe("repo-99");
     expect(lookupClaudeProcessLabelCache(state, { pid: 1 })).toBeNull();
+  });
+
+  it("mergeClaudeProcessLabelCacheStates prefers newer updatedAt and keeps both key sets", () => {
+    const runtime = createClaudeProcessWorkspaceLabelCache();
+    runtime.byKey.set(cacheKeyForPid(1), {
+      scopeTitle: "runtime-new",
+      scopeSubtitle: null,
+      projectName: null,
+      repositoryName: null,
+      repositoryPathKey: null,
+      updatedAt: 10,
+    });
+    runtime.byKey.set(cacheKeyForPid(2), {
+      scopeTitle: "runtime-only",
+      scopeSubtitle: null,
+      projectName: null,
+      repositoryName: null,
+      repositoryPathKey: null,
+      updatedAt: 5,
+    });
+    const disk = createClaudeProcessWorkspaceLabelCache();
+    disk.byKey.set(cacheKeyForPid(1), {
+      scopeTitle: "disk-old",
+      scopeSubtitle: null,
+      projectName: null,
+      repositoryName: null,
+      repositoryPathKey: null,
+      updatedAt: 1,
+    });
+    disk.byKey.set(cacheKeyForPid(3), {
+      scopeTitle: "disk-only",
+      scopeSubtitle: null,
+      projectName: null,
+      repositoryName: null,
+      repositoryPathKey: null,
+      updatedAt: 3,
+    });
+    const merged = mergeClaudeProcessLabelCacheStates(runtime, disk);
+    expect(lookupClaudeProcessLabelCache(merged, { pid: 1 })?.scopeTitle).toBe("runtime-new");
+    expect(lookupClaudeProcessLabelCache(merged, { pid: 2 })?.scopeTitle).toBe("runtime-only");
+    expect(lookupClaudeProcessLabelCache(merged, { pid: 3 })?.scopeTitle).toBe("disk-only");
   });
 });

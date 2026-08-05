@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { message } from "antd";
 import type { ClaudeSession, ProjectItem, Repository } from "../types";
-import { setAppSetting, getAppSetting } from "../services/appSettingsStore";
+import { getAppSetting } from "../services/appSettingsStore";
+import { persistRepositoryMainSessionBindings } from "../services/repositoryMainSessionBindingsPersist";
 import {
   normalizeRepositoryPathKey as normalizeRepositoryPathForMatch,
   parseRepositoryMainSessionBindings,
@@ -99,7 +100,7 @@ export function useAppSessionRouting({
           if (!(key in prev)) return prev;
           const next = { ...prev };
           delete next[key];
-          void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
+          void persistRepositoryMainSessionBindings(next);
           return next;
         });
       } catch (err) {
@@ -121,7 +122,7 @@ export function useAppSessionRouting({
         }
       }
       if (!changed) return prev;
-      void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
+      void persistRepositoryMainSessionBindings(next);
       return next;
     });
   }, []);
@@ -202,7 +203,7 @@ export function useAppSessionRouting({
       setRepositoryMainSessionBindings((prev) => {
         if (prev[key] === nextId) return prev;
         const next = { ...prev, [key]: nextId };
-        void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
+        void persistRepositoryMainSessionBindings(next);
         return next;
       });
     },
@@ -223,7 +224,7 @@ export function useAppSessionRouting({
           if (prev[key] !== sessionId) return prev;
           const next = { ...prev };
           delete next[key];
-          void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
+          void persistRepositoryMainSessionBindings(next);
           return next;
         });
       }
@@ -241,7 +242,7 @@ export function useAppSessionRouting({
           if (prev[key] !== sessionId) return prev;
           const next = { ...prev };
           delete next[key];
-          void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
+          void persistRepositoryMainSessionBindings(next);
           return next;
         });
       }

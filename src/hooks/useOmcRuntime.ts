@@ -17,7 +17,6 @@ import {
   reconcileDirectBatchInvocationRowsWithBundles,
 } from "../services/backgroundInvocationSnapshot";
 import {
-  cancelOmcDirectBatchInvocationsPersistSchedule,
   clearOmcDirectBatchInvocationsPersisted,
   digestOmcDirectBatchInvocationsList,
   flushPersistOmcDirectBatchInvocations,
@@ -493,7 +492,11 @@ export function useOmcRuntime({
         clearTimeout(omcDirectBatchProgressUiTimeoutRef.current);
         omcDirectBatchProgressUiTimeoutRef.current = null;
       }
-      cancelOmcDirectBatchInvocationsPersistSchedule();
+      const list = sortOmcDirectBatchInvocationsForStore([
+        ...omcDirectBatchInvocationRef.current.values(),
+      ]);
+      flushPersistOmcDirectBatchInvocationsLocal(list);
+      void flushPersistOmcDirectBatchInvocations(list);
       repositoryMemberInvocationRef.current.clear();
       resetRepositoryMemberInvocationsStore();
       window.removeEventListener(WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED, handleOmcBatchRuntimeChanged as EventListener);

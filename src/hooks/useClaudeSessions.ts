@@ -71,7 +71,7 @@ import {
   listClaudeDiskSessionsForRepositoryScope,
   normalizeSessionRepositoryPath,
 } from "../utils/sessionHistoryScope";
-import { loadSessionTabsState, saveSessionTabsState } from "../services/tabsStore";
+import { loadSessionTabsState, saveSessionTabsState, buildPersistedTabsState, takeLocalTabsBackupRaw, writeLocalTabsBackupRaw } from "../services/tabsStore";
 import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import {
   CLAUDE_DISK_JSONL_TAIL_LINES_LAZY,
@@ -1868,8 +1868,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     };
   }, []);
 
-  /** localStorage 备份 key：在 beforeunload 中同步写入，供下次启动时合并恢复。 */
-  const TABS_BACKUP_KEY = "wise.tabs.backup.v1";
+  /** localStorage 备份：按窗口隔离，避免 main / main-dock 互相覆盖。 */
 
   useEffect(() => {
     let cancelled = false;
@@ -1879,8 +1878,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         if (cancelled) return;
         // 合并 beforeunload 写入的 localStorage 备份（弥补异步 IPC 在页面卸载时可能未送达的空窗）
         try {
-          const backupRaw = localStorage.getItem(TABS_BACKUP_KEY);
-          localStorage.removeItem(TABS_BACKUP_KEY);
+          const backupRaw = takeLocalTabsBackupRaw();
           if (backupRaw) {
             const backup = JSON.parse(backupRaw);
             if (backup?.sessions?.length) {
@@ -2889,35 +2887,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       // 新创建会话同步落盘 localStorage，弥补 debounce 取消 + beforeunload 不可靠的双重缺口。
       // skipActivate（伴生窗格）不得改写备份里的 activeSessionId，否则刷新会落到空壳新标签。
-      try {
-        localStorage.setItem(
-          TABS_BACKUP_KEY,
-          JSON.stringify({
-            version: 1,
-            activeSessionId: opts?.skipActivate
-              ? (activeSessionIdRef.current ?? id)
-              : id,
-            sessions: sessionsRef.current.map((ses) => {
-              const {
-                diskTranscriptPartial: _omitPartial,
-                transcriptMemoryUnlimited: _omitUnlimited,
-                ...rest
-              } = ses;
-              const messages =
-                rest.messages.length <= PERSIST_SESSION_MESSAGES_MAX
-                  ? rest.messages
-                  : rest.messages.slice(-PERSIST_SESSION_MESSAGES_MAX);
-              return {
-                ...rest,
-                repositoryPath: normalizeSessionRepositoryPath(rest.repositoryPath),
-                messages,
-              };
-            }),
-          }),
-        );
-      } catch {
-        /* localStorage full or unavailable */
-      }
+      writeLocalTabsBackupRaw(
+        JSON.stringify(
+          buildPersistedTabsState(
+            opts?.skipActivate ? (activeSessionIdRef.current ?? id) : id,
+            sessionsRef.current,
+          ),
+        ),
+      );
 
       return id;
     },
@@ -4262,30 +4239,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           ? 2000
           : 450;
     const t = window.setTimeout(() => {
-      const bindingsChanged = pruneLiveSessionSidecars(sessions);
+      const latest = latestTabsForSaveRef.current;
+      if (!latest.tabsHydrated) return;
+      const bindingsChanged = pruneLiveSessionSidecars(latest.sessions);
       if (bindingsChanged) {
         persistWorkflowBindings(workflowRunBySessionRef.current);
       }
-      void saveSessionTabsState({
-        version: 1,
-        activeSessionId,
-        sessions: sessions.map((s) => {
-          const {
-            diskTranscriptPartial: _omitPartial,
-            transcriptMemoryUnlimited: _omitUnlimited,
-            ...rest
-          } = s;
-          const messages =
-            rest.messages.length <= PERSIST_SESSION_MESSAGES_MAX
-              ? rest.messages
-              : rest.messages.slice(-PERSIST_SESSION_MESSAGES_MAX);
-          return {
-            ...rest,
-            repositoryPath: normalizeSessionRepositoryPath(rest.repositoryPath),
-            messages,
-          };
-        }),
-      });
+      void saveSessionTabsState(buildPersistedTabsState(latest.activeSessionId, latest.sessions));
     }, debounceMs);
     return () => window.clearTimeout(t);
   }, [sessions, activeSessionId, tabsHydrated, pruneLiveSessionSidecars]);
@@ -4296,58 +4256,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     const saveNow = () => {
       const latest = latestTabsForSaveRef.current;
       if (!latest.tabsHydrated) return;
-      try {
-        localStorage.setItem(
-          TABS_BACKUP_KEY,
-          JSON.stringify({
-            version: 1,
-            activeSessionId: latest.activeSessionId,
-            sessions: latest.sessions.map((ses) => {
-              const {
-                diskTranscriptPartial: _omitPartial,
-                transcriptMemoryUnlimited: _omitUnlimited,
-                ...rest
-              } = ses;
-              const messages =
-                rest.messages.length <= PERSIST_SESSION_MESSAGES_MAX
-                  ? rest.messages
-                  : rest.messages.slice(-PERSIST_SESSION_MESSAGES_MAX);
-              return {
-                ...rest,
-                repositoryPath: normalizeSessionRepositoryPath(rest.repositoryPath),
-                messages,
-              };
-            }),
-          }),
-        );
-      } catch {
-        /* localStorage full or unavailable */
-      }
-      const latestSessions = latest.sessions;
-      const bindingsChanged = pruneLiveSessionSidecars(latestSessions);
+      const persisted = buildPersistedTabsState(latest.activeSessionId, latest.sessions);
+      writeLocalTabsBackupRaw(JSON.stringify(persisted));
+      const bindingsChanged = pruneLiveSessionSidecars(latest.sessions);
       if (bindingsChanged) {
         persistWorkflowBindings(workflowRunBySessionRef.current);
       }
-      void saveSessionTabsState({
-        version: 1,
-        activeSessionId: latest.activeSessionId,
-        sessions: latestSessions.map((ses) => {
-          const {
-            diskTranscriptPartial: _omitPartial,
-            transcriptMemoryUnlimited: _omitUnlimited,
-            ...rest
-          } = ses;
-          const messages =
-            rest.messages.length <= PERSIST_SESSION_MESSAGES_MAX
-              ? rest.messages
-              : rest.messages.slice(-PERSIST_SESSION_MESSAGES_MAX);
-          return {
-            ...rest,
-            repositoryPath: normalizeSessionRepositoryPath(rest.repositoryPath),
-            messages,
-          };
-        }),
-      });
+      void saveSessionTabsState(persisted);
     };
     // visibilitychange 在页面隐藏时触发，比 beforeunload 可靠性更高（Tauri webview 中也能触发）
     const onVisibilityChange = () => {

@@ -78,10 +78,8 @@ import {
   type EmployeeTerminalConversationStatus,
 } from "../../utils/employeeTerminalDispatchStatus";
 import {
-  monitorSessionsOverviewFingerprint,
   monitorSessionsTerminalStatusFingerprint,
 } from "../../hooks/useMonitorSessionsForOverview";
-import { useClaudeSessionsLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
 import {
   MONITOR_VIRTUALIZE_MIN_ROWS,
   MonitorPanelVirtualRows,
@@ -1294,25 +1292,8 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
     return map;
   }, [employeeHistorySessionsByName, teamItems]);
 
-  // 派发详情 drawer 自行订阅 live sessions，勿因打开派发项把整面板拖进 live 重绘。
-  const needsLiveTranscriptSessions =
-    _historyDrawerSessionIdProp != null ||
-    repositorySubagentDetailTarget != null ||
-    omcDirectBatchDetailSnapshot != null;
-  const liveTranscriptSessions = useClaudeSessionsLiveSnapshot(needsLiveTranscriptSessions);
-  const nextTranscriptFingerprint = needsLiveTranscriptSessions
-    ? monitorSessionsOverviewFingerprint(liveTranscriptSessions)
-    : "frozen";
-  const [transcriptSessionsFingerprint, setTranscriptSessionsFingerprint] = useState(
-    nextTranscriptFingerprint,
-  );
-  if (nextTranscriptFingerprint !== transcriptSessionsFingerprint) {
-    setTranscriptSessionsFingerprint(nextTranscriptFingerprint);
-  }
-  const sessionsForHistoryTranscript = useMemo(
-    () => (needsLiveTranscriptSessions ? liveTranscriptSessions : (transcriptSourceSessions ?? sessions)),
-    [needsLiveTranscriptSessions, transcriptSessionsFingerprint, sessions, transcriptSourceSessions, liveTranscriptSessions],
-  );
+  // 派发 / 历史 / 子进程抽屉自行订 live 或读盘；面板本体只吃结构态 sessions。
+  const sessionsForHistoryTranscript = transcriptSourceSessions ?? sessions;
 
   const openHistoryMessagesDrawer = useCallback(
     (sessionId: string) => {

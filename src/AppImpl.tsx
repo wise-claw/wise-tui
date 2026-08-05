@@ -198,6 +198,7 @@ import { useLeftSidebarRepositoryIconBadgesDefault } from "./hooks/useLeftSideba
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
 import { invalidateWorkflowRunCacheForRepository } from "./hooks/useWorkflowRun";
 import { deleteAppSetting, getAppSetting, setAppSetting } from "./services/appSettingsStore";
+import { persistMultiPaneLayoutState } from "./services/multiPaneLayoutPersist";
 import { loadWiseDefaultConfig } from "./services/wiseDefaultConfigStore";
 import { migratePromptContextSessionKey } from "./components/ClaudeChatInput/prompt-context";
 import {
@@ -481,7 +482,7 @@ export default function App() {
       })),
       primaryPaneRuntime: primaryPaneRuntimeOverride ?? undefined,
     };
-    void setAppSetting(multiPaneStorageKeyRef.current, JSON.stringify(payload));
+    void persistMultiPaneLayoutState(multiPaneStorageKeyRef.current, JSON.stringify(payload));
   }, [paneCount, extraPanes, primaryPaneRuntimeOverride]);
 
   useEffect(() => {

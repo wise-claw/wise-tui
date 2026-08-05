@@ -29,6 +29,8 @@ import {
   probeCodeReviewFindingsFreshness,
 } from "../../services/codeReview";
 import { countCodeReviewFindingSeverities } from "../../stores/codeReviewFindingsStore";
+import { useScrollEndClass } from "../../hooks/useScrollEndClass";
+import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { buildFileTree } from "./fileTree";
 import { FileRow } from "./FileRow";
 import { FileTreeView } from "./FileTreeView";
@@ -106,6 +108,10 @@ function DiffModeInner({
   const hasStaged = status.staged.length > 0;
   const hasUnstaged = status.unstaged.length > 0;
   const hasChanges = hasStaged || hasUnstaged;
+  const diffScrollRef = useRef<HTMLDivElement | null>(null);
+  useScrollEndClass(diffScrollRef, LEFT_SIDEBAR_SCROLLING_CLASS, 180, {
+    relieveSidePanelPriority: true,
+  });
   const ahead = status.ahead ?? 0;
   hasChangesRef.current = hasChanges;
   const canStartCodeReview = hasChanges || ahead > 0;
@@ -662,7 +668,7 @@ function DiffModeInner({
       ) : null}
 
       {hasChanges ? (
-        <div className="git-diff-mode-scroll">
+        <div className="git-diff-mode-scroll" ref={diffScrollRef}>
       {hasStaged && (
         <div className={`git-section${stagedCollapsed ? " git-section--collapsed" : ""}`}>
           <div className="git-section-header">

@@ -376,6 +376,24 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     }, [userQuestionsPopoverOpen, session.messages]);
     const sessionTraceStorageKey = getSessionTraceStorageKey(session.id, session.repositoryPath);
     const tracePersistTimerRef = useRef<number | null>(null);
+    const sessionSendTracesRef = useRef(sessionSendTraces);
+    sessionSendTracesRef.current = sessionSendTraces;
+    /** 关闭 drawer 时会清空内存列表，跳过那一次落盘，避免把磁盘痕迹写成 []。 */
+    const skipTracePersistOnceRef = useRef(false);
+
+    const flushSessionSendTracesPersist = useCallback(() => {
+      if (tracePersistTimerRef.current != null) {
+        window.clearTimeout(tracePersistTimerRef.current);
+        tracePersistTimerRef.current = null;
+      }
+      const snapshot = sessionSendTracesRef.current;
+      // 空列表不落盘：关闭 drawer / 切会话会清空内存，不应把磁盘痕迹抹成 []。
+      if (snapshot.length === 0) return;
+      void setAppSetting(
+        sessionTraceStorageKey,
+        JSON.stringify(snapshot.slice(0, SESSION_SEND_TRACE_PERSIST_MAX)),
+      );
+    }, [sessionTraceStorageKey]);
 
     // 会话切换 reset：取代旧 ClaudeSessionChatWithDockLazy key={activeSession.id} 的整棵 remount。
     // hook 内的 7 个 useState（popover 状态、搜索词、refreshing、trace drawer、traces 列表）
@@ -383,7 +401,8 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     // 显示旧会话内容，进而让"运行面板看起来闪一下"。
     useEffect(() => {
       return () => {
-        // cleanup 跑在 session.id 变化引起的 next render 之前，等价于在新 mount 时清零。
+        // 先 flush 待写 traces，再清 UI 状态。
+        flushSessionSendTracesPersist();
         setHistoryPopoverOpen(false);
         setUserQuestionsPopoverOpen(false);
         setHistorySearchText("");
@@ -397,15 +416,12 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
           window.cancelAnimationFrame(historyLoadMoreRafRef.current);
           historyLoadMoreRafRef.current = null;
         }
-        if (tracePersistTimerRef.current != null) {
-          window.clearTimeout(tracePersistTimerRef.current);
-          tracePersistTimerRef.current = null;
-        }
       };
-    }, [session.id]);
+    }, [session.id, flushSessionSendTracesPersist]);
 
     useEffect(() => {
       if (!sessionTraceDrawerOpen) {
+        skipTracePersistOnceRef.current = true;
         setSessionSendTraces([]);
         return;
       }
@@ -432,15 +448,25 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
         cancelled = true;
       };
     }, [sessionTraceDrawerOpen, sessionTraceStorageKey]);
+
     useEffect(() => {
+      if (skipTracePersistOnceRef.current) {
+        skipTracePersistOnceRef.current = false;
+        return;
+      }
+      if (sessionSendTraces.length === 0) return;
       if (tracePersistTimerRef.current != null) {
         window.clearTimeout(tracePersistTimerRef.current);
       }
       tracePersistTimerRef.current = window.setTimeout(() => {
-        void setAppSetting(sessionTraceStorageKey, JSON.stringify(sessionSendTraces.slice(0, SESSION_SEND_TRACE_PERSIST_MAX)));
+        void setAppSetting(
+          sessionTraceStorageKey,
+          JSON.stringify(sessionSendTraces.slice(0, SESSION_SEND_TRACE_PERSIST_MAX)),
+        );
         tracePersistTimerRef.current = null;
       }, 600);
       return () => {
+        // 依赖变更只取消；真正卸载/切会话由 session.id effect flush。
         if (tracePersistTimerRef.current != null) {
           window.clearTimeout(tracePersistTimerRef.current);
           tracePersistTimerRef.current = null;

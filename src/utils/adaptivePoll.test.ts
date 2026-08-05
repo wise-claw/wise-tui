@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  pollInteractionReliefRef,
   readVisiblePollIntervalMs,
   scalePollIntervalMs,
+  shouldDeferAdaptivePollTick,
   startAdaptiveInterval,
   stringSetEqual,
 } from "./adaptivePoll";
@@ -48,6 +50,49 @@ describe("adaptivePoll", () => {
       expect(ticks).toBe(1);
     } finally {
       dispose();
+      if (originalDescriptor) {
+        Object.defineProperty(document, "visibilityState", originalDescriptor);
+      }
+    }
+  });
+
+  test("shouldDeferAdaptivePollTick follows relief ref", () => {
+    const prev = pollInteractionReliefRef.current;
+    try {
+      pollInteractionReliefRef.current = null;
+      expect(shouldDeferAdaptivePollTick()).toBe(false);
+      pollInteractionReliefRef.current = () => true;
+      expect(shouldDeferAdaptivePollTick()).toBe(true);
+      pollInteractionReliefRef.current = () => false;
+      expect(shouldDeferAdaptivePollTick()).toBe(false);
+    } finally {
+      pollInteractionReliefRef.current = prev;
+    }
+  });
+
+  test("startAdaptiveInterval skips ticks while interaction relief is active", () => {
+    if (typeof document === "undefined") return;
+    const originalDescriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");
+    const prevRelief = pollInteractionReliefRef.current;
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "visible",
+    });
+    let defer = true;
+    pollInteractionReliefRef.current = () => defer;
+    let ticks = 0;
+    const dispose = startAdaptiveInterval(() => {
+      ticks += 1;
+    }, 20, 40);
+    try {
+      document.dispatchEvent(new Event("visibilitychange"));
+      expect(ticks).toBe(0);
+      defer = false;
+      document.dispatchEvent(new Event("visibilitychange"));
+      expect(ticks).toBe(1);
+    } finally {
+      dispose();
+      pollInteractionReliefRef.current = prevRelief;
       if (originalDescriptor) {
         Object.defineProperty(document, "visibilityState", originalDescriptor);
       }

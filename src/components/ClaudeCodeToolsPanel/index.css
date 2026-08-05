@@ -234,6 +234,8 @@
   flex-direction: column;
 }
 
+/* Ant Design 6：content-holder → body-holder；tabpane 类并入 ant-tabs-content */
+.app-claude-code-tools-tabs .ant-tabs-body-holder,
 .app-claude-code-tools-tabs .ant-tabs-content-holder {
   flex: 1 1 0;
   min-height: 0;
@@ -241,13 +243,24 @@
   padding-top: 0;
 }
 
-.app-claude-code-tools-tabs .ant-tabs-content,
-.app-claude-code-tools-tabs .ant-tabs-tabpane {
+.app-claude-code-tools-tabs .ant-tabs-body {
   height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
+.app-claude-code-tools-tabs .ant-tabs-content:not(.ant-tabs-content-hidden),
+.app-claude-code-tools-tabs .ant-tabs-tabpane {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .app-claude-code-tools-scroll {
+  flex: 1 1 0;
+  min-height: 0;
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
@@ -287,6 +300,8 @@
 }
 
 .app-claude-code-tools-tab {
+  flex: 1 1 0;
+  min-height: 0;
   padding: 2px 8px 8px;
   height: 100%;
   overflow-y: auto;

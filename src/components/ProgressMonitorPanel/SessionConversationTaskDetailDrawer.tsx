@@ -24,7 +24,10 @@ import {
   type MonitorDrawerResumeSessionFn,
 } from "./MonitorDrawerSessionComposer";
 import { SubagentStatusIndicator } from "./SubagentStatusIndicator";
-import { useClaudeSessionsLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
+import {
+  useClaudeSessionLiveSnapshot,
+  useClaudeSessionsStructureSnapshot,
+} from "../../stores/claudeSessionsLiveStore";
 import { prefetchSessionConversationTaskDetailDrawer } from "./prefetchSessionConversationTaskDetailDrawer";
 import "../ClaudeSessions/index.css";
 import "./index.css";
@@ -373,9 +376,23 @@ function SessionConversationTaskDetailDrawerInner({
   onClearRevertItems?: (sessionId: string) => void;
 }) {
   const open = target !== null;
-  // 抽屉自行订阅 live sessions，避免打开时把整个运行面板拖进 live 订阅重绘。
-  const liveSessions = useClaudeSessionsLiveSnapshot(open);
-  const sessions = open && liveSessions.length > 0 ? liveSessions : sessionsProp;
+  // 结构快照用于解析 worker；正文走 per-session live，避免全局 live 拖垮运行面板。
+  const structureSessions = useClaudeSessionsStructureSnapshot(open);
+  const sessionsBase = open && structureSessions.length > 0 ? structureSessions : sessionsProp;
+  const taskSessionKey = target?.task.sessionId?.trim() || null;
+  const liveSession = useClaudeSessionLiveSnapshot(taskSessionKey, open);
+  const sessions = useMemo(() => {
+    if (!liveSession) return sessionsBase;
+    let replaced = false;
+    const next = sessionsBase.map((row) => {
+      if (row.id === liveSession.id || (liveSession.claudeSessionId && row.claudeSessionId === liveSession.claudeSessionId)) {
+        replaced = true;
+        return liveSession;
+      }
+      return row;
+    });
+    return replaced ? next : [liveSession, ...next];
+  }, [sessionsBase, liveSession]);
 
   const width = Math.min(760, typeof window !== "undefined" ? window.innerWidth - 40 : 760);
   const sessionsRef = useRef(sessions);

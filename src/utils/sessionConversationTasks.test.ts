@@ -927,6 +927,22 @@ describe("sessionsReactiveStructureKey", () => {
     const after = session({ id: "empty", createdAt: 200, messages: [] });
     expect(sessionsReactiveStructureKey([before])).not.toBe(sessionsReactiveStructureKey([after]));
   });
+
+  test("createdAt bump while running does not advance structure key", () => {
+    const before = session({
+      id: "worker",
+      status: "running",
+      createdAt: 100,
+      messages: [{ id: "u1", role: "user", content: "go", timestamp: 1 }],
+    });
+    const after = session({
+      id: "worker",
+      status: "running",
+      createdAt: 999,
+      messages: [{ id: "u1", role: "user", content: "go", timestamp: 1 }],
+    });
+    expect(sessionsReactiveStructureKey([before])).toBe(sessionsReactiveStructureKey([after]));
+  });
 });
 
 describe("executionEnvironmentWorkerSessionsFingerprint", () => {

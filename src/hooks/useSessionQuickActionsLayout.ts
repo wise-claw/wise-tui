@@ -7,8 +7,10 @@ import {
 } from "../constants/sessionQuickActionsLayout";
 import { listAssistants } from "../services/assistants";
 import {
+  flushSaveSessionQuickActionsLayout,
+  invalidateSessionQuickActionsLayoutLoad,
   loadSessionQuickActionsLayout,
-  saveSessionQuickActionsLayout,
+  scheduleSaveSessionQuickActionsLayout,
 } from "../services/sessionQuickActionsLayoutStore";
 import { setAssistantsCache, subscribeAssistants } from "../stores/assistantsStore";
 import type { AssistantEntry } from "../types/assistant";
@@ -16,8 +18,6 @@ import {
   buildSessionQuickActionCatalog,
   type SessionQuickActionCatalog,
 } from "../utils/sessionQuickAssistantCatalog";
-
-const PERSIST_DEBOUNCE_MS = 480;
 
 function persistErrorText(error: unknown): string {
   return error instanceof Error ? error.message : "快捷操作布局保存失败";
@@ -31,7 +31,7 @@ export function useSessionQuickActionsLayout() {
   const [hydrated, setHydrated] = useState(false);
   const layoutRef = useRef(layout);
   const userEditedRef = useRef(false);
-  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
   const catalog = useMemo(
     () => buildSessionQuickActionCatalog(assistants),
@@ -73,6 +73,7 @@ export function useSessionQuickActionsLayout() {
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     let cancelled = false;
     void loadSessionQuickActionsLayout()
       .then((loaded) => {
@@ -85,10 +86,9 @@ export function useSessionQuickActionsLayout() {
       });
     return () => {
       cancelled = true;
-      if (persistTimerRef.current) {
-        clearTimeout(persistTimerRef.current);
-        persistTimerRef.current = null;
-      }
+      mountedRef.current = false;
+      // 最后一个消费者卸载时 flush 模块级 pending，避免 debounce 窗口内丢布局。
+      void flushSaveSessionQuickActionsLayout();
     };
   }, []);
 
@@ -99,45 +99,30 @@ export function useSessionQuickActionsLayout() {
 
   const flushPersist = useCallback(
     async (target: SessionQuickActionsLayoutV1): Promise<boolean> => {
-      if (persistTimerRef.current) {
-        clearTimeout(persistTimerRef.current);
-        persistTimerRef.current = null;
-      }
       const normalized = mergeLayout(target);
-      try {
-        await saveSessionQuickActionsLayout(normalized);
-        return true;
-      } catch (error) {
-        message.error(persistErrorText(error));
-        return false;
+      const ok = await flushSaveSessionQuickActionsLayout(normalized);
+      if (!ok && mountedRef.current) {
+        message.error(persistErrorText(new Error("快捷操作布局保存失败")));
       }
+      return ok;
     },
     [mergeLayout],
-  );
-
-  const schedulePersist = useCallback(
-    (target: SessionQuickActionsLayoutV1) => {
-      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
-      persistTimerRef.current = setTimeout(() => {
-        persistTimerRef.current = null;
-        void flushPersist(target);
-      }, PERSIST_DEBOUNCE_MS);
-    },
-    [flushPersist],
   );
 
   const setLayout = useCallback(
     (next: SessionQuickActionsLayoutV1) => {
       userEditedRef.current = true;
+      invalidateSessionQuickActionsLayoutLoad();
       const normalized = mergeLayout(next);
       setLayoutState(normalized);
-      schedulePersist(normalized);
+      scheduleSaveSessionQuickActionsLayout(normalized);
     },
-    [mergeLayout, schedulePersist],
+    [mergeLayout],
   );
 
   const persistLayout = useCallback(async (): Promise<boolean> => {
     userEditedRef.current = true;
+    invalidateSessionQuickActionsLayoutLoad();
     return flushPersist(layoutRef.current);
   }, [flushPersist]);
 

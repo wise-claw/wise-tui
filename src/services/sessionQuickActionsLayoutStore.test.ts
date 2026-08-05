@@ -10,12 +10,24 @@ const setAppSettingJson = mock(async () => {});
 const deleteAppSetting = mock(async () => {});
 
 mock.module("./appSettingsStore", () => ({
+  WISE_CLAUDE_DEFAULT_SETTINGS_KEY: "wise.claudeDefaultSettings.v1",
+  WISE_CODEX_DEFAULT_SETTINGS_KEY: "wise.codexDefaultSettings.v1",
+  WISE_OPENCODE_DEFAULT_SETTINGS_KEY: "wise.opencodeDefaultSettings.v1",
   getAppSetting,
+  setAppSetting: mock(async () => {}),
   setAppSettingJson,
   deleteAppSetting,
+  getAppSettingsBatch: mock(async () => ({})),
+  getAppSettingJson: mock(async () => null),
 }));
 
-const { loadSessionQuickActionsLayout, saveSessionQuickActionsLayout } = await import("./sessionQuickActionsLayoutStore");
+const {
+  flushSaveSessionQuickActionsLayout,
+  loadSessionQuickActionsLayout,
+  resetSessionQuickActionsLayoutPersistForTests,
+  saveSessionQuickActionsLayout,
+  scheduleSaveSessionQuickActionsLayout,
+} = await import("./sessionQuickActionsLayoutStore");
 
 function installLocalStorageStub(): Storage {
   const map = new Map<string, string>();
@@ -44,11 +56,13 @@ describe("sessionQuickActionsLayoutStore", () => {
     getAppSetting.mockReset();
     setAppSettingJson.mockReset();
     deleteAppSetting.mockReset();
+    resetSessionQuickActionsLayoutPersistForTests();
     storage = installLocalStorageStub();
     storage.clear();
   });
 
   afterEach(() => {
+    resetSessionQuickActionsLayoutPersistForTests();
     storage?.clear();
     Reflect.deleteProperty(globalThis, "localStorage");
     storage = null;
@@ -56,7 +70,9 @@ describe("sessionQuickActionsLayoutStore", () => {
 
   test("load returns default when database and localStorage are empty", async () => {
     const layout = await loadSessionQuickActionsLayout();
-    expect(layout.items.map((item) => item.id)).toEqual(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT.items.map((item) => item.id));
+    expect(layout.items.map((item) => item.id)).toEqual(
+      DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT.items.map((item) => item.id),
+    );
     expect(setAppSettingJson).not.toHaveBeenCalled();
   });
 
@@ -95,5 +111,40 @@ describe("sessionQuickActionsLayoutStore", () => {
     expect(setAppSettingJson).toHaveBeenCalled();
     expect(storage!.getItem(SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY)).toBeNull();
     expect(storage!.getItem(SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY_V1)).toBeNull();
+  });
+
+  test("schedule debounce coalesces to latest layout and flush writes immediately", async () => {
+    const first = {
+      version: 1 as const,
+      items: [{ id: "compact-context", visible: true, zone: "primary" as const }],
+    };
+    const second = {
+      version: 1 as const,
+      items: [{ id: "new-session", visible: true, zone: "primary" as const }],
+    };
+    scheduleSaveSessionQuickActionsLayout(first);
+    scheduleSaveSessionQuickActionsLayout(second);
+    expect(setAppSettingJson).not.toHaveBeenCalled();
+
+    const ok = await flushSaveSessionQuickActionsLayout();
+    expect(ok).toBe(true);
+    expect(setAppSettingJson).toHaveBeenCalledTimes(1);
+    const saved = setAppSettingJson.mock.calls[0]?.[1] as { items: { id: string }[] };
+    expect(saved.items.some((item) => item.id === "new-session")).toBe(true);
+  });
+
+  test("flush with explicit layout cancels pending debounce", async () => {
+    scheduleSaveSessionQuickActionsLayout({
+      version: 1,
+      items: [{ id: "compact-context", visible: true, zone: "primary" }],
+    });
+    const ok = await flushSaveSessionQuickActionsLayout({
+      version: 1,
+      items: [{ id: "new-session", visible: true, zone: "overflow" }],
+    });
+    expect(ok).toBe(true);
+    expect(setAppSettingJson).toHaveBeenCalledTimes(1);
+    const saved = setAppSettingJson.mock.calls[0]?.[1] as { items: { id: string; zone: string }[] };
+    expect(saved.items.find((item) => item.id === "new-session")?.zone).toBe("overflow");
   });
 });

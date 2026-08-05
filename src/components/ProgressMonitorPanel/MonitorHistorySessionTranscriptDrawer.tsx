@@ -3,7 +3,7 @@ import { HoverHint } from "../shared/HoverHint";
 import { ReloadOutlined } from "@ant-design/icons";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeSession } from "../../types";
-import { useClaudeSessionsLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
+import { useClaudeSessionLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import {
   HistorySessionDrawerContextBar,
@@ -52,16 +52,6 @@ function cloneSessionForDrawerSnapshot(session: ClaudeSession): ClaudeSession {
   };
 }
 
-function resolveLiveSession(
-  sessionId: string | null,
-  transcriptSourceSessions: ClaudeSession[],
-): ClaudeSession | undefined {
-  if (!sessionId) return undefined;
-  return transcriptSourceSessions.find(
-    (item) => item.id === sessionId || item.claudeSessionId === sessionId,
-  );
-}
-
 export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistorySessionTranscriptDrawer({
   open,
   sessionId,
@@ -76,7 +66,8 @@ export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistor
   canRestoreSession,
   onResumeSession,
 }: MonitorHistorySessionTranscriptDrawerProps) {
-  const transcriptSourceSessions = useClaudeSessionsLiveSnapshot(open);
+  // 只订当前会话：其它会话流式时不重绘本抽屉。
+  const liveSession = useClaudeSessionLiveSnapshot(sessionId, open);
   const [compactInFlight, setCompactInFlight] = useState(false);
   const [drawerSessionSnapshot, setDrawerSessionSnapshot] = useState<ClaudeSession | null>(null);
   const openedSessionIdRef = useRef<string | null>(null);
@@ -86,11 +77,6 @@ export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistor
   const drawerWidth = useMemo(
     () => Math.min(560, typeof window !== "undefined" ? window.innerWidth - 24 : 560),
     [],
-  );
-
-  const liveSession = useMemo(
-    () => resolveLiveSession(sessionId, transcriptSourceSessions),
-    [sessionId, transcriptSourceSessions],
   );
 
   const syncDrawerSnapshotFromLive = useCallback((session: ClaudeSession) => {
@@ -112,14 +98,12 @@ export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistor
       setDrawerSessionSnapshot(null);
       return;
     }
-    if (openedSessionIdRef.current === sessionId) {
-      return;
+    if (openedSessionIdRef.current !== sessionId) {
+      openedSessionIdRef.current = sessionId;
+      diskReloadAttemptedRef.current = null;
+      setDrawerSessionSnapshot(liveSession ? cloneSessionForDrawerSnapshot(liveSession) : null);
     }
-    openedSessionIdRef.current = sessionId;
-    diskReloadAttemptedRef.current = null;
-    const found = resolveLiveSession(sessionId, transcriptSourceSessions);
-    setDrawerSessionSnapshot(found ? cloneSessionForDrawerSnapshot(found) : null);
-  }, [open, sessionId, transcriptSourceSessions]);
+  }, [open, sessionId, liveSession]);
 
   useEffect(() => {
     if (!open || !sessionId || !liveSession) return;
@@ -227,7 +211,7 @@ export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistor
 
   const refreshDrawerSnapshot = useCallback(() => {
     if (!sessionId) return;
-    const found = resolveLiveSession(sessionId, transcriptSourceSessions);
+    const found = liveSession;
     if (!found) {
       message.warning("未找到该会话");
       return;
@@ -243,7 +227,7 @@ export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistor
       return;
     }
     syncDrawerSnapshotFromLive(found);
-  }, [sessionId, transcriptSourceSessions, onReloadFullDiskTranscript, syncDrawerSnapshotFromLive]);
+  }, [sessionId, liveSession, onReloadFullDiskTranscript, syncDrawerSnapshotFromLive]);
 
   const canStopLiveSession =
     Boolean(onCancelSession) &&
@@ -370,7 +354,18 @@ export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistor
               session={displaySession}
               onOpenTaskDetail={onOpenTaskDetail}
               onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
-              sessionsForDispatchLookup={transcriptSourceSessions}
+              sessionsForDispatchLookup={
+                liveSession
+                  ? (id) => {
+                      const key = id.trim();
+                      if (!key) return undefined;
+                      if (liveSession.id === key || liveSession.claudeSessionId === key) {
+                        return liveSession;
+                      }
+                      return undefined;
+                    }
+                  : undefined
+              }
               showAllMessages
             />
           </div>

@@ -43,9 +43,9 @@ export function sessionsReactiveStructureKey(sessions: readonly ClaudeSession[])
         session.status,
         session.repositoryPath ?? "",
         session.repositoryName ?? "",
-        // createdAt 参与侧栏「最近活跃」排序；仅 bump 排序时间时也必须推进结构指纹，
-        // 否则 subscribeLive:false 的 LeftSidebar memo 不会重排。
-        String(session.createdAt),
+        // createdAt 参与侧栏「最近活跃」排序；running 时冻结，避免 bump 排序时间
+        // 与多路流式叠在一起打穿 App / 侧栏。收尾转 idle 后写入真实 createdAt。
+        streaming ? "run" : String(session.createdAt),
         // 多会话并行时，running 态每来一条工具/助手消息都会改 length/last.id，
         // 若写入结构指纹会拖垮 App 壳与侧栏（正文已由 per-session live 投递）。
         streaming ? "run" : String(session.messages.length),

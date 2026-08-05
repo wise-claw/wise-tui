@@ -107,27 +107,95 @@ export function useRepositoryList() {
   const isPrimaryMainWindowRef = useRef(true);
   const mainWorkspaceWindowLabelRef = useRef<string | null>(null);
   const persistActiveProjectIdleCleanupRef = useRef<(() => void) | null>(null);
+  /** idle 回调读 ref，避免闭包里的旧 projectId 盖掉「立即 persist」的新值。 */
+  const activeProjectIdPersistRef = useRef<string | null>(null);
+  /** 有排队中的 activeProject 写入（含已被 dep cleanup cancel 的 idle）。 */
+  const activeProjectPersistPendingRef = useRef(false);
   const selectionPersistIdleCleanupRef = useRef<(() => void) | null>(null);
+  const selectionPersistPendingRef = useRef(false);
   const selectionPersistStateRef = useRef({
     focus: "repository" as WorkspaceFocus,
     projectId: null as string | null,
     repositoryId: null as number | null,
   });
 
-  const schedulePersistActiveProjectId = useCallback((projectId: string | null) => {
+  const cancelPersistActiveProjectIdle = useCallback(() => {
     persistActiveProjectIdleCleanupRef.current?.();
-    persistActiveProjectIdleCleanupRef.current = runWhenIdle(() => {
-      persistActiveProjectIdleCleanupRef.current = null;
-      void persistActiveProjectId(projectId);
-    }, { timeoutMs: 3000 });
+    persistActiveProjectIdleCleanupRef.current = null;
   }, []);
+
+  /** 立即落盘 activeProjectId；会取消排队中的 idle，防止过期写回滚。 */
+  const flushPersistActiveProjectId = useCallback(
+    (projectId: string | null) => {
+      activeProjectIdPersistRef.current = projectId;
+      activeProjectPersistPendingRef.current = false;
+      cancelPersistActiveProjectIdle();
+      return persistActiveProjectId(projectId);
+    },
+    [cancelPersistActiveProjectIdle],
+  );
+
+  const schedulePersistActiveProjectId = useCallback(
+    (projectId: string | null) => {
+      activeProjectIdPersistRef.current = projectId;
+      activeProjectPersistPendingRef.current = true;
+      cancelPersistActiveProjectIdle();
+      persistActiveProjectIdleCleanupRef.current = runWhenIdle(() => {
+        persistActiveProjectIdleCleanupRef.current = null;
+        activeProjectPersistPendingRef.current = false;
+        void persistActiveProjectId(activeProjectIdPersistRef.current);
+      }, { timeoutMs: 3000 });
+    },
+    [cancelPersistActiveProjectIdle],
+  );
+
+  const writeSelectionPersistSnapshot = useCallback(() => {
+    const windowLabel = mainWorkspaceWindowLabelRef.current;
+    const isPrimary = isPrimaryMainWindowRef.current;
+    const isAuxMain =
+      !isPrimary && Boolean(windowLabel && isMainWorkspaceWindowLabel(windowLabel));
+    if (!isPrimary && !isAuxMain) return;
+    const { focus, projectId, repositoryId } = selectionPersistStateRef.current;
+    const selectionPayload = JSON.stringify(
+      buildWorkspaceLastSelection({
+        focus,
+        projectId,
+        repositoryId,
+      }),
+    );
+    if (isPrimary) {
+      void setAppSetting(WORKSPACE_LAST_SELECTION_STORAGE_KEY, selectionPayload);
+      if (focus === "repository" && repositoryId != null) {
+        void setAppSetting(WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY, String(repositoryId));
+      } else {
+        void deleteAppSetting(WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY);
+      }
+      return;
+    }
+    if (windowLabel) {
+      void setAppSetting(workspaceWindowSelectionStorageKey(windowLabel), selectionPayload);
+    }
+  }, []);
+
+  const flushSelectionPersist = useCallback(() => {
+    selectionPersistIdleCleanupRef.current?.();
+    selectionPersistIdleCleanupRef.current = null;
+    if (!selectionPersistPendingRef.current) return;
+    selectionPersistPendingRef.current = false;
+    writeSelectionPersistSnapshot();
+  }, [writeSelectionPersistSnapshot]);
 
   useEffect(
     () => () => {
-      persistActiveProjectIdleCleanupRef.current?.();
-      selectionPersistIdleCleanupRef.current?.();
+      // 卸载时 flush：selection effect 的 cleanup 只会 cancel idle，pending 标志仍保留。
+      if (activeProjectPersistPendingRef.current) {
+        activeProjectPersistPendingRef.current = false;
+        cancelPersistActiveProjectIdle();
+        void persistActiveProjectId(activeProjectIdPersistRef.current);
+      }
+      flushSelectionPersist();
     },
-    [],
+    [cancelPersistActiveProjectIdle, flushSelectionPersist],
   );
 
   useEffect(() => {
@@ -241,7 +309,7 @@ export function useRepositoryList() {
         setActiveRepositoryId(startup.repositoryId);
         // activeProjectId 持久化是启动恢复后的兜底写入，与首屏可交互态解耦：
         // 不阻塞 setLoading(false)，避免一次 IPC 拖慢侧栏 / 欢迎屏 / 启动会话恢复。
-        void persistActiveProjectId(startup.projectId).catch(() => {
+        void flushPersistActiveProjectId(startup.projectId).catch(() => {
           /* 持久化失败不影响启动恢复 */
         });
       } finally {
@@ -278,37 +346,24 @@ export function useRepositoryList() {
       return;
     }
     selectionPersistIdleCleanupRef.current?.();
+    selectionPersistPendingRef.current = true;
     selectionPersistIdleCleanupRef.current = runWhenIdle(() => {
       selectionPersistIdleCleanupRef.current = null;
-      const { focus, projectId, repositoryId } = selectionPersistStateRef.current;
-      const selectionPayload = JSON.stringify(
-        buildWorkspaceLastSelection({
-          focus,
-          projectId,
-          repositoryId,
-        }),
-      );
-      if (isPrimary) {
-        void setAppSetting(WORKSPACE_LAST_SELECTION_STORAGE_KEY, selectionPayload);
-        if (focus === "repository" && repositoryId != null) {
-          void setAppSetting(
-            WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY,
-            String(repositoryId),
-          );
-        } else {
-          void deleteAppSetting(WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY);
-        }
-        return;
-      }
-      if (windowLabel) {
-        void setAppSetting(workspaceWindowSelectionStorageKey(windowLabel), selectionPayload);
-      }
+      selectionPersistPendingRef.current = false;
+      writeSelectionPersistSnapshot();
     }, { timeoutMs: 1200 });
     return () => {
+      // 依赖变更时只取消 idle；pending 保留，卸载时由顶层 effect flush。
       selectionPersistIdleCleanupRef.current?.();
       selectionPersistIdleCleanupRef.current = null;
     };
-  }, [activeWorkspaceFocus, activeProjectId, activeRepositoryId, loading]);
+  }, [
+    activeWorkspaceFocus,
+    activeProjectId,
+    activeRepositoryId,
+    loading,
+    writeSelectionPersistSnapshot,
+  ]);
 
   const projectRepositories = useMemo(() => {
     if (!activeProject) return [];
@@ -371,14 +426,14 @@ export function useRepositoryList() {
     setProjects(sortProjectsByPinOrder(dbProjects, pinnedProjectIds));
     const refreshed = dbProjects.find((p) => p.id === nextProject.id) ?? nextProject;
     setActiveProjectId(refreshed.id);
-    await persistActiveProjectId(refreshed.id);
+    await flushPersistActiveProjectId(refreshed.id);
     const memberIds = refreshed.repositoryIds;
     const preferredRepoId =
       seedRepository && memberIds.includes(seedRepository.id)
         ? seedRepository.id
         : memberIds[0] ?? null;
     setActiveRepositoryId(preferredRepoId);
-  }, [activeRepositoryId, projects, repositories, pinnedProjectIds]);
+  }, [activeRepositoryId, projects, repositories, pinnedProjectIds, flushPersistActiveProjectId]);
 
   const handleUpdateProject = useCallback(async (projectId: string, name: string) => {
     const trimmed = name.trim();
@@ -429,8 +484,8 @@ export function useRepositoryList() {
       setActiveRepositoryId(null);
       setActiveWorkspaceFocus("project");
     }
-    void persistActiveProjectId(nextActive);
-  }, [activeProjectId, activeRepositoryId, projects, pinnedProjectIds]);
+    void flushPersistActiveProjectId(nextActive);
+  }, [activeProjectId, activeRepositoryId, projects, pinnedProjectIds, flushPersistActiveProjectId]);
 
   const handleSelectProject = useCallback((projectId: string) => {
     setActiveProjectId(projectId);
@@ -513,9 +568,9 @@ export function useRepositoryList() {
     setProjects((prev) => prev.map((project) => (project.id === projectId ? updatedProject : project)));
     setRepositories(repositoryList);
     setActiveProjectId(projectId);
-    void persistActiveProjectId(projectId);
+    void flushPersistActiveProjectId(projectId);
     setActiveRepositoryId(repositoryId);
-  }, [projects, repositories]);
+  }, [projects, repositories, flushPersistActiveProjectId]);
 
   /**
    * 创建不属于任何 project 的 Standalone Repo；选目录后立即在侧栏顶层平铺显示，
@@ -560,9 +615,9 @@ export function useRepositoryList() {
       setActiveProjectId(null);
       setActiveRepositoryId(repository.id);
       setActiveWorkspaceFocus("repository");
-      void persistActiveProjectId(null);
+      void flushPersistActiveProjectId(null);
     },
-    [repositories],
+    [repositories, flushPersistActiveProjectId],
   );
 
   /**
@@ -582,9 +637,9 @@ export function useRepositoryList() {
       setProjects((prev) => [...prev, updatedProject]);
       setActiveProjectId(updatedProject.id);
       setActiveRepositoryId(repositoryId);
-      void persistActiveProjectId(updatedProject.id);
+      void flushPersistActiveProjectId(updatedProject.id);
     },
-    [repositories],
+    [repositories, flushPersistActiveProjectId],
   );
 
   /**

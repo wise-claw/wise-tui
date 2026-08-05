@@ -1,10 +1,10 @@
 import { CloseOutlined } from "@ant-design/icons";
 import { Empty, message } from "antd";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { useClaudeSessionsLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
+import { useClaudeSessionsStructureSnapshot } from "../../stores/claudeSessionsLiveStore";
 import { cancelClaudeExecution, listRunningClaudeSessions } from "../../services/claude";
 import { killClaudeHostProcess } from "../../services/systemResource";
-import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
+import { readVisiblePollIntervalMs, shouldDeferAdaptivePollTick } from "../../utils/adaptivePoll";
 import {
   getSystemResourceSnapshotStoreSnapshot,
   refreshSystemResourceSnapshotStore,
@@ -49,7 +49,8 @@ const emptySnapshot = (): ReturnType<typeof getSystemResourceSnapshotStoreSnapsh
 });
 
 export function ClaudeProcessPanel({ active, listSearch, onCountChange }: Props) {
-  const liveSessions = useClaudeSessionsLiveSnapshot(active);
+  // 进程列表只关心 running/connecting 等结构态，勿挂全局 live（流式正文会打满重绘）。
+  const liveSessions = useClaudeSessionsStructureSnapshot(active);
   const hostProcesses = useSyncExternalStore(
     active ? subscribeSystemResourceSnapshot : noopSubscribe,
     active ? getSystemResourceSnapshotStoreSnapshot : emptySnapshot,
@@ -73,6 +74,7 @@ export function ClaudeProcessPanel({ active, listSearch, onCountChange }: Props)
     void pollRegistry();
     const ms = readVisiblePollIntervalMs(POLL_VISIBLE_MS, POLL_HIDDEN_MS);
     const timer = setInterval(() => {
+      if (shouldDeferAdaptivePollTick()) return;
       void pollRegistry();
     }, ms);
     return () => clearInterval(timer);

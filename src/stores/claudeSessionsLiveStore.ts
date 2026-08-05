@@ -10,8 +10,14 @@ import {
   isFileTreeScrollActive,
   isSidePanelPriorityReliefActive,
   isWorkspacePriorityReliefActive,
+  isChromeScrollReliefActive,
+  scheduleAfterChromeScrollIdle,
 } from "./chromePanelHoverStore";
-import { isComposerInteractionActive } from "./composerInteractionGate";
+import {
+  isComposerInteractionActive,
+  isComposerTypingActive,
+  scheduleAfterComposerInteractionIdle,
+} from "./composerInteractionGate";
 import { isMainThreadCongested } from "./mainThreadCongestionStore";
 import { getClaudeChatUserPausedFollow } from "./claudeChatMessageScrollBridge";
 
@@ -33,10 +39,13 @@ function liveFlushMinIntervalMs(): number {
     return 900;
   }
   if (isMainThreadCongested()) return 800;
-  if (isComposerInteractionActive()) return 360;
-  if (isFileTreeScrollActive()) return 200;
-  if (isWorkspacePriorityReliefActive()) return 195;
-  if (isSidePanelPriorityReliefActive()) return 180;
+  // 正在输入：硬推迟窗之外仍拉长合并；仅聚焦看流式则软节流。
+  if (isComposerTypingActive()) return 640;
+  if (isComposerInteractionActive()) return 220;
+  // 滚动硬推迟之外的兜底合并窗。
+  if (isFileTreeScrollActive()) return 320;
+  if (isWorkspacePriorityReliefActive()) return 280;
+  if (isSidePanelPriorityReliefActive()) return 240;
   // 多会话同时有 pending live 时拉长合并窗口，避免 N 路流式把主线程打满。
   const multiSessionLive = pendingSessionLiveIds.size > 1;
   // 消息列表正在贴底跟随时加快 flush，降低「字顿一下才出来」的体感延迟。
@@ -117,6 +126,14 @@ function scheduleLiveListenerFlush(): void {
       return;
     }
     deferFlushWhileHidden = false;
+    if (isComposerTypingActive()) {
+      scheduleAfterComposerInteractionIdle(flushLiveListeners);
+      return;
+    }
+    if (isChromeScrollReliefActive()) {
+      scheduleAfterChromeScrollIdle(flushLiveListeners);
+      return;
+    }
     if (isClaudeScrollInteractionActive()) {
       scheduleAfterScrollInteractionIdle(flushLiveListeners);
       return;
@@ -153,6 +170,10 @@ function scheduleStructureListenerFlush(): void {
   if (structureListeners.size === 0) return;
   // 隐藏时 rAF 不触发，立即通知
   if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+    flushStructureListeners();
+    return;
+  }
+  if (typeof window === "undefined") {
     flushStructureListeners();
     return;
   }
@@ -231,10 +252,24 @@ export function subscribeClaudeSessionsStructure(onStoreChange: () => void): () 
   };
 }
 
+const noopSubscribe = (): (() => void) => () => {};
+
 /** 聊天区 / 监控 transcript：`enabled` 为 false 时不订阅流式更新（只读当前快照）。 */
 export function useClaudeSessionsLiveSnapshot(enabled = true): ClaudeSession[] {
   return useSyncExternalStore(
-    (onStoreChange) => (enabled ? subscribeClaudeSessionsLive(onStoreChange) : () => {}),
+    (onStoreChange) => (enabled ? subscribeClaudeSessionsLive(onStoreChange) : noopSubscribe),
+    getClaudeSessionsSnapshot,
+    getClaudeSessionsSnapshot,
+  );
+}
+
+/**
+ * 进程列表 / 运行面板列表：仅结构变化时刷新。
+ * 流式正文不会 notify；勿用于需要逐 token 更新的 transcript。
+ */
+export function useClaudeSessionsStructureSnapshot(enabled = true): ClaudeSession[] {
+  return useSyncExternalStore(
+    (onStoreChange) => (enabled ? subscribeClaudeSessionsStructure(onStoreChange) : noopSubscribe),
     getClaudeSessionsSnapshot,
     getClaudeSessionsSnapshot,
   );
@@ -245,12 +280,27 @@ export function useClaudeSessionLiveSnapshot(
   sessionId: string | null | undefined,
   enabled = true,
 ): ClaudeSession | null {
+  const trimmed = sessionId?.trim() || "";
+  // 即使 enabled=false 也解析当前快照（离屏冻结展示），只是不订阅后续 live。
+  const resolved = trimmed ? getClaudeSessionSnapshot(trimmed) : null;
+  const canonicalId = resolved?.id ?? trimmed;
+  // 仅在「尚未解析到会话」且需要 live 时订 structure，等会话出现后再落到 per-session live。
+  // 已知 tab id / 已解析别名时不订，避免任意会话结构变化打穿消息列表宿主。
+  const awaitAppearance = Boolean(enabled && trimmed && !resolved);
+  const structureKey = useSyncExternalStore(
+    (onStoreChange) =>
+      awaitAppearance ? subscribeClaudeSessionsStructure(onStoreChange) : noopSubscribe,
+    getClaudeSessionsStructureKey,
+    getClaudeSessionsStructureKey,
+  );
+  void structureKey;
+
   return useSyncExternalStore(
     (onStoreChange) => {
-      if (!enabled || !sessionId) return () => {};
-      return subscribeClaudeSessionLive(sessionId, onStoreChange);
+      if (!enabled || !canonicalId) return noopSubscribe;
+      return subscribeClaudeSessionLive(canonicalId, onStoreChange);
     },
-    () => (sessionId ? getClaudeSessionSnapshot(sessionId) : null),
+    () => (canonicalId ? getClaudeSessionSnapshot(canonicalId) : null),
     () => null,
   );
 }

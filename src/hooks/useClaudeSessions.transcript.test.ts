@@ -390,6 +390,56 @@ describe("resolveTerminalWorkerMessagesAfterDiskLoad", () => {
 });
 
 describe("reloadFullDiskTranscriptByKey terminal recovery", () => {
+  test("does not clobber stream assistant that arrived during disk load", async () => {
+    const session = terminalWorker({
+      status: "running",
+      messages: [{ role: "user", content: "你好", timestamp: 1 }],
+    });
+    let nextSessions: ClaudeSession[] = [session];
+    let resolveLoad!: (lines: string[]) => void;
+    const loadPromise = new Promise<string[]>((resolve) => {
+      resolveLoad = resolve;
+    });
+    const reloadPromise = reloadFullDiskTranscriptByKey({
+      sessionKey: "wise-tab-1",
+      sessions: [session],
+      setSessions: (updater) => {
+        nextSessions = updater(nextSessions);
+      },
+      diskTailLinesBySession: new Map(),
+      resolveSessionExecutionEngine: () => "claude",
+      loadSessionTranscriptLines: async () => loadPromise,
+    });
+    // await 期间流式已写入助手：合并必须对最新 row，禁止用启动快照抹掉增量。
+    nextSessions = [
+      {
+        ...nextSessions[0]!,
+        messages: [
+          { role: "user", content: "你好", timestamp: 1 },
+          {
+            role: "assistant",
+            content: "流式中",
+            timestamp: 2,
+            parts: [{ type: "text", text: "流式中" }],
+          },
+        ],
+      },
+    ];
+    resolveLoad([
+      JSON.stringify({ type: "user", message: { role: "user", content: "你好" } }),
+      JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: [{ type: "text", text: "磁盘回复" }] },
+      }),
+    ]);
+    await reloadPromise;
+    const recovered = nextSessions.find((item) => item.id === "wise-tab-1");
+    expect(recovered?.messages.some((m) => m.role === "assistant" && String(m.content).includes("流式"))).toBe(
+      true,
+    );
+    expect(recovered?.messages.some((m) => String(m.content).includes("磁盘回复"))).toBe(false);
+  });
+
   test("does not clobber in-memory messages when disk lacks assistant", async () => {
     const sessions = [terminalWorker()];
     let nextSessions: ClaudeSession[] = sessions;
@@ -581,6 +631,53 @@ describe("applyDiskTranscriptTail sidebar preview", () => {
       diskPreview: "你是 Wise 内置的代码审查引擎（对标 Cursor Bugbot 的本地审查体验）。",
     });
   }
+
+  test("keeps stream assistant that arrived while tail load was in flight", async () => {
+    const session = terminalWorker({
+      status: "running",
+      messages: [{ role: "user", content: "你好", timestamp: 1 }],
+      diskPreview: "你好",
+    });
+    let nextSessions: ClaudeSession[] = [session];
+    let resolveLoad!: (lines: string[]) => void;
+    const loadPromise = new Promise<string[]>((resolve) => {
+      resolveLoad = resolve;
+    });
+    const applyPromise = applyDiskTranscriptTail({
+      session,
+      tailLines: 50,
+      setSessions: (updater) => {
+        nextSessions = updater(nextSessions);
+      },
+      diskTailLinesBySession: new Map(),
+      resolveSessionExecutionEngine: () => "claude",
+      loadSessionTranscriptLines: async () => loadPromise,
+    });
+    nextSessions = [
+      {
+        ...nextSessions[0]!,
+        messages: [
+          { role: "user", content: "你好", timestamp: 1 },
+          {
+            role: "assistant",
+            content: "流式中",
+            timestamp: 2,
+            parts: [{ type: "text", text: "流式中" }],
+          },
+        ],
+      },
+    ];
+    resolveLoad([
+      JSON.stringify({ type: "user", message: { role: "user", content: "你好" } }),
+      assistantLine,
+    ]);
+    await applyPromise;
+    const updated = nextSessions.find((item) => item.id === session.id);
+    expect(updated?.messages.some((m) => m.role === "assistant" && String(m.content).includes("流式"))).toBe(
+      true,
+    );
+    expect(updated?.messages.some((m) => String(m.content).includes("结论"))).toBe(false);
+  });
 
   test("keeps existing preview when the tail window starts mid-transcript", async () => {
     const session = reviewSession();

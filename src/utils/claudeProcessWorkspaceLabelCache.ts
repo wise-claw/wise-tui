@@ -145,6 +145,27 @@ function trimClaudeProcessLabelCache(state: ClaudeProcessWorkspaceLabelCacheStat
   }
 }
 
+/**
+ * 合并两份缓存：同 key 取 updatedAt 更新者；用于 hydrate 前已有 runtime 写入时与磁盘合并。
+ */
+export function mergeClaudeProcessLabelCacheStates(
+  runtime: ClaudeProcessWorkspaceLabelCacheState,
+  disk: ClaudeProcessWorkspaceLabelCacheState,
+): ClaudeProcessWorkspaceLabelCacheState {
+  const out = createClaudeProcessWorkspaceLabelCache();
+  for (const [key, entry] of disk.byKey) {
+    out.byKey.set(key, entry);
+  }
+  for (const [key, entry] of runtime.byKey) {
+    const existing = out.byKey.get(key);
+    if (!existing || entry.updatedAt >= existing.updatedAt) {
+      out.byKey.set(key, entry);
+    }
+  }
+  trimClaudeProcessLabelCache(out);
+  return out;
+}
+
 /** @internal test helper — 返回是否删除了条目 */
 export function pruneClaudeProcessLabelCache(
   state: ClaudeProcessWorkspaceLabelCacheState,

@@ -6,6 +6,7 @@ import {
   createClaudeProcessWorkspaceLabelCache,
   entryFromWorkspaceLabels,
   lookupClaudeProcessLabelCache,
+  mergeClaudeProcessLabelCacheStates,
   parseClaudeProcessLabelCachePayload,
   rememberClaudeProcessLabelCache,
   serializeClaudeProcessLabelCache,
@@ -15,6 +16,8 @@ import {
   type ClaudeProcessWorkspaceLabelCacheState,
 } from "../utils/claudeProcessWorkspaceLabelCache";
 import type { ClaudeProcessWorkspaceLabels } from "../utils/resolveClaudeProcessWorkspaceLabels";
+
+const PERSIST_DEBOUNCE_MS = 600;
 
 export interface ClaudeProcessWorkspaceLabelCacheHandle {
   lookup: (keys: ClaudeProcessLabelCacheLookupKeys) => ClaudeProcessLabelCacheEntry | null;
@@ -38,9 +41,24 @@ export function useClaudeProcessWorkspaceLabelCache(): ClaudeProcessWorkspaceLab
   );
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydratedRef = useRef(false);
+  /** hydrate 完成前若已有 runtime 写入，落盘需与磁盘合并，不能整表覆盖。 */
+  const dirtyBeforeHydrateRef = useRef(false);
+
+  const flushPersist = useCallback(() => {
+    if (persistTimerRef.current != null) {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    if (!hydratedRef.current) return;
+    void setAppSettingJson(
+      CLAUDE_PROCESS_WORKSPACE_LABEL_CACHE_KEY,
+      serializeClaudeProcessLabelCache(stateRef.current),
+    );
+  }, []);
 
   const schedulePersist = useCallback(() => {
     if (!hydratedRef.current) {
+      dirtyBeforeHydrateRef.current = true;
       return;
     }
     if (persistTimerRef.current != null) {
@@ -52,26 +70,32 @@ export function useClaudeProcessWorkspaceLabelCache(): ClaudeProcessWorkspaceLab
         CLAUDE_PROCESS_WORKSPACE_LABEL_CACHE_KEY,
         serializeClaudeProcessLabelCache(stateRef.current),
       );
-    }, 600);
+    }, PERSIST_DEBOUNCE_MS);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     void getAppSettingJson<unknown>(CLAUDE_PROCESS_WORKSPACE_LABEL_CACHE_KEY).then((raw) => {
-      if (cancelled) {
-        return;
-      }
+      if (cancelled) return;
       const stored = parseClaudeProcessLabelCachePayload(raw ?? {});
-      stateRef.current = createClaudeProcessWorkspaceLabelCache(stored);
+      const disk = createClaudeProcessWorkspaceLabelCache(stored);
+      if (dirtyBeforeHydrateRef.current) {
+        stateRef.current = mergeClaudeProcessLabelCacheStates(stateRef.current, disk);
+      } else {
+        stateRef.current = disk;
+      }
       hydratedRef.current = true;
+      if (dirtyBeforeHydrateRef.current) {
+        dirtyBeforeHydrateRef.current = false;
+        schedulePersist();
+      }
     });
     return () => {
       cancelled = true;
-      if (persistTimerRef.current != null) {
-        clearTimeout(persistTimerRef.current);
-      }
+      // 卸载时 flush，避免 debounce 窗口内丢标签缓存。
+      flushPersist();
     };
-  }, []);
+  }, [flushPersist, schedulePersist]);
 
   const lookup = useCallback((keys: ClaudeProcessLabelCacheLookupKeys) => {
     return lookupClaudeProcessLabelCache(stateRef.current, keys);

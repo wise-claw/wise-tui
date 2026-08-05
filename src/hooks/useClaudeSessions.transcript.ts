@@ -444,7 +444,6 @@ export async function reloadFullDiskTranscriptByKey(params: {
     params.loadSessionTranscriptLines,
   );
   if (!diskKey) return false;
-  params.diskTailLinesBySession.set(tabId, lines.length);
   const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
     tailRequestLines: Math.max(lines.length, 1),
     fullTranscript: true,
@@ -455,16 +454,14 @@ export async function reloadFullDiskTranscriptByKey(params: {
   const sanitizedDisk = isTerminalWorker
     ? sanitizeTerminalWorkerTranscriptMessages(messages)
     : messages;
-  const mergedTerminalMessages = isTerminalWorker
-    ? resolveTerminalWorkerMessagesAfterDiskLoad(session, sanitizedDisk)
-    : null;
-  const nextMessages = isTerminalWorker ? mergedTerminalMessages : sanitizedDisk;
-  if (!nextMessages || nextMessages.length === 0) return false;
-  // 运行态保护：内存领先磁盘或当前轮未落盘时跳过全量覆盖，避免抹掉进行中的回合。
-  if (shouldSkipFullDiskReloadForRunningSession(session, sanitizedDisk)) {
-    return false;
+  // 非 terminal：启动快照上先做一次运行态保护；terminal 必须在 setSessions 里对最新 row 再合并。
+  if (!isTerminalWorker) {
+    if (sanitizedDisk.length === 0) return false;
+    if (shouldSkipFullDiskReloadForRunningSession(session, sanitizedDisk)) {
+      return false;
+    }
   }
-  const hasAssistant = nextMessages.some((message) => message.role === "assistant");
+  let applied = false;
   params.setSessions((prev) =>
     prev.map((row) => {
       if (row.id !== tabId) return row;
@@ -473,16 +470,34 @@ export async function reloadFullDiskTranscriptByKey(params: {
       if (shouldSkipFullDiskReloadForRunningSession(row, sanitizedDisk)) {
         return row;
       }
-      const recoveredMessages =
-        isTerminalWorker && hasAssistant
-          ? nextMessages.filter(
+      let recoveredMessages: ClaudeMessage[];
+      if (isTerminalWorker) {
+        // 必须用最新 row 合并：await 期间流式增量可能已写入内存；用启动快照 merge 会抹掉助手气泡。
+        const merged = resolveTerminalWorkerMessagesAfterDiskLoad(row, sanitizedDisk);
+        if (!merged || merged.length === 0) return row;
+        const hasAssistant = merged.some((message) => message.role === "assistant");
+        recoveredMessages = hasAssistant
+          ? merged.filter(
               (message) =>
                 !(
                   message.role === "system" &&
                   systemMessagePlainText(message).includes(CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT)
                 ),
             )
-          : nextMessages;
+          : merged;
+        applied = true;
+        const previewFromMessages = deriveSessionListPreviewFromMessages(recoveredMessages);
+        return {
+          ...row,
+          messages: recoveredMessages,
+          diskPreview: previewFromMessages || row.diskPreview,
+          diskTranscriptPartial,
+          transcriptMemoryUnlimited: true,
+          status: terminalDiskTranscriptRecoveredStatus(row.status, hasAssistant, true),
+        };
+      }
+      recoveredMessages = sanitizedDisk;
+      applied = true;
       const previewFromMessages = deriveSessionListPreviewFromMessages(recoveredMessages);
       return {
         ...row,
@@ -491,10 +506,14 @@ export async function reloadFullDiskTranscriptByKey(params: {
         diskPreview: previewFromMessages || row.diskPreview,
         diskTranscriptPartial,
         transcriptMemoryUnlimited: true,
-        status: terminalDiskTranscriptRecoveredStatus(row.status, hasAssistant, isTerminalWorker),
+        status: row.status,
       };
     }),
   );
+  if (applied) {
+    params.diskTailLinesBySession.set(tabId, lines.length);
+  }
+  // 返回 true 表示已处理（含最新 row 运行态保护主动跳过）；仅硬失败（无磁盘/空消息）返回 false。
   return true;
 }
 
@@ -542,41 +561,60 @@ export async function applyDiskTranscriptTail(params: {
   const sanitizedDisk = isTerminalWorker
     ? sanitizeTerminalWorkerTranscriptMessages(messages)
     : messages;
-  const nextMessages = isTerminalWorker
-    ? resolveTerminalWorkerMessagesAfterDiskLoad(params.session, sanitizedDisk)
-    : sanitizedDisk;
-  if (!nextMessages || nextMessages.length === 0) return false;
-  // 与全量重载一致：内存已有完整用户回显时，禁止残片尾窗覆盖。
-  if (shouldPreserveMemoryTranscriptOverDisk(params.session, sanitizedDisk)) {
-    return false;
+  if (!isTerminalWorker) {
+    if (sanitizedDisk.length === 0) return false;
+    // 与全量重载一致：内存已有完整用户回显时，禁止残片尾窗覆盖（启动快照预检）。
+    if (shouldPreserveMemoryTranscriptOverDisk(params.session, sanitizedDisk)) {
+      return false;
+    }
   }
-  params.diskTailLinesBySession.set(params.session.id, params.tailLines);
-  // 尾部窗口的首条用户消息不是会话开头，拿它改写 diskPreview 会把长 prompt 的中段
-  // （例如代码审查 harness 里的 diff 片段）当成侧栏标题。只有读到完整 transcript 才对齐标题。
-  const previewFromMessages = diskTranscriptPartial
-    ? ""
-    : deriveSessionListPreviewFromMessages(nextMessages);
+  let applied = false;
   params.setSessions((prev) =>
     prev.map((row) => {
       if (row.id !== params.session.id) return row;
       // setSessions 时再读最新 row，避免 hydrate 竞态用陈旧 session 覆盖刚发出的用户气泡。
-      // 读取磁盘期间会话可能已开始新一轮 / 流式增量领先磁盘：按最新 row 复判运行态保护
-      // （terminal worker 走专用合并，不在此跳过）。
-      if (
-        !isTerminalWorker &&
-        shouldSkipFullDiskReloadForRunningSession(row, sanitizedDisk)
-      ) {
-        return row;
+      // 读取磁盘期间会话可能已开始新一轮 / 流式增量领先磁盘：按最新 row 复判运行态保护。
+      if (!isTerminalWorker) {
+        if (
+          shouldSkipFullDiskReloadForRunningSession(row, sanitizedDisk) ||
+          shouldPreserveMemoryTranscriptOverDisk(row, sanitizedDisk)
+        ) {
+          return row;
+        }
+        // 尾部窗口的首条用户消息不是会话开头，拿它改写 diskPreview 会把长 prompt 的中段
+        // （例如代码审查 harness 里的 diff 片段）当成侧栏标题。只有读到完整 transcript 才对齐标题。
+        const previewFromMessages = diskTranscriptPartial
+          ? ""
+          : deriveSessionListPreviewFromMessages(sanitizedDisk);
+        applied = true;
+        return {
+          ...row,
+          messages: sanitizedDisk,
+          diskPreview: previewFromMessages || row.diskPreview,
+          diskTranscriptPartial,
+          transcriptMemoryUnlimited: false,
+        };
       }
+      // terminal：await 期间内存可能已有流式助手；对最新 row 再合并，禁止用启动快照抹掉增量。
+      const merged = resolveTerminalWorkerMessagesAfterDiskLoad(row, sanitizedDisk);
+      if (!merged || merged.length === 0) return row;
+      const previewFromMessages = diskTranscriptPartial
+        ? ""
+        : deriveSessionListPreviewFromMessages(merged);
+      applied = true;
       return {
         ...row,
-        messages: nextMessages,
+        messages: merged,
         diskPreview: previewFromMessages || row.diskPreview,
         diskTranscriptPartial,
         transcriptMemoryUnlimited: false,
       };
     }),
   );
+  if (applied) {
+    params.diskTailLinesBySession.set(params.session.id, params.tailLines);
+  }
+  // 与全量重载一致：已进入 setSessions（含保护跳过）即视为处理成功。
   return true;
 }
 

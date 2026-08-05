@@ -6,6 +6,7 @@ import { applyTauriMacHostChromeClass } from "./utils/applyTauriMacHostChromeCla
 import { ensureTauriEventUnlistenPatched } from "./utils/safeTauriUnlisten";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ensureMainThreadCongestionProbe } from "./stores/mainThreadCongestionStore";
+import "./stores/wireAdaptivePollInteractionRelief";
 import { bootstrapAppTheme, startSystemThemeWatch } from "./stores/appThemeStore";
 import { bootstrapTerminalThemeStore } from "./stores/terminalThemeStore";
 import { startTerminalThemeSync } from "./services/terminalThemeSync";

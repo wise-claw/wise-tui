@@ -3,8 +3,10 @@ import type { ClaudeSession } from "../types";
 import {
   getClaudeSessionsSnapshot,
   getClaudeSessionsStructureKey,
+  getClaudeSessionSnapshot,
   publishClaudeSessions,
   subscribeClaudeSessionLive,
+  subscribeClaudeSessionsStructure,
 } from "./claudeSessionsLiveStore";
 
 function stubSession(id: string, messageCount: number): ClaudeSession {
@@ -67,6 +69,39 @@ describe("claudeSessionsLiveStore", () => {
     publishClaudeSessions([stubSession("a", 2), stubSession("b", 2)]);
     await new Promise((resolve) => setTimeout(resolve, 120));
     expect(aRevision).toBe(1);
+    unsub();
+  });
+
+  test("getClaudeSessionSnapshot resolves claudeSessionId alias to tab session", () => {
+    const session: ClaudeSession = {
+      ...stubSession("tab-1", 1),
+      claudeSessionId: "claude-sid-9",
+      status: "idle",
+    };
+    publishClaudeSessions([session]);
+    expect(getClaudeSessionSnapshot("claude-sid-9")?.id).toBe("tab-1");
+    expect(getClaudeSessionSnapshot("tab-1")?.id).toBe("tab-1");
+  });
+
+  test("structure subscription does not fire on streaming body growth while running", async () => {
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    publishClaudeSessions([stubSession("struct-a", 1)]);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    let structureRevision = 0;
+    const unsub = subscribeClaudeSessionsStructure(() => {
+      structureRevision += 1;
+    });
+    publishClaudeSessions([stubSession("struct-a", 1)]);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(structureRevision).toBe(0);
+    publishClaudeSessions([
+      {
+        ...stubSession("struct-a", 1),
+        status: "idle",
+      },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(structureRevision).toBe(1);
     unsub();
   });
 

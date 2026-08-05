@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
 import { Empty, Spin, Tag, Typography } from "antd";
 import type { GitLogEntry } from "../../types";
+import { useScrollEndClass } from "../../hooks/useScrollEndClass";
+import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { formatRelativeTime } from "./gitPanelUtils";
 
 const { Text } = Typography;
@@ -29,6 +31,9 @@ export function LogMode({
   onLoadMore,
 }: LogModeProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  useScrollEndClass(scrollRef, LEFT_SIDEBAR_SCROLLING_CLASS, 220, {
+    relieveSidePanelPriority: true,
+  });
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;

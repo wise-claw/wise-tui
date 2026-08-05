@@ -17,9 +17,43 @@ export const WISE_WORKSPACE_REQUIREMENTS_CHANGED = "wise:workspace-requirements-
 /** 是否已尝试从旧备忘录 Markdown 迁移一次 */
 const WORKSPACE_REQUIREMENTS_MEMO_MIGRATED_KEY = "wise.workspaceRequirements.memoMigrated.v1";
 
-export async function loadWorkspaceRequirements(): Promise<WorkspaceRequirementsPayloadV1> {
+/** 串行化所有写路径，避免 load→merge→save 与整表覆盖互相踩踏。 */
+let requirementsWriteChain: Promise<unknown> = Promise.resolve();
+
+function enqueueRequirementsWrite<T>(task: () => Promise<T>): Promise<T> {
+  const run = requirementsWriteChain.then(task, task);
+  requirementsWriteChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+function dispatchRequirementsChanged(next: WorkspaceRequirementsPayloadV1): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<WorkspaceRequirementsPayloadV1>(WISE_WORKSPACE_REQUIREMENTS_CHANGED, {
+      detail: next,
+    }),
+  );
+}
+
+async function readRequirementsPayload(): Promise<WorkspaceRequirementsPayloadV1> {
   const raw = await getAppSetting(WORKSPACE_REQUIREMENTS_SETTING_KEY);
-  const payload = parseWorkspaceRequirementsPayload(raw);
+  return parseWorkspaceRequirementsPayload(raw);
+}
+
+async function writeRequirementsPayload(
+  items: WorkspaceRequirementItem[],
+): Promise<WorkspaceRequirementsPayloadV1> {
+  const next = mergeWorkspaceRequirementsPayload(items);
+  await setAppSetting(WORKSPACE_REQUIREMENTS_SETTING_KEY, JSON.stringify(next));
+  dispatchRequirementsChanged(next);
+  return next;
+}
+
+export async function loadWorkspaceRequirements(): Promise<WorkspaceRequirementsPayloadV1> {
+  const payload = await readRequirementsPayload();
   if (payload.items.length > 0) {
     return payload;
   }
@@ -36,9 +70,8 @@ export async function loadWorkspaceRequirements(): Promise<WorkspaceRequirements
     if (seeded.length === 0) {
       return payload;
     }
-    const next = mergeWorkspaceRequirementsPayload(seeded);
-    await setAppSetting(WORKSPACE_REQUIREMENTS_SETTING_KEY, JSON.stringify(next));
-    return next;
+    // 迁移写入走同一写队列，避免与并发 append/save 交错。
+    return enqueueRequirementsWrite(() => writeRequirementsPayload(seeded));
   } catch {
     try {
       await setAppSetting(WORKSPACE_REQUIREMENTS_MEMO_MIGRATED_KEY, "1");
@@ -52,14 +85,22 @@ export async function loadWorkspaceRequirements(): Promise<WorkspaceRequirements
 export async function saveWorkspaceRequirements(
   items: WorkspaceRequirementItem[],
 ): Promise<WorkspaceRequirementsPayloadV1> {
-  const next = mergeWorkspaceRequirementsPayload(items);
-  await setAppSetting(WORKSPACE_REQUIREMENTS_SETTING_KEY, JSON.stringify(next));
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(
-      new CustomEvent<WorkspaceRequirementsPayloadV1>(WISE_WORKSPACE_REQUIREMENTS_CHANGED, {
-        detail: next,
-      }),
-    );
-  }
-  return next;
+  return enqueueRequirementsWrite(() => writeRequirementsPayload(items));
+}
+
+/**
+ * 在写锁内读改写追加一条需求，避免「弹窗 load + 面板整表 save」丢条目。
+ */
+export async function appendWorkspaceRequirement(
+  item: WorkspaceRequirementItem,
+): Promise<WorkspaceRequirementsPayloadV1> {
+  return enqueueRequirementsWrite(async () => {
+    const current = await readRequirementsPayload();
+    return writeRequirementsPayload([...current.items, item]);
+  });
+}
+
+/** @internal test helper */
+export function resetWorkspaceRequirementsWriteQueueForTests(): void {
+  requirementsWriteChain = Promise.resolve();
 }

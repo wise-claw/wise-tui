@@ -34,7 +34,8 @@ export function ClaudeChatMessagesLiveHost({
     getClaudeChatUserPausedFollow,
     () => false,
   );
-  const session = useClaudeSessionLiveSnapshot(sessionId);
+  // 离屏 / 辅助面板隐藏消息时冻结订阅，避免多屏伴生窗仍吃 live flush。
+  const session = useClaudeSessionLiveSnapshot(sessionId, !hideMessagesScroll);
   // render 期同步最新 session 到 ref：待处理通知滚动 effect 不再依赖 session 引用（流式 live flush
   // 每 ~100ms 产生新引用会致 effect 反复重跑），改为仅切会话（claudeSessionId 变）时重扫，
   // effect 内通过 sessionRef.current 读取当前 session。
