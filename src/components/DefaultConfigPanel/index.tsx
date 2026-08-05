@@ -48,6 +48,8 @@ import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
 import { KeyShortcutCapture } from "./KeyShortcutCapture";
 import type { AtMentionDefaultTarget } from "../../constants/atMentionDefault";
 import { useFileTreeOpenInNewPaneSetting } from "./useFileTreeOpenInNewPaneSetting";
+import { useMarkdownDefaultOpenModeSetting } from "./useMarkdownDefaultOpenModeSetting";
+import type { MarkdownDefaultOpenMode } from "../../services/wiseDefaultConfigStore";
 import { useRepoPanelPlacementSetting } from "./useRepoPanelPlacementSetting";
 import { useSessionFeedbackLoopSetting } from "./useSessionFeedbackLoopSetting";
 import { useOpenInTerminalShortcutSetting } from "./useOpenInTerminalShortcutSetting";
@@ -99,6 +101,7 @@ export function DefaultConfigPanel() {
   const defaultTerminal = useDefaultTerminalSetting();
   const terminalThemeMode = useTerminalThemeModeSetting();
   const fileTreeOpenInNewPane = useFileTreeOpenInNewPaneSetting();
+  const markdownDefaultOpenMode = useMarkdownDefaultOpenModeSetting();
   const feedbackLoop = useSessionFeedbackLoopSetting();
   const openInTerminalShortcut = useOpenInTerminalShortcutSetting();
   const openInEditorShortcut = useOpenInEditorShortcutSetting();
@@ -1030,6 +1033,25 @@ export function DefaultConfigPanel() {
                 ]}
                 onChange={(value) => {
                   void fileTreeOpenInNewPane.save(value === "new-pane");
+                }}
+              />
+            }
+          />
+          <DefaultConfigRow
+            title="Markdown 打开"
+            hint="编辑 / 预览"
+            detail="新打开的 .md / .mdx 默认进入编辑或预览；已打开过的标签保持当前选择"
+            control={
+              <DefaultConfigOptionPick<MarkdownDefaultOpenMode>
+                aria-label="Markdown 默认打开模式"
+                disabled={markdownDefaultOpenMode.loading || markdownDefaultOpenMode.saving}
+                value={markdownDefaultOpenMode.mode}
+                options={[
+                  { label: "编辑", value: "edit" },
+                  { label: "预览", value: "preview" },
+                ]}
+                onChange={(value) => {
+                  void markdownDefaultOpenMode.save(value);
                 }}
               />
             }

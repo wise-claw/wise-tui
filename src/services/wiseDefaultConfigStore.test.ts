@@ -30,6 +30,7 @@ import {
   WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED,
   WISE_WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_CHANGED,
   WISE_TERMINAL_THEME_MODE_CHANGED,
+  WISE_MARKDOWN_DEFAULT_OPEN_MODE_CHANGED,
 } from "./wiseDefaultConfigStore";
 
 function installWindowLocalStorageStub(): Storage {
@@ -108,6 +109,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showRemoteEntryTopbar).toBe(true);
     expect(config.showTopbarRepositoryName).toBe(false);
     expect(config.fileTreeOpenInNewPane).toBe(false);
+    expect(config.markdownDefaultOpenMode).toBe("edit");
     expect(config.showComposerFooterAttachButton).toBe(true);
     expect(config.showComposerFooterScreenshotButton).toBe(true);
     expect(config.showComposerFooterVoiceButton).toBe(true);
@@ -482,6 +484,45 @@ describe("wiseDefaultConfigStore", () => {
     );
     const config = await loadWiseDefaultConfig();
     expect(config.composerFooterTriggerDisplayMode).toBe("full");
+  });
+
+  test("save markdown default open mode dispatches change event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+          markdownDefaultOpenMode: "edit",
+        });
+      }
+      return null;
+    });
+    const seen: string[] = [];
+    window.addEventListener(WISE_MARKDOWN_DEFAULT_OPEN_MODE_CHANGED, (e: Event) => {
+      const mode = (e as CustomEvent<{ mode?: string }>).detail?.mode;
+      if (mode === "edit" || mode === "preview") seen.push(mode);
+    });
+    await saveWiseDefaultConfig({ markdownDefaultOpenMode: "preview" });
+    expect(seen).toEqual(["preview"]);
+    const lastCall = setAppSetting.mock.calls.at(-1);
+    expect(JSON.parse(String(lastCall?.[1]))).toMatchObject({
+      markdownDefaultOpenMode: "preview",
+    });
+  });
+
+  test("load backfills missing or invalid markdown default open mode with edit", async () => {
+    getAppSetting.mockImplementation(async (key: string) =>
+      key === WISE_DEFAULT_CONFIG_KEY
+        ? JSON.stringify({
+            version: 1,
+            connectionKind: "streaming",
+            markdownDefaultOpenMode: "bogus",
+          })
+        : null,
+    );
+    const config = await loadWiseDefaultConfig();
+    expect(config.markdownDefaultOpenMode).toBe("edit");
   });
 
   test("save terminal theme mode dispatches change event", async () => {

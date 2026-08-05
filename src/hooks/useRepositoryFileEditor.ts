@@ -40,6 +40,11 @@ import { shouldDeferAdaptivePollTick } from "../utils/adaptivePoll";
 import { setRepositoryEditorDirtyPaths } from "../stores/repositoryEditorDirtyPathsStore";
 import { requestPaneCenterView } from "../stores/paneCenterViewControlStore";
 import { refreshGitRepositoryUi } from "../services/gitRepositoryUiRefresh";
+import {
+  loadMarkdownDefaultOpenModeFromStore,
+  WISE_MARKDOWN_DEFAULT_OPEN_MODE_CHANGED,
+  type MarkdownDefaultOpenMode,
+} from "../services/wiseDefaultConfigStore";
 
 /** 外部变更触发磁盘重读的合并节流间隔（毫秒）。git-changed、窗口聚焦、轮询共用。 */
 const EDITOR_EXTERNAL_REFRESH_THROTTLE_MS = 300;
@@ -220,6 +225,25 @@ function previewKey(rootPath: string, relativePath: string): string {
   return `${rootPath}::${relativePath}`;
 }
 
+/** 与编辑器 TabSurface 一致：.md / .mdx 才走 Markdown 预览切换。 */
+export function isRepositoryMarkdownEditorPath(relativePath: string): boolean {
+  return relativePath.endsWith(".md") || relativePath.endsWith(".mdx");
+}
+
+/**
+ * 首次打开 Markdown 时是否应写入预览偏好。
+ * 仅当尚未有会话内显式偏好、且默认模式为预览时返回 true。
+ */
+export function shouldSeedMarkdownPreviewOnOpen(args: {
+  relativePath: string;
+  hasExistingPreference: boolean;
+  defaultOpenMode: MarkdownDefaultOpenMode;
+}): boolean {
+  if (args.hasExistingPreference) return false;
+  if (args.defaultOpenMode !== "preview") return false;
+  return isRepositoryMarkdownEditorPath(args.relativePath);
+}
+
 function pendingKey(paneIndex: number, relativePath: string): string {
   return `${paneIndex}::${relativePath}`;
 }
@@ -253,6 +277,12 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
    * key 加 rootPath 是为了多 pane 下跨 rootPath 同名相对路径不互相覆盖。
    */
   const [mdPreviewByPath, setMdPreviewByPath] = useState<Record<string, boolean>>({});
+  const mdPreviewByPathRef = useRef(mdPreviewByPath);
+  mdPreviewByPathRef.current = mdPreviewByPath;
+  const [markdownDefaultOpenMode, setMarkdownDefaultOpenMode] =
+    useState<MarkdownDefaultOpenMode>("edit");
+  const markdownDefaultOpenModeRef = useRef(markdownDefaultOpenMode);
+  markdownDefaultOpenModeRef.current = markdownDefaultOpenMode;
   const setEditorTabMdPreview = useCallback((rootPath: string, relativePath: string, value: boolean) => {
     // 真值/删除/幂等等行为收敛到纯函数 reducer，便于不依赖 React 渲染的单测覆盖键空间。
     setMdPreviewByPath((prev) => mdPreviewReducer(prev, { rootPath, relativePath, value }));
@@ -263,6 +293,33 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
   fileEditorActivePathRef.current = fileEditorActivePathByPane;
   const fileEditorTabs = fileEditorTabsByPane.get(paneIndex) ?? [];
   const fileEditorActivePath = fileEditorActivePathByPane.get(paneIndex) ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadMarkdownDefaultOpenModeFromStore().then((mode) => {
+      if (!cancelled) setMarkdownDefaultOpenMode(mode);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ mode?: MarkdownDefaultOpenMode }>).detail;
+      if (detail?.mode === "edit" || detail?.mode === "preview") {
+        setMarkdownDefaultOpenMode(detail.mode);
+      } else {
+        void loadMarkdownDefaultOpenModeFromStore().then(setMarkdownDefaultOpenMode);
+      }
+    };
+    window.addEventListener(WISE_MARKDOWN_DEFAULT_OPEN_MODE_CHANGED, onChanged as EventListener);
+    return () => {
+      window.removeEventListener(WISE_MARKDOWN_DEFAULT_OPEN_MODE_CHANGED, onChanged as EventListener);
+    };
+  }, []);
+
   /**
    * per-pane 化后的 setter helper。所有原本"在共享 tabs 数组上 .map / .filter"的
    * 操作都改走 helper：它把目标 pane 的 tabs 数组取出 → updater → 写回 Map。
@@ -641,6 +698,18 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
       });
       updatePaneActivePath(paneIndex, () => relativePath);
 
+      // 首次打开 md：按默认配置种入预览偏好（已有会话内显式切换则不覆盖）。
+      if (
+        shouldSeedMarkdownPreviewOnOpen({
+          relativePath,
+          hasExistingPreference:
+            mdPreviewByPathRef.current[previewKey(rootPath, relativePath)] !== undefined,
+          defaultOpenMode: markdownDefaultOpenModeRef.current,
+        })
+      ) {
+        setEditorTabMdPreview(rootPath, relativePath, true);
+      }
+
       try {
         const loaded = await readProjectRelativeFileForEditor(rootPath, relativePath);
         applyLoadedEditorContent(relativePath, rootPath, loaded.content, options?.line ?? null, {
@@ -666,7 +735,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         });
       }
     },
-    [applyLoadedEditorContent, repositoryPath, paneIndex, updatePaneActivePath, updatePaneTabs],
+    [applyLoadedEditorContent, repositoryPath, paneIndex, setEditorTabMdPreview, updatePaneActivePath, updatePaneTabs],
   );
 
   const loadGitDiffFile = useCallback(

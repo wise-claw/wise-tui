@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mdPreviewReducer } from "./useRepositoryFileEditor";
+import {
+  mdPreviewReducer,
+  shouldSeedMarkdownPreviewOnOpen,
+} from "./useRepositoryFileEditor";
 
 /**
  * `mdPreviewReducer` 的键空间语义单测。
@@ -88,5 +91,48 @@ describe("mdPreviewReducer 键空间", () => {
     });
     expect(b).toEqual({});
     expect(b).toBe(a);
+  });
+});
+
+describe("shouldSeedMarkdownPreviewOnOpen", () => {
+  test("默认预览且无会话偏好时对 .md / .mdx 种入", () => {
+    expect(
+      shouldSeedMarkdownPreviewOnOpen({
+        relativePath: "docs/config.md",
+        hasExistingPreference: false,
+        defaultOpenMode: "preview",
+      }),
+    ).toBe(true);
+    expect(
+      shouldSeedMarkdownPreviewOnOpen({
+        relativePath: "page.mdx",
+        hasExistingPreference: false,
+        defaultOpenMode: "preview",
+      }),
+    ).toBe(true);
+  });
+
+  test("默认编辑、非 md、或已有偏好时不种入", () => {
+    expect(
+      shouldSeedMarkdownPreviewOnOpen({
+        relativePath: "docs/config.md",
+        hasExistingPreference: false,
+        defaultOpenMode: "edit",
+      }),
+    ).toBe(false);
+    expect(
+      shouldSeedMarkdownPreviewOnOpen({
+        relativePath: "docs/config.md",
+        hasExistingPreference: true,
+        defaultOpenMode: "preview",
+      }),
+    ).toBe(false);
+    expect(
+      shouldSeedMarkdownPreviewOnOpen({
+        relativePath: "src/main.ts",
+        hasExistingPreference: false,
+        defaultOpenMode: "preview",
+      }),
+    ).toBe(false);
   });
 });

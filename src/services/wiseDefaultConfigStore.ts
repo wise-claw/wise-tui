@@ -136,6 +136,9 @@ export const WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED = "wise:workspace-inspector
 
 export const WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED = "wise:file-tree-open-in-new-pane-changed";
 
+/** Markdown 文件默认打开模式变更（编辑 / 预览）。 */
+export const WISE_MARKDOWN_DEFAULT_OPEN_MODE_CHANGED = "wise:markdown-default-open-mode-changed";
+
 export const WISE_REPO_PANEL_PLACEMENT_CHANGED = "wise:repo-panel-placement-changed";
 export const WISE_REPO_PANEL_SPLIT_MODE_CHANGED = "wise:repo-panel-split-mode-changed";
 export const WISE_REPO_PANEL_SPLIT_HEIGHT_CHANGED = "wise:repo-panel-split-height-changed";
@@ -177,6 +180,9 @@ export type RepoPanelVisibility = "visible" | "hidden";
 
 /** 主会话底栏「执行环境」与「模型切换」触发器显示模式。 */
 export type ComposerFooterTriggerDisplayMode = "full" | "icon";
+
+/** 仓库内 Markdown（.md / .mdx）文件首次打开时的默认模式。 */
+export type MarkdownDefaultOpenMode = "edit" | "preview";
 
 export type WorkspaceInspectorPanelsDefaults = Pick<
   WiseDefaultConfigV1,
@@ -284,6 +290,8 @@ export interface WiseDefaultConfigV1 {
   showWorkspaceTodosPanel: boolean;
   /** 文件树点击文件时在新窗格打开，而非占用当前会话主区。 */
   fileTreeOpenInNewPane: boolean;
+  /** Markdown 文件默认打开模式：编辑或预览；默认编辑。 */
+  markdownDefaultOpenMode: MarkdownDefaultOpenMode;
   /** Git 变更面板是否在左栏显示；默认显示。 */
   gitPanelPlacement: RepoPanelVisibility;
   /** 仓库文件树是否在左栏显示；默认显示（与 Git 同时显示时 Tab 切换）。 */
@@ -372,6 +380,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceTodosPanel: false,
   fileTreeOpenInNewPane: false,
+  markdownDefaultOpenMode: "edit",
   gitPanelPlacement: "visible",
   filesPanelPlacement: "visible",
   repoPanelSplitMode: false,
@@ -426,6 +435,12 @@ function normalizeComposerFooterTriggerDisplayMode(
   return raw === "full" || raw === "icon"
     ? raw
     : DEFAULT_CONFIG.composerFooterTriggerDisplayMode;
+}
+
+function normalizeMarkdownDefaultOpenMode(raw: unknown): MarkdownDefaultOpenMode {
+  return raw === "edit" || raw === "preview"
+    ? raw
+    : DEFAULT_CONFIG.markdownDefaultOpenMode;
 }
 
 function normalizeTerminalThemeMode(raw: unknown): TerminalThemeMode {
@@ -647,6 +662,7 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.fileTreeOpenInNewPane === undefined
           ? DEFAULT_CONFIG.fileTreeOpenInNewPane
           : normalizeBoolean(parsed.fileTreeOpenInNewPane, DEFAULT_CONFIG.fileTreeOpenInNewPane),
+      markdownDefaultOpenMode: normalizeMarkdownDefaultOpenMode(parsed.markdownDefaultOpenMode),
       gitPanelPlacement:
         normalizeRepoPanelVisibility(parsed.gitPanelPlacement) ?? DEFAULT_CONFIG.gitPanelPlacement,
       filesPanelPlacement:
@@ -904,6 +920,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
     fileTreeOpenInNewPane: DEFAULT_CONFIG.fileTreeOpenInNewPane,
+    markdownDefaultOpenMode: DEFAULT_CONFIG.markdownDefaultOpenMode,
     gitPanelPlacement: DEFAULT_CONFIG.gitPanelPlacement,
     filesPanelPlacement: DEFAULT_CONFIG.filesPanelPlacement,
     repoPanelSplitMode: DEFAULT_CONFIG.repoPanelSplitMode,
@@ -1078,6 +1095,13 @@ function dispatchFileTreeOpenInNewPaneChanged(openInNewPane: boolean): void {
   );
 }
 
+function dispatchMarkdownDefaultOpenModeChanged(mode: MarkdownDefaultOpenMode): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_MARKDOWN_DEFAULT_OPEN_MODE_CHANGED, { detail: { mode } }),
+  );
+}
+
 function dispatchRepoPanelPlacementChanged(
   gitPanelPlacement: RepoPanelVisibility,
   filesPanelPlacement: RepoPanelVisibility,
@@ -1238,6 +1262,7 @@ export async function saveWiseDefaultConfig(
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceTodosPanel"
       | "fileTreeOpenInNewPane"
+      | "markdownDefaultOpenMode"
       | "gitPanelPlacement"
       | "filesPanelPlacement"
       | "repoPanelSplitMode"
@@ -1342,6 +1367,10 @@ export async function saveWiseDefaultConfig(
       patch.showWorkspaceQuickActionsPanel ?? current.showWorkspaceQuickActionsPanel,
     showWorkspaceTodosPanel: patch.showWorkspaceTodosPanel ?? current.showWorkspaceTodosPanel,
     fileTreeOpenInNewPane: patch.fileTreeOpenInNewPane ?? current.fileTreeOpenInNewPane,
+    markdownDefaultOpenMode:
+      patch.markdownDefaultOpenMode !== undefined
+        ? normalizeMarkdownDefaultOpenMode(patch.markdownDefaultOpenMode)
+        : current.markdownDefaultOpenMode,
     gitPanelPlacement: patch.gitPanelPlacement ?? current.gitPanelPlacement,
     filesPanelPlacement: patch.filesPanelPlacement ?? current.filesPanelPlacement,
     repoPanelSplitMode:
@@ -1564,6 +1593,9 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.fileTreeOpenInNewPane !== undefined) {
     next.fileTreeOpenInNewPane = normalizeBoolean(patch.fileTreeOpenInNewPane);
+  }
+  if (patch.markdownDefaultOpenMode !== undefined) {
+    next.markdownDefaultOpenMode = normalizeMarkdownDefaultOpenMode(patch.markdownDefaultOpenMode);
   }
   if (patch.gitPanelPlacement !== undefined) {
     next.gitPanelPlacement =
@@ -1851,6 +1883,12 @@ export async function saveWiseDefaultConfig(
     next.fileTreeOpenInNewPane !== current.fileTreeOpenInNewPane
   ) {
     dispatchFileTreeOpenInNewPaneChanged(next.fileTreeOpenInNewPane);
+  }
+  if (
+    patch.markdownDefaultOpenMode !== undefined &&
+    next.markdownDefaultOpenMode !== current.markdownDefaultOpenMode
+  ) {
+    dispatchMarkdownDefaultOpenModeChanged(next.markdownDefaultOpenMode);
   }
   if (
     (patch.gitPanelPlacement !== undefined || patch.filesPanelPlacement !== undefined) &&
@@ -2450,6 +2488,16 @@ export async function loadFileTreeOpenInNewPaneFromStore(): Promise<boolean> {
 
 export async function saveFileTreeOpenInNewPaneToStore(openInNewPane: boolean): Promise<void> {
   await saveWiseDefaultConfig({ fileTreeOpenInNewPane: openInNewPane });
+}
+
+export async function loadMarkdownDefaultOpenModeFromStore(): Promise<MarkdownDefaultOpenMode> {
+  return (await loadWiseDefaultConfig()).markdownDefaultOpenMode;
+}
+
+export async function saveMarkdownDefaultOpenModeToStore(
+  mode: MarkdownDefaultOpenMode,
+): Promise<void> {
+  await saveWiseDefaultConfig({ markdownDefaultOpenMode: mode });
 }
 
 export async function loadSessionFeedbackLoopSettingsFromStore(): Promise<SessionFeedbackLoopSettings> {
