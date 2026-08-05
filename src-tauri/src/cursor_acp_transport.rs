@@ -201,6 +201,19 @@ impl CursorAcpTransport {
         Ok((id, rx))
     }
 
+    /// Locally complete every in-flight JSON-RPC request waiter.
+    ///
+    /// Used when `session/cancel` is sent: Cursor may not reply to `session/prompt`
+    /// promptly (or at all). Without forcing the oneshot closed, the prompt loop
+    /// never exits and the tab `busy` flag stays stuck.
+    pub async fn abort_pending_requests(&self, stop_reason: &str) {
+        let pending: HashMap<JsonRpcId, oneshot::Sender<JsonRpcMessage>> = {
+            let mut map = self.pending_requests.lock().await;
+            std::mem::take(&mut *map)
+        };
+        complete_pending_with_stop_reason(pending, stop_reason);
+    }
+
     /// Convenience: begin + wait (no concurrent server-request handling).
     /// Safe for initialize / authenticate / session/new before a prompt.
     pub async fn send_request(
@@ -263,5 +276,49 @@ impl CursorAcpTransport {
 
     pub fn is_child_exited(&mut self) -> bool {
         matches!(self.child.try_wait(), Ok(Some(_)))
+    }
+}
+
+/// Complete local oneshot waiters with a synthetic ACP prompt result.
+pub(crate) fn complete_pending_with_stop_reason(
+    pending: HashMap<JsonRpcId, oneshot::Sender<JsonRpcMessage>>,
+    stop_reason: &str,
+) {
+    let result = serde_json::json!({ "stopReason": stop_reason });
+    for (id, tx) in pending {
+        let _ = tx.send(JsonRpcMessage::Response {
+            jsonrpc: "2.0".to_string(),
+            id,
+            result: Some(result.clone()),
+            error: None,
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn complete_pending_with_stop_reason_unblocks_waiters() {
+        let (tx, rx) = oneshot::channel();
+        let id = JsonRpcId::Number(42);
+        let mut pending = HashMap::new();
+        pending.insert(id.clone(), tx);
+
+        complete_pending_with_stop_reason(pending, "cancelled");
+
+        let msg = rx.await.expect("waiter should receive synthetic response");
+        match msg {
+            JsonRpcMessage::Response { id: got_id, result, error, .. } => {
+                assert_eq!(got_id, id);
+                assert!(error.is_none());
+                assert_eq!(
+                    result.as_ref().and_then(|v| v.get("stopReason")).and_then(|v| v.as_str()),
+                    Some("cancelled")
+                );
+            }
+            other => panic!("unexpected message: {other:?}"),
+        }
     }
 }

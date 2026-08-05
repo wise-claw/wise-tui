@@ -16,6 +16,7 @@ import {
   formatWorkspaceSidebarRelativeTime,
   listWorkspaceSidebarHistorySessions,
   pickFirstWorkspaceSidebarHistorySession,
+  pickFirstRepositoryOwnedSidebarHistorySession,
 } from "./repositoryWorkspaceTree";
 
 function makeRepo(id: number, name: string, path: string): Repository {
@@ -95,6 +96,22 @@ describe("listWorkspaceSidebarHistorySessions", () => {
     ];
     expect(pickFirstWorkspaceSidebarHistorySession(sessions, "/work/a")?.id).toBe("new");
     expect(pickFirstWorkspaceSidebarHistorySession(sessions, "/work/missing")).toBeNull();
+  });
+
+  test("pickFirstRepositoryOwnedSidebarHistorySession skips nested Project root sessions", () => {
+    const projectRoot: ClaudeSession = {
+      ...makeSession("proj", "/work", { createdAt: 400, content: "workspace" }),
+      repositoryName: "Project: Demo",
+    };
+    const member = makeSession("member", "/work/a", { createdAt: 200, content: "repo" });
+    const sessions = [projectRoot, member];
+    // 历史列表仍可包含 Project（嵌套 scope），但成员仓默认激活不得选它。
+    expect(listWorkspaceSidebarHistorySessions(sessions, "/work/a").map((s) => s.id)).toEqual([
+      "proj",
+      "member",
+    ]);
+    expect(pickFirstWorkspaceSidebarHistorySession(sessions, "/work/a")?.id).toBe("proj");
+    expect(pickFirstRepositoryOwnedSidebarHistorySession(sessions, "/work/a")?.id).toBe("member");
   });
 
   test("recycled hello session stays above empty draft after sort-activity bump", () => {

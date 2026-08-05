@@ -28,11 +28,13 @@ import {
   pickProjectMainSessionForSidebarSelect,
   pickSessionForRepositorySidebarSelect,
 } from "../utils/claudeSessionSelection";
-import { pickFirstWorkspaceSidebarHistorySession } from "../utils/repositoryWorkspaceTree";
+import { pickFirstRepositoryOwnedSidebarHistorySession } from "../utils/repositoryWorkspaceTree";
 import {
+  isProjectRootSessionDisplayName,
   isSessionBoundAsRepositoryMain,
   findReusableEmptyMainSession,
   projectMainSessionBindingKey,
+  repositoryPathsMatch,
   resolveBoundMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "../utils/repositoryMainSessionBinding";
@@ -203,7 +205,8 @@ export function useAppSidebarSelection({
   function switchRepositoryDisplaySession(repository: Repository): string | null {
     const sessionsNow = sessionsLatestRef.current;
     const target = resolveSidebarSelectionTarget({ repository });
-    const first = pickFirstWorkspaceSidebarHistorySession(sessionsNow, target.path);
+    // 成员仓不得优先激活嵌套 scope 带入的 Project 根会话，否则会跨仓共享绑定。
+    const first = pickFirstRepositoryOwnedSidebarHistorySession(sessionsNow, target.path);
     if (first) {
       switchSessionIfNeeded(first.id);
       return first.id;
@@ -236,7 +239,15 @@ export function useAppSidebarSelection({
     const target = resolveSidebarSelectionTarget({ repository });
     const sessionId = switchRepositoryDisplaySession(repository);
     if (sessionId) {
-      void bindRepositoryMainSession(target.path, sessionId);
+      const session = sessionsLatestRef.current.find((item) => item.id === sessionId);
+      // 仅当会话真正属于该成员仓时写入绑定，避免 Project 根会话污染多个成员路径。
+      if (
+        session &&
+        !isProjectRootSessionDisplayName(session.repositoryName ?? "") &&
+        repositoryPathsMatch(session.repositoryPath, target.path)
+      ) {
+        void bindRepositoryMainSession(target.path, sessionId);
+      }
     }
     return sessionId;
   }

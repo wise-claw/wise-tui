@@ -120,6 +120,15 @@ describe("project-rooted main session matching", () => {
     },
   ];
 
+  it("resolveBoundMainSessionId rejects Project root session bound to member repo path", () => {
+    const bindings = {
+      "/work/demo/web": "project-main",
+      "/work/demo/api": "project-main",
+    };
+    expect(resolveBoundMainSessionId("/work/demo/web", bindings, [projectRootSession], null)).toBeNull();
+    expect(resolveBoundMainSessionId("/work/demo/api", bindings, [projectRootSession], null)).toBeNull();
+  });
+
   it("treats project-rooted tab as repository main session target", () => {
     expect(isRepositoryMainSessionTab(projectRootSession, "/work/demo/web", null)).toBe(true);
     expect(isRepositoryMainSessionTab(projectRootSession, "/work/demo/api", null)).toBe(true);
@@ -284,5 +293,12 @@ describe("findReusableEmptyMainSession", () => {
     const side = session(path, "wise-tui", { id: "side", isSide: true });
     const empty = session(path, "wise-tui", { id: "empty" });
     expect(findReusableEmptyMainSession([employee, side, empty], path)?.id).toBe("empty");
+  });
+
+  it("skips Project root sessions even when nested under member path scope", () => {
+    const projectRoot = session("/work", "Project: Demo", { id: "proj", createdAt: 99 });
+    const empty = session(path, "wise-tui", { id: "empty", createdAt: 1 });
+    expect(findReusableEmptyMainSession([projectRoot, empty], path)?.id).toBe("empty");
+    expect(findReusableEmptyMainSession([projectRoot], path)).toBeNull();
   });
 });

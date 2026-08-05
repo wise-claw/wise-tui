@@ -131,6 +131,38 @@ describe("buildSidebarRunningMainSessionMaps", () => {
     expect(maps.runningByRepositoryId[11]).toBe(false);
   });
 
+  it("does not mark sibling repositories when both incorrectly bind the same Project root session", () => {
+    const childWeb: Repository = {
+      id: 10,
+      name: "web",
+      path: "/work/hr/web",
+      repositoryType: "frontend",
+      createdAt: "0",
+      updatedAt: "0",
+    };
+    const childApi: Repository = {
+      id: 11,
+      name: "api",
+      path: "/work/hr/api",
+      repositoryType: "backend",
+      createdAt: "0",
+      updatedAt: "0",
+    };
+    const projectRootSession = session("s-root", "/work/hr", "Project: 华润", "claude-1", "running");
+    const maps = buildSidebarRunningMainSessionMaps({
+      projects: [{ id: "hr" }],
+      repositories: [childWeb, childApi],
+      sessions: [projectRootSession],
+      bindings: {
+        "/work/hr/web": "s-root",
+        "/work/hr/api": "s-root",
+      },
+      claudeProcesses: [],
+    });
+    expect(maps.runningByRepositoryId[10]).toBe(false);
+    expect(maps.runningByRepositoryId[11]).toBe(false);
+  });
+
   it("marks repository when bound session UI is running but host scan is empty", () => {
     const repoSession = session("s-repo", "/work/hr/web", "web", null, "running");
     const maps = buildSidebarRunningMainSessionMaps({

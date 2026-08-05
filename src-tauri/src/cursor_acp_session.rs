@@ -192,13 +192,18 @@ impl CursorAcpSession {
     }
 
     pub async fn cancel_prompt(&mut self) -> Result<()> {
-        let Some(sid) = self.acp_session_id.clone() else {
-            return Ok(());
-        };
-        let params = SessionCancelParams { session_id: sid };
-        self.transport
-            .send_notification("session/cancel", Some(serde_json::to_value(&params)?))
-            .await?;
+        if let Some(sid) = self.acp_session_id.clone() {
+            let params = SessionCancelParams { session_id: sid };
+            // Best-effort: agent may ignore or delay the cancel notification.
+            let _ = self
+                .transport
+                .send_notification("session/cancel", Some(serde_json::to_value(&params)?))
+                .await;
+        }
+        // Always unblock the local prompt waiter so the turn loop can exit and
+        // release `busy` — otherwise "结束" then re-send fails with overlapping turn.
+        self.transport.abort_pending_requests("cancelled").await;
+        self.prompt_in_flight = false;
         Ok(())
     }
 

@@ -133,6 +133,9 @@ export function findReusableEmptyMainSession(
     if (session.messages.length > 0) continue;
     if (session.pendingPrompt?.trim()) continue;
     if (session.diskPreview?.trim()) continue;
+    // 成员仓复用不得落到 Project 根会话（路径不同时 isRepositoryMainSessionTab 仍可能为 true）。
+    if (isProjectRootSessionDisplayName(session.repositoryName ?? "")) continue;
+    if (normalizeRepositoryPathKey(session.repositoryPath) !== pathKey) continue;
     if (!isRepositoryMainSessionTab(session, pathKey, mainOwnerAgentName)) continue;
     if (!best || session.createdAt > best.createdAt) {
       best = session;
@@ -192,6 +195,14 @@ export function resolveBoundMainSessionId(
       return null;
     }
     return s.id;
+  }
+  // 成员仓路径绑定：必须精确同路径且非 Project 根会话。
+  // 禁止把 Project 根会话（或其它仓会话）绑到多个成员路径，否则执行时多仓同亮绿点。
+  if (isProjectRootSessionDisplayName(s.repositoryName ?? "")) {
+    return null;
+  }
+  if (normalizeRepositoryPathKey(s.repositoryPath) !== key) {
+    return null;
   }
   if (isRepositoryMainSessionTab(s, key, mainOwnerAgentName)) {
     return s.id;

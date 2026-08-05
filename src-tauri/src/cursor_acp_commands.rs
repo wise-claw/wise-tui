@@ -31,6 +31,9 @@ pub(crate) struct CursorAcpSessionStore {
     pub(crate) sessions: Arc<TokioMutex<HashMap<String, Arc<TokioMutex<CursorAcpSession>>>>>,
     /// Tabs currently running a prompt turn (prevents overlapping prompts).
     pub(crate) busy: Arc<TokioMutex<HashMap<String, bool>>>,
+    /// Monotonic turn epoch per tab. Interrupt / newer execute bumps this so a
+    /// superseded prompt loop must not clear `busy` or emit complete for the new turn.
+    pub(crate) turn_epoch: Arc<TokioMutex<HashMap<String, u64>>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -215,6 +218,13 @@ pub(crate) async fn execute_cursor_acp(
         }
         busy.insert(session_id.clone(), true);
     }
+
+    let turn_epoch = {
+        let mut epochs = store.turn_epoch.lock().await;
+        let entry = epochs.entry(session_id.clone()).or_insert(0);
+        *entry = entry.saturating_add(1);
+        *entry
+    };
 
     let invocation_key = params
         .invocation_key
@@ -462,6 +472,15 @@ pub(crate) async fn execute_cursor_acp(
         }
 
         {
+            let still_current = {
+                let epochs = store_loop.turn_epoch.lock().await;
+                epochs.get(&session_id_loop).copied().unwrap_or(0) == turn_epoch
+            };
+            if !still_current {
+                // Interrupt or a newer execute owns this tab; do not touch busy /
+                // prompt_in_flight / completion events belonging to the new turn.
+                return;
+            }
             let mut guard = session_arc_loop.lock().await;
             guard.mark_prompt_done();
         }
@@ -553,20 +572,30 @@ pub(crate) async fn interrupt_cursor_acp(
     store: tauri::State<'_, CursorAcpSessionStore>,
     params: InterruptCursorAcpParams,
 ) -> Result<(), String> {
+    // Invalidate the in-flight prompt loop's finalize before unblocking waiters /
+    // clearing busy, so a quick re-send cannot have its busy flag stolen.
+    {
+        let mut epochs = store.turn_epoch.lock().await;
+        let entry = epochs.entry(params.session_id.clone()).or_insert(0);
+        *entry = entry.saturating_add(1);
+    }
+    store.busy.lock().await.remove(&params.session_id);
+
     let session_arc = {
         let sessions = store.sessions.lock().await;
-        sessions
-            .get(&params.session_id)
-            .cloned()
-            .ok_or_else(|| format!("No active Cursor ACP session: {}", params.session_id))?
+        sessions.get(&params.session_id).cloned()
     };
-    {
+    if let Some(session_arc) = session_arc {
         let mut guard = session_arc.lock().await;
         guard
             .cancel_prompt()
             .await
             .map_err(|e| format!("session/cancel failed: {e}"))?;
     }
+
+    let registry = app.state::<ClaudeSessionRegistry>();
+    registry.mark_completed(&params.session_id, false);
+
     let _ = app.emit(
         "cursor-acp:interrupted",
         json!({ "sessionId": params.session_id }),
@@ -583,6 +612,7 @@ pub(crate) async fn shutdown_cursor_acp(
         let mut sessions = store.sessions.lock().await;
         sessions.remove(&params.session_id)
     };
+    store.turn_epoch.lock().await.remove(&params.session_id);
     store.busy.lock().await.remove(&params.session_id);
     if let Some(arc) = session_arc {
         let mut guard = arc.lock().await;

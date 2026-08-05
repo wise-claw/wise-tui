@@ -7,7 +7,11 @@ import type {
 } from "../types";
 import { isCodeReviewPromptHistorySession } from "./codeReviewPromptSession";
 import { isConventionalCommitPromptHistorySession } from "./conventionalCommitMessage";
-import { repositoryPathsMatch } from "./repositoryMainSessionBinding";
+import {
+  isProjectRootSessionDisplayName,
+  normalizeRepositoryPathKey,
+  repositoryPathsMatch,
+} from "./repositoryMainSessionBinding";
 import { isSessionFeedbackLoopHistorySession } from "./sessionFeedbackLoopDispatch";
 import { getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGrouping";
 import { listSessionsForRepositoryPath, dedupeClaudeSessionsByIdentity } from "./sessionHistoryScope";
@@ -71,6 +75,26 @@ export function pickFirstWorkspaceSidebarHistorySession(
   repositoryPath: string,
 ): ClaudeSession | null {
   return listWorkspaceSidebarHistorySessions(sessions, repositoryPath)[0] ?? null;
+}
+
+/**
+ * 点成员仓行时默认激活的会话：与侧栏历史同序，但排除嵌套 scope 带入的 `Project: …` 根会话，
+ * 且要求 `repositoryPath` 与目标仓精确匹配。
+ * 否则多仓会把同一 Project 根会话绑到多个成员路径，执行后两侧同时亮绿点。
+ */
+export function pickFirstRepositoryOwnedSidebarHistorySession(
+  sessions: ReadonlyArray<ClaudeSession>,
+  repositoryPath: string,
+): ClaudeSession | null {
+  const pathKey = normalizeRepositoryPathKey(repositoryPath);
+  if (!pathKey) return null;
+  return (
+    listWorkspaceSidebarHistorySessions(sessions, repositoryPath).find(
+      (session) =>
+        !isProjectRootSessionDisplayName(session.repositoryName ?? "") &&
+        normalizeRepositoryPathKey(session.repositoryPath) === pathKey,
+    ) ?? null
+  );
 }
 
 export function filterEmployeeMonitorForRepository(
