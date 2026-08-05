@@ -4,6 +4,7 @@ import {
   PictureOutlined,
   PlusOutlined,
   SendOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import { Button, Checkbox, Empty, Modal, Spin, Tag, Typography, message } from "antd";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -32,8 +33,13 @@ import {
 } from "../../services/workspaceRequirementsStore";
 import {
   closeWorkspaceMemoPanel,
+  consumeWorkspaceRequirementEditRequest,
   requestWorkspaceRequirementCreate,
+  useWorkspaceRequirementEditRequestEpoch,
 } from "../../stores/workspaceMemoPanelStore";
+import { loadRepositories } from "../../services/repository";
+import type { Repository } from "../../types";
+import { repositoryFolderBasename } from "../../utils/repositoryType";
 import { ErrorBoundary } from "../ErrorBoundary";
 import type { MilkdownEditorHandle } from "../MilkdownViewer";
 import { MilkdownSyntaxToolbar } from "../MilkdownViewer/MilkdownSyntaxToolbar";
@@ -91,6 +97,8 @@ function thumbSrc(path: string): string {
 
 interface RequirementRowProps {
   item: WorkspaceRequirementItem;
+  repositoryLabel: string;
+  repositoryMissing: boolean;
   dispatchingId: string | null;
   onToggleDone: (item: WorkspaceRequirementItem) => void;
   onEdit: (item: WorkspaceRequirementItem) => void;
@@ -101,6 +109,8 @@ interface RequirementRowProps {
 function requirementRowEqual(prev: RequirementRowProps, next: RequirementRowProps): boolean {
   return (
     prev.item === next.item &&
+    prev.repositoryLabel === next.repositoryLabel &&
+    prev.repositoryMissing === next.repositoryMissing &&
     prev.dispatchingId === next.dispatchingId &&
     prev.onToggleDone === next.onToggleDone &&
     prev.onEdit === next.onEdit &&
@@ -111,6 +121,8 @@ function requirementRowEqual(prev: RequirementRowProps, next: RequirementRowProp
 
 const RequirementRow = memo(function RequirementRow({
   item,
+  repositoryLabel,
+  repositoryMissing,
   dispatchingId,
   onToggleDone,
   onEdit,
@@ -135,7 +147,20 @@ const RequirementRow = memo(function RequirementRow({
       />
       <div className="app-workspace-requirements-panel__row-main">
         <div className="app-workspace-requirements-panel__title-line">
+          {repositoryMissing ? (
+            <Tag
+              icon={<WarningOutlined />}
+              color="warning"
+              className="app-workspace-requirements-panel__tag"
+              title={repositoryLabel}
+            >
+              {repositoryLabel}
+            </Tag>
+          ) : null}
           <span className="app-workspace-requirements-panel__title">{item.title}</span>
+          {!repositoryMissing ? (
+            <Tag className="app-workspace-requirements-panel__tag">{repositoryLabel}</Tag>
+          ) : null}
           {item.imagePaths.length > 0 ? (
             <Tag icon={<PictureOutlined />} className="app-workspace-requirements-panel__tag">
               {item.imagePaths.length}
@@ -217,6 +242,7 @@ async function hydrateMarkdownImagesForEditor(markdown: string): Promise<string>
 export function WorkspaceMemoPanel() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<WorkspaceRequirementItem[]>([]);
+  const [repositories, setRepositories] = useState<Repository[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftBody, setDraftBody] = useState("");
@@ -251,10 +277,11 @@ export function WorkspaceMemoPanel() {
     mountedRef.current = true;
     let cancelled = false;
     setLoading(true);
-    void loadWorkspaceRequirements()
-      .then((payload) => {
+    void Promise.all([loadWorkspaceRequirements(), loadRepositories()])
+      .then(([payload, repos]) => {
         if (cancelled) return;
         setItems(payload.items);
+        setRepositories(repos);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -269,6 +296,16 @@ export function WorkspaceMemoPanel() {
       mountedRef.current = false;
     };
   }, []);
+
+  const resolveRepositoryMeta = useCallback(
+    (repositoryId: string | null): { label: string; missing: boolean } => {
+      if (!repositoryId) return { label: "未指定仓库", missing: true };
+      const repo = repositories.find((item) => String(item.id) === repositoryId);
+      if (!repo) return { label: "未知仓库", missing: true };
+      return { label: repositoryFolderBasename(repo), missing: false };
+    },
+    [repositories],
+  );
 
   // 全局新增弹窗保存后同步列表（不依赖本面板是否打开过 create）。
   useEffect(() => {
@@ -303,6 +340,34 @@ export function WorkspaceMemoPanel() {
       setEditorKey((k) => k + 1);
     });
   }, []);
+
+  const pendingEditIdRef = useRef<string | null>(null);
+  const editRequestEpoch = useWorkspaceRequirementEditRequestEpoch();
+  useEffect(() => {
+    if (editRequestEpoch <= 0) return;
+    const id = consumeWorkspaceRequirementEditRequest();
+    if (!id) return;
+    const readyItem = itemsRef.current.find((row) => row.id === id);
+    if (readyItem) {
+      pendingEditIdRef.current = null;
+      openEdit(readyItem);
+      return;
+    }
+    pendingEditIdRef.current = id;
+  }, [editRequestEpoch, openEdit]);
+
+  useEffect(() => {
+    const id = pendingEditIdRef.current;
+    if (!id || loading) return;
+    const item = items.find((row) => row.id === id);
+    if (!item) {
+      pendingEditIdRef.current = null;
+      message.warning("未找到要编辑的需求");
+      return;
+    }
+    pendingEditIdRef.current = null;
+    openEdit(item);
+  }, [items, loading, openEdit]);
 
   const saveEditor = useCallback(async () => {
     const rawBody = draftBodyRef.current.trim();
@@ -516,31 +581,41 @@ export function WorkspaceMemoPanel() {
               </Empty>
             ) : (
               <ul className="app-workspace-requirements-panel__list">
-                {openItems.map((item) => (
+                {openItems.map((item) => {
+                  const repo = resolveRepositoryMeta(item.repositoryId);
+                  return (
                   <RequirementRow
                     key={item.id}
                     item={item}
+                    repositoryLabel={repo.label}
+                    repositoryMissing={repo.missing}
                     dispatchingId={dispatchingId}
                     onToggleDone={(row) => void handleToggleDone(row)}
                     onEdit={openEdit}
                     onDelete={handleDelete}
                     onDispatch={(row) => void handleDispatch(row)}
                   />
-                ))}
+                  );
+                })}
                 {doneItems.length > 0 ? (
                   <li className="app-workspace-requirements-panel__section-label">已完成</li>
                 ) : null}
-                {doneItems.map((item) => (
+                {doneItems.map((item) => {
+                  const repo = resolveRepositoryMeta(item.repositoryId);
+                  return (
                   <RequirementRow
                     key={item.id}
                     item={item}
+                    repositoryLabel={repo.label}
+                    repositoryMissing={repo.missing}
                     dispatchingId={dispatchingId}
                     onToggleDone={(row) => void handleToggleDone(row)}
                     onEdit={openEdit}
                     onDelete={handleDelete}
                     onDispatch={(row) => void handleDispatch(row)}
                   />
-                ))}
+                  );
+                })}
               </ul>
             )}
           </div>

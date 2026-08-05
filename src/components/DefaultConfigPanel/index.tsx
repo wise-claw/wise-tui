@@ -11,6 +11,7 @@ import {
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
 import { MONITOR_PANEL_VISIBLE_ROWS_OPTIONS } from "../../constants/monitorPanelLayout";
+import { REQUIREMENTS_PANEL_VISIBLE_ROWS_OPTIONS } from "../../constants/requirementsPanelLayout";
 import { WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS, formatWorkspaceListVisibleRowsLabel } from "../../constants/workspaceListLayout";
 import { WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_OPTIONS } from "../../constants/workspaceSidebarLayout";
 import { LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS } from "../../constants/leftSidebarHubQuickEntries";
@@ -27,6 +28,7 @@ import { DefaultConfigCheckboxGrid } from "./defaultConfigCheckboxGrid";
 import { useLeftSidebarHubQuickEntriesSetting } from "./useLeftSidebarHubQuickEntriesSetting";
 import { useMonitorPanelSetting } from "./useMonitorPanelSetting";
 import { useLeftSidebarWorkspaceListSetting } from "./useLeftSidebarWorkspaceListSetting";
+import { useLeftSidebarRequirementsPanelSetting } from "./useLeftSidebarRequirementsPanelSetting";
 import { useWorkspaceSidebarRowPreviewLimitSetting } from "./useWorkspaceSidebarRowPreviewLimitSetting";
 import { useExecutionEnvironmentDispatchHistoryDaysSetting } from "./useExecutionEnvironmentDispatchHistoryDaysSetting";
 import { EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS } from "../../constants/executionEnvironmentDispatch";
@@ -88,6 +90,7 @@ export function DefaultConfigPanel() {
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
   const monitorPanel = useMonitorPanelSetting();
   const leftSidebarWorkspaceList = useLeftSidebarWorkspaceListSetting();
+  const leftSidebarRequirementsPanel = useLeftSidebarRequirementsPanelSetting();
   const workspaceSidebarRowPreview = useWorkspaceSidebarRowPreviewLimitSetting();
   const repoPanelPlacement = useRepoPanelPlacementSetting();
   const execEnvDispatchHistory = useExecutionEnvironmentDispatchHistoryDaysSetting();
@@ -776,6 +779,52 @@ export function DefaultConfigPanel() {
                     }))}
                     onChange={(value) => {
                       void leftSidebarWorkspaceList.saveVisibleRows(value);
+                    }}
+                  />
+                </div>
+              </div>
+            }
+          />
+
+          <DefaultConfigRow
+            title="需求列表"
+            hint="显隐 · 行数"
+            detail="左栏需求模块；可配置显示行数，超出部分滚动查看；新增需求须指定归属仓库"
+            control={
+              <div className="app-default-config-row__control--monitor">
+                <div className="app-default-config-monitor-panel__field">
+                  <span className="app-default-config-monitor-panel__field-label">显示</span>
+                  <DefaultConfigOptionPick<"hidden" | "visible">
+                    aria-label="左栏需求列表默认显示"
+                    disabled={leftSidebarRequirementsPanel.loading || leftSidebarRequirementsPanel.saving}
+                    value={leftSidebarRequirementsPanel.visible ? "visible" : "hidden"}
+                    options={[
+                      { label: "显示", value: "visible" },
+                      { label: "隐藏", value: "hidden" },
+                    ]}
+                    onChange={(value) => {
+                      void leftSidebarRequirementsPanel.saveVisible(value === "visible");
+                    }}
+                  />
+                </div>
+                <div className="app-default-config-monitor-panel__field">
+                  <span className="app-default-config-monitor-panel__field-label">行数</span>
+                  <Select
+                    size="small"
+                    className="app-default-config-monitor-panel__rows-select"
+                    aria-label="需求列表可见行数"
+                    disabled={
+                      leftSidebarRequirementsPanel.loading ||
+                      leftSidebarRequirementsPanel.saving ||
+                      !leftSidebarRequirementsPanel.visible
+                    }
+                    value={leftSidebarRequirementsPanel.visibleRows}
+                    options={REQUIREMENTS_PANEL_VISIBLE_ROWS_OPTIONS.map((rows) => ({
+                      value: rows,
+                      label: `${rows}`,
+                    }))}
+                    onChange={(value) => {
+                      void leftSidebarRequirementsPanel.saveVisibleRows(value);
                     }}
                   />
                 </div>

@@ -59,6 +59,14 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
         description: "打开或关闭终端面板（反引号键，数字 1 左侧；须用 Control，不是 ⌘）。",
       },
       {
+        keys: "⌥R · Alt+R",
+        description: "打开或关闭需求中栏面板（与侧栏「工作区」标题旁需求按钮一致）。",
+      },
+      {
+        keys: "⌥Q · Alt+Q",
+        description: "打开或关闭快捷操作中栏面板（与侧栏「工作区」标题旁快捷操作按钮一致）。",
+      },
+      {
         keys: "⌘W · Ctrl+W",
         description:
           "焦点在终端面板内时：关闭当前终端标签；仅剩一个时同时关闭面板。需求面板打开且未在编辑弹窗时：关闭需求面板。快捷操作面板打开且未在编辑弹窗时：关闭快捷操作面板。",

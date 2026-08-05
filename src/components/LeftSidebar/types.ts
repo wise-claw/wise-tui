@@ -47,6 +47,8 @@ export interface LeftSidebarProps {
   showLeftSidebarMonitorPanel?: boolean;
   /** 是否显示左栏工作区与仓库树；默认 true，由 `wise.defaultConfig.v1` 控制。 */
   showLeftSidebarWorkspaceList?: boolean;
+  /** 是否显示左栏需求列表面板；默认 true，由 `wise.defaultConfig.v1` 控制。 */
+  showLeftSidebarRequirementsPanel?: boolean;
   /** 左栏工作区树纵向位置；默认 top。 */
   workspaceListPlacement?: WorkspaceListPlacement;
   /** 是否显示左栏工作区列表中的仓库圆形角标；默认 false，由 `wise.defaultConfig.v1` 控制。 */

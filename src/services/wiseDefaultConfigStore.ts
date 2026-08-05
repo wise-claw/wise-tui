@@ -33,6 +33,10 @@ import {
   normalizeMonitorPanelVisibleRows,
 } from "../constants/monitorPanelLayout";
 import {
+  REQUIREMENTS_PANEL_VISIBLE_ROWS_DEFAULT,
+  normalizeRequirementsPanelVisibleRows,
+} from "../constants/requirementsPanelLayout";
+import {
   WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT,
   normalizeWorkspaceListVisibleRows,
 } from "../constants/workspaceListLayout";
@@ -88,6 +92,12 @@ export const WISE_LEFT_SIDEBAR_HUB_QUICK_ENTRIES_CHANGED = "wise:left-sidebar-hu
 export const WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED = "wise:left-sidebar-monitor-panel-changed";
 
 export const WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED = "wise:left-sidebar-workspace-list-changed";
+
+export const WISE_LEFT_SIDEBAR_REQUIREMENTS_PANEL_CHANGED =
+  "wise:left-sidebar-requirements-panel-changed";
+
+export const WISE_REQUIREMENTS_PANEL_VISIBLE_ROWS_CHANGED =
+  "wise:requirements-panel-visible-rows-changed";
 
 export const WISE_WORKSPACE_LIST_VISIBLE_ROWS_CHANGED = "wise:workspace-list-visible-rows-changed";
 
@@ -216,6 +226,10 @@ export interface WiseDefaultConfigV1 {
   showLeftSidebarMonitorPanel: boolean;
   /** 左栏工作区与仓库树是否显示；默认显示。 */
   showLeftSidebarWorkspaceList: boolean;
+  /** 左栏需求列表面板是否显示；默认显示。 */
+  showLeftSidebarRequirementsPanel: boolean;
+  /** 左栏需求列表内容区默认可见行数（超出滚动）。 */
+  requirementsPanelVisibleRows: number;
   /** 左栏工作区树内容区默认可见行数（与文件树并存时封顶高度；`0` = 不限）。 */
   workspaceListVisibleRows: number;
   /** 左栏工作区树纵向位置；默认顶部。 */
@@ -323,6 +337,8 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
   showLeftSidebarMonitorPanel: true,
   showLeftSidebarWorkspaceList: true,
+  showLeftSidebarRequirementsPanel: true,
+  requirementsPanelVisibleRows: REQUIREMENTS_PANEL_VISIBLE_ROWS_DEFAULT,
   workspaceListVisibleRows: WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT,
   workspaceListPlacement: "top",
   workspaceSidebarRowPreviewLimit: WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_DEFAULT,
@@ -490,6 +506,17 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
               parsed.showLeftSidebarWorkspaceList,
               DEFAULT_CONFIG.showLeftSidebarWorkspaceList,
             ),
+      showLeftSidebarRequirementsPanel:
+        parsed.showLeftSidebarRequirementsPanel === undefined
+          ? DEFAULT_CONFIG.showLeftSidebarRequirementsPanel
+          : normalizeBoolean(
+              parsed.showLeftSidebarRequirementsPanel,
+              DEFAULT_CONFIG.showLeftSidebarRequirementsPanel,
+            ),
+      requirementsPanelVisibleRows:
+        parsed.requirementsPanelVisibleRows === undefined
+          ? DEFAULT_CONFIG.requirementsPanelVisibleRows
+          : normalizeRequirementsPanelVisibleRows(parsed.requirementsPanelVisibleRows),
       workspaceListVisibleRows:
         parsed.workspaceListVisibleRows === undefined
           ? DEFAULT_CONFIG.workspaceListVisibleRows
@@ -834,6 +861,8 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
     showLeftSidebarWorkspaceList: DEFAULT_CONFIG.showLeftSidebarWorkspaceList,
+    showLeftSidebarRequirementsPanel: DEFAULT_CONFIG.showLeftSidebarRequirementsPanel,
+    requirementsPanelVisibleRows: DEFAULT_CONFIG.requirementsPanelVisibleRows,
     workspaceListVisibleRows: DEFAULT_CONFIG.workspaceListVisibleRows,
     workspaceListPlacement: DEFAULT_CONFIG.workspaceListPlacement,
     workspaceSidebarRowPreviewLimit: DEFAULT_CONFIG.workspaceSidebarRowPreviewLimit,
@@ -908,6 +937,24 @@ function dispatchLeftSidebarWorkspaceListChanged(visible: boolean): void {
   window.dispatchEvent(
     new CustomEvent(WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED, {
       detail: { showLeftSidebarWorkspaceList: visible },
+    }),
+  );
+}
+
+function dispatchLeftSidebarRequirementsPanelChanged(visible: boolean): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_LEFT_SIDEBAR_REQUIREMENTS_PANEL_CHANGED, {
+      detail: { showLeftSidebarRequirementsPanel: visible },
+    }),
+  );
+}
+
+function dispatchRequirementsPanelVisibleRowsChanged(visibleRows: number): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_REQUIREMENTS_PANEL_VISIBLE_ROWS_CHANGED, {
+      detail: { requirementsPanelVisibleRows: visibleRows },
     }),
   );
 }
@@ -1114,6 +1161,8 @@ export async function saveWiseDefaultConfig(
       | "leftSidebarHubQuickEntries"
       | "showLeftSidebarMonitorPanel"
       | "showLeftSidebarWorkspaceList"
+      | "showLeftSidebarRequirementsPanel"
+      | "requirementsPanelVisibleRows"
       | "workspaceListVisibleRows"
       | "workspaceListPlacement"
       | "workspaceSidebarRowPreviewLimit"
@@ -1188,6 +1237,10 @@ export async function saveWiseDefaultConfig(
       patch.showLeftSidebarMonitorPanel ?? current.showLeftSidebarMonitorPanel,
     showLeftSidebarWorkspaceList:
       patch.showLeftSidebarWorkspaceList ?? current.showLeftSidebarWorkspaceList,
+    showLeftSidebarRequirementsPanel:
+      patch.showLeftSidebarRequirementsPanel ?? current.showLeftSidebarRequirementsPanel,
+    requirementsPanelVisibleRows:
+      patch.requirementsPanelVisibleRows ?? current.requirementsPanelVisibleRows,
     workspaceListVisibleRows: patch.workspaceListVisibleRows ?? current.workspaceListVisibleRows,
     workspaceListPlacement: patch.workspaceListPlacement ?? current.workspaceListPlacement,
     workspaceSidebarRowPreviewLimit:
@@ -1350,6 +1403,14 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.showLeftSidebarWorkspaceList !== undefined) {
     next.showLeftSidebarWorkspaceList = normalizeBoolean(patch.showLeftSidebarWorkspaceList);
+  }
+  if (patch.showLeftSidebarRequirementsPanel !== undefined) {
+    next.showLeftSidebarRequirementsPanel = normalizeBoolean(patch.showLeftSidebarRequirementsPanel);
+  }
+  if (patch.requirementsPanelVisibleRows !== undefined) {
+    next.requirementsPanelVisibleRows = normalizeRequirementsPanelVisibleRows(
+      patch.requirementsPanelVisibleRows,
+    );
   }
   if (patch.workspaceListVisibleRows !== undefined) {
     next.workspaceListVisibleRows = normalizeWorkspaceListVisibleRows(patch.workspaceListVisibleRows);
@@ -1619,6 +1680,18 @@ export async function saveWiseDefaultConfig(
     next.showLeftSidebarWorkspaceList !== current.showLeftSidebarWorkspaceList
   ) {
     dispatchLeftSidebarWorkspaceListChanged(next.showLeftSidebarWorkspaceList);
+  }
+  if (
+    patch.showLeftSidebarRequirementsPanel !== undefined &&
+    next.showLeftSidebarRequirementsPanel !== current.showLeftSidebarRequirementsPanel
+  ) {
+    dispatchLeftSidebarRequirementsPanelChanged(next.showLeftSidebarRequirementsPanel);
+  }
+  if (
+    patch.requirementsPanelVisibleRows !== undefined &&
+    next.requirementsPanelVisibleRows !== current.requirementsPanelVisibleRows
+  ) {
+    dispatchRequirementsPanelVisibleRowsChanged(next.requirementsPanelVisibleRows);
   }
   if (
     patch.workspaceListVisibleRows !== undefined &&
@@ -2004,6 +2077,34 @@ export async function loadLeftSidebarWorkspaceListVisibleFromStore(): Promise<bo
 
 export async function saveLeftSidebarWorkspaceListVisibleToStore(visible: boolean): Promise<void> {
   await saveWiseDefaultConfig({ showLeftSidebarWorkspaceList: visible });
+}
+
+export async function loadLeftSidebarRequirementsPanelVisibleFromStore(): Promise<boolean> {
+  return (await loadWiseDefaultConfig()).showLeftSidebarRequirementsPanel;
+}
+
+export async function saveLeftSidebarRequirementsPanelVisibleToStore(visible: boolean): Promise<void> {
+  await saveWiseDefaultConfig({ showLeftSidebarRequirementsPanel: visible });
+}
+
+export async function loadRequirementsPanelVisibleRowsFromStore(): Promise<number> {
+  return (await loadWiseDefaultConfig()).requirementsPanelVisibleRows;
+}
+
+export async function saveRequirementsPanelVisibleRowsToStore(visibleRows: number): Promise<void> {
+  const normalized = normalizeRequirementsPanelVisibleRows(visibleRows);
+  await saveWiseDefaultConfig({ requirementsPanelVisibleRows: normalized });
+}
+
+export async function loadLeftSidebarRequirementsPanelDefaultFromStore(): Promise<{
+  visible: boolean;
+  visibleRows: number;
+}> {
+  const config = await loadWiseDefaultConfig();
+  return {
+    visible: config.showLeftSidebarRequirementsPanel,
+    visibleRows: config.requirementsPanelVisibleRows,
+  };
 }
 
 export async function loadWorkspaceListVisibleRowsFromStore(): Promise<number> {

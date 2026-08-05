@@ -18,6 +18,11 @@ export interface WorkspaceRequirementItem {
   updatedAt: number;
   /** 最近一次派发到待执行队列的时间；未派发为 null */
   lastDispatchedAt: number | null;
+  /**
+   * 归属仓库 id（Wise `Repository.id`）。
+   * 旧数据可能为 null；新增时必须指定。
+   */
+  repositoryId: string | null;
 }
 
 export interface WorkspaceRequirementsPayloadV1 {
@@ -52,8 +57,11 @@ export function deriveRequirementTitle(bodyMarkdown: string): string {
 export function createWorkspaceRequirementItem(
   bodyMarkdown: string,
   now = Date.now(),
+  repositoryId: string | null = null,
 ): WorkspaceRequirementItem {
   const body = typeof bodyMarkdown === "string" ? bodyMarkdown : "";
+  const repoId =
+    typeof repositoryId === "string" && repositoryId.trim() ? repositoryId.trim() : null;
   return {
     id: createWorkspaceRequirementId(),
     title: deriveRequirementTitle(body),
@@ -64,6 +72,7 @@ export function createWorkspaceRequirementItem(
     createdAt: now,
     updatedAt: now,
     lastDispatchedAt: null,
+    repositoryId: repoId,
   };
 }
 
@@ -105,6 +114,8 @@ function normalizeItem(raw: unknown): WorkspaceRequirementItem | null {
       : legacyDescription;
   const titleRaw = typeof row.title === "string" ? row.title.trim() : "";
   const title = titleRaw || deriveRequirementTitle(bodyMarkdown) || "无标题需求";
+  const repositoryIdRaw = typeof row.repositoryId === "string" ? row.repositoryId.trim() : "";
+  const repositoryId = repositoryIdRaw || null;
 
   return {
     id,
@@ -116,6 +127,7 @@ function normalizeItem(raw: unknown): WorkspaceRequirementItem | null {
     createdAt,
     updatedAt,
     lastDispatchedAt,
+    repositoryId,
   };
 }
 

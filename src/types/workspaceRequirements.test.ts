@@ -42,6 +42,32 @@ describe("workspaceRequirements", () => {
     expect(parsed.items).toHaveLength(1);
     expect(parsed.items[0]!.bodyMarkdown).toBe("legacy note");
     expect(parsed.items[0]!.imagePaths).toEqual([]);
+    expect(parsed.items[0]!.repositoryId).toBeNull();
+  });
+
+  test("parseWorkspaceRequirementsPayload keeps repositoryId", () => {
+    const raw = JSON.stringify({
+      version: 1,
+      items: [
+        {
+          id: "b",
+          title: "Beta",
+          bodyMarkdown: "body",
+          status: "open",
+          createdAt: 1,
+          updatedAt: 2,
+          sortOrder: 1,
+          repositoryId: "42",
+        },
+      ],
+    });
+    const parsed = parseWorkspaceRequirementsPayload(raw);
+    expect(parsed.items[0]!.repositoryId).toBe("42");
+  });
+
+  test("createWorkspaceRequirementItem stores repositoryId", () => {
+    const item = createWorkspaceRequirementItem("建商城", Date.now(), "7");
+    expect(item.repositoryId).toBe("7");
   });
 
   test("extractRequirementsFromMemoMarkdown reads checklist and bullets", () => {

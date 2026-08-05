@@ -1967,7 +1967,10 @@ export function AppWorkspaceLayout({
                 <ConnectedRepositoryFilePreviewModal />
               </Suspense>
 
-              <WorkspaceRequirementCreateModal />
+              <WorkspaceRequirementCreateModal
+                repositories={claudeSessionsProps.repositories ?? []}
+                activeRepositoryId={claudeSessionsProps.activeRepository?.id ?? null}
+              />
 
               <Suspense fallback={null}>
                 <LazyProgressMonitorDrawer {...progressMonitorDrawerProps} />

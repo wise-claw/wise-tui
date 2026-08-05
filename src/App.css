@@ -2329,6 +2329,10 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   flex-shrink: 0;
 }
 
+.app-left-sidebar-project-and-files > .app-left-sidebar-requirements-panel {
+  flex-shrink: 0;
+}
+
 .app-left-sidebar-project-and-files > .app-repository-header {
   flex-shrink: 0;
   min-height: 24px;
@@ -4392,6 +4396,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 /* ── Unified Left Sidebar Section Headers ─────────────────────────────────── */
 .app-left-sidebar-project-and-files > .app-repository-header,
+.app-left-sidebar-requirements-panel .app-repository-header,
 .app-left-sidebar-monitor-panel .app-monitor-panel__head,
 .app-left-sidebar-repo-panel-header,
 .app-left-sidebar-bottom-tab-content .git-files-explorer-bar {
@@ -4406,6 +4411,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 /* Headers titles to uppercase & secondary style */
 .app-left-sidebar-project-and-files > .app-repository-header .app-repository-header-title,
+.app-left-sidebar-requirements-panel .app-repository-header-title,
 .app-left-sidebar-monitor-panel .app-monitor-panel__title,
 .git-files-explorer-title {
   font-size: 11px !important;
@@ -4456,6 +4462,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 /* ── Left sidebar list typography（工作区 / 运行面板 / 文件树协调） ── */
 .app-left-sidebar-project-and-files,
+.app-left-sidebar-requirements-panel,
 .app-left-sidebar-monitor-panel {
   --app-sidebar-list-font-size: 12px;
   --app-sidebar-list-line-height: 1.35;

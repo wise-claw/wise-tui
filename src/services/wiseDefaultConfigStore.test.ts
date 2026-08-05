@@ -22,6 +22,7 @@ import {
   WISE_DEFAULT_EXECUTION_ENGINE_CHANGED,
   WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED,
   WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED,
+  WISE_LEFT_SIDEBAR_REQUIREMENTS_PANEL_CHANGED,
   WISE_MONITOR_PANEL_PLACEMENT_CHANGED,
   WISE_WORKSPACE_LIST_PLACEMENT_CHANGED,
   WISE_TOPBAR_CHROME_DEFAULT_CHANGED,
@@ -97,6 +98,8 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.leftSidebarHubQuickEntries).toEqual(["mcp", "skills", "automation"]);
     expect(config.showLeftSidebarMonitorPanel).toBe(true);
     expect(config.showLeftSidebarWorkspaceList).toBe(true);
+    expect(config.showLeftSidebarRequirementsPanel).toBe(true);
+    expect(config.requirementsPanelVisibleRows).toBe(6);
     expect(config.showRepositoryIconBadgesInWorkspaceList).toBe(false);
     expect(config.workspaceListPlacement).toBe("top");
     expect(config.monitorPanelPlacement).toBe("left");
@@ -231,6 +234,28 @@ describe("wiseDefaultConfigStore", () => {
       if (typeof visible === "boolean") seen.push(visible);
     });
     await saveWiseDefaultConfig({ showLeftSidebarWorkspaceList: false });
+    expect(seen).toEqual([false]);
+  });
+
+  test("save requirements panel visibility dispatches event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+          showLeftSidebarRequirementsPanel: true,
+        });
+      }
+      return null;
+    });
+    const seen: boolean[] = [];
+    window.addEventListener(WISE_LEFT_SIDEBAR_REQUIREMENTS_PANEL_CHANGED, (e: Event) => {
+      const visible = (e as CustomEvent<{ showLeftSidebarRequirementsPanel?: boolean }>).detail
+        ?.showLeftSidebarRequirementsPanel;
+      if (typeof visible === "boolean") seen.push(visible);
+    });
+    await saveWiseDefaultConfig({ showLeftSidebarRequirementsPanel: false });
     expect(seen).toEqual([false]);
   });
 

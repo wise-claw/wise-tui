@@ -6,6 +6,7 @@ import {
   toggleWorkspaceMemoPanel,
   useWorkspaceMemoPanelOpen,
 } from "../../stores/workspaceMemoPanelStore";
+import { formatChordForDisplay } from "../../utils/atMentionShortcutChord";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { useRepositoryRunCommandRowPinnedMap } from "../../hooks/useRepositoryRunCommandRowPinned";
@@ -223,6 +224,7 @@ function ProjectRepositoryListInner({
   );
 
   const headerMemoOpen = useWorkspaceMemoPanelOpen();
+  const requirementsShortcutLabel = formatChordForDisplay("Alt+KeyR");
 
   const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
   const { message } = AntdApp.useApp();
@@ -267,11 +269,11 @@ function ProjectRepositoryListInner({
           className="app-repository-header-actions"
           onClick={(e) => { e.stopPropagation(); }}
         >
-          <DeferredHoverTooltip title="需求">
+          <DeferredHoverTooltip title={`需求（${requirementsShortcutLabel}）`}>
             <button
               type="button"
               className={`app-repository-header-btn${headerMemoOpen ? " app-repository-header-btn--active" : ""}`}
-              aria-label="需求"
+              aria-label={`需求（${requirementsShortcutLabel}）`}
               aria-pressed={headerMemoOpen}
               onClick={() => toggleWorkspaceMemoPanel()}
             >

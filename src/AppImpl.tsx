@@ -104,7 +104,11 @@ import { WISE_UI_EVENT_NAVIGATE, type WiseUiNavigationDetail } from "./constants
 import { requestClaudePluginHubTab } from "./stores/claudePluginHubNavStore";
 import { getActivePaneIndex } from "./stores/activePaneIndexStore";
 import { requestPaneCenterView } from "./stores/paneCenterViewControlStore";
-import { requestWorkspaceRequirementCreate } from "./stores/workspaceMemoPanelStore";
+import {
+  requestWorkspaceRequirementCreate,
+  toggleWorkspaceMemoPanel,
+} from "./stores/workspaceMemoPanelStore";
+import { toggleWorkspaceQuickActionsPanel } from "./stores/workspaceQuickActionsPanelStore";
 import { reloadAppWindow } from "./services/window";
 import {
   getCurrentMainWorkspaceWindowLabel,
@@ -193,6 +197,7 @@ import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOver
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
 import { useLeftSidebarWorkspaceListDefault } from "./hooks/useLeftSidebarWorkspaceListDefault";
+import { useLeftSidebarRequirementsPanelDefault } from "./hooks/useLeftSidebarRequirementsPanelDefault";
 import { useWorkspaceListPlacementDefault } from "./hooks/useWorkspaceListPlacementDefault";
 import { useLeftSidebarRepositoryIconBadgesDefault } from "./hooks/useLeftSidebarRepositoryIconBadgesDefault";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
@@ -1607,6 +1612,7 @@ export default function App() {
   }, [enterAuthorPane]);
   const leftSidebarHubQuickEntries = useLeftSidebarHubQuickEntries();
   const showLeftSidebarWorkspaceList = useLeftSidebarWorkspaceListDefault();
+  const showLeftSidebarRequirementsPanel = useLeftSidebarRequirementsPanelDefault();
   const workspaceListPlacement = useWorkspaceListPlacementDefault();
   const showRepositoryIconBadgesInWorkspaceList = useLeftSidebarRepositoryIconBadgesDefault();
   const showMonitorOnLeft =
@@ -2481,6 +2487,30 @@ export default function App() {
         handleToggleTerminal();
         return;
       }
+      // ⌥R / Alt+R：打开或关闭需求中栏面板（与侧栏「需求」按钮一致）
+      if (
+        e.altKey &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.shiftKey &&
+        (e.code === "KeyR" || e.key === "r" || e.key === "R")
+      ) {
+        e.preventDefault();
+        toggleWorkspaceMemoPanel();
+        return;
+      }
+      // ⌥Q / Alt+Q：打开或关闭快捷操作中栏面板（与侧栏「快捷操作」按钮一致）
+      if (
+        e.altKey &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.shiftKey &&
+        (e.code === "KeyQ" || e.key === "q" || e.key === "Q")
+      ) {
+        e.preventDefault();
+        toggleWorkspaceQuickActionsPanel();
+        return;
+      }
       // ⌘F / Ctrl+F 与 ⌘⇧F / Ctrl+Shift+F：桌面版由主窗口聚焦时注册的 Tauri 快捷键派发事件
       if (mod && e.key === "k") {
         e.preventDefault();
@@ -2510,7 +2540,12 @@ export default function App() {
           }
         }
         e.preventDefault();
-        requestWorkspaceRequirementCreate();
+        requestWorkspaceRequirementCreate({
+          defaultRepositoryId:
+            activeRepositoryIdLatestRef.current != null
+              ? String(activeRepositoryIdLatestRef.current)
+              : null,
+        });
         return;
       }
       // Cmd/Ctrl+R：捕获阶段处理，避免焦点在 contentEditable / AntD 内部时冒泡不到 window；
@@ -2702,6 +2737,7 @@ export default function App() {
         leftSidebarHubQuickEntryIds: leftSidebarHubQuickEntries.enabledEntryIds,
         showLeftSidebarMonitorPanel: showLeftSidebarMonitorPanelMerged,
         showLeftSidebarWorkspaceList,
+        showLeftSidebarRequirementsPanel,
         workspaceListPlacement,
         showRepositoryIconBadgesInWorkspaceList,
         mcpHubActive:

@@ -5,6 +5,7 @@ import {
   toggleWorkspaceQuickActionsPanel,
   useWorkspaceQuickActionsPanelOpen,
 } from "../../stores/workspaceQuickActionsPanelStore";
+import { formatChordForDisplay } from "../../utils/atMentionShortcutChord";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { QuickActionsIcon } from "./SidebarIcons";
 
@@ -56,12 +57,14 @@ export function LeftSidebarQuickActionsPopover({
     });
   }, [projectId, repositoryId, additionalRepositoryIds, canManage]);
 
+  const shortcutLabel = formatChordForDisplay("Alt+KeyQ");
+
   return (
-    <DeferredHoverTooltip title="快捷操作">
+    <DeferredHoverTooltip title={`快捷操作（${shortcutLabel}）`}>
       <button
         type="button"
         className={`app-repository-header-btn${open ? " app-repository-header-btn--active" : ""}`}
-        aria-label="快捷操作"
+        aria-label={`快捷操作（${shortcutLabel}）`}
         aria-pressed={open}
         onClick={() => toggleWorkspaceQuickActionsPanel()}
       >

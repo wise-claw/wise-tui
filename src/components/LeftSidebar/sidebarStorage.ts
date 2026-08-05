@@ -1,6 +1,7 @@
 const LEFT_FILES_EXPLORER_COLLAPSED_KEY = "wise.leftPanel.filesExplorerCollapsed";
 const LEFT_WORKSPACE_LIST_COLLAPSED_KEY = "wise.leftPanel.workspaceListCollapsed";
 const LEFT_MONITOR_PANEL_COLLAPSED_KEY = "wise.leftPanel.monitorPanelCollapsed";
+const LEFT_REQUIREMENTS_PANEL_COLLAPSED_KEY = "wise.leftPanel.requirementsPanelCollapsed";
 const LEFT_BOTTOM_TAB_KEY = "wise.leftPanel.bottomTab";
 
 export function readLeftFilesExplorerCollapsedFromStorage(): boolean {
@@ -37,6 +38,19 @@ export function readLeftMonitorPanelCollapsedFromStorage(): boolean {
 export function writeLeftMonitorPanelCollapsedToStorage(collapsed: boolean): void {
   try {
     window.localStorage.setItem(LEFT_MONITOR_PANEL_COLLAPSED_KEY, collapsed ? "1" : "0");
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function readLeftRequirementsPanelCollapsedFromStorage(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(LEFT_REQUIREMENTS_PANEL_COLLAPSED_KEY) === "1";
+}
+
+export function writeLeftRequirementsPanelCollapsedToStorage(collapsed: boolean): void {
+  try {
+    window.localStorage.setItem(LEFT_REQUIREMENTS_PANEL_COLLAPSED_KEY, collapsed ? "1" : "0");
   } catch {
     /* ignore quota / private mode */
   }

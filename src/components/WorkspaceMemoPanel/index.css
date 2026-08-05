@@ -170,6 +170,18 @@
   font-size: 12px;
 }
 
+.app-workspace-requirements-panel__create-repo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.app-workspace-requirements-panel__create-repo-label {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+}
+
 .app-workspace-requirements-panel__editor-wrap {
   display: flex;
   flex-direction: column;

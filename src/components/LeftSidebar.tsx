@@ -58,6 +58,8 @@ import {
   writeLeftWorkspaceListCollapsedToStorage,
   readLeftMonitorPanelCollapsedFromStorage,
   writeLeftMonitorPanelCollapsedToStorage,
+  readLeftRequirementsPanelCollapsedFromStorage,
+  writeLeftRequirementsPanelCollapsedToStorage,
   readLeftBottomTabFromStorage,
   writeLeftBottomTabToStorage,
   type LeftBottomTab,
@@ -87,6 +89,7 @@ import {
   LeftSidebarMonitorPanelSlot,
   preloadLeftSidebarMonitorPanel,
 } from "./LeftSidebar/LeftSidebarMonitorPanelSlot";
+import { LeftSidebarRequirementsPanelSlot } from "./LeftSidebar/LeftSidebarRequirementsPanelSlot";
 import { prefetchClaudeCodeToolsSurface } from "./ClaudeSessions/prefetchClaudeCodeToolsSurface";
 import { useChromePanelHoverHandlers } from "../hooks/useChromePanelHoverHandlers";
 import { useMonitorSidebarFingerprints } from "../hooks/useMonitorSessionsForOverview";
@@ -111,6 +114,7 @@ export function LeftSidebar({
   leftSidebarHubQuickEntryIds = [],
   showLeftSidebarMonitorPanel = true,
   showLeftSidebarWorkspaceList = true,
+  showLeftSidebarRequirementsPanel = true,
   workspaceListPlacement = "top",
   showRepositoryIconBadgesInWorkspaceList = false,
   mcpHubActive = false,
@@ -331,6 +335,9 @@ export function LeftSidebar({
   const [monitorPanelSectionCollapsed, setMonitorPanelSectionCollapsed] = useState(
     readLeftMonitorPanelCollapsedFromStorage,
   );
+  const [requirementsPanelSectionCollapsed, setRequirementsPanelSectionCollapsed] = useState(
+    readLeftRequirementsPanelCollapsedFromStorage,
+  );
   const [leftBottomTab, setLeftBottomTab] = useState<LeftBottomTab>(readLeftBottomTabFromStorage);
   const repoPanelRenderState = useMemo(
     () =>
@@ -544,6 +551,11 @@ export function LeftSidebar({
   const handleMonitorPanelSectionCollapsedChange = useCallback((next: boolean) => {
     setMonitorPanelSectionCollapsed(next);
     writeLeftMonitorPanelCollapsedToStorage(next);
+  }, []);
+
+  const handleRequirementsPanelSectionCollapsedChange = useCallback((next: boolean) => {
+    setRequirementsPanelSectionCollapsed(next);
+    writeLeftRequirementsPanelCollapsedToStorage(next);
   }, []);
 
   const handleLeftBottomTabChange = useCallback((tab: LeftBottomTab) => {
@@ -1186,6 +1198,14 @@ export function LeftSidebar({
           onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
           onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
           onStopSessionConversationTask={onStopSessionConversationTask}
+        />
+
+        <LeftSidebarRequirementsPanelSlot
+          visible={showLeftSidebarRequirementsPanel}
+          sectionCollapsed={requirementsPanelSectionCollapsed}
+          onSectionCollapsedChange={handleRequirementsPanelSectionCollapsedChange}
+          repositories={repositories}
+          activeRepositoryId={activeRepositoryId}
         />
 
         {/* 工作区列表已合并运行项；仅在关闭工作区列表时保留独立运行面板区块 */}
