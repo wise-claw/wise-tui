@@ -48,11 +48,66 @@ function isMermaidBlockContinuationLine(line: string): boolean {
   if (/^(?:subgraph|end|classDef|class|style|linkStyle|click|direction)\b/i.test(trimmed)) {
     return true;
   }
+  // 图表声明行本身（嵌入块的首行）必须保留。
+  if (MERMAID_DIAGRAM_START_RE.test(trimmed)) return true;
   if (/^(?:#+\s|[-*+]\s|\d+\.\s)/.test(trimmed)) return false;
+  // 节点闭合后粘上 Markdown 标题：`]## 1. …` —— 不得当作流程图续行。
+  if (lineHasGluedMarkdownHeading(trimmed)) return false;
   if (/-->|<--|---|==>|:::/.test(trimmed)) return true;
   if (/[\[\(\{]/.test(trimmed)) return true;
   if (/^\s/.test(line)) return true;
   return false;
+}
+
+function lineHasGluedMarkdownHeading(line: string): boolean {
+  return /(?:\]|\)|\})\s*#{1,6}\s/.test(line) || /"\]\s*#{1,6}\s/.test(line);
+}
+
+/**
+ * 把粘在节点闭合符后的 ATX 标题拆到下一行。
+ * 模型常输出 `J[…/401]## 1. 登录态`，Mermaid 会把 `##` 吃进同一语句。
+ */
+export function unglueTrailingMarkdownHeadings(source: string): string {
+  return source
+    .replace(/("\])(#{1,6}\s)/g, "$1\n$2")
+    .replace(/(\]|\)|\})(#{1,6}\s)/g, "$1\n$2");
+}
+
+/** 一行是否像流程图结束后误吞的 Markdown 正文（标题优先）。 */
+export function isMermaidTrailingMarkdownLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  return /^#{1,6}\s/.test(trimmed);
+}
+
+/**
+ * 从可能混入后续 Markdown 的 Mermaid 源码中切出纯流程图与尾部正文。
+ * 用于：整段裸 flowchart 被包进围栏、或围栏未闭合吞掉 `##` 标题等场景。
+ */
+export function splitMermaidSourceAndTrailingMarkdown(source: string): {
+  mermaid: string;
+  trailingMarkdown: string;
+} {
+  const unglued = unglueTrailingMarkdownHeadings(source);
+  const lines = unglued.split("\n");
+  let cutAt = lines.length;
+  for (let i = 1; i < lines.length; i++) {
+    if (isMermaidTrailingMarkdownLine(lines[i]!)) {
+      cutAt = i;
+      break;
+    }
+  }
+  return {
+    mermaid: lines.slice(0, cutAt).join("\n").trimEnd(),
+    trailingMarkdown: lines.slice(cutAt).join("\n").replace(/^\n+/, ""),
+  };
+}
+
+function pushMermaidFence(out: string[], mermaid: string, trailingMarkdown?: string): void {
+  out.push("```mermaid", mermaid, "```");
+  if (trailingMarkdown?.trim()) {
+    out.push(trailingMarkdown);
+  }
 }
 
 /** 围栏 code block 是否应渲染为 Mermaid 图表。 */
@@ -60,8 +115,10 @@ export function shouldRenderFencedBlockAsMermaid(codeText: string, lang: string)
   const body = codeText.trim();
   if (!body || !looksLikeMermaidSource(body)) return false;
   if (isProgrammingFenceLanguage(lang)) return false;
+  const { mermaid } = splitMermaidSourceAndTrailingMarkdown(body);
+  if (!looksLikeMermaidSource(mermaid)) return false;
   if (isMermaidFenceLanguage(lang)) return true;
-  return hasMermaidDiagramBody(body);
+  return hasMermaidDiagramBody(mermaid);
 }
 
 /** 将 Markdown 正文中嵌入的裸 Mermaid 块包成围栏。 */
@@ -90,27 +147,65 @@ export function wrapEmbeddedMermaidBlocks(text: string): string {
       continue;
     }
 
-    if (looksLikeMermaidSource(trimmedLine)) {
-      const blockLines: string[] = [line];
+    if (!looksLikeMermaidSource(trimmedLine)) {
+      out.push(line);
       i += 1;
-      while (i < lines.length) {
-        const next = lines[i] ?? "";
-        if (next.trim().startsWith("```")) break;
-        if (!isMermaidBlockContinuationLine(next)) break;
-        blockLines.push(next);
-        i += 1;
+      continue;
+    }
+
+    const blockLines: string[] = [];
+    let trailingFromGluedLine: string | null = null;
+    i += 1;
+
+    const consumeLine = (raw: string): boolean => {
+      const glued = splitMermaidSourceAndTrailingMarkdown(raw);
+      if (glued.trailingMarkdown && glued.mermaid.trim()) {
+        blockLines.push(glued.mermaid);
+        trailingFromGluedLine = glued.trailingMarkdown;
+        return false;
       }
+      if (isMermaidTrailingMarkdownLine(raw)) {
+        return false;
+      }
+      if (!isMermaidBlockContinuationLine(raw)) {
+        return false;
+      }
+      blockLines.push(raw);
+      return true;
+    };
+
+    // 首行：可能本身就粘了标题。
+    if (!consumeLine(line)) {
       const blockText = blockLines.join("\n").trimEnd();
-      if (shouldRenderFencedBlockAsMermaid(blockText, "mermaid")) {
-        out.push("```mermaid", blockText, "```");
+      if (blockText && shouldRenderFencedBlockAsMermaid(blockText, "mermaid")) {
+        pushMermaidFence(out, blockText, trailingFromGluedLine ?? undefined);
       } else {
-        out.push(...blockLines);
+        out.push(line);
       }
       continue;
     }
 
-    out.push(line);
-    i += 1;
+    while (i < lines.length) {
+      const next = lines[i] ?? "";
+      if (next.trim().startsWith("```")) break;
+      if (!consumeLine(next)) {
+        if (trailingFromGluedLine) {
+          i += 1;
+        }
+        break;
+      }
+      i += 1;
+    }
+
+    const blockText = blockLines.join("\n").trimEnd();
+    const split = splitMermaidSourceAndTrailingMarkdown(blockText);
+    if (shouldRenderFencedBlockAsMermaid(split.mermaid, "mermaid")) {
+      const trailing = [split.trailingMarkdown, trailingFromGluedLine].filter(Boolean).join("\n");
+      pushMermaidFence(out, split.mermaid, trailing || undefined);
+    } else {
+      out.push(...blockLines);
+      if (trailingFromGluedLine) out.push(trailingFromGluedLine);
+    }
   }
 
   return out.join("\n");
@@ -121,9 +216,18 @@ export function wrapMermaidBlocksInMarkdown(text: string): string {
   const trimmed = text.trim();
   if (!trimmed) return text;
   if (trimmed.startsWith("```")) return text;
-  if (shouldRenderFencedBlockAsMermaid(trimmed, "mermaid")) {
-    return `\`\`\`mermaid\n${trimmed}\n\`\`\``;
+
+  // 整段以 flowchart 开头时，必须先切开尾部 Markdown，避免把 `##` 标题吞进围栏。
+  if (looksLikeMermaidSource(trimmed)) {
+    const { mermaid, trailingMarkdown } = splitMermaidSourceAndTrailingMarkdown(trimmed);
+    if (shouldRenderFencedBlockAsMermaid(mermaid, "mermaid")) {
+      if (!trailingMarkdown.trim()) {
+        return `\`\`\`mermaid\n${mermaid}\n\`\`\``;
+      }
+      return `\`\`\`mermaid\n${mermaid}\n\`\`\`\n\n${trailingMarkdown}`;
+    }
   }
+
   return wrapEmbeddedMermaidBlocks(text);
 }
 

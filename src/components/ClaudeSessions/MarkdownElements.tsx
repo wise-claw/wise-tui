@@ -279,6 +279,17 @@ export function createMarkdownComponents(opts: {
         return <MarkdownMermaidBlock source={plan.text} streaming={streaming} />;
       }
 
+      if (plan.kind === "mermaid-plus-markdown" && depth < MAX_NESTED_MARKDOWN_DEPTH) {
+        return (
+          <div className="app-markdown-mermaid-with-prose">
+            <MarkdownMermaidBlock source={plan.mermaid} streaming={streaming} />
+            <div className="app-markdown-prose-from-fence">
+              <MarkdownBody source={plan.markdown} streaming={false} depth={depth + 1} />
+            </div>
+          </div>
+        );
+      }
+
       if (plan.kind === "markdown" && depth < MAX_NESTED_MARKDOWN_DEPTH) {
         return (
           <div className="app-markdown-prose-from-fence">

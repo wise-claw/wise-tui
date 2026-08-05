@@ -1,3 +1,5 @@
+import { splitMermaidSourceAndTrailingMarkdown } from "./mermaidBlock";
+
 const QUOTED_LABEL_PAIRS: Array<[string, string]> = [
   ['["', '"]'],
   ['[("', '")]'],
@@ -160,6 +162,9 @@ export function normalizeMermaidSourceForRender(
     .replace(/\u00a0/g, " ")
     .replace(/\t/g, "  ")
     .replace(/\r\n/g, "\n");
+
+  // 渲染前丢掉误吞的 Markdown 标题（`]## 1.` / 后续 `##` 行），避免 Parse error。
+  normalized = splitMermaidSourceAndTrailingMarkdown(normalized).mermaid;
 
   normalized = normalizeMultilineQuotedLabels(normalized);
   normalized = repairDanglingQuotedLabels(normalized);

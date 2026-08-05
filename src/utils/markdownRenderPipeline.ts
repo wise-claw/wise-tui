@@ -4,6 +4,7 @@ import { isValidHttpUrl, normalizeAutolinkUrl } from "./autolinkUrl";
 import { normalizeMarkdownForDisplay, normalizeMarkdownLineBreaks } from "./markdownDisplayNormalize";
 import {
   shouldRenderFencedBlockAsMermaid,
+  splitMermaidSourceAndTrailingMarkdown,
   wrapMermaidBlocksInMarkdown,
 } from "./mermaidBlock";
 import {
@@ -227,6 +228,7 @@ export function splitMarkdownAndTrailingDataLines(body: string): {
 
 export type FencedBlockDisplayPlan =
   | { kind: "mermaid"; text: string }
+  | { kind: "mermaid-plus-markdown"; mermaid: string; markdown: string }
   | { kind: "code"; text: string; lang: string }
   | { kind: "markdown"; text: string }
   | { kind: "markdown-plus-data"; markdown: string; dataLines: string; lang: string };
@@ -237,7 +239,15 @@ export function planFencedBlockDisplay(text: string, lang: string): FencedBlockD
   const normalizedLang = lang.trim().toLowerCase();
 
   if (shouldRenderFencedBlockAsMermaid(body, normalizedLang)) {
-    return { kind: "mermaid", text: body };
+    const split = splitMermaidSourceAndTrailingMarkdown(body);
+    if (split.trailingMarkdown.trim()) {
+      return {
+        kind: "mermaid-plus-markdown",
+        mermaid: split.mermaid,
+        markdown: split.trailingMarkdown,
+      };
+    }
+    return { kind: "mermaid", text: split.mermaid || body };
   }
 
   const split = splitMarkdownAndTrailingDataLines(body);
@@ -463,6 +473,7 @@ export function enhanceMarkdownHtmlString(
     const lang = extractCodeBlockLanguage(code);
 
     if (shouldRenderFencedBlockAsMermaid(raw, lang)) {
+      const split = splitMermaidSourceAndTrailingMarkdown(raw);
       if (opts?.streaming) {
         const wrapper = doc.createElement("div");
         wrapper.className = "app-markdown-code app-markdown-code--mermaid-pending";
@@ -480,8 +491,20 @@ export function enhanceMarkdownHtmlString(
         return;
       }
 
-      const diagram = createMermaidPlaceholder(doc, raw);
-      pre.parentElement?.replaceChild(diagram, pre);
+      const diagram = createMermaidPlaceholder(doc, split.mermaid || raw);
+      if (split.trailingMarkdown.trim() && depth < ENHANCE_RECURSE_MAX_DEPTH) {
+        const container = doc.createElement("div");
+        container.className = "app-markdown-mermaid-with-prose";
+        container.appendChild(diagram);
+        const prose = doc.createElement("div");
+        prose.className = "app-markdown-prose-from-fence";
+        const innerParsed = parseMarkdownSourceToHtml(split.trailingMarkdown);
+        prose.innerHTML = enhanceMarkdownHtmlString(innerParsed, doc, enhancer, depth + 1, opts);
+        container.appendChild(prose);
+        pre.parentElement?.replaceChild(container, pre);
+      } else {
+        pre.parentElement?.replaceChild(diagram, pre);
+      }
       return;
     }
 

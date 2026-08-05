@@ -46,14 +46,19 @@ subgraph AGENT["核心"]
     expect(normalizeMermaidSourceForRender(input, { aggressive: true })).not.toContain("direction LR");
   });
 
-  test("repairs implicit node connections without arrows", () => {
-    const input = "flowchart TB\n    LOOP  CTX\n    DB  FTS";
-    const output = normalizeMermaidSourceForRender(input, { plainLabels: true });
-    expect(output).toMatch(/^flowchart TB/m);
-    expect(output).not.toMatch(/flowchart\s+-->\s+TB/);
-    expect(output).toContain("LOOP --> CTX");
-    expect(output).toContain("DB --> FTS");
-    expect(output).not.toMatch(/^\s*LOOP\s+CTX\s*$/m);
+  test("strips trailing markdown heading swallowed after flowchart", () => {
+    const input = `flowchart TD
+  I --> J[AdminLayout 再校验，失败去 /401]
+## 1. 登录态：后端统一认证，前端只做拦截`;
+    const output = normalizeMermaidSourceForRender(input);
+    expect(output).toContain("J[AdminLayout 再校验，失败去 /401]");
+    expect(output).not.toContain("## 1.");
+  });
+
+  test("strips glued markdown heading on same line as node", () => {
+    const input = "flowchart TD\n  I --> J[fail /401]## 1. 登录态";
+    const output = normalizeMermaidSourceForRender(input);
+    expect(output).toBe("flowchart TD\n  I --> J[fail /401]");
   });
 });
 

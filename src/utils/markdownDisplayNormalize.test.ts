@@ -499,6 +499,22 @@ describe("normalizeMarkdownForDisplay", () => {
     expect(html).not.toContain("| 总源文件 |");
   });
 
+  test("does not split mermaid edge labels into fake pipe table rows", () => {
+    const raw = [
+      "```mermaid",
+      "flowchart TD",
+      "  C -->|未登录 USER_NOT_LOGIN| D[跳转登录]",
+      "  C -->|已登录| E[拉权限]",
+      "```",
+      "",
+      "## 说明",
+    ].join("\n");
+    const out = normalizeMarkdownForDisplay(raw);
+    expect(out).toContain("C -->|未登录 USER_NOT_LOGIN| D[跳转登录]");
+    expect(out).toContain("C -->|已登录| E[拉权限]");
+    expect(out).not.toMatch(/C -->\s*\n\s*\|未登录/);
+  });
+
   test("renders glm html fragment with table via marked", async () => {
     const { marked } = await import("marked");
     marked.use({ gfm: true, breaks: true });

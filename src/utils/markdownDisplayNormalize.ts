@@ -921,10 +921,14 @@ function ensureBlankLineBeforePipeTables(text: string): string {
   return text
     .replace(/(^|\n)([^\n|][^\n]*)\n(\|[^\n]+\|)/g, (match, prefix, before, row) => {
       if (before.trim().startsWith("|")) return match;
+      // Mermaid 边标签：`C -->|未登录| D` 被拆行后仍以箭头结尾，勿当表前导空行。
+      if (/(?:-->|---|==>|\.->|<-->)\s*$/.test(before)) return match;
       return `${prefix}${before}\n\n${row}`;
     })
     .replace(/(^|\n)([^\n|][^\n]*)(\|[^|\n]+\|)/g, (match, prefix, before, row) => {
       if (before.trim().endsWith("|")) return match;
+      // 同上：flowchart 边 `-->|label|` 不得拆成段落 + 伪表格行。
+      if (/(?:-->|---|==>|\.->|<-->)\s*$/.test(before)) return match;
       return `${prefix}${before}\n\n${row}`;
     });
 }

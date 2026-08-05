@@ -3,6 +3,7 @@ import {
   isMermaidFenceLanguage,
   looksLikeMermaidSource,
   shouldRenderFencedBlockAsMermaid,
+  splitMermaidSourceAndTrailingMarkdown,
   wrapEmbeddedMermaidBlocks,
   wrapMermaidBlocksInMarkdown,
 } from "./mermaidBlock";
@@ -80,5 +81,47 @@ describe("wrapMermaidBlocksInMarkdown", () => {
   test("leaves non-mermaid text unchanged", () => {
     const source = "## Title\n\n- item";
     expect(wrapMermaidBlocksInMarkdown(source)).toBe(source);
+  });
+
+  test("does not swallow trailing markdown heading into mermaid fence", () => {
+    const source = [
+      "flowchart TD",
+      "  A[用户访问页面] --> B[浏览器带 Cookie 请求后端]",
+      "  I --> J[AdminLayout 再校验，失败去 /401]",
+      "",
+      "## 1. 登录态：后端统一认证，前端只做拦截跳转",
+      "",
+      "核心判断在拦截器。",
+    ].join("\n");
+    const wrapped = wrapMermaidBlocksInMarkdown(source);
+    expect(wrapped).toContain("```mermaid\n");
+    expect(wrapped).toContain("J[AdminLayout 再校验，失败去 /401]\n```");
+    expect(wrapped).toContain("## 1. 登录态：后端统一认证，前端只做拦截跳转");
+    expect(wrapped.indexOf("```")).toBeLessThan(wrapped.indexOf("## 1."));
+    // 标题必须在围栏外
+    const fenceEnd = wrapped.indexOf("\n```\n");
+    expect(fenceEnd).toBeGreaterThan(0);
+    expect(wrapped.slice(fenceEnd + 5)).toContain("## 1.");
+    expect(wrapped.slice(0, fenceEnd)).not.toContain("## 1.");
+  });
+
+  test("splits glued markdown heading after node close bracket", () => {
+    const source =
+      "flowchart TD\n  I --> J[AdminLayout 再校验，失败去 /401]## 1. 登录态：后端统一认证";
+    const wrapped = wrapMermaidBlocksInMarkdown(source);
+    expect(wrapped).toContain("J[AdminLayout 再校验，失败去 /401]\n```");
+    expect(wrapped).toContain("## 1. 登录态：后端统一认证");
+    expect(wrapped).not.toContain("]##");
+  });
+});
+
+describe("splitMermaidSourceAndTrailingMarkdown", () => {
+  test("unglues and cuts at ATX heading", () => {
+    const { mermaid, trailingMarkdown } = splitMermaidSourceAndTrailingMarkdown(
+      "flowchart TD\n  I --> J[x /401]## 1. 登录态\n\n正文",
+    );
+    expect(mermaid).toBe("flowchart TD\n  I --> J[x /401]");
+    expect(trailingMarkdown).toContain("## 1. 登录态");
+    expect(trailingMarkdown).toContain("正文");
   });
 });
