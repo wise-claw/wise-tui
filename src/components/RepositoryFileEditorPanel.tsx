@@ -177,7 +177,7 @@ export function RepositoryFileEditorPanel({
   useEffect(() => {
     const reveal = onRevealInExplorer;
     if (!reveal) return;
-    function handleRevealShortcut(event: KeyboardEvent) {
+    const handleRevealShortcut = (event: KeyboardEvent) => {
       if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) {
         return;
       }
@@ -195,7 +195,7 @@ export function RepositoryFileEditorPanel({
       event.preventDefault();
       event.stopPropagation();
       reveal(tab.rootPath, tab.relativePath);
-    }
+    };
     window.addEventListener("keydown", handleRevealShortcut, { capture: true });
     return () => window.removeEventListener("keydown", handleRevealShortcut, { capture: true });
   }, [activePath, onRevealInExplorer, tabs]);
