@@ -262,7 +262,7 @@ export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistor
 
   return (
     <Drawer
-      title={<HistorySessionDrawerTitle session={displaySession ?? liveSession} />}
+      title={<HistorySessionDrawerTitle session={displaySession ?? liveSession ?? undefined} />}
       open={open}
       onClose={onClose}
       placement="right"
