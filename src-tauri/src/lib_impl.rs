@@ -1,7 +1,7 @@
 use crate::{
     agent_registry, app_state_commands, assistants, at_mention_shortcuts, cc_switch_import,
     chrome_devtools_monitor, in_app_shortcuts,
-    claude_code_line_edits, claude_code_usage, claude_commands, codex_commands, codex_rpc_commands, codex_rpc_disk, opencode_commands,
+    claude_code_line_edits, claude_code_usage, claude_commands, codex_commands, codex_rpc_commands, codex_rpc_disk, opencode_commands, opencode_acp_commands,
     qoder_commands, claude_config_dir,
     claude_llm_proxy, claude_model_profiles,
     cursor_agent, cursor_acp_commands, fcc_traces, free_claude_code, opencode_go_proxy,
@@ -244,6 +244,7 @@ pub fn run() {
         .manage(claude_commands::ClaudeSessionRegistry::new())
         .manage(codex_rpc_commands::CodexRpcSessionStore::default())
         .manage(cursor_acp_commands::CursorAcpSessionStore::default())
+        .manage(opencode_acp_commands::OpencodeAcpSessionStore::default())
         .manage(chrome_devtools_monitor::ChromeDevtoolsMonitorState::default());
     #[cfg(target_os = "macos")]
     let builder = builder.manage(crate::macos_speech_stream::MacosStreamingSpeechState::default());
@@ -835,6 +836,12 @@ pub fn run() {
             cursor_acp_commands::respond_cursor_acp_permission,
             cursor_acp_commands::respond_cursor_acp_question,
             cursor_acp_commands::respond_cursor_acp_plan,
+            opencode_acp_commands::execute_opencode_acp,
+            opencode_acp_commands::interrupt_opencode_acp,
+            opencode_acp_commands::shutdown_opencode_acp,
+            opencode_acp_commands::respond_opencode_acp_permission,
+            opencode_acp_commands::respond_opencode_acp_question,
+            opencode_acp_commands::respond_opencode_acp_plan,
             mcp::commands::mcp_list_servers,
             mcp::commands::mcp_save_server,
             mcp::commands::mcp_delete_server,

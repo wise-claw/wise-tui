@@ -594,6 +594,12 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
       .catch(() => {
         /* no active ACP session */
       });
+    // Release persistent OpenCode ACP process for this tab.
+    void import("../services/opencodeAcp")
+      .then(({ shutdownOpencodeAcp }) => shutdownOpencodeAcp(sessionId))
+      .catch(() => {
+        /* no active opencode ACP session */
+      });
     const victimSid = victim?.claudeSessionId?.trim() ?? sessionIdMapRef.current.get(sessionId)?.trim();
     if (victimSid) {
       void closeStreamingSession(victimSid).catch(() => {

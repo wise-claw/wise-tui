@@ -46,6 +46,10 @@ export function sessionsReactiveStructureKey(sessions: readonly ClaudeSession[])
         // 标签级执行引擎：Composer 切换后须击穿 ChatHost / ClaudeChat memo，
         // 否则 UI 仍显示旧引擎（且多屏路径不改仓库时 repositories 也不会变）。
         session.executionEngine ?? "",
+        // 推理强度：App 壳 subscribeLive:false，仅靠 structure 订阅推进；漏记会导致
+        // Composer 选档后 UI（live）已变、tabs.json 仍写旧快照，刷新回默认。
+        session.claudeReasoningEffort ?? "",
+        session.codexReasoningEffort ?? "",
         // createdAt 参与侧栏「最近活跃」排序；running 时冻结，避免 bump 排序时间
         // 与多路流式叠在一起打穿 App / 侧栏。收尾转 idle 后写入真实 createdAt。
         streaming ? "run" : String(session.createdAt),

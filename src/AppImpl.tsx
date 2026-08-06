@@ -374,18 +374,28 @@ export default function App() {
 
   useEffect(() => {
     let disposed = false;
-    let stop: (() => void) | undefined;
+    const stops: Array<() => void> = [];
     void import("./services/cursorAcpControlBridge").then(async ({ startCursorAcpControlBridge }) => {
       const disposer = await startCursorAcpControlBridge();
       if (disposed) {
         disposer();
         return;
       }
-      stop = disposer;
+      stops.push(disposer);
     });
+    void import("./services/opencodeAcpControlBridge").then(
+      async ({ startOpencodeAcpControlBridge }) => {
+        const disposer = await startOpencodeAcpControlBridge();
+        if (disposed) {
+          disposer();
+          return;
+        }
+        stops.push(disposer);
+      },
+    );
     return () => {
       disposed = true;
-      stop?.();
+      for (const s of stops) s();
     };
   }, []);
   /** paneCount 的 ref：供 openRepositoryFileByEvent 等回调在多屏下避免污染全局 active。 */

@@ -636,6 +636,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     } catch {
       /* no active ACP session for this tab */
     }
+    // OpenCode ACP: same persistent-process cancel semantics.
+    try {
+      const { interruptOpencodeAcp } = await import("../services/opencodeAcp");
+      await interruptOpencodeAcp(tabSessionId);
+    } catch {
+      /* no active opencode ACP session for this tab */
+    }
     for (const sid of cancelIds) {
       try {
         await cancelClaudeExecution(sid);
@@ -4090,6 +4097,24 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const engineResolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
       const cursorEngine =
         engineResolver && session ? engineResolver(session) : null;
+      if (cursorEngine === "opencode") {
+        try {
+          const { respondOpencodeAcpPermission } = await import("../services/opencodeAcp");
+          const decision =
+            response === "allow_always"
+              ? "allow-always"
+              : response === "deny"
+                ? "reject-once"
+                : "allow-once";
+          await respondOpencodeAcpPermission(tabSessionId, pr.id, decision);
+          notificationHub.markRequestAnswered(pr.id);
+          notificationHub.clearPermission(ownerSessionId);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          notificationHub.markRequestFailed(pr.id, msg);
+        }
+        return;
+      }
       if (cursorEngine === "cursor") {
         try {
           const {
@@ -4386,7 +4411,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   useEffect(() => {
     if (!tabsHydrated) return;
-    const hasActiveStream = sessions.some(
+    // App 壳 subscribeLive:false：`sessions` 仅在 structure key 变化时更新。
+    // 落盘一律读 live snapshot，避免漏记字段时写到陈旧 React 快照。
+    const liveSessions = getClaudeSessionsSnapshot();
+    const hasActiveStream = liveSessions.some(
       (item) => item.status === "running" || item.status === "connecting",
     );
     const debounceMs =
@@ -4398,11 +4426,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     const t = window.setTimeout(() => {
       const latest = latestTabsForSaveRef.current;
       if (!latest.tabsHydrated) return;
-      const bindingsChanged = pruneLiveSessionSidecars(latest.sessions);
+      const sessionsToSave = getClaudeSessionsSnapshot();
+      const bindingsChanged = pruneLiveSessionSidecars(sessionsToSave);
       if (bindingsChanged) {
         persistWorkflowBindings(workflowRunBySessionRef.current);
       }
-      void saveSessionTabsState(buildPersistedTabsState(latest.activeSessionId, latest.sessions));
+      void saveSessionTabsState(buildPersistedTabsState(latest.activeSessionId, sessionsToSave));
     }, debounceMs);
     return () => window.clearTimeout(t);
   }, [sessions, activeSessionId, tabsHydrated, pruneLiveSessionSidecars]);
@@ -4413,9 +4442,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     const saveNow = () => {
       const latest = latestTabsForSaveRef.current;
       if (!latest.tabsHydrated) return;
-      const persisted = buildPersistedTabsState(latest.activeSessionId, latest.sessions);
+      // 刷新/隐藏瞬间必须读 live：structure 订阅可能尚未把推理强度等字段刷进 React `sessions`。
+      const sessionsToSave = getClaudeSessionsSnapshot();
+      const persisted = buildPersistedTabsState(latest.activeSessionId, sessionsToSave);
       writeLocalTabsBackupRaw(JSON.stringify(persisted));
-      const bindingsChanged = pruneLiveSessionSidecars(latest.sessions);
+      const bindingsChanged = pruneLiveSessionSidecars(sessionsToSave);
       if (bindingsChanged) {
         persistWorkflowBindings(workflowRunBySessionRef.current);
       }

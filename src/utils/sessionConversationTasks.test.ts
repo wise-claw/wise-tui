@@ -949,6 +949,23 @@ describe("sessionsReactiveStructureKey", () => {
     const after = session({ id: "main", messages: [], executionEngine: "codex" });
     expect(sessionsReactiveStructureKey([before])).not.toBe(sessionsReactiveStructureKey([after]));
   });
+
+  test("claudeReasoningEffort change advances structure key so tabs persist can flush", () => {
+    const before = session({ id: "main", messages: [] });
+    const after = session({ id: "main", messages: [], claudeReasoningEffort: "xhigh" });
+    expect(sessionsReactiveStructureKey([before])).not.toBe(sessionsReactiveStructureKey([after]));
+  });
+
+  test("codexReasoningEffort change advances structure key so tabs persist can flush", () => {
+    const before = session({ id: "main", messages: [], executionEngine: "codex-rpc" });
+    const after = session({
+      id: "main",
+      messages: [],
+      executionEngine: "codex-rpc",
+      codexReasoningEffort: "ultra",
+    });
+    expect(sessionsReactiveStructureKey([before])).not.toBe(sessionsReactiveStructureKey([after]));
+  });
 });
 
 describe("executionEnvironmentWorkerSessionsFingerprint", () => {
