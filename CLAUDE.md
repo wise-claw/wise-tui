@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides Claude Code guidance for this repository. Trellis specs are the main source of truth for detailed coding rules.
+This file provides Claude Code guidance for this repository.
 
 ## Project Overview
 
@@ -45,7 +45,6 @@ Feature and support modules:
 - `src/hooks/`: reusable stateful orchestration.
 - `src/services/`: Tauri IPC wrappers and pure service modules.
 - `src/services/workflow/`: workflow engine, facade, replay, event store, adapters.
-- `src/services/trellis/`: Trellis SDD-mode detection helpers.
 - `src/services/assistantPromptLayers.ts`: assistant runtime resolver (platform default → builtin → assistant scope → project scope → repository scope).
 - `src/features/cc-wf-studio/`: cc-workflow-studio host integration (Wise side).
 - `src/cc-workflow-studio-core/`: pure workflow definition and prompt generation.
@@ -125,12 +124,6 @@ Do not store durable project/workflow/session metadata in browser `localStorage`
 
 ## Coding Rules
 
-Read these before implementation:
-
-- `.trellis/spec/frontend/index.md`
-- `.trellis/spec/tauri/index.md`
-- `.trellis/spec/guides/index.md`
-
 Key rules:
 
 - Components must not call `invoke` directly; use `src/services/*`.
@@ -139,20 +132,6 @@ Key rules:
 - Preserve Tauri capability and asset protocol boundaries.
 - Add focused tests for parsers, workflow transitions, persistence adapters, and JSON migration logic.
 - Do not grow `src/App.tsx` or `src-tauri/src/lib.rs` for feature-specific logic that can live in a module.
-
-## Trellis Spec & Skills
-
-Detailed coding rules and product context live under `.trellis/spec/`. Read the relevant index before changing code in that layer.
-
-| Spec index | Scope |
-|------------|-------|
-| [`.trellis/spec/frontend/index.md`](.trellis/spec/frontend/index.md) | React 19, hooks, state, type safety, quality, directory structure |
-| [`.trellis/spec/tauri/index.md`](.trellis/spec/tauri/index.md) | Tauri 2 IPC, security/filesystem, persistence and migrations |
-| [`.trellis/spec/guides/index.md`](.trellis/spec/guides/index.md) | Cross-layer thinking, code reuse, commit hygiene, Trellis subagent prompts |
-
-`.trellis/spec/guides/agent-harness-architecture.md` is the product constitution. Update it first when changing top-level layout, the `ViewMode` state machine, or the Operator/Author/Inspector domain split.
-
-The Trellis workflow itself (phases, task creation, sub-agent dispatch) is documented in `.trellis/workflow.md`; load step detail on demand via `python3 ./.trellis/scripts/get_context.py --mode phase --step <X.Y>`.
 
 ## UI System Policy
 
@@ -172,4 +151,3 @@ Use English Conventional Commits:
 - `test: ...`
 
 Keep commits scoped by task and behavior. Do not include unrelated dirty worktree changes.
-Use `.trellis/spec/guides/commit-hygiene.md` as the detailed local handoff policy.
