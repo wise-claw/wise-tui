@@ -14,11 +14,10 @@ export const PANE_RUNTIME_PRESET_OPTIONS: Array<{
 }> = [
   { label: "Claude Code", value: "claude-direct", title: "Claude Code 直连（不经 Wise 代理）" },
   { label: "代理", value: "claude-proxy", title: "Claude Code 经 OpenCode / LLM / FCC 代理" },
-  { label: "Codex", value: "codex", title: "OpenAI Codex CLI" },
 ];
 
 export function isPaneRuntimePresetKey(key: string): key is PaneRuntimePreset {
-  return key === "claude-direct" || key === "claude-proxy" || key === "codex";
+  return key === "claude-direct" || key === "claude-proxy";
 }
 
 export function resolvePaneRuntimePresetLabel(
@@ -31,18 +30,11 @@ export function resolvePaneRuntimePresetLabel(
 export function buildPaneRuntimePresetMenuItems(
   activePreset: PaneRuntimePreset | null,
   inferredPreset?: PaneRuntimePreset | null,
-  options?: { codexAvailable?: boolean },
 ): MenuProps["items"] {
   // activePreset 为空（pane 无显式 override）时，回退到根据生效引擎推断的预设，
   // 确保继承默认的 pane 也能在菜单中高亮当前预设。
-  const codexAvailable = options?.codexAvailable ?? true;
   const selectedPreset = activePreset ?? inferredPreset ?? null;
-  return PANE_RUNTIME_PRESET_OPTIONS
-    .filter((item) => {
-      if (item.value === "codex") return codexAvailable;
-      return true;
-    })
-    .map((item) => {
+  return PANE_RUNTIME_PRESET_OPTIONS.map((item) => {
     const isSelected = selectedPreset !== null && selectedPreset === item.value;
     return {
       key: item.value,

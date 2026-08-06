@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import {
   isSessionExecutionEngine,
   SESSION_EXECUTION_ENGINE_LABELS,
-  SESSION_EXECUTION_ENGINES,
+  SESSION_EXECUTION_ENGINES_OFFERED,
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
 import { ExecutionEnvironmentDropdownHeader } from "./ExecutionEnvironmentDropdownHeader";
@@ -44,7 +44,7 @@ function isEngineAvailable(
 function visibleExecutionEngines(
   cursorAvailable: boolean,
 ): readonly SessionExecutionEngine[] {
-  return SESSION_EXECUTION_ENGINES.filter((key) => {
+  return SESSION_EXECUTION_ENGINES_OFFERED.filter((key) => {
     if (key === "cursor" && !cursorAvailable) return false;
     return true;
   });

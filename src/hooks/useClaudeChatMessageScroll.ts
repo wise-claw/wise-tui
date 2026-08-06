@@ -6,6 +6,7 @@ import {
   setClaudeChatUserPausedFollow,
   takeChatScrollFileOpenAnchor,
 } from "../stores/claudeChatMessageScrollBridge";
+import { CHAT_MESSAGE_LIST_BOTTOM_RECLAIM_PX } from "../constants/claudeMessageList";
 import { WORKFLOW_UI_EVENT_REPOSITORY_FILE_EDITOR_CLOSED } from "../constants/workflowUiEvents";
 import {
   isClaudeScrollInteractionActive,
@@ -20,6 +21,8 @@ const SCROLL_FOLLOW_MAX_STEP_PX = 96;
 const SCROLL_FOLLOW_MIN_INTERVAL_MS = 36;
 /** 闲置会话 Markdown 挂载会连发 DOM 变更；合并贴底，避免切换会话时消息区连跳。 */
 const IDLE_HYDRATE_SCROLL_DEBOUNCE_MS = 80;
+/** 距底部小于该值仍视为贴底：内容高度变化 / 窗口回收 clamp 触发的 scroll 不应暂停跟随。 */
+const STILL_PINNED_TO_BOTTOM_PX = CHAT_MESSAGE_LIST_BOTTOM_RECLAIM_PX;
 
 export interface UseClaudeChatMessageScrollOptions {
   session: ClaudeSession;
@@ -399,6 +402,14 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
         if (programmaticScrollRef.current) return;
         const currentScrollTop = sc.scrollTop;
         const prevScrollTop = lastScrollTopRef.current;
+        const maxScrollTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
+        const distanceToBottom = maxScrollTop - currentScrollTop;
+        // 贴底回收卸载顶部行、流式增高后的 clamp 都会改 scrollTop；只要仍在底部阈值内
+        // 就保持跟随。任意 delta 都 pause 会在「执行中等一下」后丢掉末条自动展示。
+        if (distanceToBottom <= STILL_PINNED_TO_BOTTOM_PX) {
+          lastScrollTopRef.current = currentScrollTop;
+          return;
+        }
         if (Math.abs(currentScrollTop - prevScrollTop) > 1) {
           ensureScrollContainerFocus();
           pauseAutoFollowForUserScroll();

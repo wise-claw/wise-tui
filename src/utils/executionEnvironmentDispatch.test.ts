@@ -125,7 +125,7 @@ describe("listExecutionEnvironmentEngineMentionOptions", () => {
     expect(rows).toHaveLength(2);
   });
 
-  test("includes gemini, opencode, and qoder when available", () => {
+  test("offers codex-rpc instead of Codex CLI when codex is available", () => {
     const rows = listExecutionEnvironmentEngineMentionOptions({
       codexAvailable: true,
       cursorAvailable: false,
@@ -133,6 +133,12 @@ describe("listExecutionEnvironmentEngineMentionOptions", () => {
       opencodeAvailable: true,
       qoderAvailable: true,
     });
-    expect(rows.map((r) => r.engine)).toEqual(["claude", "codex", "gemini", "opencode", "qoder"]);
+    expect(rows.map((r) => r.engine)).toEqual([
+      "claude",
+      "codex-rpc",
+      "gemini",
+      "opencode",
+      "qoder",
+    ]);
   });
 });

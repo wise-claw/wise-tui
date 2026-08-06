@@ -51,7 +51,7 @@ interface Props {
   disabled?: boolean;
   /** 多屏窗格 Claude 代理路由；bypass 时不展示代理角标。 */
   claudeProxyRoute?: "auto" | "bypass";
-  /** 多屏窗格：将 Claude 直连 / 代理 / Codex 并入本弹窗「执行环境」区。 */
+  /** 多屏窗格：将 Claude 直连 / 代理预设并入本弹窗「执行环境」区。 */
   paneIndex?: number;
   paneRuntimeOverride?: PaneRuntimeOverride | null;
   onUpdatePaneRuntimeOverride?: (
@@ -156,10 +156,10 @@ function ComposerRuntimeSettingsTriggerImpl({
       (resolvedPaneOverride?.claudeProxyRoute ?? claudeProxyRoute) === "bypass",
   });
 
-  // 多屏 pane 无显式 override（或仅 claude/codex）时，根据生效引擎与代理路由推断默认选中预设，
-  // 确保继承默认的 pane 也能在菜单中高亮当前预设（claude-direct / claude-proxy / codex）。
+  // 多屏 pane 无显式 override 时，根据生效引擎与代理路由推断默认选中预设，
+  // 确保继承默认的 pane 也能在菜单中高亮当前预设（claude-direct / claude-proxy）。
   // 当 route=auto 时，检查是否真有代理活跃；无代理则退回到直连，避免无代理时仍选中「代理」项。
-  // Codex RPC / Cursor 等额外引擎绝不推断为 Claude/Codex 预设，否则会与下方勾选项双高亮。
+  // Codex RPC / Cursor 等额外引擎绝不推断为 Claude 预设，否则会与下方勾选项双高亮。
   const inferredPanePreset = useMemo<PaneRuntimePreset | null>(() => {
     if (!showPaneRuntimePresets) return null;
     if (activePanePreset) return activePanePreset;
@@ -168,7 +168,6 @@ function ComposerRuntimeSettingsTriggerImpl({
     if (isPaneExtraExecutionEngine(effectiveOverrideEngine)) {
       return null;
     }
-    if (effectiveOverrideEngine === "codex") return "codex";
     const route =
       resolvedPaneOverride?.claudeProxyRoute ?? claudeProxyRoute ?? "auto";
     if (route === "bypass") return "claude-direct";
@@ -217,7 +216,6 @@ function ComposerRuntimeSettingsTriggerImpl({
     effectiveEngine === "qoder" ||
     (showPaneRuntimePresets &&
       (activePanePreset === "claude-proxy" ||
-        activePanePreset === "codex" ||
         isPaneExtraExecutionEngine(effectiveEngine)));
   const tooltip = useMemo(() => {
     const parts: string[] = [];
@@ -254,7 +252,6 @@ function ComposerRuntimeSettingsTriggerImpl({
       const presetItems = buildPaneRuntimePresetMenuItems(
         paneMenuSelection.highlightPreset,
         null,
-        { codexAvailable },
       );
       if (presetItems?.length) {
         items.push(...presetItems);

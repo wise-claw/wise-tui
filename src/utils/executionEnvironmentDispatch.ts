@@ -6,6 +6,7 @@ import {
 import {
   SESSION_EXECUTION_ENGINE_LABELS,
   SESSION_EXECUTION_ENGINES,
+  SESSION_EXECUTION_ENGINES_OFFERED,
   type SessionExecutionEngine,
 } from "../constants/sessionExecutionEngine";
 import { extractComposerAttachmentPathsFromText } from "../services/readComposerImage";
@@ -155,7 +156,7 @@ export function listExecutionEnvironmentEngineMentionOptions(input: {
     opencodeAvailable,
     qoderAvailable,
   };
-  return SESSION_EXECUTION_ENGINES.filter((engine) =>
+  return SESSION_EXECUTION_ENGINES_OFFERED.filter((engine) =>
     isExecutionEnvironmentEngineAvailable(engine, availability),
   ).map((engine) => {
     const meta = SESSION_EXECUTION_ENGINE_LABELS[engine];

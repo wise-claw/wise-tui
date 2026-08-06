@@ -13,7 +13,6 @@ export function resolvePaneEffectiveEngine(
     return override.executionEngine;
   }
   const preset = resolvePaneRuntimePreset(override, fallbackEngine);
-  if (preset === "codex") return "codex";
   if (preset === "claude-direct" || preset === "claude-proxy") return "claude";
   // No explicit override – derive from fallback engine
   if (fallbackEngine === "codex-rpc") return "codex-rpc";
@@ -34,9 +33,7 @@ export function resolvePaneRuntimeDisplayLabel(
   if (preset) {
     return preset === "claude-direct"
       ? "Claude Code"
-      : preset === "claude-proxy"
-        ? "代理"
-        : "Codex";
+      : "代理";
   }
   return SESSION_EXECUTION_ENGINE_LABELS[resolvePaneEffectiveEngine(override, fallbackEngine)].title;
 }
@@ -50,7 +47,7 @@ export interface PaneRuntimeOverride {
   claudeProxyRoute?: PaneClaudeProxyRoute;
 }
 
-export type PaneRuntimePreset = "claude-direct" | "claude-proxy" | "codex";
+export type PaneRuntimePreset = "claude-direct" | "claude-proxy";
 
 /** 无实际覆盖字段时视为未设置（避免 `{}` 被误判为 claude-proxy）。 */
 export function isPaneRuntimeOverrideEmpty(
@@ -74,10 +71,7 @@ export function paneRuntimePresetToOverride(preset: PaneRuntimePreset): PaneRunt
   if (preset === "claude-direct") {
     return { executionEngine: "claude", claudeProxyRoute: "bypass" };
   }
-  if (preset === "claude-proxy") {
-    return { executionEngine: "claude", claudeProxyRoute: "auto" };
-  }
-  return { executionEngine: "codex", claudeProxyRoute: undefined };
+  return { executionEngine: "claude", claudeProxyRoute: "auto" };
 }
 
 /** 新建额外窗格执行会话时继承主窗格运行时覆盖；未设置则与 Pane 0 一样走仓库默认。 */
@@ -99,9 +93,9 @@ export function resolvePaneRuntimePreset(
   if (isPaneRuntimeOverrideEmpty(override)) return null;
   const resolved = override!;
   const engine = resolved.executionEngine ?? resolvedEngine;
-  // Codex RPC / Cursor 等落在「额外引擎」区，不能映射到上方 Codex CLI 预设，否则会双高亮。
+  // Codex RPC / Cursor 等落在「额外引擎」区，不能映射到 Claude 预设，否则会双高亮；
+  // 历史 Codex CLI（codex）覆盖同样不映射预设，仅保留引擎值用于会话运行。
   if (isPaneExtraExecutionEngine(engine)) return null;
-  if (engine === "codex") return "codex";
   if (engine === "claude") {
     return resolved.claudeProxyRoute === "bypass" ? "claude-direct" : "claude-proxy";
   }

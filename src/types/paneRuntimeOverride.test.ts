@@ -17,9 +17,6 @@ describe("paneRuntimeOverride", () => {
       executionEngine: "claude",
       claudeProxyRoute: "auto",
     });
-    expect(paneRuntimePresetToOverride("codex")).toEqual({
-      executionEngine: "codex",
-    });
   });
 
   test("resolves active preset from override", () => {
@@ -29,9 +26,12 @@ describe("paneRuntimeOverride", () => {
         "claude",
       ),
     ).toBe("claude-direct");
+  });
+
+  test("legacy codex override no longer maps to a pane preset", () => {
     expect(
       resolvePaneRuntimePreset({ executionEngine: "codex" }, "claude"),
-    ).toBe("codex");
+    ).toBeNull();
   });
 
   test("merge clears proxy route for non-claude engines", () => {

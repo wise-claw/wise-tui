@@ -6,6 +6,7 @@ import type { ClaudeMessage, ClaudeSession } from "../types";
 import { useClaudeChatMessageScroll } from "./useClaudeChatMessageScroll";
 import {
   getClaudeChatMessageScrollBridge,
+  getClaudeChatUserPausedFollow,
   registerClaudeChatMessageScrollBridge,
 } from "../stores/claudeChatMessageScrollBridge";
 
@@ -314,5 +315,45 @@ describe("会话切换后消息列表贴底", () => {
 
     await tick(500);
     expectAtBottom(sc, 10, ROW_H * 2);
+  });
+
+  test("贴底时内容高度骤降触发的 scroll 不暂停跟随：后续新消息仍自动展示", async () => {
+    rowHeightBySessionId = { R: ROW_H };
+    await act(async () => {
+      root!.render(<Host session={makeSession("R", 20, "idle")} />);
+    });
+    const sc = getScrollEl();
+    installBrowserLikeScroll(sc);
+    await tick(200);
+    expectAtBottom(sc, 20);
+    expect(getClaudeChatUserPausedFollow()).toBe(false);
+
+    // 模拟尾部窗口回收：内容高度骤降，浏览器 clamp scrollTop，仍停留在新底部。
+    // 旧逻辑会把这次 scroll 当成用户上翻并关掉跟随。
+    rowHeightBySessionId = { R: ROW_H / 2 };
+    act(() => {
+      // 写入超大 scrollTop → harness clamp 到新底部并派发 scroll（等同浏览器回收后的 clamp）
+      sc.scrollTop = 99999;
+    });
+    await tick(50);
+    for (let i = 0; i < 4; i++) act(() => flushRaf());
+    expect(getClaudeChatUserPausedFollow()).toBe(false);
+    expectAtBottom(sc, 20, ROW_H / 2);
+
+    // 继续追加消息：跟随必须仍开着，末条自动入视口
+    await act(async () => {
+      root!.render(<Host session={makeSession("R", 28, "idle")} />);
+    });
+    await tick(200);
+    expect(getClaudeChatUserPausedFollow()).toBe(false);
+    expectAtBottom(sc, 28, ROW_H / 2);
+
+    // 真正上翻离开底部时仍应暂停
+    act(() => {
+      sc.scrollTop = 0;
+    });
+    await tick(50);
+    for (let i = 0; i < 4; i++) act(() => flushRaf());
+    expect(getClaudeChatUserPausedFollow()).toBe(true);
   });
 });

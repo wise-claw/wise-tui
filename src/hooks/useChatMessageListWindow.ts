@@ -151,14 +151,19 @@ export function useChatMessageListWindow({
   }, []);
 
   /**
-   * 贴底回收延后到滚动静置后执行。
+   * 贴底回收延后到滚动静置后执行（真 debounce：每次贴底滚动都重置计时）。
    *
    * 回收一次最多卸载 maxVisible - initialVisible 行；在滚动过程中同步卸载会掉帧，随后
    * 向上滚动触发 loadMoreOlder 又要重新挂载并重新解析 Markdown，上下滚动便在拆建之间
    * 反复横跳，表现为「滚动时消息空白重绘」。延后不改变 DOM 封顶意图。
+   *
+   * 流式贴底跟随会持续产生 scroll：若不重置计时，首次贴底后约 idleMs 就会回收，
+   * scrollHeight 骤降触发的 clamp 曾被误判为用户上翻并关掉跟随。
    */
   const schedulePendingReclaim = useCallback(() => {
-    if (reclaimTimerRef.current !== 0) return;
+    if (reclaimTimerRef.current !== 0) {
+      window.clearTimeout(reclaimTimerRef.current);
+    }
     reclaimTimerRef.current = window.setTimeout(() => {
       reclaimTimerRef.current = 0;
       const el = scrollContainerRef.current;

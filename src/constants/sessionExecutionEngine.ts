@@ -58,6 +58,16 @@ export const SESSION_EXECUTION_ENGINES = [
   "qoder",
 ] as const satisfies readonly SessionExecutionEngine[];
 
+/** 执行环境对外提供的引擎（Codex CLI 已下线，仅保留 Codex RPC；历史 codex 数据仍可解析）。 */
+export const SESSION_EXECUTION_ENGINES_OFFERED = [
+  "claude",
+  "codex-rpc",
+  "cursor",
+  "gemini",
+  "opencode",
+  "qoder",
+] as const satisfies readonly SessionExecutionEngine[];
+
 export function normalizeSessionExecutionEngine(
   raw: string | null | undefined,
 ): SessionExecutionEngine {

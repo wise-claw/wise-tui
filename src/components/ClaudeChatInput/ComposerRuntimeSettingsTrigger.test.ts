@@ -14,7 +14,7 @@ describe("composer runtime settings menu items", () => {
     });
     const connectionItems = buildConnectionKindMenuItems("streaming", "streaming");
 
-    expect(engineItems).toHaveLength(7);
+    expect(engineItems).toHaveLength(6);
     expect(connectionItems).toHaveLength(2);
     expect(engineItems?.[0]?.key).toBe("claude");
     expect(connectionItems?.[1]?.key).toBe("streaming");
@@ -28,8 +28,8 @@ describe("composer runtime settings menu items", () => {
       geminiAvailable: false,
       opencodeAvailable: false,
     });
-    expect(engineItems).toHaveLength(3);
-    expect(engineItems?.map((item) => item?.key)).toEqual(["claude", "codex", "codex-rpc"]);
+    expect(engineItems).toHaveLength(2);
+    expect(engineItems?.map((item) => item?.key)).toEqual(["claude", "codex-rpc"]);
   });
 
   test("hides all optional engines when none are available", () => {

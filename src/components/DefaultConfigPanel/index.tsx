@@ -7,7 +7,7 @@ import {
 } from "../../constants/atMentionDefault";
 import {
   SESSION_EXECUTION_ENGINE_LABELS,
-  SESSION_EXECUTION_ENGINES,
+  SESSION_EXECUTION_ENGINES_OFFERED,
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
 import { MONITOR_PANEL_VISIBLE_ROWS_OPTIONS } from "../../constants/monitorPanelLayout";
@@ -121,7 +121,7 @@ export function DefaultConfigPanel() {
   }, []);
 
   const atMentionDefaultSelectOptions = useMemo(() => {
-    const engines = SESSION_EXECUTION_ENGINES.map((engine) => ({
+    const engines = SESSION_EXECUTION_ENGINES_OFFERED.map((engine) => ({
       value: encodeAtMentionDefaultSelectValue({ kind: "execution_engine", engine }),
       label: `执行环境 · ${SESSION_EXECUTION_ENGINE_LABELS[engine].title}`,
     }));
@@ -136,7 +136,7 @@ export function DefaultConfigPanel() {
 
   const atMentionShortcutRows = useMemo(() => {
     const rows: Array<{ target: AtMentionDefaultTarget; label: string; group: string }> = [];
-    for (const engine of SESSION_EXECUTION_ENGINES) {
+    for (const engine of SESSION_EXECUTION_ENGINES_OFFERED) {
       rows.push({
         target: { kind: "execution_engine", engine },
         label: SESSION_EXECUTION_ENGINE_LABELS[engine].title,
@@ -444,7 +444,7 @@ export function DefaultConfigPanel() {
                 disabled={defaultExecutionEngine.loading || defaultExecutionEngine.saving}
                 value={defaultExecutionEngine.engine}
                 style={{ minWidth: 140 }}
-                options={SESSION_EXECUTION_ENGINES.map((engine) => ({
+                options={SESSION_EXECUTION_ENGINES_OFFERED.map((engine) => ({
                   label: SESSION_EXECUTION_ENGINE_LABELS[engine].title,
                   value: engine,
                 }))}

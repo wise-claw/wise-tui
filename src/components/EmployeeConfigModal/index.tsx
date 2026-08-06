@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { EmployeeItem, Repository, WorkflowGraph, WorkflowTemplateItem } from "../../types";
 import {
   SESSION_EXECUTION_ENGINE_LABELS,
-  SESSION_EXECUTION_ENGINES,
+  SESSION_EXECUTION_ENGINES_OFFERED,
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
 import { collectTeamMemberEmployeeIds } from "../../utils/collectTeamMemberEmployeeIds";
@@ -418,7 +418,7 @@ export function EmployeeConfigModal({
           initialValue="claude"
         >
           <Select
-            options={SESSION_EXECUTION_ENGINES.map((key) => ({
+            options={SESSION_EXECUTION_ENGINES_OFFERED.map((key) => ({
               value: key,
               label: SESSION_EXECUTION_ENGINE_LABELS[key].title,
             }))}
