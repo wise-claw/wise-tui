@@ -98,10 +98,12 @@ export function GitBranchSwitcher({
       try {
         await gitCheckoutBranch(repositoryPath, name.trim());
         setActiveBranch(name.trim());
+        setBranchPopoverOpen(false);
         await loadBranches();
         onBranchChanged?.();
-      } catch {
-        /* ignore */
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        message.error(`切换分支失败：${errMsg}`);
       } finally {
         setBranchActionLoading(false);
       }
@@ -112,7 +114,11 @@ export function GitBranchSwitcher({
   const handleCreateBranch = useCallback(async () => {
     const draft = branchCreateDraftRef.current;
     const name = draft.name.trim();
-    if (!name || !repositoryPath) return;
+    if (!repositoryPath) return;
+    if (!name) {
+      message.warning("请输入新分支名");
+      return;
+    }
     setBranchActionLoading(true);
     try {
       await gitCreateBranch(
@@ -123,11 +129,15 @@ export function GitBranchSwitcher({
         draft.noTrack,
       );
       setBranchCreateName("");
+      setBranchCreateFromRef(undefined);
       setActiveBranch(name);
+      setBranchPopoverOpen(false);
       await loadBranches();
       onBranchChanged?.();
-    } catch {
-      /* ignore */
+      message.success(`已创建并切换到分支 ${name}`);
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      message.error(`创建分支失败：${errMsg}`);
     } finally {
       setBranchActionLoading(false);
     }
@@ -263,6 +273,7 @@ export function GitBranchSwitcher({
                   void handleCreateBranch();
                 }}
                 loading={branchActionLoading}
+                disabled={!branchCreateName.trim() || branchActionLoading}
               >
                 新建
               </Button>

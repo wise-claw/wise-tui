@@ -14,6 +14,7 @@ import {
 } from "@ant-design/icons";
 import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { cancelClaudeInvocation, getClaudeConfigModel } from "../../services/claude";
+import { needsPublishBranch } from "../../services/gitCommitPullPush";
 import { executeSessionEngineAndWait } from "../../services/sessionEngineInvocation";
 import type { GitFileStatus, GitStatusResponse } from "../../types";
 import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
@@ -111,10 +112,11 @@ function DiffModeInner({
   });
   const ahead = status.ahead ?? 0;
   hasChangesRef.current = hasChanges;
+  const needsPublish = needsPublishBranch(status);
 
   const canCommit = commitMsg.trim().length > 0 && hasChanges && !loading.commit && !loading.commitAndPush;
   const canPush =
-    (hasChanges || ahead > 0) &&
+    (hasChanges || ahead > 0 || needsPublish) &&
     !loading.commit &&
     !loading.commitAndPush &&
     !aiSummaryLoading &&
@@ -289,9 +291,17 @@ function DiffModeInner({
     if (loading.commit || loading.commitAndPush || commitSubmitLockRef.current || pushPreparing || aiSummaryLoading) {
       return;
     }
-    if (!hasChangesRef.current && ahead <= 0) return;
+    const publishOnly = !hasChangesRef.current && needsPublishBranch(status) && ahead <= 0;
+    if (!hasChangesRef.current && ahead <= 0 && !publishOnly) return;
 
     commitSubmitLockRef.current = true;
+
+    // 仅发布本地分支到远端：无需提交信息 / AI 润色。
+    if (publishOnly) {
+      onCommitAndPush("");
+      return;
+    }
+
     const rawMsg = commitMsgRef.current.trim();
     let trimmed = rawMsg ? normalizeConventionalCommitMessage(rawMsg) : "";
     try {
@@ -435,6 +445,7 @@ function DiffModeInner({
     onCommitAndPush,
     pushPreparing,
     repositoryPath,
+    status,
   ]);
 
   return (
@@ -465,7 +476,13 @@ function DiffModeInner({
               <TextArea
                 className="git-commit-card__input"
                 variant="borderless"
-                placeholder={hasChanges ? "提交信息..." : "待推送提交，可 AI 生成描述后推送"}
+                placeholder={
+                  hasChanges
+                    ? "提交信息..."
+                    : needsPublish
+                      ? "本地分支尚未同步到远端，可直接同步"
+                      : "待推送提交，可 AI 生成描述后推送"
+                }
                 value={commitMsg}
                 onChange={(e) => setCommitMsg(e.target.value)}
                 onKeyDown={(event) => {
@@ -514,7 +531,11 @@ function DiffModeInner({
                   type="text"
                   size="small"
                   className="git-push-btn"
-                  title="AI 生成提交信息并提交、拉取、推送（可开启推送前审查）"
+                  title={
+                    needsPublish && !hasChanges && ahead <= 0
+                      ? "将本地分支同步（发布）到远端"
+                      : "AI 生成提交信息并提交、拉取、推送（可开启推送前审查）"
+                  }
                   disabled={!canPush}
                   icon={<CloudUploadOutlined />}
                   onMouseDown={(event) => event.preventDefault()}
@@ -524,7 +545,13 @@ function DiffModeInner({
                     void submitCommitAndPush();
                   }}
                 >
-                  {loading.commitAndPush ? "推送中..." : pushPreparing ? "生成中..." : "推送"}
+                  {loading.commitAndPush
+                    ? "推送中..."
+                    : pushPreparing
+                      ? "生成中..."
+                      : needsPublish && !hasChanges && ahead <= 0
+                        ? "同步到远端"
+                        : "推送"}
                 </Button>
                 {pushPreparing ? (
                   <Button
@@ -587,10 +614,29 @@ function DiffModeInner({
       ) : null}
 
       {!hasChanges && status.branch ? (
-        <div className="git-diff-mode__empty" role="status">
-          <CheckOutlined className="git-diff-mode__empty-icon" aria-hidden />
-          <span>没有检测到变更</span>
-        </div>
+        needsPublish ? (
+          <div className="git-diff-mode__empty git-diff-mode__empty--publish" role="status">
+            <CloudUploadOutlined className="git-diff-mode__empty-icon git-diff-mode__empty-icon--publish" aria-hidden />
+            <span>
+              本地分支「{status.branch}」尚未同步到远端
+            </span>
+            <Button
+              type="link"
+              size="small"
+              className="git-diff-mode__publish-btn"
+              disabled={!canPush}
+              loading={loading.commitAndPush}
+              onClick={() => void submitCommitAndPush()}
+            >
+              同步到远端
+            </Button>
+          </div>
+        ) : (
+          <div className="git-diff-mode__empty" role="status">
+            <CheckOutlined className="git-diff-mode__empty-icon" aria-hidden />
+            <span>没有检测到变更</span>
+          </div>
+        )
       ) : null}
 
       {hasChanges ? (

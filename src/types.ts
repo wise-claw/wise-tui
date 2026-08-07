@@ -483,6 +483,8 @@ export interface GitStatusSummaryResponse {
   behind: number;
   stagedCount: number;
   unstagedCount: number;
+  /** 无上游时为 null，用于识别「本地分支尚未同步到远端」。 */
+  upstream: string | null;
 }
 
 export interface GitLogEntry {

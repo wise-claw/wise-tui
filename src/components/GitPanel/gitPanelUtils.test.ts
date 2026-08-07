@@ -67,12 +67,19 @@ describe("gitStatusHeaderSnapshotEqual", () => {
       behind: 0,
       stagedCount: 1,
       unstagedCount: 3,
+      upstream: null as string | null,
     };
     expect(gitStatusHeaderSnapshotEqual(snapshot, { ...snapshot })).toBe(true);
     expect(
       gitStatusHeaderSnapshotEqual(snapshot, {
         ...snapshot,
         unstagedCount: 5,
+      }),
+    ).toBe(false);
+    expect(
+      gitStatusHeaderSnapshotEqual(snapshot, {
+        ...snapshot,
+        upstream: "origin/master",
       }),
     ).toBe(false);
   });

@@ -22,7 +22,14 @@ import {
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { WISE_GIT_REPOSITORY_STATUS_REFRESH, type GitRepositoryStatusRefreshDetail } from "../../constants/gitUiEvents";
-import { aiCommitPullPushRepository, commitPullPushRepository, isGitMergeConflictError } from "../../services/gitCommitPullPush";
+import {
+  aiCommitPullPushRepository,
+  commitPullPushRepository,
+  gitCommitPullPushNoopMessage,
+  gitCommitPullPushSuccessMessage,
+  isGitMergeConflictError,
+  needsPublishBranch,
+} from "../../services/gitCommitPullPush";
 import { maybeAutoCodeReviewAfterCommit } from "../../services/codeReview";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import { refreshGitRepositoryExplorerStatus } from "../../stores/gitRepositoryExplorerStatusStore";
@@ -79,9 +86,13 @@ function formatBranchLabel(
   const dirty = stagedLen > 0 || unstagedLen > 0;
   const ahead = status?.ahead ?? header?.ahead ?? 0;
   const behind = status?.behind ?? header?.behind ?? 0;
+  const publishNeeded = needsPublishBranch({
+    branch: status?.branch ?? header?.branch ?? null,
+    upstream: status?.upstream ?? header?.upstream ?? null,
+  });
   let suffix = "";
   if (dirty) suffix += "*";
-  if (ahead > 0 || behind > 0) suffix += "+";
+  if (ahead > 0 || behind > 0 || publishNeeded) suffix += "+";
   return `${branch}${suffix}`;
 }
 
@@ -242,6 +253,7 @@ function GitRepoSectionInner({
         behind: result.behind,
         stagedCount: result.stagedCount,
         unstagedCount: result.unstagedCount,
+        upstream: result.upstream ?? null,
       };
       const apply = () => {
         if (!mountedRef.current) return;
@@ -387,6 +399,7 @@ function GitRepoSectionInner({
       behind: current.behind,
       stagedCount: current.staged.length,
       unstagedCount: current.unstaged.length,
+      upstream: current.upstream ?? null,
     };
     headerSnapshotRef.current = snapshot;
     setHeaderSnapshot(snapshot);
@@ -532,20 +545,16 @@ function GitRepoSectionInner({
       void runAction("commitAndPush", async () => {
         if (!repositoryPath) return;
         const raw = msg.trim();
-        if (!raw) throw new Error("提交信息不能为空");
-        const trimmed = normalizeConventionalCommitMessage(raw);
+        const trimmed = raw ? normalizeConventionalCommitMessage(raw) : "";
         const outcome = await commitPullPushRepository(repositoryPath, trimmed);
         if (outcome === "noop") {
-          message.info("当前没有可提交的改动，也没有待推送的提交");
+          message.info(gitCommitPullPushNoopMessage());
           return;
         }
         refreshGitRepositoryStats(repositoryPath);
         refreshGitRepositoryExplorerStatus(repositoryPath);
-        if (outcome === "pushed_only") {
-          message.success("已推送待同步提交");
-        } else {
-          message.success("已提交并推送");
-        }
+        const successMsg = gitCommitPullPushSuccessMessage(outcome);
+        if (successMsg) message.success(successMsg);
       }),
     [repositoryPath, runAction],
   );
@@ -595,9 +604,10 @@ function GitRepoSectionInner({
           executionEngine: entry.executionEngine,
         });
         if (outcome === "noop") {
-          message.info("当前没有可提交的改动，也没有待推送的提交");
+          message.info(gitCommitPullPushNoopMessage());
         } else {
-          message.success(outcome === "pushed_only" ? "已推送待同步提交" : "已提交并推送");
+          const successMsg = gitCommitPullPushSuccessMessage(outcome);
+          if (successMsg) message.success(successMsg);
         }
       },
       (msg) => {
@@ -669,7 +679,7 @@ function GitRepoSectionInner({
           behind: headerSnapshot.behind,
           additions: 0,
           deletions: 0,
-          upstream: null,
+          upstream: headerSnapshot.upstream,
           staged: [],
           unstaged: [],
         }

@@ -24,6 +24,14 @@ export function hasUpstreamTracking(status: Pick<GitStatusResponse, "upstream">)
   return Boolean(status.upstream?.trim());
 }
 
+/** 排除 detached HEAD（后端格式为 `(abc1234)`）与占位名。 */
+export function isNamedLocalBranch(branch: string | null | undefined): boolean {
+  const name = branch?.trim() ?? "";
+  if (!name || name === "-" || name === "(detached)") return false;
+  if (name.startsWith("(") && name.endsWith(")")) return false;
+  return true;
+}
+
 /**
  * 本地已有分支名、但尚未关联远程跟踪分支：需要 `git push -u` 发布。
  * 常见于本机 `checkout -b` 新建分支后首次推送。
@@ -31,7 +39,7 @@ export function hasUpstreamTracking(status: Pick<GitStatusResponse, "upstream">)
 export function needsPublishBranch(
   status: Pick<GitStatusResponse, "upstream" | "branch">,
 ): boolean {
-  return Boolean(status.branch?.trim()) && !hasUpstreamTracking(status);
+  return isNamedLocalBranch(status.branch) && !hasUpstreamTracking(status);
 }
 
 export function needsGitSyncWork(status: GitStatusResponse): boolean {
@@ -39,10 +47,39 @@ export function needsGitSyncWork(status: GitStatusResponse): boolean {
 }
 
 export function needsGitSyncWorkFromSummary(summary: GitStatusSummaryResponse): boolean {
-  return summary.stagedCount > 0 || summary.unstagedCount > 0 || (summary.ahead ?? 0) > 0;
+  return (
+    summary.stagedCount > 0
+    || summary.unstagedCount > 0
+    || (summary.ahead ?? 0) > 0
+    || needsPublishBranch(summary)
+  );
 }
 
-export type GitCommitPullPushOutcome = "committed_and_pushed" | "pushed_only" | "noop";
+export type GitCommitPullPushOutcome =
+  | "committed_and_pushed"
+  | "pushed_only"
+  | "published"
+  | "noop";
+
+/** 推送成功后的用户可见文案；noop 返回 null。 */
+export function gitCommitPullPushSuccessMessage(
+  outcome: GitCommitPullPushOutcome,
+): string | null {
+  switch (outcome) {
+    case "committed_and_pushed":
+      return "已提交并推送";
+    case "pushed_only":
+      return "已推送待同步提交";
+    case "published":
+      return "已同步分支到远端";
+    case "noop":
+      return null;
+  }
+}
+
+export function gitCommitPullPushNoopMessage(): string {
+  return "当前没有可提交的改动，也没有待推送或待同步的分支";
+}
 
 /** git pull/merge 冲突在错误信息中的典型标记（大小写不敏感）。 */
 const GIT_MERGE_CONFLICT_MARKERS = [
@@ -65,11 +102,6 @@ export async function commitPullPushRepository(
   message: string,
   hooks?: { onPhase?: (phase: string) => void },
 ): Promise<GitCommitPullPushOutcome> {
-  const trimmed = message.trim();
-  if (!trimmed) {
-    throw new Error("提交信息不能为空");
-  }
-
   hooks?.onPhase?.("读取变更");
   const status = await gitStatus(path);
   const hasChanges = hasWorkingTreeChanges(status);
@@ -80,6 +112,10 @@ export async function commitPullPushRepository(
   }
 
   if (hasChanges) {
+    const trimmed = message.trim();
+    if (!trimmed) {
+      throw new Error("提交信息不能为空");
+    }
     if (status.unstaged.length > 0) {
       hooks?.onPhase?.("暂存改动");
       await gitStageAll(path);
@@ -95,7 +131,9 @@ export async function commitPullPushRepository(
   }
   hooks?.onPhase?.("推送");
   await gitPush(path);
-  return hasChanges ? "committed_and_pushed" : "pushed_only";
+  if (hasChanges) return "committed_and_pushed";
+  if (publishBranch && !hasAhead) return "published";
+  return "pushed_only";
 }
 
 export interface AiCommitPullPushHooks {

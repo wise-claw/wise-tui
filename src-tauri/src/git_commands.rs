@@ -49,6 +49,7 @@ pub(crate) struct GitStatusSummaryResponse {
     behind: usize,
     staged_count: usize,
     unstaged_count: usize,
+    upstream: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -619,7 +620,7 @@ pub(crate) async fn git_status_summary(path: String) -> Result<GitStatusSummaryR
         }
 
         let (additions, deletions) = collect_aggregate_line_totals(&path);
-        let (ahead, behind, _upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
+        let (ahead, behind, upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
 
         Ok(GitStatusSummaryResponse {
             branch,
@@ -629,6 +630,7 @@ pub(crate) async fn git_status_summary(path: String) -> Result<GitStatusSummaryR
             behind,
             staged_count,
             unstaged_count,
+            upstream,
         })
     })
     .await
@@ -1860,6 +1862,37 @@ pub(crate) fn git_checkout_branch(path: String, branch_name: String) -> Result<(
     Err(format!("Branch not found: {}", name))
 }
 
+/// 组装 `git checkout/branch` 创建参数；`--no-track` 必须在 `-b` 之前。
+fn build_create_branch_git_args<'a>(
+    name: &'a str,
+    from: Option<&'a str>,
+    should_checkout: bool,
+    should_no_track: bool,
+) -> Vec<&'a str> {
+    if should_checkout {
+        let mut args: Vec<&str> = vec!["checkout"];
+        if should_no_track {
+            args.push("--no-track");
+        }
+        args.push("-b");
+        args.push(name);
+        if let Some(from_name) = from {
+            args.push(from_name);
+        }
+        args
+    } else {
+        let mut args: Vec<&str> = vec!["branch"];
+        if should_no_track {
+            args.push("--no-track");
+        }
+        args.push(name);
+        if let Some(from_name) = from {
+            args.push(from_name);
+        }
+        args
+    }
+}
+
 #[tauri::command]
 pub(crate) fn git_create_branch(
     path: String,
@@ -1882,27 +1915,8 @@ pub(crate) fn git_create_branch(
         .filter(|v| !v.is_empty());
     let should_checkout = checkout.unwrap_or(true);
     let should_no_track = no_track.unwrap_or(true);
-
-    if should_checkout {
-        let mut args: Vec<&str> = vec!["checkout", "-b", name];
-        if should_no_track {
-            args.push("--no-track");
-        }
-        if let Some(from_name) = from {
-            args.push(from_name);
-        }
-        run_git_command(&path, &args, "Create branch")
-    } else {
-        let mut args: Vec<&str> = vec!["branch"];
-        if should_no_track {
-            args.push("--no-track");
-        }
-        args.push(name);
-        if let Some(from_name) = from {
-            args.push(from_name);
-        }
-        run_git_command(&path, &args, "Create branch")
-    }
+    let args = build_create_branch_git_args(name, from, should_checkout, should_no_track);
+    run_git_command(&path, &args, "Create branch")
 }
 
 #[tauri::command]
@@ -2590,6 +2604,35 @@ mod git_push_tests {
                 "origin".to_string(),
                 "feature/foo".to_string(),
             ]
+        );
+    }
+}
+
+#[cfg(test)]
+mod git_create_branch_tests {
+    use super::*;
+
+    #[test]
+    fn build_create_branch_puts_no_track_before_dash_b() {
+        assert_eq!(
+            build_create_branch_git_args("develop", Some("origin/main"), true, true),
+            vec!["checkout", "--no-track", "-b", "develop", "origin/main"]
+        );
+    }
+
+    #[test]
+    fn build_create_branch_without_checkout() {
+        assert_eq!(
+            build_create_branch_git_args("develop", Some("origin/main"), false, true),
+            vec!["branch", "--no-track", "develop", "origin/main"]
+        );
+    }
+
+    #[test]
+    fn build_create_branch_allows_tracking() {
+        assert_eq!(
+            build_create_branch_git_args("feature", Some("origin/feature"), true, false),
+            vec!["checkout", "-b", "feature", "origin/feature"]
         );
     }
 }

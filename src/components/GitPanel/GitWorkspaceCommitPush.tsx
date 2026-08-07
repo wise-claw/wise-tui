@@ -7,7 +7,7 @@ import {
   type GitWorkspaceRepositoryRef,
 } from "../../services/gitWorkspaceSync";
 import { gitStatusSummary } from "../../services/git";
-import { needsGitSyncWorkFromSummary } from "../../services/gitCommitPullPush";
+import { needsGitSyncWorkFromSummary, needsPublishBranch } from "../../services/gitCommitPullPush";
 import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
 
 const { TextArea } = Input;
@@ -55,7 +55,7 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
         if (!summary || !needsGitSyncWorkFromSummary(summary)) continue;
         if (summary.stagedCount > 0 || summary.unstagedCount > 0) {
           dirty += 1;
-        } else if ((summary.ahead ?? 0) > 0) {
+        } else if ((summary.ahead ?? 0) > 0 || needsPublishBranch(summary)) {
           aheadOnly += 1;
         }
       }
@@ -191,7 +191,7 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
               : dirtyRepoCount > 0
                 ? `${dirtyRepoCount} 个仓库有改动，将使用同一提交信息`
                 : aheadOnlyRepoCount > 0
-                  ? `${aheadOnlyRepoCount} 个仓库仅有待推送提交，将直接拉取并推送`
+                  ? `${aheadOnlyRepoCount} 个仓库仅有待推送/待同步分支，将直接同步到远端`
                   : "当前工作区暂无可同步内容"}
           </div>
           {loadingDraft ? (

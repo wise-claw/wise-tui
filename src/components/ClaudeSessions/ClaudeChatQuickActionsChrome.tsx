@@ -8,7 +8,12 @@ import { dispatchApplyComposerCommonPhrase } from "../../constants/composerCommo
 import { useComposerCommonPhrases } from "../../hooks/useComposerCommonPhrases";
 import { useGitRepositoryStats } from "../../hooks/useGitRepositoryStats";
 import { gitStatus } from "../../services/git";
-import { aiCommitPullPushRepository, isGitMergeConflictError } from "../../services/gitCommitPullPush";
+import {
+  aiCommitPullPushRepository,
+  gitCommitPullPushNoopMessage,
+  gitCommitPullPushSuccessMessage,
+  isGitMergeConflictError,
+} from "../../services/gitCommitPullPush";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import { ComposerCommonPhrasesBar } from "../ClaudeChatInput/ComposerCommonPhrasesBar";
 import { SessionQuickActionsBar } from "./SessionQuickActionsBar";
@@ -131,10 +136,11 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
         executionEngine,
       });
       if (outcome === "noop") {
-        message.info("当前没有可提交的改动，也没有待推送的提交");
+        message.info(gitCommitPullPushNoopMessage());
       } else {
         refreshGitRepositoryStats(repoPath);
-        message.success(outcome === "pushed_only" ? "已推送待同步提交" : "已提交并推送");
+        const successMsg = gitCommitPullPushSuccessMessage(outcome);
+        if (successMsg) message.success(successMsg);
       }
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);

@@ -52,8 +52,13 @@ export function GraphCreateBranchDialog({
         setSubmitting(true);
         try {
           await gitCreateBranch(repositoryPath, name, sha, true, true);
+          message.success(`已创建并切换到分支 ${name}`);
           onSuccess();
           onClose();
+        } catch (error) {
+          const errMsg = error instanceof Error ? error.message : String(error);
+          message.error(`创建分支失败：${errMsg}`);
+          return Promise.reject(error instanceof Error ? error : new Error(errMsg));
         } finally {
           setSubmitting(false);
         }
@@ -73,13 +78,18 @@ export function GraphCreateBranchDialog({
             void (async () => {
               const name = branchName.trim();
               if (!name) {
+                message.warning("请输入分支名");
                 return;
               }
               setSubmitting(true);
               try {
                 await gitCreateBranch(repositoryPath, name, sha, true, true);
+                message.success(`已创建并切换到分支 ${name}`);
                 onSuccess();
                 onClose();
+              } catch (error) {
+                const errMsg = error instanceof Error ? error.message : String(error);
+                message.error(`创建分支失败：${errMsg}`);
               } finally {
                 setSubmitting(false);
               }

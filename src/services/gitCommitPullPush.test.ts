@@ -48,6 +48,7 @@ function makeSummary(partial: Partial<GitStatusSummaryResponse> = {}): GitStatus
     behind: 0,
     stagedCount: 0,
     unstagedCount: 0,
+    upstream: null,
     ...partial,
   };
 }
@@ -80,12 +81,18 @@ describe("gitCommitPullPush helpers", () => {
       false,
     );
     expect(needsPublishBranch(makeStatus({ branch: null, upstream: null }))).toBe(false);
+    expect(needsPublishBranch(makeStatus({ branch: "(abc1234)", upstream: null }))).toBe(false);
   });
 
   it("treats unpublished local branches as syncable even when ahead is 0", () => {
     expect(needsGitSyncWork(makeStatus({ branch: "feature/new", ahead: 0, upstream: null }))).toBe(
       true,
     );
+    expect(
+      needsGitSyncWorkFromSummary(
+        makeSummary({ branch: "feature/new", ahead: 0, upstream: null }),
+      ),
+    ).toBe(true);
     expect(
       needsGitSyncWork(
         makeStatus({
@@ -127,6 +134,23 @@ describe("commitPullPushRepository new local branch", () => {
     expect(outcome).toBe("committed_and_pushed");
     expect(gitStageAll).toHaveBeenCalledTimes(1);
     expect(gitCommit).toHaveBeenCalledTimes(1);
+    expect(gitPull).toHaveBeenCalledTimes(0);
+    expect(gitPush).toHaveBeenCalledTimes(1);
+  });
+
+  it("publishes branch-only without commit message when no local changes", async () => {
+    gitStatus.mockImplementation(async () =>
+      makeStatus({
+        branch: "feature/new",
+        upstream: null,
+        ahead: 0,
+      }),
+    );
+
+    const outcome = await commitPullPushRepository("/repo", "");
+
+    expect(outcome).toBe("published");
+    expect(gitCommit).toHaveBeenCalledTimes(0);
     expect(gitPull).toHaveBeenCalledTimes(0);
     expect(gitPush).toHaveBeenCalledTimes(1);
   });

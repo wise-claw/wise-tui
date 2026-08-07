@@ -110,6 +110,7 @@ export interface GitStatusHeaderSnapshot {
   behind: number;
   stagedCount: number;
   unstagedCount: number;
+  upstream: string | null;
 }
 
 /** 比较多仓折叠 header 快照，避免 watcher 刷新触发无效重渲染。 */
@@ -123,7 +124,8 @@ export function gitStatusHeaderSnapshotEqual(
     prev.ahead === next.ahead &&
     prev.behind === next.behind &&
     prev.stagedCount === next.stagedCount &&
-    prev.unstagedCount === next.unstagedCount
+    prev.unstagedCount === next.unstagedCount &&
+    prev.upstream === next.upstream
   );
 }
 
