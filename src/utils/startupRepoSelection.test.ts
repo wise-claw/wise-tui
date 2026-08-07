@@ -3,6 +3,7 @@ import type { ProjectItem, Repository } from "../types";
 import {
   parseWorkspaceLastSelection,
   resolveStartupSelection,
+  shouldKeepRestoredActiveSessionOnStartup,
   workspaceWindowSelectionStorageKey,
 } from "./startupRepoSelection";
 
@@ -251,5 +252,24 @@ describe("workspaceWindowSelectionStorageKey", () => {
     expect(workspaceWindowSelectionStorageKey("main-dock-123")).toBe(
       "wise.workspace.windowSelection.v1:main-dock-123",
     );
+  });
+});
+
+describe("shouldKeepRestoredActiveSessionOnStartup", () => {
+  test("keeps restored id when it exists in hydrated sessions", () => {
+    expect(
+      shouldKeepRestoredActiveSessionOnStartup("session_a", [
+        { id: "session_b" },
+        { id: "session_a" },
+      ]),
+    ).toBe(true);
+  });
+
+  test("does not keep missing, empty, or whitespace ids", () => {
+    const sessions = [{ id: "session_a" }];
+    expect(shouldKeepRestoredActiveSessionOnStartup(null, sessions)).toBe(false);
+    expect(shouldKeepRestoredActiveSessionOnStartup("", sessions)).toBe(false);
+    expect(shouldKeepRestoredActiveSessionOnStartup("   ", sessions)).toBe(false);
+    expect(shouldKeepRestoredActiveSessionOnStartup("session_gone", sessions)).toBe(false);
   });
 });

@@ -157,3 +157,16 @@ function pickFirstItem(
   }
   return { repositoryId: null, projectId: null };
 }
+
+/**
+ * tabs.json 已 hydrate 出有效 `activeSessionId` 时，启动路径不得再走 ensure* /
+ * `pickFirst…SidebarHistorySession` 把选中改成侧栏第一项。
+ */
+export function shouldKeepRestoredActiveSessionOnStartup(
+  activeSessionId: string | null | undefined,
+  sessions: ReadonlyArray<{ id: string }>,
+): boolean {
+  const id = activeSessionId?.trim() ?? "";
+  if (!id) return false;
+  return sessions.some((session) => session.id === id);
+}

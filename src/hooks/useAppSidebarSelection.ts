@@ -29,6 +29,7 @@ import {
   pickSessionForRepositorySidebarSelect,
 } from "../utils/claudeSessionSelection";
 import { pickFirstRepositoryOwnedSidebarHistorySession } from "../utils/repositoryWorkspaceTree";
+import { shouldKeepRestoredActiveSessionOnStartup } from "../utils/startupRepoSelection";
 import {
   isProjectRootSessionDisplayName,
   isSessionBoundAsRepositoryMain,
@@ -700,11 +701,19 @@ export function useAppSidebarSelection({
     if (repositoryListLoading || !tabsHydrated) return;
     if (startupFirstProjectRepoSessionAppliedRef.current) return;
 
+    // tabs.json 已恢复有效活跃会话时保留；ensure* 会按侧栏「第一项」重选，覆盖关闭前选中。
+    const keepRestoredActive = shouldKeepRestoredActiveSessionOnStartup(
+      activeSessionIdLatestRef.current,
+      sessionsLatestRef.current,
+    );
+
     if (activeWorkspaceFocus === "project" && activeProjectId) {
       const startupProject = projects.find((p) => p.id === activeProjectId) ?? null;
       if (!startupProject) return;
       startupFirstProjectRepoSessionAppliedRef.current = true;
-      void ensureProjectMainSession(startupProject);
+      if (!keepRestoredActive) {
+        void ensureProjectMainSession(startupProject);
+      }
       if (!viewMode.isChat) {
         viewMode.enter({ kind: "chat" });
       }
@@ -720,8 +729,10 @@ export function useAppSidebarSelection({
       : null;
     if (startupRepo && isMultiRepoProject(ownerProject, projects) && ownerProject) {
       setActiveRepositoryWithOwner(startupRepo.id);
-      void ensureProjectMainSession(ownerProject);
-    } else if (startupRepo) {
+      if (!keepRestoredActive) {
+        void ensureProjectMainSession(ownerProject);
+      }
+    } else if (startupRepo && !keepRestoredActive) {
       void ensureRepositoryMainSession(startupRepo);
     }
     if (!ownerProject) {
