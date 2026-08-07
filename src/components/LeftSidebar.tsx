@@ -1201,15 +1201,7 @@ export function LeftSidebar({
                   : undefined
               }
               onRemoveFloatingRepository={(repo) => {
-                if (!onRemoveRepository) return;
-                modal.confirm({
-                  title: "确认移除单仓？",
-                  content: `单仓「${repositoryFolderBasename(repo)}」将从 Wise 列表移除（不会删除磁盘文件，也不会动 .trellis）。`,
-                  okText: "移除",
-                  okType: "danger",
-                  cancelText: "取消",
-                  onOk: () => onRemoveRepository(repo),
-                });
+                onRemoveRepository?.(repo);
               }}
               onDetachRepositoryFromProject={onDetachRepositoryFromProject}
               onReorderRepositoriesInProject={onReorderRepositoriesInProject}

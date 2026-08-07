@@ -1,7 +1,7 @@
-import { memo, useState, type ReactNode } from "react";
+import { memo, useRef, useState, type ReactNode } from "react";
 import { getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
 import { UserOutlined } from "@ant-design/icons";
-import { App as AntdApp } from "antd";
+import { App as AntdApp, Popconfirm } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import type { Repository, StandaloneRepo, Workspace } from "../../types";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
@@ -775,6 +775,9 @@ function FloatingRepositoryRowInner({
   const showActiveRepository = isActiveRepository;
 
   const trellisEnabled = repositoryTrellisEntrypointsEnabled(repository, trellisReady);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
+  const removeTriggeredRef = useRef(false);
   const moreItems = buildFloatingRepositoryMoreMenuItems({
     joinableProjects,
     trellisEnabled,
@@ -795,6 +798,8 @@ function FloatingRepositoryRowInner({
     onJoinExistingProject: Boolean(onJoinExistingProject),
     repositoryOpenAppId: repository.openAppId,
   });
+  // 「移除仓库」菜单项点击后由行内受控 Popconfirm 承接确认（锚点独立于下拉菜单，避免随菜单销毁）。
+  const moreItemsWithRemoveConfirm = moreItems;
 
   const dropRowClass =
     repositoryReorder?.rowReorderEnabled && repositoryReorder.dropHint?.anchorRepositoryId === repository.id
@@ -965,8 +970,25 @@ function FloatingRepositoryRowInner({
           {onOpenInTerminal ? <OpenInTerminalAction onOpen={() => onOpenInTerminal(repository)} /> : null}
           <RepositorySddStackBadge repository={repository} trellisReady={trellisReady} />
           <SidebarMoreMenuDropdown
-            items={moreItems}
+            items={moreItemsWithRemoveConfirm}
+            open={moreMenuOpen}
+            onOpenChange={(open) => {
+              if (open) {
+                setMoreMenuOpen(true);
+                return;
+              }
+              if (removeTriggeredRef.current) return;
+              setMoreMenuOpen(false);
+              setRemoveConfirmOpen(false);
+            }}
             onMenuClick={({ key }) => {
+              if (key === "remove") {
+                removeTriggeredRef.current = true;
+                setMoreMenuOpen(false);
+                setRemoveConfirmOpen(true);
+                return;
+              }
+              setMoreMenuOpen(false);
               if (key === "finder") onOpenInFinder(repository);
               if (key === "editor") onOpenRepositoryInEditor(repository);
               if (key === "open-terminal") onOpenInTerminal?.(repository);
@@ -988,7 +1010,6 @@ function FloatingRepositoryRowInner({
                 const projectId = key.slice("join-".length);
                 onJoinExistingProject?.(repository, projectId);
               }
-              if (key === "remove") onRemove(repository);
               if (typeof key === "string") {
                 const openAppId = parseOpenAppConfigureMenuKey(key);
                 if (openAppId !== undefined) onConfigureRepositoryOpenApp?.(repository, openAppId);
@@ -1006,6 +1027,33 @@ function FloatingRepositoryRowInner({
               <MoreIcon />
             </button>
           </SidebarMoreMenuDropdown>
+          <Popconfirm
+            classNames={{ root: "app-repository-remove-popconfirm" }}
+            title={`移除「${repositoryFolderBasename(repository)}」？`}
+            description="仅从列表移除，不删磁盘文件。"
+            okText="移除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+            zIndex={1060}
+            placement="leftTop"
+            open={removeConfirmOpen}
+            onOpenChange={(next) => {
+              if (next) return;
+              removeTriggeredRef.current = false;
+              setRemoveConfirmOpen(false);
+            }}
+            onConfirm={() => {
+              removeTriggeredRef.current = false;
+              setRemoveConfirmOpen(false);
+              setMoreMenuOpen(false);
+              onRemove(repository);
+            }}
+          >
+            <span
+              aria-hidden="true"
+              className="app-repository-remove-confirm-anchor"
+            />
+          </Popconfirm>
         </div>
       </div>
       {expanded && children ? children : null}

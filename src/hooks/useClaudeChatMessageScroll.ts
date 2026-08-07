@@ -9,7 +9,6 @@ import {
 import { CHAT_MESSAGE_LIST_BOTTOM_RECLAIM_PX } from "../constants/claudeMessageList";
 import { WORKFLOW_UI_EVENT_REPOSITORY_FILE_EDITOR_CLOSED } from "../constants/workflowUiEvents";
 import {
-  isClaudeScrollInteractionActive,
   markClaudeScrollInteraction,
 } from "../stores/claudeScrollInteractionGate";
 import { shouldShowListEndThinkingHint } from "../utils/claudeChatMessageListRows";
@@ -159,12 +158,9 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
 
   const tickScrollFollowLoop = useCallback(() => {
     scrollFollowLoopRafRef.current = null;
-    if (isClaudeScrollInteractionActive()) {
-      if (shouldAutoFollow() && isSessionStreaming()) {
-        scrollFollowLoopRafRef.current = window.requestAnimationFrame(() => tickScrollFollowLoopRef.current());
-      }
-      return;
-    }
+    // 交互门闩仅用于推迟 live flush（指针悬停 / 滚动节流），不应阻断贴底跟随：
+    // 执行中用户通常正盯着消息区，pointermove 会持续 mark interaction，
+    // 若在此 return 则 RAF 环空转、最新消息永远进不了视口。
     if (!shouldAutoFollow()) return;
     if (!canScrollForNewContent()) return;
 
@@ -180,7 +176,8 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
       return;
     }
     lastScrollFollowLayoutAtRef.current = now;
-    applyScrollTowardBottom(sc, { smooth: streaming });
+    // 流式贴底直接 snap：分步 smooth 会在距底 > reclaim 阈值时触发 onScroll 误判为用户上翻。
+    applyScrollTowardBottom(sc);
 
     if (streaming && shouldAutoFollow()) {
       scrollFollowLoopRafRef.current = window.requestAnimationFrame(() => tickScrollFollowLoopRef.current());
@@ -195,7 +192,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     const sc = messagesScrollRef.current;
     if (!sc) return;
 
-    applyScrollTowardBottom(sc, { smooth: isSessionStreaming() });
+    applyScrollTowardBottom(sc);
 
     if (isSessionStreaming()) {
       ensureScrollFollowLoop();
@@ -407,6 +404,11 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
         // 贴底回收卸载顶部行、流式增高后的 clamp 都会改 scrollTop；只要仍在底部阈值内
         // 就保持跟随。任意 delta 都 pause 会在「执行中等一下」后丢掉末条自动展示。
         if (distanceToBottom <= STILL_PINNED_TO_BOTTOM_PX) {
+          lastScrollTopRef.current = currentScrollTop;
+          return;
+        }
+        // 流式贴底跟随产生的 scroll 可能在 reclaim 阈值外：仍视为自动跟随，勿误判为用户上翻。
+        if (isSessionStreaming() && pinToBottomRef.current && currentScrollTop >= prevScrollTop) {
           lastScrollTopRef.current = currentScrollTop;
           return;
         }

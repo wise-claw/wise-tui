@@ -9,6 +9,7 @@ import {
   getClaudeChatUserPausedFollow,
   registerClaudeChatMessageScrollBridge,
 } from "../stores/claudeChatMessageScrollBridge";
+import { markClaudeScrollInteraction } from "../stores/claudeScrollInteractionGate";
 
 /**
  * 回归测试：点击工作区/侧栏切换会话后，加载出的消息必须滚动到最底部。
@@ -355,5 +356,38 @@ describe("会话切换后消息列表贴底", () => {
     await tick(50);
     for (let i = 0; i < 4; i++) act(() => flushRaf());
     expect(getClaudeChatUserPausedFollow()).toBe(true);
+  });
+
+  test("流式执行中：指针/滚动交互标记不应阻断贴底，新 token 仍自动展示", async () => {
+    rowHeightBySessionId = { R: ROW_H };
+    await act(async () => {
+      root!.render(<Host session={makeSession("R", 20, "running")} />);
+    });
+    const sc = getScrollEl();
+    installBrowserLikeScroll(sc);
+    await tick(200);
+    expectAtBottom(sc, 20);
+    expect(getClaudeChatUserPausedFollow()).toBe(false);
+
+    // 模拟执行中鼠标悬停消息区：pointermove 会持续 mark interaction（live flush 让路）。
+    act(() => {
+      markClaudeScrollInteraction();
+    });
+
+    // 流式增长：同一条 assistant 消息变长 + 追加新行。
+    const growing = makeSession("R", 24, "running");
+    const last = growing.messages[growing.messages.length - 1]!;
+    growing.messages[growing.messages.length - 1] = {
+      ...last,
+      content: last.content + "y".repeat(400),
+    };
+    await act(async () => {
+      root!.render(<Host session={growing} />);
+    });
+    await tick(300);
+    for (let i = 0; i < 8; i++) act(() => flushRaf());
+
+    expect(getClaudeChatUserPausedFollow()).toBe(false);
+    expectAtBottom(sc, 24);
   });
 });
