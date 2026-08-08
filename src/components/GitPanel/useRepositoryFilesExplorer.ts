@@ -72,6 +72,11 @@ import {
 } from "./repositoryExplorerEntryCache";
 import { buildCaptureExtensionContextMenuItems } from "./captureExtensionContextMenu";
 import {
+  explorerContextMenuLabel,
+  explorerContextMenuModKey,
+  explorerContextMenuShiftModKey,
+} from "./explorerTreeChrome";
+import {
   INITIAL_REPOSITORY_EXPLORER_EXPAND_STATE,
   reduceRepositoryExplorerExpandState,
 } from "./repositoryExplorerExpandState";
@@ -897,6 +902,9 @@ export function useRepositoryFilesExplorer({
       repositoryPath.split(/[/\\]/).filter(Boolean).pop() ||
       "";
 
+    const mod = explorerContextMenuModKey();
+    const shiftMod = explorerContextMenuShiftModKey();
+
     const standardItems: NonNullable<MenuProps["items"]> = [
       ...captureItems,
       {
@@ -952,7 +960,7 @@ export function useRepositoryFilesExplorer({
       { type: "divider" },
       {
         key: "search-file",
-        label: "搜索文件",
+        label: explorerContextMenuLabel("搜索文件", `${mod}F`),
         onClick: () => {
           close();
           // 携带右键目标目录作为搜索范围；AppImpl 监听读取后预置命令面板 scopeDir。
@@ -961,7 +969,7 @@ export function useRepositoryFilesExplorer({
       },
       {
         key: "search-content",
-        label: "搜索内容",
+        label: explorerContextMenuLabel("搜索内容", `${shiftMod}F`),
         onClick: () => {
           close();
           void emit("global-open-content-search", { scopeDir: targetForCreate });

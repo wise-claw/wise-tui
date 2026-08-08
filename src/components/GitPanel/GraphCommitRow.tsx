@@ -1,18 +1,18 @@
 import { memo, useCallback, useMemo, type CSSProperties, type MouseEvent, type Ref } from "react";
-import { Dropdown, Tag, Typography } from "antd";
+import { Dropdown, Tag } from "antd";
 import { MoreOutlined } from "@ant-design/icons";
 import { message } from "antd";
+import "@vscode/codicons/dist/codicon.css";
 import type { GitGraphCommit } from "../../types";
 import { buildGraphCommitMenuItems } from "./graphCommitMenu";
-import { formatCommitDate, formatRelativeTime } from "./gitPanelUtils";
+import { formatGitGraphDate } from "./gitPanelUtils";
 import { gitGraphRefColor } from "./gitGraphLayout";
-
-const { Text } = Typography;
 
 export interface GraphCommitRowProps {
   commit: GitGraphCommit;
   laneColor: string;
   rowHeight: number;
+  rowIndex: number;
   virtualized?: boolean;
   virtualTop?: number;
   selected: boolean;
@@ -44,12 +44,14 @@ function graphCommitRowEqual(left: GraphCommitRowProps, right: GraphCommitRowPro
     && left.virtualTop === right.virtualTop
     && left.virtualized === right.virtualized
     && left.rowHeight === right.rowHeight
+    && left.rowIndex === right.rowIndex
     && left.canCompareWithBase === right.canCompareWithBase
     && left.canCompareWithHead === right.canCompareWithHead
     && left.commit.sha === right.commit.sha
     && left.commit.summary === right.commit.summary
     && left.commit.author === right.commit.author
     && left.commit.timestamp === right.commit.timestamp
+    && left.commit.parentShas.length === right.commit.parentShas.length
     && refsSignature(left.commit.refs) === refsSignature(right.commit.refs)
     && left.onSelectCommit === right.onSelectCommit
     && left.onCheckout === right.onCheckout
@@ -67,10 +69,21 @@ function graphCommitRowEqual(left: GraphCommitRowProps, right: GraphCommitRowPro
   );
 }
 
+function refIconClass(ref: GitGraphCommit["refs"][number]): string {
+  if (ref.isHead) {
+    return "codicon codicon-git-commit";
+  }
+  if (ref.kind === "tag") {
+    return "codicon codicon-tag";
+  }
+  return "codicon codicon-git-branch";
+}
+
 function GraphCommitRowInner({
   commit,
   laneColor,
   rowHeight,
+  rowIndex,
   virtualized,
   virtualTop,
   selected,
@@ -152,6 +165,11 @@ function GraphCommitRowInner({
     ],
   );
 
+  const isMerge = commit.parentShas.length > 1;
+  const dateLabel = formatGitGraphDate(commit.timestamp);
+  const shortSha = commit.sha.slice(0, 8);
+  const zebra = rowIndex % 2 === 1;
+
   const rowStyle: CSSProperties = {
     height: rowHeight,
     minHeight: rowHeight,
@@ -168,7 +186,15 @@ function GraphCommitRowInner({
     >
       <div
         ref={rowRef}
-        className={`git-graph-row${selected ? " git-graph-row--selected" : ""}${virtualized ? " git-graph-row--virtualized" : ""}`}
+        className={[
+          "git-graph-row",
+          selected ? "git-graph-row--selected" : "",
+          zebra ? "git-graph-row--zebra" : "",
+          isMerge ? "git-graph-row--merge" : "",
+          virtualized ? "git-graph-row--virtualized" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         style={rowStyle}
         onClick={handleSelect}
         onDoubleClick={(event) => {
@@ -178,40 +204,47 @@ function GraphCommitRowInner({
         role="button"
         aria-selected={selected}
       >
-        <div className="git-graph-row__main">
-          <div className="git-graph-row__summary-row">
-            <div className="git-graph-row__summary">{commit.summary || "无描述"}</div>
-            {commit.refs.length > 0 ? (
-              <div className="git-graph-row__refs">
-                {commit.refs.map((ref) => {
-                  const clickable = !ref.isHead && ref.kind !== "remote";
-                  const refColor = ref.isHead ? undefined : ref.kind === "tag" ? gitGraphRefColor(ref.name) : laneColor;
-                  return (
-                    <Tag
-                      key={`${ref.kind}:${ref.name}`}
-                      className={`git-graph-ref-tag${clickable ? " git-graph-ref-tag--clickable" : ""}${ref.isHead ? " git-graph-ref-tag--head" : ""}`}
-                      style={
-                        refColor
-                          ? ({ "--git-graph-ref-color": refColor } as CSSProperties)
-                          : undefined
-                      }
-                      title={clickable ? `检出 ${ref.name}` : ref.name}
-                      onClick={clickable ? (event) => handleRefClick(event, ref) : undefined}
-                    >
-                      {ref.isHead ? "HEAD" : ref.name}
-                    </Tag>
-                  );
-                })}
-              </div>
-            ) : null}
+        <div className="git-graph-row__description">
+          {commit.refs.length > 0 ? (
+            <div className="git-graph-row__refs">
+              {commit.refs.map((ref) => {
+                const clickable = !ref.isHead && ref.kind !== "remote";
+                const refColor = ref.isHead
+                  ? undefined
+                  : ref.kind === "tag"
+                    ? gitGraphRefColor(ref.name)
+                    : laneColor;
+                return (
+                  <Tag
+                    key={`${ref.kind}:${ref.name}`}
+                    className={`git-graph-ref-tag${clickable ? " git-graph-ref-tag--clickable" : ""}${ref.isHead ? " git-graph-ref-tag--head" : ""}`}
+                    style={
+                      refColor
+                        ? ({ "--git-graph-ref-color": refColor } as CSSProperties)
+                        : undefined
+                    }
+                    title={clickable ? `检出 ${ref.name}` : ref.name}
+                    onClick={clickable ? (event) => handleRefClick(event, ref) : undefined}
+                  >
+                    <span className={refIconClass(ref)} aria-hidden />
+                    <span className="git-graph-ref-tag__label">{ref.isHead ? "HEAD" : ref.name}</span>
+                  </Tag>
+                );
+              })}
+            </div>
+          ) : null}
+          <div className="git-graph-row__summary" title={commit.summary || "无描述"}>
+            {commit.summary || "无描述"}
           </div>
-          <div className="git-graph-row__meta">
-            <span className="git-graph-row__sha">{commit.sha.slice(0, 7)}</span>
-            <Text type="secondary" className="git-graph-row__author">{commit.author || "未知"}</Text>
-            <Text type="secondary" className="git-graph-row__time" title={formatCommitDate(commit.timestamp)}>
-              {formatRelativeTime(commit.timestamp)}
-            </Text>
-          </div>
+        </div>
+        <div className="git-graph-row__date" title={dateLabel}>
+          {dateLabel}
+        </div>
+        <div className="git-graph-row__author" title={commit.author || "未知"}>
+          {commit.author || "未知"}
+        </div>
+        <div className="git-graph-row__sha" title={commit.sha}>
+          {shortSha}
         </div>
         <Dropdown
           menu={{ items: menuItems, className: "git-graph-menu" }}

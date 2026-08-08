@@ -5,7 +5,8 @@ import { CloseOutlined, MoreOutlined } from "@ant-design/icons";
 import { gitCommitDetail } from "../../services/git";
 import type { GitCommitDetailResponse } from "../../types";
 import { GraphBlameModal } from "./GraphBlameModal";
-import { formatCommitDate, getStatusColor, getStatusSymbol, splitNameAndExt, splitPath } from "./gitPanelUtils";
+import { ExplorerTreeFileIcon } from "./explorerTreeChrome";
+import { formatGitGraphDate, getStatusColor, getStatusSymbol, splitPath } from "./gitPanelUtils";
 import type { GitPanelOpenFileOptions } from "./types";
 
 const { Text, Paragraph } = Typography;
@@ -147,9 +148,9 @@ export function GraphCommitDetail({
         <div className="git-graph-detail__body">
           <div className="git-graph-detail__summary">{detail.summary || "无描述"}</div>
           <div className="git-graph-detail__meta">
-            <Text code style={{ fontSize: 10 }}>{detail.sha.slice(0, 7)}</Text>
-            <Text type="secondary" style={{ fontSize: 10 }}>{detail.author}</Text>
-            <Text type="secondary" style={{ fontSize: 10 }}>{formatCommitDate(detail.timestamp)}</Text>
+            <span className="git-graph-detail__sha">{detail.sha.slice(0, 8)}</span>
+            <span className="git-graph-detail__author">{detail.author}</span>
+            <span className="git-graph-detail__time">{formatGitGraphDate(detail.timestamp)}</span>
           </div>
           {detail.body ? (
             <Paragraph className="git-graph-detail__message" ellipsis={{ rows: 4, expandable: true }}>
@@ -157,12 +158,12 @@ export function GraphCommitDetail({
             </Paragraph>
           ) : null}
           <div className="git-graph-detail__files">
-            <Text type="secondary" style={{ fontSize: 10, fontWeight: 600 }}>
-              变更文件 ({detail.files.length})
-            </Text>
+            <div className="git-graph-detail__files-title">变更文件 ({detail.files.length})</div>
             <div className="git-graph-detail__file-list">
               {detail.files.length === 0 ? (
-                <Text type="secondary" style={{ fontSize: 10 }}>无文件变更</Text>
+                <Text type="secondary" className="git-graph-detail__files-empty">
+                  无文件变更
+                </Text>
               ) : (
                 detail.files.map((file) => (
                   <CommitFileRow
@@ -201,8 +202,7 @@ function CommitFileRow({
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
   onBlame: () => void;
 }) {
-  const { name } = splitPath(file.path);
-  const { base, ext } = splitNameAndExt(name);
+  const { name, dir } = splitPath(file.path);
   const clickable = Boolean(onOpenFile) && file.status !== "D";
   const canBlame = file.status !== "D";
 
@@ -212,6 +212,7 @@ function CommitFileRow({
         type="button"
         className={`git-graph-detail__file-row${clickable ? " git-graph-detail__file-row--clickable" : ""}`}
         disabled={!clickable}
+        title={file.path}
         onClick={() => {
           if (!clickable || !onOpenFile) {
             return;
@@ -219,13 +220,20 @@ function CommitFileRow({
           onOpenFile(file.path, { fromCommit: { sha } });
         }}
       >
-        <span className="git-file-status-badge" style={{ color: getStatusColor(file.status) }}>
+        <ExplorerTreeFileIcon fileName={name} className="git-graph-detail__file-icon" />
+        <span
+          className={`git-graph-detail__file-status git-graph-detail__file-status--${file.status.toLowerCase()}`}
+          style={{ color: getStatusColor(file.status) }}
+          aria-label={file.status}
+        >
           {getStatusSymbol(file.status)}
         </span>
-        <span className="git-graph-detail__file-name">
-          {base}
-          {ext ? <span className="git-file-ext">.{ext}</span> : null}
-        </span>
+        <span className="git-graph-detail__file-name">{name}</span>
+        {dir ? (
+          <span className="git-graph-detail__file-path" title={dir}>
+            {dir}
+          </span>
+        ) : null}
         {(file.additions > 0 || file.deletions > 0) ? (
           <span className="git-graph-detail__file-stats">
             {file.additions > 0 ? <span className="git-file-stat-add">+{file.additions}</span> : null}
@@ -234,9 +242,9 @@ function CommitFileRow({
         ) : null}
       </button>
       {canBlame ? (
-        <Button type="link" size="small" className="git-graph-detail__blame-btn" onClick={onBlame}>
+        <button type="button" className="git-graph-detail__blame-btn" onClick={onBlame}>
           Blame
-        </Button>
+        </button>
       ) : null}
     </div>
   );

@@ -86,11 +86,11 @@ describe("resolveGitGraphDisplayMetrics", () => {
 
 describe("buildGitGraphEdgePath", () => {
   test("draws straight line when lanes match", () => {
-    expect(buildGitGraphEdgePath(0, 0, 1, 0)).toBe("M 7 20 L 7 60");
+    expect(buildGitGraphEdgePath(0, 0, 1, 0)).toBe("M 7 12 L 7 36");
   });
 
   test("draws smooth bezier when lanes differ", () => {
     const path = buildGitGraphEdgePath(0, 0, 1, 1);
-    expect(path).toBe("M 7 20 C 7 40, 21 40, 21 60");
+    expect(path).toBe("M 7 12 C 7 24, 21 24, 21 36");
   });
 });

@@ -1,5 +1,5 @@
-/** 左栏工作区树：单行高度（与 `--app-sidebar-list-row-min-height` 一致）。 */
-export const WORKSPACE_LIST_ROW_HEIGHT_PX = 28;
+/** 左栏工作区树：单行高度（与文件树 `REPOSITORY_TREE_ROW_HEIGHT_PX` / VS Code 列表行一致）。 */
+export const WORKSPACE_LIST_ROW_HEIGHT_PX = 22;
 
 /** `0` = 不限制高度（与文件树并存时也不封顶）。 */
 export const WORKSPACE_LIST_VISIBLE_ROWS_UNLIMITED = 0;

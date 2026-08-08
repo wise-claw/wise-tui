@@ -121,7 +121,9 @@
   content-visibility: visible !important;
 }
 
-.app-left-sidebar-scroll-region--scrolling .app-repository-expand svg {
+.app-left-sidebar-scroll-region--scrolling .app-repository-expand svg,
+.app-left-sidebar-scroll-region--scrolling .app-repository-expand .codicon,
+.app-left-sidebar-scroll-region--scrolling .app-repository-expand .app-repository-expand-chevron {
   transition: none !important;
 }
 

@@ -2,6 +2,7 @@ import { memo, useCallback, type MouseEvent } from "react";
 import {
   GIT_GRAPH_NODE_RADIUS_PX,
   GIT_GRAPH_NODE_SELECTED_RADIUS_PX,
+  GIT_GRAPH_ROW_HEIGHT_PX,
   type GitGraphRenderEdge,
   type GitGraphRenderNode,
 } from "./gitGraphLayout";
@@ -12,6 +13,7 @@ interface GraphSvgLayerProps {
   edges: GitGraphRenderEdge[];
   nodes: GitGraphRenderNode[];
   selectedSha: string | null;
+  selectedRowIndex?: number | null;
   onSelectCommit: (sha: string) => void;
 }
 
@@ -21,6 +23,7 @@ export const GraphSvgLayer = memo(function GraphSvgLayer({
   edges,
   nodes,
   selectedSha,
+  selectedRowIndex = null,
   onSelectCommit,
 }: GraphSvgLayerProps) {
   const handleNodeClick = useCallback(
@@ -33,6 +36,15 @@ export const GraphSvgLayer = memo(function GraphSvgLayer({
 
   return (
     <svg className="git-graph-svg" width={width} height={height} aria-hidden>
+      {selectedRowIndex != null && selectedRowIndex >= 0 ? (
+        <rect
+          className="git-graph-selection-rect"
+          x={0}
+          y={selectedRowIndex * GIT_GRAPH_ROW_HEIGHT_PX}
+          width={width}
+          height={GIT_GRAPH_ROW_HEIGHT_PX}
+        />
+      ) : null}
       {edges.map((edge) => (
         <path
           key={`${edge.fromSha}-${edge.toSha}-${edge.fromLane}-${edge.toLane}`}

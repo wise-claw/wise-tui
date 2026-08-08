@@ -196,7 +196,7 @@
   line-height: 1;
 }
 
-/* 与仓库文件树一致的扩展名图标（codicon + Seti 配色） */
+/* 与仓库文件树一致的 Material Icon Theme 图标 */
 .app-command-palette-item-file-icon.explorer-tree-file-icon {
   width: 16px;
   height: 16px;
@@ -204,60 +204,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
   line-height: 1;
   margin-top: 1px;
 }
 
-.app-command-palette .explorer-tree-file-icon--react {
-  color: color-mix(in srgb, #149eca 88%, var(--ant-color-text-secondary));
-}
-
-.app-command-palette .explorer-tree-file-icon--react .explorer-tree-react-icon {
-  display: block;
+.app-command-palette .explorer-tree-material-icon {
   width: 16px;
   height: 16px;
-}
-
-.app-command-palette .explorer-tree-file-icon--docker {
-  color: #2496ed;
-}
-
-.app-command-palette .explorer-tree-file-icon--ts {
-  color: #3178c6;
-}
-
-.app-command-palette .explorer-tree-file-icon--js,
-.app-command-palette .explorer-tree-file-icon--json {
-  color: #cb9f17;
-}
-
-.app-command-palette .explorer-tree-file-icon--markdown {
-  color: #519aba;
-}
-
-.app-command-palette .explorer-tree-file-icon--media {
-  color: #7e57c2;
-}
-
-.app-command-palette .explorer-tree-file-icon--zip {
-  color: #d4a574;
-}
-
-.app-command-palette .explorer-tree-file-icon--pdf {
-  color: #e53935;
-}
-
-.app-command-palette .explorer-tree-file-icon--generic,
-.app-command-palette .explorer-tree-file-icon--plain,
-.app-command-palette .explorer-tree-file-icon--lock {
-  color: var(--ant-color-text-tertiary);
-}
-
-.app-command-palette-item--active .explorer-tree-file-icon--generic,
-.app-command-palette-item--active .explorer-tree-file-icon--plain,
-.app-command-palette-item--active .explorer-tree-file-icon--lock {
-  color: var(--ant-color-primary);
 }
 
 .app-command-palette-item-head-right {

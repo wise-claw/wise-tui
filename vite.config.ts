@@ -1,9 +1,59 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import { resolve } from "node:path";
+import { createReadStream, cpSync, existsSync, statSync } from "node:fs";
+import { extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
+const MATERIAL_ICONS_DIR = resolve(
+  root,
+  "node_modules/vscode-material-icons/generated/icons",
+);
+const MATERIAL_ICONS_MOUNT = "/material-icons";
+
+/** Dev 中间件 + build 拷贝：自托管 Material Icon Theme SVG。 */
+function materialIconsStaticPlugin(): Plugin {
+  return {
+    name: "wise-material-icons-static",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const rawUrl = req.url ?? "";
+        if (!rawUrl.startsWith(`${MATERIAL_ICONS_MOUNT}/`)) {
+          next();
+          return;
+        }
+        const pathname = decodeURIComponent(rawUrl.split("?", 1)[0] ?? "");
+        const relative = pathname.slice(MATERIAL_ICONS_MOUNT.length + 1);
+        if (!relative || relative.includes("\0") || relative.includes("..")) {
+          res.statusCode = 404;
+          res.end();
+          return;
+        }
+        const filePath = normalize(join(MATERIAL_ICONS_DIR, relative));
+        if (
+          !filePath.startsWith(MATERIAL_ICONS_DIR + sep) ||
+          extname(filePath).toLowerCase() !== ".svg" ||
+          !existsSync(filePath) ||
+          !statSync(filePath).isFile()
+        ) {
+          res.statusCode = 404;
+          res.end();
+          return;
+        }
+        res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+        res.setHeader("Cache-Control", "public, max-age=604800, immutable");
+        createReadStream(filePath).pipe(res);
+      });
+    },
+    writeBundle(options) {
+      if (!existsSync(MATERIAL_ICONS_DIR)) {
+        return;
+      }
+      const outDir = options.dir ? resolve(options.dir) : resolve(root, "dist");
+      cpSync(MATERIAL_ICONS_DIR, resolve(outDir, "material-icons"), { recursive: true });
+    },
+  };
+}
 
 /** 仅按需打开的功能块，不应出现在 index 入口的 modulepreload 里。 */
 const DEFERRED_MODULE_PRELOAD_CHUNK =
@@ -14,7 +64,7 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   assetsInclude: ["**/*.wasm"],
-  plugins: [react()],
+  plugins: [react(), materialIconsStaticPlugin()],
   resolve: {
     /** 避免多份 React 进入不同 chunk，引发 `useLayoutEffect` of undefined。 */
     dedupe: ["react", "react-dom"],

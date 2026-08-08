@@ -1,11 +1,11 @@
 /** Per-depth indent for repository explorer rows (chevron column alignment). */
 export const REPOSITORY_TREE_DEPTH_INDENT_PX = 16;
 
-/** 与 `.repo-tree-node-arrow { width: 24px }` 一致。 */
-export const REPOSITORY_TREE_CHEVRON_COLUMN_PX = 24;
+/** 与 `.repo-tree-node-arrow { width: 16px }` 一致（VS Code twistie 列）。 */
+export const REPOSITORY_TREE_CHEVRON_COLUMN_PX = 16;
 
-/** 与 `.repo-tree-node { min-height: 28px }` 一致，供虚拟列表窗口计算。 */
-export const REPOSITORY_TREE_ROW_HEIGHT_PX = 28;
+/** 与 `.repo-tree-node { min-height: 22px }` 一致，供虚拟列表窗口计算。 */
+export const REPOSITORY_TREE_ROW_HEIGHT_PX = 22;
 
 export function repositoryTreeDepthIndentPx(depth: number): number {
   return Math.max(0, depth) * REPOSITORY_TREE_DEPTH_INDENT_PX;

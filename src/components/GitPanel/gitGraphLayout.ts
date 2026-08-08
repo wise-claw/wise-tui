@@ -1,9 +1,12 @@
 export const GIT_GRAPH_LANE_WIDTH_PX = 14;
 /** Cap graph column width so commit rows keep readable space beside the lanes. */
 export const GIT_GRAPH_MAX_WIDTH_PX = 112;
-export const GIT_GRAPH_ROW_HEIGHT_PX = 40;
-export const GIT_GRAPH_NODE_RADIUS_PX = 4;
-export const GIT_GRAPH_NODE_SELECTED_RADIUS_PX = 5;
+/** 表头「Graph」与图谱列对齐的最小宽度，避免单 lane 时标题溢出叠字。 */
+export const GIT_GRAPH_COLUMN_MIN_WIDTH_PX = 56;
+/** Git Graph 单行高度（图谱节点垂直居中依赖此值）。 */
+export const GIT_GRAPH_ROW_HEIGHT_PX = 24;
+export const GIT_GRAPH_NODE_RADIUS_PX = 3.5;
+export const GIT_GRAPH_NODE_SELECTED_RADIUS_PX = 4.5;
 
 export interface GitGraphLayoutInput {
   sha: string;
@@ -229,13 +232,13 @@ export function gitGraphRowCenterY(rowIndex: number): number {
   return rowIndex * GIT_GRAPH_ROW_HEIGHT_PX + GIT_GRAPH_ROW_HEIGHT_PX / 2;
 }
 
-/** Git Graph–style lane palette (vivid, distinguishable on light backgrounds). */
+/** Git Graph–style lane palette（主线偏蓝，分支粉/绿等易辨）。 */
 export const GIT_GRAPH_LANE_COLORS = [
-  "#8b5cf6",
-  "#22c55e",
-  "#f97316",
   "#3b82f6",
   "#ec4899",
+  "#22c55e",
+  "#f97316",
+  "#8b5cf6",
   "#14b8a6",
   "#eab308",
   "#6366f1",

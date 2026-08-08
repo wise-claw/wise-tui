@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import type { CSSProperties, KeyboardEvent } from "react";
 import { Empty, Input, Modal, Select, Spin, Tag, Typography, message } from "antd";
 import {
   gitCheckoutRevision,
@@ -25,6 +25,7 @@ import {
 } from "./graphVirtualRange";
 import type { GitPanelOpenFileOptions } from "./types";
 import {
+  GIT_GRAPH_COLUMN_MIN_WIDTH_PX,
   GIT_GRAPH_ROW_HEIGHT_PX,
   resolveGitGraphDisplayWidthPx,
   resolveGitGraphLaneWidthPx,
@@ -184,6 +185,7 @@ export function GraphMode({
   const layout = useMemo(() => computeGitGraphLayout(commits), [commits]);
   const graphLaneWidthPx = resolveGitGraphLaneWidthPx(layout.laneColumns);
   const graphWidth = resolveGitGraphDisplayWidthPx(layout.laneColumns);
+  const graphColumnWidth = Math.max(graphWidth, GIT_GRAPH_COLUMN_MIN_WIDTH_PX);
   const graphHeight = layout.rows.length * GIT_GRAPH_ROW_HEIGHT_PX;
   const virtualizeRows = shouldVirtualizeGraphRows(commits.length);
 
@@ -665,17 +667,35 @@ export function GraphMode({
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         ) : (
-        <div
-          className={`git-graph-table${virtualizeRows ? " git-graph-table--virtualized" : ""}`}
-          style={virtualizeRows ? { height: graphHeight } : undefined}
-        >
-          <div className="git-graph-table__graph" style={{ width: graphWidth }}>
+          <>
+            <div
+              className="git-graph-table-header"
+              style={{ ["--git-graph-col-width" as string]: `${graphColumnWidth}px` }}
+            >
+              <div className="git-graph-table-header__graph">Graph</div>
+              <div className="git-graph-table-header__description">Description</div>
+              <div className="git-graph-table-header__date">Date</div>
+              <div className="git-graph-table-header__author">Author</div>
+              <div className="git-graph-table-header__commit">Commit</div>
+              <div className="git-graph-table-header__menu" aria-hidden />
+            </div>
+            <div
+              className={`git-graph-table${virtualizeRows ? " git-graph-table--virtualized" : ""}`}
+              style={
+                {
+                  ...(virtualizeRows ? { height: graphHeight } : null),
+                  ["--git-graph-col-width" as string]: `${graphColumnWidth}px`,
+                } as CSSProperties
+              }
+            >
+          <div className="git-graph-table__graph" style={{ width: graphColumnWidth }}>
             <GraphSvgLayer
               width={graphWidth}
               height={graphHeight}
               edges={visibleGraph.edges}
               nodes={visibleGraph.nodes}
               selectedSha={selectedSha}
+              selectedRowIndex={selectedSha ? shaToRowIndex.get(selectedSha) ?? null : null}
               onSelectCommit={selectCommit}
             />
           </div>
@@ -692,6 +712,7 @@ export function GraphMode({
                   commit={commit}
                   laneColor={gitGraphLaneColor(layout.rows[rowIndex]?.lane ?? 0)}
                   rowHeight={GIT_GRAPH_ROW_HEIGHT_PX}
+                  rowIndex={rowIndex}
                   virtualized={virtualizeRows}
                   virtualTop={virtualizeRows ? rowIndex * GIT_GRAPH_ROW_HEIGHT_PX : undefined}
                   selected={selectedSha === commit.sha}
@@ -715,6 +736,7 @@ export function GraphMode({
             })}
           </div>
         </div>
+          </>
         )}
 
         {hasMore || loadingMore ? (

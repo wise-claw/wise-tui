@@ -37,12 +37,28 @@ export function writeExplorerExpandedToSession(repositoryPath: string, expanded:
   }
 }
 
-export function clampExplorerMenuPosition(clientX: number, clientY: number) {
-  const menuW = 180;
-  const menuH = 168;
-  const pad = 8;
-  const x = Math.max(pad, Math.min(clientX, window.innerWidth - menuW - pad));
-  const y = Math.max(pad, Math.min(clientY, window.innerHeight - menuH - pad));
+/** 右键菜单预估尺寸：用于首次落点钳制（渲染后再按实测微调）。 */
+export const EXPLORER_CONTEXT_MENU_ESTIMATED_WIDTH_PX = 220;
+export const EXPLORER_CONTEXT_MENU_ESTIMATED_HEIGHT_PX = 380;
+export const EXPLORER_CONTEXT_MENU_VIEWPORT_PAD_PX = 8;
+
+export function clampExplorerMenuPosition(
+  clientX: number,
+  clientY: number,
+  size?: { width?: number; height?: number },
+  viewport?: { width?: number; height?: number },
+) {
+  const menuW = Math.max(1, size?.width ?? EXPLORER_CONTEXT_MENU_ESTIMATED_WIDTH_PX);
+  const menuH = Math.max(1, size?.height ?? EXPLORER_CONTEXT_MENU_ESTIMATED_HEIGHT_PX);
+  const pad = EXPLORER_CONTEXT_MENU_VIEWPORT_PAD_PX;
+  const viewportW =
+    viewport?.width ?? (typeof window !== "undefined" ? window.innerWidth : menuW + pad * 2);
+  const viewportH =
+    viewport?.height ?? (typeof window !== "undefined" ? window.innerHeight : menuH + pad * 2);
+  const maxX = Math.max(pad, viewportW - menuW - pad);
+  const maxY = Math.max(pad, viewportH - menuH - pad);
+  const x = Math.max(pad, Math.min(clientX, maxX));
+  const y = Math.max(pad, Math.min(clientY, maxY));
   return { x, y };
 }
 

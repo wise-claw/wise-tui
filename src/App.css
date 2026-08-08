@@ -2917,6 +2917,11 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   min-width: 22px;
 }
 
+.app-left-sidebar-bottom-tab-content .git-files-explorer-actions .ant-btn .anticon,
+.app-left-sidebar-bottom-tab-content .git-files-explorer-actions .ant-btn .explorer-toolbar-codicon {
+  font-size: 16px;
+}
+
 .app-left-sidebar-bottom-tab-content .git-files-explorer-section-collapse {
   color: var(--ant-color-text-secondary);
 }
@@ -2982,7 +2987,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-left-sidebar-bottom-tab-content .git-files-explorer-actions .ant-btn .anticon {
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .app-left-sidebar-bottom-tab-content .git-files-explorer-search {
@@ -3291,13 +3296,17 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-item:hover {
-  background: var(--wise-row-hover-bg);
+  background: color-mix(in srgb, var(--ant-color-fill-secondary) 72%, transparent);
 }
 
-/* 工作区树行内缩成圆角行：全出血直角行会让「哪一行被选中」只能靠 3% 的灰度差分辨。
-   内缩后选中态是一个独立色块，层级和当前位置一眼可见。 */
+.app-left-sidebar .app-repository-item:hover {
+  background: color-mix(in srgb, var(--ant-color-fill-secondary) 72%, transparent);
+}
+
+/* 工作区列表：VS Code 风格全出血直角行（与文件树 .repo-tree-node 一致）。 */
 .app-left-sidebar .app-repository-list .app-repository-item {
-  margin-inline: 6px;
+  margin-inline: 0;
+  border-radius: 0;
 }
 
 .app-repository-item--project {
@@ -3310,31 +3319,35 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   padding: 4px 12px 4px 20px; /* Indent child repos in float layout */
 }
 
-/* 左栏工作区树：与运行面板列表行高密度一致 */
+/* 左栏工作区树：对齐文件树 22px / 13px */
 .app-left-sidebar .app-repository-item {
   gap: 4px;
-  padding: 3px 10px;
-  font-size: var(--app-sidebar-list-font-size, 12px);
+  padding: 0 8px;
+  font-size: var(--app-sidebar-list-font-size, 13px);
   line-height: var(--app-sidebar-list-line-height, 1.35);
-  min-height: var(--app-sidebar-list-row-min-height, 24px);
+  min-height: var(--app-sidebar-list-row-min-height, 22px);
+  height: var(--app-sidebar-list-row-min-height, 22px);
+  box-sizing: border-box;
+  transition: background-color 0.08s ease;
 }
 
 .app-left-sidebar .app-repository-item--project {
   gap: 2px;
-  min-height: var(--app-sidebar-list-row-min-height, 24px);
-  padding: 2px 10px 2px 6px;
+  min-height: var(--app-sidebar-list-row-min-height, 22px);
+  height: var(--app-sidebar-list-row-min-height, 22px);
+  padding: 0 8px 0 4px;
 }
 
 .app-left-sidebar .app-repository-item--repo {
-  padding: 2px 10px 2px 16px;
+  padding: 0 8px 0 4px;
 }
 
 .app-left-sidebar .app-repository-list--hide-icon-badges .app-repository-item--repo {
-  padding-left: 11px;
+  padding-left: 4px;
 }
 
 .app-left-sidebar .app-repository-list--hide-icon-badges .app-repository-sessions .app-repository-item--repo {
-  padding-left: 13px !important;
+  padding-left: 8px !important;
 }
 
 .app-left-sidebar .app-repository-drag-handle {
@@ -3598,9 +3611,9 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   background: color-mix(in srgb, var(--ant-color-primary) 24%, transparent) !important;
 }
 
-/* 当前仓库：同上，主色 tint 才能和 hover 区分开 */
+/* 当前仓库：对齐文件树选中底（primary-bg），全出血 */
 .app-repository-item--repo.app-repository-item--repo-active {
-  background: var(--wise-row-selected-bg) !important;
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 92%, var(--ant-color-fill-content)) !important;
   border-color: transparent !important;
   box-shadow: none !important;
 }
@@ -3614,20 +3627,20 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-repository-row:has(.app-workspace-session-tree__row--active)
   .app-repository-item--repo.app-repository-item--repo-active
   .app-repository-name {
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .app-repository-item--repo.app-repository-item--repo-active:hover {
-  background: color-mix(in srgb, var(--ant-color-primary) 24%, transparent) !important;
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 100%, var(--ant-color-fill-content)) !important;
 }
 
 .app-repository-item--repo.app-repository-item--repo-active .app-repository-name {
-  font-weight: 600;
+  font-weight: 400;
   color: var(--ant-color-text);
 }
 
 .app-repository-item--repo.app-repository-item--repo-active .app-repository-icon {
-  color: var(--ant-color-primary);
+  color: inherit;
   filter: none !important;
 }
 
@@ -3654,8 +3667,8 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-expand {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3663,12 +3676,12 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   flex-shrink: 0;
   cursor: pointer;
   border-radius: 4px;
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.12s, background 0.12s;
 }
 
 .app-repository-expand:hover {
-  color: var(--ant-color-text);
-  background: var(--ant-color-fill-content);
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-quaternary);
 }
 
 .app-repository-expand svg {
@@ -3677,14 +3690,46 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-item--repo > .app-repository-expand {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
 }
 
 .app-repository-item--repo > .app-repository-expand svg {
   width: 16px;
   height: 16px;
+}
+
+/* VS Code twistie：codicon chevron-right，展开旋转 90° */
+.app-repository-expand .app-repository-expand-chevron,
+.app-repository-expand .codicon {
+  font-size: 13px;
+  line-height: 1;
+  display: block;
+  transition: transform 0.15s ease;
+}
+
+.app-repository-expand--expanded .app-repository-expand-chevron,
+.app-repository-expand--expanded .codicon {
+  transform: rotate(90deg);
+}
+
+.app-repository-item--repo .app-repository-icon-wrap {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.app-repository-item--repo .app-repository-icon.app-repository-icon--folder {
+  width: 16px;
+  height: 16px;
+}
+
+.app-repository-item--repo .app-repository-icon .explorer-tree-folder-icon,
+.app-repository-item--repo .app-repository-icon .explorer-tree-material-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
 .app-repository-icon {
@@ -3695,6 +3740,11 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   justify-content: center;
   color: var(--ant-color-text-secondary);
   flex-shrink: 0;
+}
+
+.app-left-sidebar .app-repository-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .app-repository-icon-wrap {
@@ -4466,8 +4516,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-repository-header-btn,
 .app-left-sidebar-monitor-panel .app-monitor-panel__section-collapse-btn,
 .app-left-sidebar-repo-panel-header__expand-icon,
-.git-files-explorer-section-collapse,
-.git-files-explorer-actions .ant-btn {
+.git-files-explorer-section-collapse {
   width: 20px !important;
   height: 20px !important;
   min-width: 20px !important;
@@ -4482,33 +4531,60 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   transition: background 0.12s, color 0.12s !important;
 }
 
+.git-files-explorer-actions .ant-btn {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  color: var(--ant-color-text-tertiary) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: background-color 0.1s ease, color 0.1s ease !important;
+}
+
 .app-repository-header-btn:hover,
 .app-left-sidebar-monitor-panel .app-monitor-panel__section-collapse-btn:hover,
 .app-left-sidebar-repo-panel-header__expand-icon:hover,
-.git-files-explorer-section-collapse:hover,
-.git-files-explorer-actions .ant-btn:hover {
+.git-files-explorer-section-collapse:hover {
   background: var(--ant-color-fill-quaternary) !important;
+  color: var(--ant-color-text) !important;
+}
+
+.git-files-explorer-actions .ant-btn:hover {
+  background: color-mix(in srgb, var(--ant-color-fill-secondary) 70%, transparent) !important;
   color: var(--ant-color-text) !important;
 }
 
 .app-repository-header-btn svg,
 .app-left-sidebar-monitor-panel .app-monitor-panel__section-collapse-btn svg,
 .app-left-sidebar-repo-panel-header__expand-icon svg,
-.git-files-explorer-section-collapse svg,
-.git-files-explorer-actions .ant-btn svg {
+.git-files-explorer-section-collapse svg {
   width: 14px !important;
   height: 14px !important;
+}
+
+.git-files-explorer-actions .ant-btn .explorer-toolbar-codicon,
+.git-files-explorer-actions .ant-btn .anticon.explorer-toolbar-codicon,
+.git-files-explorer-actions .ant-btn .codicon {
+  font-size: 16px !important;
+  line-height: 1 !important;
+  width: auto !important;
+  height: auto !important;
 }
 
 /* ── Left sidebar list typography（工作区 / 运行面板 / 文件树协调） ── */
 .app-left-sidebar-project-and-files,
 .app-left-sidebar-requirements-panel,
 .app-left-sidebar-monitor-panel {
-  --app-sidebar-list-font-size: 12px;
+  --app-sidebar-list-font-size: 13px;
   --app-sidebar-list-line-height: 1.35;
-  --app-sidebar-list-secondary-size: 11px;
+  --app-sidebar-list-secondary-size: 12px;
   --app-sidebar-list-secondary-line-height: 1.3;
-  --app-sidebar-list-row-min-height: 24px;
+  --app-sidebar-list-row-min-height: 22px;
 }
 
 .app-left-sidebar .app-repository-name {

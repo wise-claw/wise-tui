@@ -3,6 +3,7 @@ import type { GitStatusResponse } from "../../types";
 import {
   GIT_PANEL_LARGE_CHANGE_COUNT,
   GIT_PANEL_VIRTUAL_LIST_THRESHOLD,
+  formatGitGraphDate,
   gitStatusHeaderSnapshotEqual,
   gitStatusSnapshotEqual,
   shouldUseGitVirtualFileList,
@@ -82,5 +83,12 @@ describe("gitStatusHeaderSnapshotEqual", () => {
         upstream: "origin/master",
       }),
     ).toBe(false);
+  });
+});
+
+describe("formatGitGraphDate", () => {
+  it("formats like Git Graph absolute timestamps", () => {
+    const stamp = Math.floor(new Date(2026, 7, 4, 16, 48, 0).getTime() / 1000);
+    expect(formatGitGraphDate(stamp)).toBe("4 Aug 2026 16:48");
   });
 });

@@ -31,7 +31,6 @@ import {
 import { SidebarMoreMenuDropdown } from "./SidebarMoreMenuDropdown";
 import {
   ExecutableTasksIcon,
-  FolderExpandIcon,
   MoreIcon,
   OpenInEditorIcon,
   OpenInTerminalIcon,
@@ -42,6 +41,7 @@ import {
   ScheduledTasksIcon,
   RequirementIcon,
 } from "./SidebarIcons";
+import { ExplorerTreeChevron, ExplorerTreeFolderIcon } from "../GitPanel/explorerTreeChrome";
 import { useIsRepositoryRunCommandRunning } from "../../hooks/useIsRepositoryRunCommandRunning";
 import {
   toggleRepositoryRunCommandRowPinned,
@@ -860,7 +860,7 @@ function FloatingRepositoryRowInner({
       >
         {onToggleExpand ? (
           <span
-            className="app-repository-expand"
+            className={`app-repository-expand${expanded ? " app-repository-expand--expanded" : ""}`}
             onClick={(e) => {
               e.stopPropagation();
               onToggleExpand();
@@ -868,28 +868,33 @@ function FloatingRepositoryRowInner({
             aria-expanded={expanded}
             aria-label={expanded ? "收起会话列表" : "展开会话列表"}
           >
-            <FolderExpandIcon expanded={expanded} />
+            <ExplorerTreeChevron className="app-repository-expand-chevron" />
           </span>
         ) : null}
-        {showRepositoryIconBadgesInWorkspaceList ? (
-          <span className="app-repository-icon-wrap">
-            <span className="app-repository-icon app-repository-icon--folder">
+        <span className="app-repository-icon-wrap">
+          <span className="app-repository-icon app-repository-icon--folder">
+            {showRepositoryIconBadgesInWorkspaceList ? (
               <RepositorySidebarIcon
                 repository={repository}
                 showIconBadgeInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
               />
-            </span>
-            {hasMainOwner ? (
-              <span
-                className="app-repository-main-owner-badge"
-                aria-label="已配置主 Owner"
-                title="已配置主 Owner"
-              >
-                <UserOutlined />
-              </span>
-            ) : null}
+            ) : (
+              <ExplorerTreeFolderIcon
+                name={repositoryFolderBasename(repository)}
+                expanded={expanded}
+              />
+            )}
           </span>
-        ) : null}
+          {hasMainOwner ? (
+            <span
+              className="app-repository-main-owner-badge"
+              aria-label="已配置主 Owner"
+              title="已配置主 Owner"
+            >
+              <UserOutlined />
+            </span>
+          ) : null}
+        </span>
         <span className="app-repository-name-block">
           <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
           {mainSessionRunning ? (

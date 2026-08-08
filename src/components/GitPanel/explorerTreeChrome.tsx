@@ -1,131 +1,44 @@
 import "@vscode/codicons/dist/codicon.css";
+import {
+  getIconForDirectoryPath,
+  getIconForFilePath,
+  getIconUrlByName,
+  isMaterialIconName,
+  type MaterialIcon,
+} from "vscode-material-icons";
 
-// ── Types ──
+/** 与 Vite 插件挂载的静态路径一致（`/material-icons/*.svg`）。 */
+export const MATERIAL_ICONS_BASE_URL = "/material-icons";
 
-export type ExplorerFolderVisualKind =
-  | "src"
-  | "components"
-  | "assets"
-  | "public"
-  | "scripts"
-  | "dist"
-  | "node_modules"
-  | "github"
-  | "lib"
-  | "default";
+// ── Material Icon Theme helpers ──
 
-// ── Helpers ──
-
-export function explorerFolderVisualKind(folderName: string): ExplorerFolderVisualKind {
-  const n = folderName.toLowerCase();
-  const map: Record<string, ExplorerFolderVisualKind> = {
-    src: "src",
-    components: "components",
-    assets: "assets",
-    public: "public",
-    scripts: "scripts",
-    dist: "dist",
-    build: "dist",
-    out: "dist",
-    target: "dist",
-    node_modules: "node_modules",
-    ".github": "github",
-    lib: "lib",
-  };
-  return map[n] ?? "default";
+export function resolveExplorerFileMaterialIcon(fileName: string): MaterialIcon {
+  return getIconForFilePath(fileName.trim() || "file");
 }
 
-function fileExtLower(fileName: string): string {
-  const i = fileName.lastIndexOf(".");
-  if (i <= 0 || i === fileName.length - 1) {
-    return "";
+export function resolveExplorerFolderMaterialIcon(
+  folderName: string,
+  expanded: boolean,
+): MaterialIcon {
+  const closed = getIconForDirectoryPath(folderName.trim() || "folder");
+  if (!expanded) {
+    return closed;
   }
-  return fileName.slice(i + 1).toLowerCase();
+  if (closed === "folder") {
+    return "folder-open";
+  }
+  if (closed.endsWith("-open")) {
+    return closed;
+  }
+  const openName = `${closed}-open`;
+  return isMaterialIconName(openName) ? openName : closed;
 }
 
-type FileIconResolve = { mode: "codicon"; codicon: string; kind: string } | { mode: "react"; kind: "tsx" };
-
-function resolveExplorerFileIcon(fileName: string): FileIconResolve {
-  if (/^(dockerfile|containerfile)$/i.test(fileName)) {
-    return { mode: "codicon", codicon: "codicon-file-code", kind: "docker" };
-  }
-  const ext = fileExtLower(fileName);
-  if (ext === "tsx" || ext === "jsx") {
-    return { mode: "react", kind: "tsx" };
-  }
-  if (ext === "json" || ext === "jsonc") {
-    return { mode: "codicon", codicon: "codicon-json", kind: "json" };
-  }
-  if (ext === "md" || ext === "mdx") {
-    return { mode: "codicon", codicon: "codicon-markdown", kind: "markdown" };
-  }
-  if (["png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "avif", "heic", "svg"].includes(ext)) {
-    return { mode: "codicon", codicon: "codicon-file-media", kind: "media" };
-  }
-  if (["zip", "gz", "tgz", "rar", "7z", "tar", "bz2", "xz"].includes(ext)) {
-    return { mode: "codicon", codicon: "codicon-file-zip", kind: "zip" };
-  }
-  if (ext === "pdf") {
-    return { mode: "codicon", codicon: "codicon-file-pdf", kind: "pdf" };
-  }
-  if (["rs", "toml", "yaml", "yml", "css", "scss", "less", "html", "htm", "vue", "svelte", "go", "py", "rb", "java", "kt", "swift", "c", "h", "cpp", "hpp", "cs", "php", "sql", "sh", "bash", "zsh", "ps1"].includes(ext)) {
-    return { mode: "codicon", codicon: "codicon-file-code", kind: ext };
-  }
-  if (["ts", "mts", "cts"].includes(ext)) {
-    return { mode: "codicon", codicon: "codicon-file-code", kind: "ts" };
-  }
-  if (["js", "mjs", "cjs"].includes(ext)) {
-    return { mode: "codicon", codicon: "codicon-file-code", kind: "js" };
-  }
-  if (ext === "lock" || fileName.endsWith(".lock")) {
-    return { mode: "codicon", codicon: "codicon-file", kind: "lock" };
-  }
-  if (!ext) {
-    return { mode: "codicon", codicon: "codicon-file", kind: "plain" };
-  }
-  return { mode: "codicon", codicon: "codicon-symbol-file", kind: "generic" };
+export function materialIconSrc(iconName: MaterialIcon): string {
+  return getIconUrlByName(iconName, MATERIAL_ICONS_BASE_URL);
 }
 
-// ── Sub-components / SVG Icons ──
-
-function IconReactSourceFile() {
-  return (
-    <svg viewBox="0 0 16 16" width={16} height={16} aria-hidden className="explorer-tree-react-icon">
-      <circle cx="8" cy="8" r="1.35" fill="currentColor" />
-      <ellipse
-        cx="8"
-        cy="8"
-        rx="6.2"
-        ry="2.45"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.05"
-        transform="rotate(-54 8 8)"
-      />
-      <ellipse
-        cx="8"
-        cy="8"
-        rx="6.2"
-        ry="2.45"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.05"
-        transform="rotate(54 8 8)"
-      />
-      <ellipse
-        cx="8"
-        cy="8"
-        rx="6.2"
-        ry="2.45"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.05"
-      />
-    </svg>
-  );
-}
-
-// ── Tree chrome (VS Code codicons + Seti-like tints) ──
+// ── Tree chrome (VS Code chevron + Material Icon Theme) ──
 
 interface ExplorerTreeChevronProps {
   className?: string;
@@ -143,20 +56,17 @@ interface ExplorerTreeFolderIconProps {
 }
 
 export function ExplorerTreeFolderIcon({ name, expanded, className }: ExplorerTreeFolderIconProps) {
-  const kind = explorerFolderVisualKind(name);
-  const codicon = expanded ? "codicon-folder-opened" : "codicon-folder";
+  const icon = resolveExplorerFolderMaterialIcon(name, expanded);
   return (
-    <span
-      className={[
-        "explorer-tree-folder-icon codicon",
-        codicon,
-        `explorer-tree-folder-icon--${kind}`,
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      aria-hidden
-    />
+    <span className={["explorer-tree-folder-icon", className].filter(Boolean).join(" ")} aria-hidden>
+      <img
+        className="explorer-tree-material-icon"
+        src={materialIconSrc(icon)}
+        alt=""
+        draggable={false}
+        decoding="async"
+      />
+    </span>
   );
 }
 
@@ -166,28 +76,78 @@ interface ExplorerTreeFileIconProps {
 }
 
 export function ExplorerTreeFileIcon({ fileName, className }: ExplorerTreeFileIconProps) {
-  const resolved = resolveExplorerFileIcon(fileName);
-  if (resolved.mode === "react") {
-    return (
-      <span
-        className={["explorer-tree-file-icon explorer-tree-file-icon--react", className].filter(Boolean).join(" ")}
-        aria-hidden
-      >
-        <IconReactSourceFile />
-      </span>
-    );
-  }
+  const icon = resolveExplorerFileMaterialIcon(fileName);
+  return (
+    <span className={["explorer-tree-file-icon", className].filter(Boolean).join(" ")} aria-hidden>
+      <img
+        className="explorer-tree-material-icon"
+        src={materialIconSrc(icon)}
+        alt=""
+        draggable={false}
+        decoding="async"
+      />
+    </span>
+  );
+}
+
+// ── Explorer toolbar actions (VS Code codicons) ──
+
+type ExplorerToolbarCodicon =
+  | "codicon-new-file"
+  | "codicon-new-folder"
+  | "codicon-refresh"
+  | "codicon-collapse-all";
+
+interface ExplorerToolbarCodiconProps {
+  name: ExplorerToolbarCodicon;
+  className?: string;
+}
+
+function ExplorerToolbarCodiconIcon({ name, className }: ExplorerToolbarCodiconProps) {
   return (
     <span
-      className={[
-        "explorer-tree-file-icon codicon",
-        resolved.codicon,
-        `explorer-tree-file-icon--${resolved.kind}`,
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      className={["codicon", name, "explorer-toolbar-codicon", className].filter(Boolean).join(" ")}
       aria-hidden
     />
   );
+}
+
+export function ExplorerToolbarNewFileIcon({ className }: { className?: string } = {}) {
+  return <ExplorerToolbarCodiconIcon name="codicon-new-file" className={className} />;
+}
+
+export function ExplorerToolbarNewFolderIcon({ className }: { className?: string } = {}) {
+  return <ExplorerToolbarCodiconIcon name="codicon-new-folder" className={className} />;
+}
+
+export function ExplorerToolbarRefreshIcon({ className }: { className?: string } = {}) {
+  return <ExplorerToolbarCodiconIcon name="codicon-refresh" className={className} />;
+}
+
+export function ExplorerToolbarCollapseAllIcon({ className }: { className?: string } = {}) {
+  return <ExplorerToolbarCodiconIcon name="codicon-collapse-all" className={className} />;
+}
+
+import { isMacLikePlatform } from "./explorerUtils";
+
+/** 右键菜单项：左侧文案 + 右侧快捷键（VS Code 风格） */
+export function explorerContextMenuLabel(label: string, shortcut?: string) {
+  if (!shortcut) {
+    return label;
+  }
+  return (
+    <span className="git-files-ctx-menu__row">
+      <span className="git-files-ctx-menu__label">{label}</span>
+      <span className="git-files-ctx-menu__shortcut">{shortcut}</span>
+    </span>
+  );
+}
+
+/** 当前平台修饰键符号，用于右键菜单快捷键展示。 */
+export function explorerContextMenuModKey(): string {
+  return isMacLikePlatform() ? "⌘" : "Ctrl+";
+}
+
+export function explorerContextMenuShiftModKey(): string {
+  return isMacLikePlatform() ? "⇧⌘" : "Ctrl+Shift+";
 }

@@ -1,13 +1,14 @@
-import { memo, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { HoverHint } from "../shared/HoverHint";
 import { Button, Empty, Input, Menu, Popconfirm, Spin } from "antd";
+import { ExclamationCircleOutlined } from "@ant-design/icons";
 import {
-  ExclamationCircleOutlined,
-  FileAddOutlined,
-  FolderAddOutlined,
-  MinusSquareOutlined,
-  ReloadOutlined,
-} from "@ant-design/icons";
+  ExplorerToolbarCollapseAllIcon,
+  ExplorerToolbarNewFileIcon,
+  ExplorerToolbarNewFolderIcon,
+  ExplorerToolbarRefreshIcon,
+} from "./explorerTreeChrome";
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { ExplorerSearchResultList } from "./ExplorerSearchResultList";
 import { RepositoryExplorerTreeActionsProvider } from "./RepositoryExplorerTreeActionsContext";
@@ -25,6 +26,13 @@ import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { formatRepositoryExplorerLoadError } from "../../utils/repositoryPathAccessibility";
 import type { ExplorerRevealTarget } from "../../utils/explorerRevealTarget";
+import {
+  clampExplorerMenuPosition,
+} from "./explorerUtils";
+
+/** 高于终端 / composer 浮层，避免底部右键菜单被盖住。 */
+const EXPLORER_CONTEXT_MENU_Z_INDEX = 5000;
+const EXPLORER_CONTEXT_SUBMENU_Z_INDEX = 5010;
 
 export interface RepositoryFilesExplorerProps {
   repositoryPath: string;
@@ -127,6 +135,37 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
 
   const pointerHoverRowsRef = useRef<readonly FlatRepositoryTreeRow[] | null>(flatTreeRows);
   pointerHoverRowsRef.current = flatTreeRows;
+  const ctxMenuRef = useRef<HTMLDivElement | null>(null);
+  const ctxMenuAdjustedForRef = useRef<string | null>(null);
+
+  // 菜单挂载后按实测宽高上移/左移，避免贴底/贴右时被视口裁切。
+  useLayoutEffect(() => {
+    const ctx = explorer.explorerCtx;
+    if (!ctx) {
+      ctxMenuAdjustedForRef.current = null;
+      return;
+    }
+    const adjustKey = `${ctx.path}@${ctx.x},${ctx.y}`;
+    if (ctxMenuAdjustedForRef.current === adjustKey) {
+      return;
+    }
+    const el = ctxMenuRef.current;
+    if (!el) {
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) {
+      return;
+    }
+    const next = clampExplorerMenuPosition(ctx.x, ctx.y, {
+      width: rect.width,
+      height: rect.height,
+    });
+    ctxMenuAdjustedForRef.current = `${ctx.path}@${next.x},${next.y}`;
+    if (next.x !== ctx.x || next.y !== ctx.y) {
+      explorer.setExplorerCtx({ ...ctx, x: next.x, y: next.y });
+    }
+  }, [explorer.explorerCtx, explorer.setExplorerCtx]);
   const pointerHoverPath = useRepositoryExplorerPointerHover(
     scrollRegionRef,
     active && !searchActive,
@@ -283,7 +322,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
         <Button
           type="text"
           size="small"
-          icon={<FileAddOutlined />}
+          icon={<ExplorerToolbarNewFileIcon />}
           onClick={explorer.handleToolbarNewFile}
           aria-label="新建文件"
         />
@@ -292,7 +331,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
         <Button
           type="text"
           size="small"
-          icon={<FolderAddOutlined />}
+          icon={<ExplorerToolbarNewFolderIcon />}
           onClick={explorer.handleToolbarNewFolder}
           aria-label="新建文件夹"
         />
@@ -301,7 +340,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
         <Button
           type="text"
           size="small"
-          icon={<ReloadOutlined />}
+          icon={<ExplorerToolbarRefreshIcon />}
           onClick={explorer.handleRefresh}
           aria-label="刷新"
         />
@@ -310,7 +349,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
         <Button
           type="text"
           size="small"
-          icon={<MinusSquareOutlined />}
+          icon={<ExplorerToolbarCollapseAllIcon />}
           onClick={explorer.handleCollapseAll}
           aria-label="全部收起"
         />
@@ -373,27 +412,42 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
           </>
         )}
       </div>
-      {explorer.explorerCtx ? (
-        <>
-          <div
-            className="git-files-ctx-backdrop"
-            role="presentation"
-            aria-hidden
-            onMouseDown={() => explorer.setExplorerCtx(null)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              explorer.setExplorerCtx(null);
-            }}
-          />
-          <Menu
-            className="git-files-ctx-menu"
-            classNames={{ popup: { root: "git-files-ctx-menu-popup" } }}
-            style={{ position: "fixed", left: explorer.explorerCtx.x, top: explorer.explorerCtx.y, zIndex: 1050 }}
-            selectable={false}
-            items={explorer.explorerContextMenuItems}
-          />
-        </>
-      ) : null}
+      {explorer.explorerCtx
+        ? createPortal(
+            <>
+              <div
+                className="git-files-ctx-backdrop"
+                role="presentation"
+                aria-hidden
+                onMouseDown={() => explorer.setExplorerCtx(null)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  explorer.setExplorerCtx(null);
+                }}
+              />
+              <div
+                ref={ctxMenuRef}
+                className="git-files-ctx-menu-anchor"
+                style={{
+                  position: "fixed",
+                  left: explorer.explorerCtx.x,
+                  top: explorer.explorerCtx.y,
+                  zIndex: EXPLORER_CONTEXT_MENU_Z_INDEX,
+                }}
+              >
+                <Menu
+                  className="git-files-ctx-menu"
+                  classNames={{ popup: { root: "git-files-ctx-menu-popup" } }}
+                  styles={{ popup: { root: { zIndex: EXPLORER_CONTEXT_SUBMENU_Z_INDEX } } }}
+                  getPopupContainer={() => document.body}
+                  selectable={false}
+                  items={explorer.explorerContextMenuItems}
+                />
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
       {explorer.deletePop ? (
         <Popconfirm
           open

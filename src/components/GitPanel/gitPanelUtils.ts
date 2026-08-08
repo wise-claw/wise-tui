@@ -185,6 +185,20 @@ export function formatCommitDate(timestamp: number): string {
   });
 }
 
+/** Git Graph 日期列：`4 Aug 2026 16:48`。 */
+export function formatGitGraphDate(timestamp: number): string {
+  const date = new Date(timestamp * 1000);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const day = date.getDate();
+  const month = date.toLocaleString("en-GB", { month: "short" });
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${day} ${month} ${year} ${hours}:${minutes}`;
+}
+
 export function splitPath(path: string) {
   const parts = path.split("/");
   if (parts.length === 1) return { name: path, dir: "" };
