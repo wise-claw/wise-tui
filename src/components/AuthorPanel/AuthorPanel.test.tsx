@@ -285,9 +285,7 @@ function buildProps(
     automationPanelProps: {
       repositories: [repo],
       activeRepositoryId: repo.id,
-      employees: [],
       workflowTemplates: [],
-      workflowGraphsByWorkflowId: {},
     },
     artifactsPanelProps: {
       repositories: [repo],

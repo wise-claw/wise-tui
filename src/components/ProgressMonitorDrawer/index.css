@@ -160,6 +160,30 @@
   gap: 10px;
 }
 
+.app-monitor-drawer__stage-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-monitor-drawer__stage-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 9px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-monitor-drawer__stage-status-name {
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ant-color-text);
+  line-height: 1.4;
+}
+
 .app-monitor-drawer__team-step-card.ant-card .ant-card-body {
   padding: 10px 12px;
 }

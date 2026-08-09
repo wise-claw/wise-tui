@@ -3,43 +3,38 @@ import {
   formatScheduledTaskDispatchTargetLabel,
   parseScheduledTaskDispatchTargetKey,
   scheduledTaskDispatchTargetKey,
+  SCHEDULED_TASK_DISPATCH_NEW_SESSION,
 } from "./scheduledTaskDispatchTarget";
 
 describe("scheduledTaskDispatchTarget", () => {
-  test("encodes main, employee, and team keys", () => {
-    expect(scheduledTaskDispatchTargetKey({})).toBe("main");
-    expect(scheduledTaskDispatchTargetKey({ employeeId: "e1" })).toBe("employee:e1");
+  test("encodes new session and team keys", () => {
+    expect(scheduledTaskDispatchTargetKey({})).toBe(SCHEDULED_TASK_DISPATCH_NEW_SESSION);
     expect(scheduledTaskDispatchTargetKey({ workflowId: "w1" })).toBe("team:w1");
-    expect(
-      scheduledTaskDispatchTargetKey({ employeeId: "e1", workflowId: "w1" }),
-    ).toBe("team:w1");
   });
 
-  test("parses keys back to ids", () => {
+  test("parses keys; legacy main/employee map to session", () => {
+    expect(parseScheduledTaskDispatchTargetKey("session")).toEqual({
+      type: "session",
+      workflowId: null,
+    });
     expect(parseScheduledTaskDispatchTargetKey("main")).toEqual({
-      type: "main",
-      employeeId: null,
+      type: "session",
       workflowId: null,
     });
     expect(parseScheduledTaskDispatchTargetKey("employee:abc")).toEqual({
-      type: "employee",
-      employeeId: "abc",
+      type: "session",
       workflowId: null,
     });
     expect(parseScheduledTaskDispatchTargetKey("team:flow-1")).toEqual({
       type: "team",
-      employeeId: null,
       workflowId: "flow-1",
     });
   });
 
   test("formats display labels", () => {
-    expect(formatScheduledTaskDispatchTargetLabel({})).toBe("主会话");
-    expect(
-      formatScheduledTaskDispatchTargetLabel({ employeeId: "e1", employeeName: "Alice" }),
-    ).toBe("员工：Alice");
+    expect(formatScheduledTaskDispatchTargetLabel({})).toBe("新建会话");
     expect(
       formatScheduledTaskDispatchTargetLabel({ workflowId: "w1", workflowName: "发布流" }),
-    ).toBe("团队：发布流");
+    ).toBe("工作流：发布流");
   });
 });

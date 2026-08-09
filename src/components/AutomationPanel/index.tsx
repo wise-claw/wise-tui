@@ -10,7 +10,7 @@ import { Button, Empty, Select, message } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { openCodeReviewDrawer } from "../../constants/workflowUiEvents";
-import type { EmployeeItem, Repository, RepositoryScheduledClaudeTask, WorkflowGraph, WorkflowTemplateItem } from "../../types";
+import type { Repository, RepositoryScheduledClaudeTask, WorkflowTemplateItem } from "../../types";
 import { readRepositoryScheduledClaudeTasks } from "../../services/repositoryScheduledClaudeTasksStore";
 import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import { RepositoryScheduledTasksModal } from "../RepositoryScheduledTasksModal";
@@ -19,9 +19,7 @@ import "./index.css";
 interface AutomationPanelProps {
   repositories: Repository[];
   activeRepositoryId: number | null;
-  employees: EmployeeItem[];
-  workflowTemplates: WorkflowTemplateItem[];
-  workflowGraphsByWorkflowId: Record<string, WorkflowGraph>;
+  workflowTemplates?: WorkflowTemplateItem[];
   /** 关闭定时自动化页（例如 Cockpit 叠层返回助手）。 */
   onClose?: () => void;
 }
@@ -71,9 +69,7 @@ function getInitials(name: string): string {
 export function AutomationPanel({
   repositories,
   activeRepositoryId,
-  employees,
-  workflowTemplates,
-  workflowGraphsByWorkflowId,
+  workflowTemplates = [],
   onClose,
 }: AutomationPanelProps) {
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<number | null>(activeRepositoryId);
@@ -296,9 +292,7 @@ export function AutomationPanel({
           }}
           repositoryPath={selectedRepository.path}
           repositoryDisplayName={selectedRepository.name}
-          employees={employees}
           workflowTemplates={workflowTemplates}
-          workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
         />
       ) : null}
     </AuthorPanelPageShell>

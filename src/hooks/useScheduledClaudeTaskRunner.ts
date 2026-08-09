@@ -1,33 +1,40 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import { CronExpressionParser } from "cron-parser";
-import type { ClaudeSession, EmployeeItem, PendingExecutionTask, Repository, WorkflowTemplateItem } from "../types";
+import type { PendingExecutionTask, Repository, WorkflowTemplateItem } from "../types";
 import { buildClaudeOutgoingPrompt } from "../services/claudeComposerPrompt";
 import { patchRepositoryScheduledClaudeTask, readRepositoryScheduledClaudeTasks } from "../services/repositoryScheduledClaudeTasksStore";
 import { runShellCommand } from "../services/terminal";
-import { resolveBoundMainSessionId, resolveMainOwnerAgentNameForRepositoryPath } from "../utils/repositoryMainSessionBinding";
-import { isOmcMonitorEmployeeRecord } from "../utils/omcMonitorEmployeeSession";
 import {
   resolveScheduledTaskExecutionKind,
 } from "../utils/scheduledTaskExecution";
+import { buildScheduledTaskScriptCommand } from "../utils/scheduledTaskScript";
 import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 
 const TICK_MS = 45_000;
 const TICK_MS_HIDDEN = 180_000;
 
+type ScheduledTaskDispatch = Pick<
+  PendingExecutionTask,
+  "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName"
+>;
+
 interface Params {
   repositoriesRef: MutableRefObject<Repository[]>;
-  sessionsRef: MutableRefObject<ClaudeSession[]>;
-  bindingsRef: MutableRefObject<Record<string, string>>;
-  employeesRef: MutableRefObject<EmployeeItem[]>;
   workflowTemplatesRef: MutableRefObject<WorkflowTemplateItem[]>;
-  executeRef: MutableRefObject<
+  createSessionRef: MutableRefObject<
     (
-      sessionId: string,
-      prompt: string,
-      dispatchTarget?: Pick<PendingExecutionTask, "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName">,
-    ) => Promise<boolean>
+      repositoryPath: string,
+      repositoryName: string,
+      opts?: { skipActivate?: boolean; connectionKind?: "oneshot" | "streaming" },
+    ) => Promise<string>
   >;
+  executeSessionRef: MutableRefObject<(sessionId: string, prompt: string) => boolean>;
+  /** 支持团队工作流派发（与 Composer 执行路径一致）。 */
+  executeWithDispatchRef: MutableRefObject<
+    (sessionId: string, prompt: string, dispatchTarget?: ScheduledTaskDispatch) => Promise<boolean>
+  >;
+  closeSessionRef: MutableRefObject<(sessionId: string) => void | Promise<void>>;
 }
 
 function truncateMessage(text: string, max = 240): string {
@@ -36,16 +43,30 @@ function truncateMessage(text: string, max = 240): string {
   return `${trimmed.slice(0, max)}…`;
 }
 
+function buildScheduledTaskSessionName(repoName: string, taskTitle: string, suffix?: string): string {
+  const base = repoName.trim() || "仓库";
+  const title = taskTitle.trim() || "未命名任务";
+  const stamp = new Date().toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const mid = suffix?.trim() ? `${title}·${suffix.trim()}` : title;
+  return `${base}/定时任务:${mid}·${stamp}`;
+}
+
 /**
  * 按侧栏仓库列表轮询：到达 cron 下一档时执行仓库定时任务（Claude 提示词 / Shell 脚本）。
+ * Claude：默认新建独立会话；若配置了 workflowId 则按团队工作流派发。
  */
 export function useScheduledClaudeTaskRunner({
   repositoriesRef,
-  sessionsRef,
-  bindingsRef,
-  employeesRef,
   workflowTemplatesRef,
-  executeRef,
+  createSessionRef,
+  executeSessionRef,
+  executeWithDispatchRef,
+  closeSessionRef,
 }: Params): void {
   const inFlightRef = useRef(false);
 
@@ -57,11 +78,11 @@ export function useScheduledClaudeTaskRunner({
       inFlightRef.current = true;
       try {
         const repos = repositoriesRef.current;
-        const sessions = sessionsRef.current;
-        const bindings = bindingsRef.current;
-        const employees = employeesRef.current;
         const workflowTemplates = workflowTemplatesRef.current;
-        const execute = executeRef.current;
+        const createSession = createSessionRef.current;
+        const executeSession = executeSessionRef.current;
+        const executeWithDispatch = executeWithDispatchRef.current;
+        const closeSession = closeSessionRef.current;
         const now = Date.now();
 
         for (const repo of repos) {
@@ -75,14 +96,6 @@ export function useScheduledClaudeTaskRunner({
             continue;
           }
           if (tasks.length === 0) continue;
-
-          const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repos, repoPath);
-          const mainId = resolveBoundMainSessionId(repoPath, bindings, sessions, mainOwnerPick);
-          const mainSess = mainId ? sessions.find((s) => s.id === mainId) : undefined;
-          const mainSessionBusy =
-            mainSess != null &&
-            mainSess.repositoryPath.trim() === repoPath &&
-            (mainSess.status === "running" || mainSess.status === "connecting");
 
           for (const task of tasks) {
             if (!task.enabled) continue;
@@ -104,21 +117,25 @@ export function useScheduledClaudeTaskRunner({
             const executionKind = resolveScheduledTaskExecutionKind(task);
 
             if (executionKind === "script") {
-              const script = task.contentMarkdown.trim();
-              if (!script) {
+              const built = buildScheduledTaskScriptCommand(task);
+              if (!built.ok) {
                 await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
                   lastScheduledSlotAt: nextFireMs,
                   lastExecutedAt: now,
                   lastExecuteOk: false,
-                  lastExecuteMessage: "脚本内容为空，已跳过",
+                  lastExecuteMessage: `${built.reason}，已跳过`,
                 });
                 continue;
               }
               try {
-                const result = await runShellCommand(repoPath, script);
+                const result = await runShellCommand(repoPath, built.command);
                 const ok = result.exit_code === 0;
                 const detail = [
-                  ok ? "脚本执行成功" : `脚本退出码 ${result.exit_code}`,
+                  ok
+                    ? built.mode === "file"
+                      ? `脚本文件执行成功（${built.scriptFilePath}）`
+                      : "脚本执行成功"
+                    : `脚本退出码 ${result.exit_code}`,
                   result.stderr.trim() ? `stderr: ${truncateMessage(result.stderr)}` : "",
                   !ok && result.stdout.trim() ? `stdout: ${truncateMessage(result.stdout)}` : "",
                 ]
@@ -141,9 +158,6 @@ export function useScheduledClaudeTaskRunner({
               }
               continue;
             }
-
-            if (!mainId || !mainSess || mainSess.repositoryPath.trim() !== repoPath) continue;
-            if (mainSessionBusy) continue;
 
             const md = task.contentMarkdown.trim();
             if (!md) {
@@ -186,51 +200,70 @@ export function useScheduledClaudeTaskRunner({
             }
 
             const wfId = task.workflowId?.trim() ?? "";
-            const empId = task.employeeId?.trim() ?? "";
-            let dispatch:
-              | Pick<
-                  PendingExecutionTask,
-                  "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName"
-                >
-              | undefined;
+            let workerSessionId: string | null = null;
+            try {
+              if (wfId) {
+                const wf = workflowTemplates.find((t) => t.id === wfId);
+                if (!wf) {
+                  await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
+                    lastScheduledSlotAt: nextFireMs,
+                    lastExecutedAt: now,
+                    lastExecuteOk: false,
+                    lastExecuteMessage: "所选团队工作流不存在或不可用，已跳过",
+                  });
+                  continue;
+                }
+                workerSessionId = await createSession(
+                  repoPath,
+                  buildScheduledTaskSessionName(repo.name, task.title, "工作流"),
+                  { skipActivate: true, connectionKind: "streaming" },
+                );
+                const ok = await executeWithDispatch(workerSessionId, outbound, {
+                  targetType: "team",
+                  targetWorkflowId: wf.id,
+                  targetWorkflowName: wf.name.trim(),
+                });
+                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
+                  lastScheduledSlotAt: nextFireMs,
+                  lastExecutedAt: now,
+                  lastExecuteOk: ok,
+                  lastExecuteMessage: ok ? undefined : "工作流派发失败或未启动",
+                });
+                continue;
+              }
 
-            if (wfId) {
-              const wf = workflowTemplates.find((t) => t.id === wfId);
-              if (!wf) {
+              workerSessionId = await createSession(
+                repoPath,
+                buildScheduledTaskSessionName(repo.name, task.title),
+                { skipActivate: true, connectionKind: "streaming" },
+              );
+              const ok = executeSession(workerSessionId, outbound);
+              if (ok === false) {
+                void closeSession(workerSessionId);
                 await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
                   lastScheduledSlotAt: nextFireMs,
                   lastExecutedAt: now,
                   lastExecuteOk: false,
-                  lastExecuteMessage: "所选团队工作流不存在或不可用，已跳过",
+                  lastExecuteMessage: "新建会话未启动（可能已达并发上限）",
                 });
                 continue;
               }
-              dispatch = {
-                targetType: "team",
-                targetWorkflowId: wf.id,
-                targetWorkflowName: wf.name.trim(),
-              };
-            } else if (empId) {
-              const emp = employees.find((e) => e.id === empId && !isOmcMonitorEmployeeRecord(e));
-              if (!emp) {
-                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                  lastScheduledSlotAt: nextFireMs,
-                  lastExecutedAt: now,
-                  lastExecuteOk: false,
-                  lastExecuteMessage: "所选员工不存在或不可用，已跳过",
-                });
-                continue;
-              }
-              dispatch = { targetType: "employee", targetEmployeeName: emp.name.trim() };
+              await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
+                lastScheduledSlotAt: nextFireMs,
+                lastExecutedAt: now,
+                lastExecuteOk: true,
+                lastExecuteMessage: undefined,
+              });
+            } catch (e) {
+              if (workerSessionId) void closeSession(workerSessionId);
+              const msg = e instanceof Error ? e.message : String(e);
+              await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
+                lastScheduledSlotAt: nextFireMs,
+                lastExecutedAt: now,
+                lastExecuteOk: false,
+                lastExecuteMessage: `执行失败：${msg}`,
+              });
             }
-
-            const ok = await execute(mainId, outbound, dispatch);
-            await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-              lastScheduledSlotAt: nextFireMs,
-              lastExecutedAt: now,
-              lastExecuteOk: ok,
-              lastExecuteMessage: ok ? undefined : "执行被拒绝或未启动（可能仍受并发限制）",
-            });
           }
         }
       } finally {
@@ -258,5 +291,12 @@ export function useScheduledClaudeTaskRunner({
         document.removeEventListener("visibilitychange", onVisibilityChange);
       }
     };
-  }, [bindingsRef, employeesRef, executeRef, repositoriesRef, sessionsRef, workflowTemplatesRef]);
+  }, [
+    closeSessionRef,
+    createSessionRef,
+    executeSessionRef,
+    executeWithDispatchRef,
+    repositoriesRef,
+    workflowTemplatesRef,
+  ]);
 }

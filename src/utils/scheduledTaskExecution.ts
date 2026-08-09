@@ -10,12 +10,12 @@ export const SCHEDULED_TASK_EXECUTION_KIND_OPTIONS: {
   {
     value: "claude",
     label: "Claude 提示词",
-    description: "向执行会话发送 Markdown 提示，可指定主会话、员工或团队工作流分发",
+    description: "每次触发新建独立会话，或派发到所选团队工作流",
   },
   {
     value: "script",
     label: "脚本执行",
-    description: "在仓库根目录通过 zsh -c 执行 Shell 命令或多行脚本",
+    description: "在仓库根目录执行内联 Shell，或选择仓库内脚本文件",
   },
 ];
 

@@ -16,6 +16,7 @@ function isRepositoryScheduledClaudeTask(x: unknown): x is RepositoryScheduledCl
     typeof o.title === "string" &&
     typeof o.cronExpression === "string" &&
     typeof o.contentMarkdown === "string" &&
+    (o.scriptFilePath === undefined || o.scriptFilePath === null || typeof o.scriptFilePath === "string") &&
     (o.employeeId === null || typeof o.employeeId === "string") &&
     (o.workflowId === undefined || o.workflowId === null || typeof o.workflowId === "string") &&
     (o.executionKind === undefined ||

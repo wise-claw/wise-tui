@@ -40,9 +40,6 @@ describe("AutomationPanel", () => {
       <AutomationPanel
         repositories={[repository]}
         activeRepositoryId={repository.id}
-        employees={[]}
-        workflowTemplates={[]}
-        workflowGraphsByWorkflowId={{}}
       />,
     );
 
@@ -57,9 +54,6 @@ describe("AutomationPanel", () => {
       <AutomationPanel
         repositories={[repository]}
         activeRepositoryId={repository.id}
-        employees={[]}
-        workflowTemplates={[]}
-        workflowGraphsByWorkflowId={{}}
         onClose={() => {}}
       />,
     );

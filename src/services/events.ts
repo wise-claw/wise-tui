@@ -58,6 +58,10 @@ function createEventHub<T>(event: string) {
         teardownIfIdle();
       };
     },
+    /** 等待底层 `listen` 挂好；订阅后、触发事件前应 await，避免错过瞬时 exit。 */
+    ensureReady(onError?: (error: unknown) => void): Promise<void> {
+      return setup(onError);
+    },
     teardown(): void {
       safeUnlisten(unlisten);
       unlisten = null;
@@ -130,6 +134,16 @@ export function subscribeTerminalExit(
   options?: EventHubOptions,
 ): () => void {
   return terminalExitHub.subscribe(onEvent, options);
+}
+
+/** 工作流代码节点等：先 await 再 spawn，避免短命令 exit 早于 listen 挂载。 */
+export async function ensureTerminalOutputAndExitReady(
+  onError?: (error: unknown) => void,
+): Promise<void> {
+  await Promise.all([
+    terminalOutputHub.ensureReady(onError),
+    terminalExitHub.ensureReady(onError),
+  ]);
 }
 
 export function subscribeTerminalCreated(

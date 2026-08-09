@@ -1,4 +1,4 @@
-import { Button, Drawer, Empty, Space, Tag, Typography, message } from "antd";
+import { Button, Card, Drawer, Empty, Space, Tag, Typography, message } from "antd";
 import { progressMonitorDrawerPropsEqual } from "../ProgressMonitorPanel/monitorOverlayPropsEqual";
 import { HoverHint } from "../shared/HoverHint";
 import { List } from "../ui/AppList";
@@ -24,6 +24,11 @@ import { hasRenderableChatMessageBody } from "../../utils/claudeChatMessageDispl
 import { resolveWorkflowProgressGraphHighlight } from "../../utils/resolveWorkflowProgressGraphHighlight";
 import { describeNextExecutorAfterDispatch } from "../../utils/workflowTeamNextExecutor";
 import { findLatestRuntimeSnapshotForGraphNode } from "../../utils/findLatestRuntimeSnapshotForGraphNode";
+import {
+  buildWorkflowStageStatusRows,
+  resolveDispatchStepExecutionStatus,
+  type WorkflowStageExecutionStatus,
+} from "../../utils/resolveWorkflowStageExecutionStatus";
 import {
   WORKFLOW_EVENT_TYPE_ACCEPTANCE_VERDICT_SUBMITTED,
   WORKFLOW_EVENT_TYPE_ACCEPTANCE_VERDICT_UNRESOLVED,
@@ -217,6 +222,11 @@ function formatWorkflowNodeTypeLabel(nodeType?: string): string {
   if (nodeType === "end") return "结束节点";
   if (nodeType === "task") return "执行节点";
   if (nodeType === "approval") return "审批节点";
+  if (nodeType === "code") return "代码节点";
+  if (nodeType === "prompt") return "提示词节点";
+  if (nodeType === "knowledge") return "知识节点";
+  if (nodeType === "branch") return "分支节点";
+  if (nodeType === "loop") return "循环节点";
   return nodeType;
 }
 
@@ -428,6 +438,119 @@ function resolveTeamDrawerTask(teamItem: TeamMonitorItem | undefined, tasks: Wor
   const active = list.find((t) => t.status === "in_progress");
   if (active) return active;
   return [...list].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+}
+
+const TEAM_DISPATCH_CARD_COLLAPSE_CHARS = 3600;
+
+interface TeamDispatchStepCardProps {
+  snapshot: WorkflowRuntimeStepSnapshot;
+  stepNo: number;
+  nextExecutor: string;
+  employees: EmployeeItem[];
+  status: WorkflowStageExecutionStatus;
+  onOpenExecutorSession?: (sessionId: string) => void;
+}
+
+function TeamDispatchStepCard({
+  snapshot,
+  stepNo,
+  nextExecutor,
+  employees,
+  status,
+  onOpenExecutorSession,
+}: TeamDispatchStepCardProps) {
+  const [bodyExpanded, setBodyExpanded] = useState(false);
+  const stageMarker = snapshot.toNodeId?.trim() || snapshot.toNodeName?.trim() || "unknown-node";
+
+  const executorAgentHint = useMemo(() => {
+    const name = snapshot.toNodeName?.trim();
+    if (!name) return null;
+    const emp = employees.find((e) => e.name.trim() === name);
+    const agent = emp?.agentType?.trim();
+    return agent ? `执行前缀：/${agent}` : null;
+  }, [employees, snapshot.toNodeName]);
+
+  const inputText = snapshot.inputPreview?.trim() || "(无)";
+  const outputText = snapshot.outputPreview?.trim() || "(无)";
+  const collapsible = inputText.length + outputText.length > TEAM_DISPATCH_CARD_COLLAPSE_CHARS;
+  const clampBody = collapsible && !bodyExpanded;
+  const executorSessionId = snapshot.executorSessionId?.trim() || "";
+
+  return (
+    <Card
+      size="small"
+      className={`app-monitor-drawer__team-step-card${clampBody ? " app-monitor-drawer__team-step-card--body-clamped" : ""}`}
+    >
+      <div className="app-monitor-drawer__team-step-head">
+        <Typography.Text strong style={{ fontSize: 12 }}>
+          第 {stepNo} 步 · {snapshot.toNodeName?.trim() || snapshot.toNodeId || "未知执行方"}
+        </Typography.Text>
+        <Space size={4} wrap className="app-monitor-drawer__team-step-head-right">
+          <Tag color={status.color} style={{ margin: 0 }}>
+            {status.label}
+          </Tag>
+          <span className="app-monitor-drawer__team-step-time">{formatTime(snapshot.createdAt)}</span>
+        </Space>
+      </div>
+      <div className="app-monitor-drawer__muted" style={{ marginTop: 4 }}>
+        执行状态：{status.label}
+      </div>
+      {snapshot.toNodeType ? (
+        <div className="app-monitor-drawer__muted" style={{ marginTop: 4 }}>
+          节点类型：{formatWorkflowNodeTypeLabel(snapshot.toNodeType)}
+          {executorAgentHint ? <span> · {executorAgentHint}</span> : null}
+        </div>
+      ) : executorAgentHint ? (
+        <div className="app-monitor-drawer__muted" style={{ marginTop: 4 }}>
+          {executorAgentHint}
+        </div>
+      ) : null}
+      <div className="app-monitor-drawer__muted" style={{ marginTop: 2 }}>
+        阶段标识：{stageMarker}
+        {executorSessionId ? (
+          <>
+            {" · "}
+            <Button
+              type="link"
+              size="small"
+              className="app-monitor-drawer__team-step-copy-link"
+              onClick={() => onOpenExecutorSession?.(executorSessionId)}
+            >
+              查看会话消息
+            </Button>
+          </>
+        ) : null}
+      </div>
+      <div className="app-monitor-drawer__team-step-body">
+        <Space align="center" size={8} style={{ margin: "8px 0 2px" }}>
+          <Typography.Paragraph type="secondary" style={{ margin: 0, fontSize: 11 }}>
+            派发输入
+          </Typography.Paragraph>
+          <Button type="link" size="small" className="app-monitor-drawer__team-step-copy-link" onClick={() => void copyText(inputText)}>
+            复制
+          </Button>
+        </Space>
+        <pre className="app-monitor-drawer__team-step-pre">{inputText}</pre>
+        <Space align="center" size={8} style={{ margin: "8px 0 2px" }}>
+          <Typography.Paragraph type="secondary" style={{ margin: 0, fontSize: 11 }}>
+            执行结果
+          </Typography.Paragraph>
+          <Button type="link" size="small" className="app-monitor-drawer__team-step-copy-link" onClick={() => void copyText(outputText)}>
+            复制
+          </Button>
+        </Space>
+        <pre className="app-monitor-drawer__team-step-pre">{outputText}</pre>
+        {collapsible ? (
+          <Button type="link" size="small" className="app-monitor-drawer__team-step-expand" onClick={() => setBodyExpanded((v) => !v)}>
+            {bodyExpanded ? "收起长文" : "展开长文"}
+          </Button>
+        ) : null}
+      </div>
+      <div className="app-monitor-drawer__team-next-executor">
+        下一阶段执行方：<strong>{nextExecutor}</strong>
+      </div>
+    </Card>
+  );
 }
 
 function extractEventEmployeeIds(events: WorkflowTaskEventItem[]): string[] {
@@ -702,6 +825,39 @@ export const ProgressMonitorDrawer = memo(function ProgressMonitorDrawer({
     if (!teamTask) return [];
     return sortWorkflowRuntimeSnapshotsChronological(workflowRuntimeSnapshotsByTaskId[teamTask.id] ?? []);
   }, [teamTask, workflowRuntimeSnapshotsByTaskId]);
+  const teamDispatchCards = useMemo(() => {
+    if (!teamTask) return [];
+    const sorted = teamSnapshotsSorted;
+    const pending = taskPendingEmployeesByTaskId[teamTask.id] ?? [];
+    const dispatchRows = sorted
+      .map((snapshot, index) => ({ snapshot, index }))
+      .filter((row) => row.snapshot.phase === "dispatch");
+    const latestDispatchIndex =
+      dispatchRows.length > 0 ? dispatchRows[dispatchRows.length - 1]!.index : -1;
+    return dispatchRows.map((row, stepIdx) => ({
+      ...row,
+      stepNo: stepIdx + 1,
+      nextExecutor: describeNextExecutorAfterDispatch(sorted, row.index, pending, teamTask.status),
+      status: resolveDispatchStepExecutionStatus({
+        snapshot: row.snapshot,
+        snapshotIndex: row.index,
+        snapshotsSorted: sorted,
+        taskStatus: teamTask.status,
+        sessionById,
+        isLatestDispatch: row.index === latestDispatchIndex,
+      }),
+    }));
+  }, [teamTask, teamSnapshotsSorted, taskPendingEmployeesByTaskId, sessionById]);
+  const teamStageStatusRows = useMemo(
+    () =>
+      buildWorkflowStageStatusRows({
+        graph: teamItem ? workflowGraphsByWorkflowId[teamItem.workflowId] ?? null : null,
+        snapshotsSorted: teamSnapshotsSorted,
+        taskStatus: teamTask?.status,
+        sessionById,
+      }),
+    [teamItem, workflowGraphsByWorkflowId, teamSnapshotsSorted, teamTask?.status, sessionById],
+  );
   const teamLatestAcceptanceEvent = useMemo(() => {
     if (!teamTask) return null;
     const events = workflowTaskEventsByTaskId[teamTask.id] ?? [];
@@ -787,6 +943,39 @@ export const ProgressMonitorDrawer = memo(function ProgressMonitorDrawer({
   }, [selectedTask, selectedTaskWorkflowGraph, selectedTaskSnapshotsSorted]);
   const teamTaskPending = teamTask ? taskPendingEmployeesByTaskId[teamTask.id] ?? [] : [];
   const selectedTaskPending = selectedTask ? taskPendingEmployeesByTaskId[selectedTask.id] ?? [] : [];
+  const selectedTaskDispatchCards = useMemo(() => {
+    if (!selectedTask) return [];
+    const sorted = selectedTaskSnapshotsSorted;
+    const pending = selectedTaskPending;
+    const dispatchRows = sorted
+      .map((snapshot, index) => ({ snapshot, index }))
+      .filter((row) => row.snapshot.phase === "dispatch");
+    const latestDispatchIndex =
+      dispatchRows.length > 0 ? dispatchRows[dispatchRows.length - 1]!.index : -1;
+    return dispatchRows.map((row, stepIdx) => ({
+      ...row,
+      stepNo: stepIdx + 1,
+      nextExecutor: describeNextExecutorAfterDispatch(sorted, row.index, pending, selectedTask.status),
+      status: resolveDispatchStepExecutionStatus({
+        snapshot: row.snapshot,
+        snapshotIndex: row.index,
+        snapshotsSorted: sorted,
+        taskStatus: selectedTask.status,
+        sessionById,
+        isLatestDispatch: row.index === latestDispatchIndex,
+      }),
+    }));
+  }, [selectedTask, selectedTaskSnapshotsSorted, selectedTaskPending, sessionById]);
+  const selectedTaskStageStatusRows = useMemo(
+    () =>
+      buildWorkflowStageStatusRows({
+        graph: selectedTaskWorkflowGraph,
+        snapshotsSorted: selectedTaskSnapshotsSorted,
+        taskStatus: selectedTask?.status,
+        sessionById,
+      }),
+    [selectedTaskWorkflowGraph, selectedTaskSnapshotsSorted, selectedTask?.status, sessionById],
+  );
 
   const renderTeamGraphHover = useCallback(
     (nodeId: string) =>
@@ -877,7 +1066,13 @@ export const ProgressMonitorDrawer = memo(function ProgressMonitorDrawer({
 
   return (
     <>
-    <Drawer title={title} open={open} onClose={onClose} size={480} destroyOnHidden>
+    <Drawer
+      title={title}
+      open={open}
+      onClose={onClose}
+      size={Math.min(960, typeof window !== "undefined" ? window.innerWidth - 40 : 960)}
+      destroyOnHidden
+    >
       {target?.type === "employee" && employeeItem ? (
         <div className="app-monitor-drawer">
           <div className="app-monitor-drawer__section">
@@ -1024,6 +1219,59 @@ export const ProgressMonitorDrawer = memo(function ProgressMonitorDrawer({
               />
             </div>
           ) : null}
+
+          <div className="app-monitor-drawer__section">
+            <Typography.Text type="secondary">阶段执行状态</Typography.Text>
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 6, fontSize: 11 }}>
+              按工作流节点汇总：未开始 / 执行中 / 已返回 / 已完成 / 已驳回等。
+            </Typography.Paragraph>
+            {teamStageStatusRows.length > 0 ? (
+              <div className="app-monitor-drawer__stage-status-list">
+                {teamStageStatusRows.map((row) => (
+                  <div key={row.nodeId} className="app-monitor-drawer__stage-status-row">
+                    <div className="app-monitor-drawer__stage-status-name">
+                      {row.stepNo ? `第 ${row.stepNo} 步 · ` : null}
+                      {row.nodeName}
+                      {row.nodeType ? (
+                        <span className="app-monitor-drawer__muted"> · {formatWorkflowNodeTypeLabel(row.nodeType)}</span>
+                      ) : null}
+                    </div>
+                    <Tag color={row.status.color} style={{ margin: 0 }}>
+                      {row.status.label}
+                    </Tag>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无阶段状态" />
+            )}
+          </div>
+
+          <div className="app-monitor-drawer__section">
+            <Typography.Text type="secondary">阶段执行结果</Typography.Text>
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 6, fontSize: 11 }}>
+              按派发步骤列出各阶段输入与返回结果；已绑定会话时可打开消息抽屉。超长内容可展开。
+            </Typography.Paragraph>
+            {teamTask && teamDispatchCards.length > 0 ? (
+              <div className="app-monitor-drawer__team-step-list">
+                {teamDispatchCards.map((row) => (
+                  <TeamDispatchStepCard
+                    key={row.snapshot.id}
+                    snapshot={row.snapshot}
+                    stepNo={row.stepNo}
+                    nextExecutor={row.nextExecutor}
+                    employees={employees}
+                    status={row.status}
+                    onOpenExecutorSession={(sessionId) => setHistoryPeekSessionId(sessionId)}
+                  />
+                ))}
+              </div>
+            ) : teamTask ? (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无派发与回传记录" />
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无关联任务" />
+            )}
+          </div>
 
           <div className="app-monitor-drawer__section app-monitor-drawer__section--acceptance-fixed">
             <Typography.Text type="secondary">验收判定记录</Typography.Text>
@@ -1186,20 +1434,45 @@ export const ProgressMonitorDrawer = memo(function ProgressMonitorDrawer({
           </div>
 
           <div className="app-monitor-drawer__section">
-            <Typography.Text type="secondary">关键执行记录</Typography.Text>
-            {selectedTaskSnapshots.length > 0 ? (
-              <List
-                size="small"
-                dataSource={selectedTaskSnapshots.slice(-10).reverse()}
-                renderItem={(item) => (
-                  <List.Item>
-                    <div className="app-monitor-drawer__event">
-                      <div>{item.phase === "dispatch" ? "派发" : "决策"} · {formatTime(item.createdAt)}</div>
-                      <div className="app-monitor-drawer__muted">{item.outputPreview || item.inputPreview || "(空)"}</div>
+            <Typography.Text type="secondary">阶段执行状态</Typography.Text>
+            {selectedTaskStageStatusRows.length > 0 ? (
+              <div className="app-monitor-drawer__stage-status-list">
+                {selectedTaskStageStatusRows.map((row) => (
+                  <div key={row.nodeId} className="app-monitor-drawer__stage-status-row">
+                    <div className="app-monitor-drawer__stage-status-name">
+                      {row.stepNo ? `第 ${row.stepNo} 步 · ` : null}
+                      {row.nodeName}
+                      {row.nodeType ? (
+                        <span className="app-monitor-drawer__muted"> · {formatWorkflowNodeTypeLabel(row.nodeType)}</span>
+                      ) : null}
                     </div>
-                  </List.Item>
-                )}
-              />
+                    <Tag color={row.status.color} style={{ margin: 0 }}>
+                      {row.status.label}
+                    </Tag>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无阶段状态" />
+            )}
+          </div>
+
+          <div className="app-monitor-drawer__section">
+            <Typography.Text type="secondary">阶段执行结果</Typography.Text>
+            {selectedTaskDispatchCards.length > 0 ? (
+              <div className="app-monitor-drawer__team-step-list">
+                {selectedTaskDispatchCards.map((row) => (
+                  <TeamDispatchStepCard
+                    key={row.snapshot.id}
+                    snapshot={row.snapshot}
+                    stepNo={row.stepNo}
+                    nextExecutor={row.nextExecutor}
+                    employees={employees}
+                    status={row.status}
+                    onOpenExecutorSession={(sessionId) => setHistoryPeekSessionId(sessionId)}
+                  />
+                ))}
+              </div>
             ) : (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无执行记录" />
             )}

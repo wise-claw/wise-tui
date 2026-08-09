@@ -53,7 +53,7 @@ import { planFileViewerPaneIndex } from "../utils/fileViewerPanePlacement";
 import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBinding";
 import type { PaneAuxLayout } from "./ClaudeSessions/paneAuxLayout";
 import { waitLayoutFrames } from "../services/mainWindowLayout";
-import type { EmployeeItem, WorkflowGraph, WorkflowTemplateItem } from "../types";
+import type { WorkflowTemplateItem } from "../types";
 import { resolveCockpitHubPane, type ViewMode } from "../types/viewMode";
 import { AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { dispatchRepositoryFileEditorClosed, type OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
@@ -741,9 +741,7 @@ export interface AppWorkspaceLayoutProps {
   cockpitSurfaceOpenRequestKey: number;
   scheduledTasksOverlay?: ScheduledTasksOverlayTarget | null;
   onCloseScheduledTasksOverlay?: () => void;
-  scheduledTasksOverlayEmployees?: EmployeeItem[];
   scheduledTasksOverlayWorkflowTemplates?: WorkflowTemplateItem[];
-  scheduledTasksOverlayWorkflowGraphsByWorkflowId?: Record<string, WorkflowGraph>;
   onCockpitActiveAssistantIdChange?: (assistantId: string | null) => void;
   onClearCockpitInitialAssistant?: () => void;
   commandPaletteProps: ComponentProps<typeof CommandPalette>;
@@ -794,9 +792,7 @@ export function AppWorkspaceLayout({
   cockpitSurfaceOpenRequestKey,
   scheduledTasksOverlay = null,
   onCloseScheduledTasksOverlay,
-  scheduledTasksOverlayEmployees = [],
   scheduledTasksOverlayWorkflowTemplates = [],
-  scheduledTasksOverlayWorkflowGraphsByWorkflowId = {},
   onCockpitActiveAssistantIdChange,
   onClearCockpitInitialAssistant,
   commandPaletteProps,
@@ -1874,9 +1870,7 @@ export function AppWorkspaceLayout({
                               onClose={onCloseScheduledTasksOverlay}
                               repositoryPath={scheduledTasksOverlay.path}
                               repositoryDisplayName={scheduledTasksOverlay.name}
-                              employees={scheduledTasksOverlayEmployees}
                               workflowTemplates={scheduledTasksOverlayWorkflowTemplates}
-                              workflowGraphsByWorkflowId={scheduledTasksOverlayWorkflowGraphsByWorkflowId}
                             />
                           </Suspense>
                         </ErrorBoundary>

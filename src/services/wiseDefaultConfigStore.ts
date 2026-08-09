@@ -236,7 +236,7 @@ export interface WiseDefaultConfigV1 {
   showTopbarOpenDirectory: boolean;
   /** 左栏 AI 工作台快捷入口；默认 MCP、技能、自动化。 */
   leftSidebarHubQuickEntries: LeftSidebarHubQuickEntryId[];
-  /** 运行面板（终端 / 工作流运行态）是否显示；默认显示。合并进仓库子树后亦控制运行项显隐。 */
+  /** 运行面板（终端 / 工作流运行态）是否显示；默认显示。控制左栏独立运行面板显隐。 */
   showLeftSidebarMonitorPanel: boolean;
   /** 左栏工作区与仓库树是否显示；默认显示。 */
   showLeftSidebarWorkspaceList: boolean;

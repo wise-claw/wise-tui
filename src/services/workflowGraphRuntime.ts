@@ -9,6 +9,7 @@ import type { WorkflowLoopFrame } from "../types/workflowLoop";
 import { normalizeWorkflowStageOutcomeCriteria } from "../utils/workflowStageOutcomeCriteria";
 import { applyWorkflowVariableSubstitution, normalizeWorkflowVariables, workflowVariablesToRecord } from "../utils/workflowVariables";
 import { formatPassthroughBlockForNode, isPassthroughGraphNodeType } from "./workflowPassthroughBlocks";
+import { codeConfigFromNodeData, substituteCodeSource } from "./workflowCodeExecution";
 import type { AcceptanceDecision } from "./workflow/acceptanceVerdict";
 import { inferAcceptanceDecisionFromOutput, WORKFLOW_ACCEPTANCE_VERDICT_KEY } from "./workflow/acceptanceVerdict";
 import {
@@ -307,6 +308,13 @@ export function resolveGraphRollbackNode(
 }
 
 export function assertDispatchableNode(node: WorkflowGraphNode): void {
+  if (node.type === "code") {
+    const config = codeConfigFromNodeData(node.data);
+    if (!config.source.trim()) {
+      throw new Error(`WF_CODE_SOURCE_EMPTY:${node.id}`);
+    }
+    return;
+  }
   if (node.type !== "task" && node.type !== "approval") {
     throw new Error(`WF_DISPATCH_UNSUPPORTED_NODE:${node.id}`);
   }
@@ -497,6 +505,23 @@ function resolveDispatchTarget(params: {
       cursor = nodeById(graph, out[0].target);
       continue;
     }
+    // 非 Shell 代码节点仍作为说明注入下一员工；Shell 代码节点停下真实执行。
+    if (cursor.type === "code") {
+      const config = codeConfigFromNodeData(cursor.data);
+      if (config.language !== "shell") {
+        const block = formatPassthroughBlockForNode(cursor, graph, taskContent, activeLoopStack);
+        if (block.trim()) {
+          prefixBlocks.push(applyGraphVariables(block, graph, activeLoopStack));
+        }
+        const out = outgoingEdges(graph, cursor.id);
+        if (out.length === 0) {
+          throw new Error(`WF_NO_OUTGOING_EDGE:${cursor.id}`);
+        }
+        cursor = nodeById(graph, out[0].target);
+        continue;
+      }
+      return { dispatchNode: cursor, prefixBlocks, traceNodeIds, loopStack: activeLoopStack };
+    }
     if (cursor.type === "branch") {
       const ctx = buildBranchEvaluationContext(graph, {
         acceptanceDecision: branchDecision,
@@ -587,9 +612,22 @@ export function advanceWorkflowGraph(params: {
 
   assertDispatchableNode(dispatchNode);
 
-  const composed = composeDispatchInput(dispatchNode, baseInput, graph, mergedLoopStack);
-  const mergedInput =
-    resolved.prefixBlocks.length > 0 ? `${resolved.prefixBlocks.join("\n\n")}\n\n${composed}` : composed;
+  let mergedInput: string;
+  if (dispatchNode.type === "code") {
+    const config = codeConfigFromNodeData(dispatchNode.data);
+    const ctx = buildBranchEvaluationContext(graph, {
+      lastOutput: lastOutput ?? state.lastOutput,
+      taskContent: baseInput,
+      loopStack: mergedLoopStack,
+    });
+    const source = substituteCodeSource(config.source, config, ctx).trim();
+    // Shell 执行只用替换后的命令/脚本；passthrough 前缀保留在快照侧由调用方展示。
+    mergedInput = source;
+  } else {
+    const composed = composeDispatchInput(dispatchNode, baseInput, graph, mergedLoopStack);
+    mergedInput =
+      resolved.prefixBlocks.length > 0 ? `${resolved.prefixBlocks.join("\n\n")}\n\n${composed}` : composed;
+  }
 
   const dispatch: WorkflowNodeDispatch = {
     nodeId: dispatchNode.id,

@@ -17,7 +17,8 @@ export function useBackgroundScriptRuntimeSync(): void {
   useEffect(() => {
     const unlisten = subscribeTerminalExit((event) => {
       const terminalId = event.terminalId?.trim();
-      if (!terminalId || !terminalId.startsWith("assistant-script:")) return;
+      if (!terminalId) return;
+      if (!terminalId.startsWith("assistant-script:") && !terminalId.startsWith("workflow-code:")) return;
       markExecutionEnvironmentDispatchItemExited({
         workerSessionId: terminalId,
         exitCode: event.exitCode,

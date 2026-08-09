@@ -1736,7 +1736,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
               >
                 {item.workflowName}
               </span>
-              {statusText(item.status)}
+              {item.status === "in_progress" ? statusText(item.status) : null}
             </span>
             <span
               className="app-monitor-panel__item-actions"
@@ -1813,15 +1813,18 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
                   </button>
                 )}
               />
-              {taskResultTag(item.latestTaskStatus)}
             </span>
           </div>
-          <div className="app-monitor-panel__item-meta-grid">
-            <span className="app-monitor-panel__item-sub">{item.progressText}</span>
-            {item.omcProgressText ? (
-              <span className="app-monitor-panel__item-sub">{item.omcProgressText}</span>
-            ) : null}
-          </div>
+          {item.status === "in_progress" || item.omcProgressText ? (
+            <div className="app-monitor-panel__item-meta-grid">
+              {item.status === "in_progress" ? (
+                <span className="app-monitor-panel__item-sub">{item.progressText}</span>
+              ) : null}
+              {item.omcProgressText ? (
+                <span className="app-monitor-panel__item-sub">{item.omcProgressText}</span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       );
     },
@@ -1988,11 +1991,6 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
             }}
             renderRow={renderCompactVirtualRow}
           />
-          {shouldShowSessionConversationTasks && executionEnvironmentDispatchTaskItems.length === 0 ? (
-            <div className="app-monitor-panel__session-tasks-empty-hint">
-              近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无执行环境派发记录
-            </div>
-          ) : null}
         </div>
       ) : null}
 
@@ -2003,11 +2001,6 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
             {executionEnvironmentDispatchTaskItems.map((item) => renderDispatchTaskRow(item))}
             {teamItems.map((item) => renderWorkflowListItem(item))}
           </div>
-          {shouldShowSessionConversationTasks && executionEnvironmentDispatchTaskItems.length === 0 ? (
-            <div className="app-monitor-panel__session-tasks-empty-hint">
-              近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无执行环境派发记录
-            </div>
-          ) : null}
         </div>
       ) : null}
 

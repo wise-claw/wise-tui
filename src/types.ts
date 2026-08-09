@@ -716,13 +716,22 @@ export interface RepositoryScheduledClaudeTask {
    * @default "claude"
    */
   executionKind?: RepositoryScheduledTaskExecutionKind;
-  /** Milkdown / 脚本正文：`claude` 为 Markdown 提示；`script` 为 zsh -c 执行的命令或脚本 */
+  /** Milkdown / 脚本正文：`claude` 为 Markdown 提示；`script` 内联模式下为 zsh -c 执行的命令或脚本 */
   contentMarkdown: string;
+  /**
+   * `script` 模式下可选：仓库相对路径的脚本文件。
+   * 非空时优先于 `contentMarkdown`，在仓库根目录用 zsh 执行该文件。
+   */
+  scriptFilePath?: string | null;
   /** @deprecated 旧 CC Workflow Studio 工作流 id，仅兼容历史数据 */
   ccWorkflowId?: string | null;
-  /** 为 null 或空字符串时在仓库绑定主会话执行；否则按员工名分发到员工子标签。与 `workflowId` 互斥。 */
+  /**
+   * @deprecated 员工执行目标已下线；读写时固定为 null，仅兼容历史数据。
+   */
   employeeId: string | null;
-  /** 非空时按团队工作流分发；与 `employeeId` 互斥。 */
+  /**
+   * Claude 提示词模式：非空时按团队工作流派发；为空则每次新建独立会话执行。
+   */
   workflowId?: string | null;
   enabled: boolean;
   createdAt: number;

@@ -901,15 +901,15 @@ export function DefaultConfigPanel() {
         </>
       ),
     },
-    // 运行项：显隐控制仓库子树中的终端/派发/工作流；栏位/行数保留兼容独立面板。
+    // 运行面板：左栏独立区块（终端 / 派发 / 工作流）。
     {
       key: "monitor",
-      title: "运行项",
+      title: "运行面板",
       content: (
         <DefaultConfigRow
           title="终端 / 派发 / 工作流"
           hint="显隐 · 栏位 · 行数"
-          detail="默认嵌在左栏仓库工作区展开子树中；关闭工作区树时仍可单独显示运行面板"
+          detail="左栏独立运行面板；关闭后不再显示"
           control={
             <div className="app-default-config-row__control--monitor">
               <div className="app-default-config-monitor-panel__field">

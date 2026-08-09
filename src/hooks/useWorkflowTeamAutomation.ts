@@ -72,6 +72,9 @@ import {
   resolveOrCreateTerminalWorkerTab,
   type TerminalDispatchDeps,
 } from "../services/terminalDispatch";
+import { codeConfigFromNodeData } from "../services/workflowCodeExecution";
+import { runWorkflowCodeNodeInTerminalShell } from "../services/workflowCodeTerminalRunner";
+import { markExecutionEnvironmentDispatchItemExited } from "../stores/executionEnvironmentDispatchStore";
 
 type CreateSession = (
   repositoryPath: string,
@@ -329,6 +332,7 @@ export function useWorkflowTeamAutomation({
     async (input: {
       task: WorkflowTaskItem;
       dispatch: {
+        nodeId?: string;
         employeeId?: string;
         employeeName: string;
         nodeType: WorkflowGraphNodeType;
@@ -340,6 +344,198 @@ export function useWorkflowTeamAutomation({
       attachExecutorToSnapshotId?: string;
     }): Promise<boolean> => {
       const { task, dispatch } = input;
+
+      if (dispatch.nodeType === "code") {
+        const ownerSession =
+          sessionsLiveRef.current.find((item) => item.id === task.creator) ??
+          sessionsRef.current.find((item) => item.id === task.creator);
+        if (!ownerSession) {
+          return false;
+        }
+        const nodeId = dispatch.nodeId?.trim() ?? "";
+        let config = codeConfigFromNodeData({
+          label: dispatch.employeeName,
+          codeMode: dispatch.input.includes("\n") ? "script" : "command",
+          codeLanguage: "shell",
+          codeSource: dispatch.input,
+          codeScript: dispatch.input,
+        });
+        try {
+          const graphItem = await getWorkflowGraph({ workflowId: task.workflowId });
+          const node = nodeId
+            ? graphItem?.graph?.nodes.find((item) => item.id === nodeId)
+            : graphItem?.graph?.nodes.find(
+                (item) => item.type === "code" && (item.data.label?.trim() || item.id) === dispatch.employeeName.trim(),
+              );
+          if (node) {
+            config = codeConfigFromNodeData(node.data);
+          }
+        } catch {
+          /* keep fallback config */
+        }
+
+        const title = `工作流·${dispatch.employeeName.trim() || "代码执行"}`;
+        appendSystemMessage(
+          ownerSession.id,
+          ["代码执行（终端 Shell）", `- 节点：${title}`, `- 命令/脚本：`, dispatch.input.trim() || "(空)"].join("\n"),
+        );
+
+        const run = await runWorkflowCodeNodeInTerminalShell({
+          repositoryPath: ownerSession.repositoryPath,
+          config,
+          substitutedSource: dispatch.input,
+          title,
+          anchorSessionId: ownerSession.id,
+        });
+
+        const attachId = input.attachExecutorToSnapshotId?.trim();
+        if (attachId && run.terminalId) {
+          await persistRuntimeSnapshotExecutor({
+            taskId: task.id,
+            snapshotId: attachId,
+            executorSessionId: run.terminalId,
+          });
+        }
+
+        const outputText = run.output.trim() || (run.ok ? "(空输出)" : "代码执行失败");
+        setWorkflowRuntimeSnapshotsByTaskId((prev) => {
+          const updated = updateSnapshotOutput([...(prev[task.id] ?? [])], outputText);
+          return { ...prev, [task.id]: updated.snapshots };
+        });
+        if (run.terminalId) {
+          markExecutionEnvironmentDispatchItemExited({
+            workerSessionId: run.terminalId,
+            exitCode: run.exitCode,
+          });
+        }
+        appendSystemMessage(
+          ownerSession.id,
+          [
+            run.ok ? "代码执行完成" : "代码执行失败",
+            `- exit_code：${run.exitCode}`,
+            run.usedBackgroundTerminal ? "- 通道：运行面板终端 Shell" : "- 通道：同步 shell（终端不可用回退）",
+            `- 输出：`,
+            outputText,
+          ].join("\n"),
+        );
+
+        // 失败也推进？保持严格：失败仍推进并把输出交给后续节点/结束判断。
+        try {
+          const graphItem = await getWorkflowGraph({ workflowId: task.workflowId });
+          const runtimeState = workflowRuntimeStateByTaskIdRef.current[task.id];
+          if (!graphItem?.graph?.nodes?.length || !runtimeState) {
+            return run.ok;
+          }
+          const nextStep = advanceWorkflowGraph({
+            graph: graphItem.graph,
+            state: runtimeState,
+            startContent: task.content,
+            lastOutput: outputText,
+          });
+          setWorkflowRuntimeStateByTaskId((prev) => ({ ...prev, [task.id]: nextStep.state }));
+
+          const decisionSnapshot: WorkflowRuntimeStepSnapshot = {
+            id: `${task.id}-decision-${Date.now()}`,
+            taskId: task.id,
+            phase: "decision",
+            fromNodeId: runtimeState.currentNodeId,
+            toNodeId: nextStep.dispatch?.nodeId ?? nextStep.state.currentNodeId,
+            toNodeName: nextStep.dispatch?.employeeName,
+            toNodeType: nextStep.dispatch?.nodeType,
+            inputPreview: nextStep.dispatch
+              ? snapshotWorkflowDispatchInput(nextStep.dispatch.input)
+              : "(流程已结束)",
+            outputPreview: snapshotWorkflowAssistantOutput(outputText),
+            createdAt: Date.now(),
+          };
+          let nextDispatchSnapshot: WorkflowRuntimeStepSnapshot | undefined;
+          setWorkflowRuntimeSnapshotsByTaskId((prev) => {
+            const list = [...(prev[task.id] ?? []), decisionSnapshot];
+            if (nextStep.dispatch && !nextStep.completed) {
+              nextDispatchSnapshot = {
+                id: `${task.id}-dispatch-${Date.now()}`,
+                taskId: task.id,
+                phase: "dispatch",
+                fromNodeId: nextStep.state.lastNodeId,
+                toNodeId: nextStep.dispatch.nodeId,
+                toNodeName: nextStep.dispatch.employeeName,
+                toNodeType: nextStep.dispatch.nodeType,
+                inputPreview: snapshotWorkflowDispatchInput(nextStep.dispatch.input),
+                outputPreview: "(待执行)",
+                createdAt: Date.now(),
+              };
+              list.push(nextDispatchSnapshot);
+            }
+            return { ...prev, [task.id]: list };
+          });
+
+          try {
+            const runtimeEvent = await appendTaskEvent({
+              taskId: task.id,
+              eventType: "workflow_runtime_snapshot",
+              payloadJson: JSON.stringify({ action: "runtime_snapshot", snapshot: decisionSnapshot }),
+            });
+            setWorkflowTaskEventsByTaskId((prev) => ({
+              ...prev,
+              [task.id]: [...(prev[task.id] ?? []), runtimeEvent],
+            }));
+          } catch (e) {
+            console.error("Failed to persist code-node decision snapshot:", e);
+          }
+          if (nextDispatchSnapshot) {
+            try {
+              const ev = await appendTaskEvent({
+                taskId: task.id,
+                eventType: "workflow_runtime_snapshot",
+                payloadJson: JSON.stringify({ action: "runtime_snapshot", snapshot: nextDispatchSnapshot }),
+              });
+              setWorkflowTaskEventsByTaskId((prev) => ({
+                ...prev,
+                [task.id]: [...(prev[task.id] ?? []), ev],
+              }));
+            } catch (e) {
+              console.error("Failed to persist next dispatch after code node:", e);
+            }
+          }
+
+          if (nextStep.dispatch && !nextStep.completed) {
+            return dispatchTeamStepToEmployeeSession({
+              task,
+              dispatch: {
+                nodeId: nextStep.dispatch.nodeId,
+                employeeId: nextStep.dispatch.employeeId,
+                employeeName: nextStep.dispatch.employeeName,
+                nodeType: nextStep.dispatch.nodeType,
+                input: nextStep.dispatch.input,
+              },
+              previousNodeLabel: dispatch.employeeName,
+              attachExecutorToSnapshotId: nextDispatchSnapshot?.id,
+            });
+          }
+          if (nextStep.completed) {
+            try {
+              const endedTask = await endWorkflowTask({
+                taskId: task.id,
+                reason: "到达结束节点自动完成",
+              });
+              setWorkflowTasks((prev) => prev.map((item) => (item.id === endedTask.id ? endedTask : item)));
+              const [events, pendingEmployees] = await Promise.all([
+                listTaskEvents(endedTask.id),
+                listTaskPendingEmployees(endedTask.id),
+              ]);
+              setWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [endedTask.id]: events }));
+              setTaskPendingEmployeesByTaskId((prev) => ({ ...prev, [endedTask.id]: pendingEmployees }));
+            } catch (endError) {
+              console.error("Failed to end workflow after code node:", endError);
+            }
+          }
+          return run.ok;
+        } catch (error) {
+          console.error("Failed to advance workflow after code node:", error);
+          return false;
+        }
+      }
+
       const ownerSession = sessionsRef.current.find((item) => item.id === task.creator);
       if (!ownerSession) {
         return false;
@@ -431,8 +627,11 @@ export function useWorkflowTeamAutomation({
       appendSystemMessage,
       executeTerminalSession,
       persistRuntimeSnapshotExecutor,
+      setTaskPendingEmployeesByTaskId,
       setWorkflowRuntimeSnapshotsByTaskId,
+      setWorkflowRuntimeStateByTaskId,
       setWorkflowTaskEventsByTaskId,
+      setWorkflowTasks,
     ],
   );
 
@@ -476,171 +675,183 @@ export function useWorkflowTeamAutomation({
       };
       notificationHub.setControlDockMirror(sessionId, null);
 
-      const session = sessionsRef.current.find((item) => item.id === sessionId);
-      if (session) {
-        const explicitTargetType = dispatchTarget?.targetType ?? "main";
-        const explicitTargetEmployeeName = dispatchTarget?.targetEmployeeName?.trim();
-        const explicitTargetWorkflowId = dispatchTarget?.targetWorkflowId?.trim();
-        const explicitTargetWorkflowName = dispatchTarget?.targetWorkflowName?.trim();
-
-        if (explicitTargetType === "employee") {
-          const terminalResult = await dispatchTerminal({
-            mainSessionId: sessionId,
-            prompt,
-            explicitTerminalName: explicitTargetEmployeeName,
-          });
-          if (terminalResult === "ok") return true;
-          if (terminalResult === "failed") return false;
-          if (explicitTargetEmployeeName) return false;
-          return runExecute(sessionId, prompt) !== false;
-        }
-
-        const templatesByNameLen = [...workflowTemplates].sort((a, b) => b.name.length - a.name.length);
-        const publishedTemplates = workflowTemplates.filter(
-          (item) => (workflowGraphStatusByWorkflowId[item.id] ?? "").toLowerCase() === "published",
-        );
-        const genericTeamMentionMatched = prompt.includes("@团队") || prompt.includes("＠团队");
-        const teamDispatchRequested = explicitTargetType === "team" || genericTeamMentionMatched;
-        const explicitTeam =
-          explicitTargetType === "team"
-            ? (explicitTargetWorkflowId
-                ? workflowTemplates.find((item) => item.id === explicitTargetWorkflowId)
-                : undefined) ??
-              (explicitTargetWorkflowName
-                ? workflowTemplates.find((item) => item.name.trim() === explicitTargetWorkflowName)
-                : undefined) ??
-              (genericTeamMentionMatched ? publishedTemplates[0] : undefined)
-            : undefined;
-        const mentionedTeam = explicitTeam ?? templatesByNameLen.find((t) => prompt.includes(`@${t.name}`));
-        if (teamDispatchRequested && !mentionedTeam) {
-          const warningText = "未找到可用团队流程，请先在「团队」中发布至少一个流程。";
+      // 必须用 live snapshot：skipActivate 新建的 worker 会先同步进 sessionsLiveRef，
+      // React `sessions` 经 startTransition 才更新；若用滞后 state，定时任务/后台派发会
+      // 误判「会话不存在」并退回普通 executeSession，看起来像「只新建会话执行」。
+      const session =
+        sessionsLiveRef.current.find((item) => item.id === sessionId) ??
+        sessionsRef.current.find((item) => item.id === sessionId);
+      const explicitTargetType = dispatchTarget?.targetType ?? "main";
+      if (!session) {
+        if (explicitTargetType === "team" || explicitTargetType === "employee") {
+          const warningText = "派发目标会话尚未就绪，请稍后重试。";
           message.warning(warningText);
-          appendSystemMessage(sessionId, warningText);
           return false;
         }
-        if (mentionedTeam) {
+        return runExecute(sessionId, prompt) !== false;
+      }
+      const explicitTargetEmployeeName = dispatchTarget?.targetEmployeeName?.trim();
+      const explicitTargetWorkflowId = dispatchTarget?.targetWorkflowId?.trim();
+      const explicitTargetWorkflowName = dispatchTarget?.targetWorkflowName?.trim();
+
+      if (explicitTargetType === "employee") {
+        const terminalResult = await dispatchTerminal({
+          mainSessionId: sessionId,
+          prompt,
+          explicitTerminalName: explicitTargetEmployeeName,
+        });
+        if (terminalResult === "ok") return true;
+        if (terminalResult === "failed") return false;
+        if (explicitTargetEmployeeName) return false;
+        return runExecute(sessionId, prompt) !== false;
+      }
+
+      const templatesByNameLen = [...workflowTemplates].sort((a, b) => b.name.length - a.name.length);
+      const publishedTemplates = workflowTemplates.filter(
+        (item) => (workflowGraphStatusByWorkflowId[item.id] ?? "").toLowerCase() === "published",
+      );
+      const genericTeamMentionMatched = prompt.includes("@团队") || prompt.includes("＠团队");
+      const teamDispatchRequested = explicitTargetType === "team" || genericTeamMentionMatched;
+      const explicitTeam =
+        explicitTargetType === "team"
+          ? (explicitTargetWorkflowId
+              ? workflowTemplates.find((item) => item.id === explicitTargetWorkflowId)
+              : undefined) ??
+            (explicitTargetWorkflowName
+              ? workflowTemplates.find((item) => item.name.trim() === explicitTargetWorkflowName)
+              : undefined) ??
+            (genericTeamMentionMatched ? publishedTemplates[0] : undefined)
+          : undefined;
+      const mentionedTeam = explicitTeam ?? templatesByNameLen.find((t) => prompt.includes(`@${t.name}`));
+      if (teamDispatchRequested && !mentionedTeam) {
+        const warningText = "未找到可用团队流程，请先在「团队」中发布至少一个流程。";
+        message.warning(warningText);
+        appendSystemMessage(sessionId, warningText);
+        return false;
+      }
+      if (mentionedTeam) {
+        try {
+          const taskTitle = prompt.split("\n")[0]?.slice(0, 80) || "新任务";
+          const task = await createWorkflowTask({
+            title: taskTitle,
+            content: prompt,
+            creator: sessionId,
+            workflowId: mentionedTeam?.id,
+          });
+          setWorkflowTasks((prev) => [task, ...prev]);
+          const events = await listTaskEvents(task.id);
+          const pendingEmployees = await listTaskPendingEmployees(task.id);
+          setWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [task.id]: events }));
+          setTaskPendingEmployeesByTaskId((prev) => ({ ...prev, [task.id]: pendingEmployees }));
+          appendSystemMessage(
+            sessionId,
+            [
+              "任务分发记录",
+              `- 类型：团队流程`,
+              `- 目标：${mentionedTeam.name}`,
+              `- 任务ID：${task.id}`,
+              `- 时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
+            ].join("\n"),
+          );
           try {
-            const taskTitle = prompt.split("\n")[0]?.slice(0, 80) || "新任务";
-            const task = await createWorkflowTask({
-              title: taskTitle,
-              content: prompt,
-              creator: sessionId,
-              workflowId: mentionedTeam?.id,
-            });
-            setWorkflowTasks((prev) => [task, ...prev]);
-            const events = await listTaskEvents(task.id);
-            const pendingEmployees = await listTaskPendingEmployees(task.id);
-            setWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [task.id]: events }));
-            setTaskPendingEmployeesByTaskId((prev) => ({ ...prev, [task.id]: pendingEmployees }));
-            appendSystemMessage(
+            logWorkflowTrace("team.dispatch.bootstrap.start", {
+              taskId: task.id,
+              workflowId: task.workflowId,
               sessionId,
-              [
-                "任务分发记录",
-                `- 类型：团队流程`,
-                `- 目标：${mentionedTeam.name}`,
-                `- 任务ID：${task.id}`,
-                `- 时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
-              ].join("\n"),
-            );
-            try {
-              logWorkflowTrace("team.dispatch.bootstrap.start", {
-                taskId: task.id,
-                workflowId: task.workflowId,
-                sessionId,
+            });
+            const graphItem = await getWorkflowGraph({ workflowId: task.workflowId });
+            if (graphItem?.graph?.nodes?.length) {
+              const runtimeState = createWorkflowRuntimeState(graphItem.graph);
+              const firstStep = advanceWorkflowGraph({
+                graph: graphItem.graph,
+                state: runtimeState,
+                startContent: task.content,
               });
-              const graphItem = await getWorkflowGraph({ workflowId: task.workflowId });
-              if (graphItem?.graph?.nodes?.length) {
-                const runtimeState = createWorkflowRuntimeState(graphItem.graph);
-                const firstStep = advanceWorkflowGraph({
-                  graph: graphItem.graph,
-                  state: runtimeState,
-                  startContent: task.content,
+              setWorkflowRuntimeStateByTaskId((prev) => ({ ...prev, [task.id]: firstStep.state }));
+              if (firstStep.dispatch) {
+                logWorkflowTrace("team.dispatch.bootstrap.next", {
+                  taskId: task.id,
+                  nodeId: firstStep.dispatch.nodeId,
+                  nodeType: firstStep.dispatch.nodeType,
+                  employeeName: firstStep.dispatch.employeeName,
                 });
-                setWorkflowRuntimeStateByTaskId((prev) => ({ ...prev, [task.id]: firstStep.state }));
-                if (firstStep.dispatch) {
-                  logWorkflowTrace("team.dispatch.bootstrap.next", {
+                const dispatchSnapshot: WorkflowRuntimeStepSnapshot = {
+                  id: `${task.id}-dispatch-${Date.now()}`,
+                  taskId: task.id,
+                  phase: "dispatch",
+                  fromNodeId: firstStep.state.lastNodeId,
+                  toNodeId: firstStep.dispatch.nodeId,
+                  toNodeName: firstStep.dispatch.employeeName,
+                  toNodeType: firstStep.dispatch.nodeType,
+                  inputPreview: snapshotTeamWorkerExecuteInput(firstStep.dispatch, employeesRef.current, pendingEmployees),
+                  outputPreview: "(待执行)",
+                  createdAt: Date.now(),
+                };
+                setWorkflowRuntimeSnapshotsByTaskId((prev) => ({
+                  ...prev,
+                  [task.id]: [...(prev[task.id] ?? []), dispatchSnapshot],
+                }));
+                try {
+                  const runtimeEvent = await appendTaskEvent({
                     taskId: task.id,
-                    nodeId: firstStep.dispatch.nodeId,
-                    nodeType: firstStep.dispatch.nodeType,
-                    employeeName: firstStep.dispatch.employeeName,
+                    eventType: "workflow_runtime_snapshot",
+                    payloadJson: JSON.stringify({
+                      action: "runtime_snapshot",
+                      snapshot: dispatchSnapshot,
+                    }),
                   });
-                  const dispatchSnapshot: WorkflowRuntimeStepSnapshot = {
-                    id: `${task.id}-dispatch-${Date.now()}`,
-                    taskId: task.id,
-                    phase: "dispatch",
-                    fromNodeId: firstStep.state.lastNodeId,
-                    toNodeId: firstStep.dispatch.nodeId,
-                    toNodeName: firstStep.dispatch.employeeName,
-                    toNodeType: firstStep.dispatch.nodeType,
-                    inputPreview: snapshotTeamWorkerExecuteInput(firstStep.dispatch, employeesRef.current, pendingEmployees),
-                    outputPreview: "(待执行)",
-                    createdAt: Date.now(),
-                  };
-                  setWorkflowRuntimeSnapshotsByTaskId((prev) => ({
+                  setWorkflowTaskEventsByTaskId((prev) => ({
                     ...prev,
-                    [task.id]: [...(prev[task.id] ?? []), dispatchSnapshot],
+                    [task.id]: [...(prev[task.id] ?? []), runtimeEvent],
                   }));
-                  try {
-                    const runtimeEvent = await appendTaskEvent({
-                      taskId: task.id,
-                      eventType: "workflow_runtime_snapshot",
-                      payloadJson: JSON.stringify({
-                        action: "runtime_snapshot",
-                        snapshot: dispatchSnapshot,
-                      }),
-                    });
-                    setWorkflowTaskEventsByTaskId((prev) => ({
-                      ...prev,
-                      [task.id]: [...(prev[task.id] ?? []), runtimeEvent],
-                    }));
-                  } catch (runtimeEventError) {
-                    console.error("Failed to persist workflow runtime dispatch snapshot:", runtimeEventError);
-                  }
-                  const dispatched = await dispatchTeamStepToEmployeeSession({
-                    task,
-                    dispatch: {
-                      employeeId: firstStep.dispatch.employeeId,
-                      employeeName: firstStep.dispatch.employeeName,
-                      nodeType: firstStep.dispatch.nodeType,
-                      input: firstStep.dispatch.input,
-                    },
-                    previousNodeLabel: "开始",
-                    attachExecutorToSnapshotId: dispatchSnapshot.id,
-                  });
-                  if (!dispatched) {
-                    const warningText = `团队流程「${mentionedTeam.name}」首步派发失败，请检查终端配置或执行引擎。`;
-                    message.warning(warningText);
-                    appendSystemMessage(sessionId, warningText);
-                    return false;
-                  }
-                } else {
-                  const warningText = `团队流程「${mentionedTeam.name}」未找到可执行节点。`;
+                } catch (runtimeEventError) {
+                  console.error("Failed to persist workflow runtime dispatch snapshot:", runtimeEventError);
+                }
+                const dispatched = await dispatchTeamStepToEmployeeSession({
+                  task,
+                  dispatch: {
+                    nodeId: firstStep.dispatch.nodeId,
+                    employeeId: firstStep.dispatch.employeeId,
+                    employeeName: firstStep.dispatch.employeeName,
+                    nodeType: firstStep.dispatch.nodeType,
+                    input: firstStep.dispatch.input,
+                  },
+                  previousNodeLabel: "开始",
+                  attachExecutorToSnapshotId: dispatchSnapshot.id,
+                });
+                if (!dispatched) {
+                  const warningText = `团队流程「${mentionedTeam.name}」首步派发失败，请检查终端配置或执行引擎。`;
                   message.warning(warningText);
                   appendSystemMessage(sessionId, warningText);
                   return false;
                 }
+              } else {
+                const warningText = `团队流程「${mentionedTeam.name}」未找到可执行节点。`;
+                message.warning(warningText);
+                appendSystemMessage(sessionId, warningText);
+                return false;
               }
-            } catch (runtimeError) {
-              console.error("Failed to bootstrap workflow graph runtime:", runtimeError);
             }
-          } catch (error) {
-            console.error("Failed to create workflow task from mention:", error);
-            const errorText = error instanceof Error ? error.message : String(error);
-            const warningText = `团队任务创建失败：${errorText || "未知错误"}`;
-            message.error(warningText);
-            appendSystemMessage(sessionId, warningText);
-            return false;
+          } catch (runtimeError) {
+            console.error("Failed to bootstrap workflow graph runtime:", runtimeError);
           }
-          return true;
+        } catch (error) {
+          console.error("Failed to create workflow task from mention:", error);
+          const errorText = error instanceof Error ? error.message : String(error);
+          const warningText = `团队任务创建失败：${errorText || "未知错误"}`;
+          message.error(warningText);
+          appendSystemMessage(sessionId, warningText);
+          return false;
         }
-
-        const mentionDispatch = await dispatchTerminal({
-          mainSessionId: sessionId,
-          prompt,
-        });
-        if (mentionDispatch === "ok") return true;
-        if (mentionDispatch === "failed") return false;
+        return true;
       }
+
+      const mentionDispatch = await dispatchTerminal({
+        mainSessionId: sessionId,
+        prompt,
+      });
+      if (mentionDispatch === "ok") return true;
+      if (mentionDispatch === "failed") return false;
       return runExecute(sessionId, prompt) !== false;
     },
     [
@@ -649,6 +860,7 @@ export function useWorkflowTeamAutomation({
       dispatchTerminal,
       executeSession,
       executeTerminalSession,
+      sessionsLiveRef,
       setTaskPendingEmployeesByTaskId,
       setWorkflowRuntimeSnapshotsByTaskId,
       setWorkflowRuntimeStateByTaskId,
@@ -986,6 +1198,7 @@ export function useWorkflowTeamAutomation({
           const rollbackEmployeeName = rollbackPending[0]?.name ?? rollbackNode?.data.label ?? "回退阶段执行";
           if (rollbackEmployeeId) {
             const rollbackDispatch = {
+              nodeId: rollbackNode?.id,
               employeeId: rollbackEmployeeId,
               employeeName: rollbackEmployeeName,
               nodeType: rollbackNode ? resolveWorkflowDispatchNodeType(rollbackNode) : ("task" as WorkflowGraphNodeType),
@@ -1225,6 +1438,7 @@ export function useWorkflowTeamAutomation({
           await dispatchTeamStepToEmployeeSession({
             task: updatedTaskAfterDecision ?? task,
             dispatch: {
+              nodeId: effectiveDispatch.nodeId,
               employeeId: effectiveDispatch.employeeId,
               employeeName: effectiveDispatch.employeeName,
               nodeType: effectiveDispatch.nodeType,
@@ -1317,6 +1531,7 @@ export function useWorkflowTeamAutomation({
                 await dispatchTeamStepToEmployeeSession({
                   task: updatedTask,
                   dispatch: {
+                    nodeId: rollbackNode?.id,
                     employeeId: rollbackEmployeeId,
                     employeeName: rollbackEmployeeName,
                     nodeType: rollbackNode ? resolveWorkflowDispatchNodeType(rollbackNode) : ("task" as WorkflowGraphNodeType),
@@ -1449,6 +1664,7 @@ export function useWorkflowTeamAutomation({
               await dispatchTeamStepToEmployeeSession({
                 task: updatedTask,
                 dispatch: {
+                  nodeId: effectiveDispatch.nodeId,
                   employeeId: effectiveDispatch.employeeId,
                   employeeName: effectiveDispatch.employeeName,
                   nodeType: effectiveDispatch.nodeType,

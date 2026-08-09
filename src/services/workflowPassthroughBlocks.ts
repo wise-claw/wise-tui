@@ -40,5 +40,6 @@ export function formatPassthroughBlockForNode(
 }
 
 export function isPassthroughGraphNodeType(type: WorkflowGraphNode["type"]): boolean {
-  return type === "prompt" || type === "knowledge" || type === "code";
+  // code（尤其 Shell）由运行时停留并真实执行，不再仅注入说明文本。
+  return type === "prompt" || type === "knowledge";
 }

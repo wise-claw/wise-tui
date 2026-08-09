@@ -1218,7 +1218,7 @@ export function LeftSidebar({
               onStopRepositoryMainSession={handleStopRepositoryMainSession}
               workspaceSessions={monitorPanelSessions ?? sessions}
               activeSessionId={activeSessionId}
-              showWorkspaceRunItems={showLeftSidebarMonitorPanel}
+              showWorkspaceRunItems={false}
               employeeMonitorItems={employeeMonitorItems}
               sessionConversationTaskItems={sessionConversationTaskItems}
               teamMonitorItems={teamMonitorItems}
@@ -1254,8 +1254,8 @@ export function LeftSidebar({
           </LeftSidebarSortableSection>
         ) : null}
 
-        {/* 工作区列表已合并运行项；仅在关闭工作区列表时保留独立运行面板区块 */}
-        {monitorPanelMounted && !showLeftSidebarWorkspaceList ? (
+        {/* 独立运行面板：显示开关打开时始终展示（不再仅在关闭工作区树时出现） */}
+        {monitorPanelMounted ? (
           <LeftSidebarSortableSection
             sectionId="monitor"
             orderIndex={sectionOrderIndex("monitor")}

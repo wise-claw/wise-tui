@@ -1,19 +1,12 @@
 import { CloseOutlined, PlusOutlined } from "@ant-design/icons";
 import { HoverHint } from "../shared/HoverHint";
-import { Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography, message } from "antd";
+import { Button, Drawer, Form, Input, Modal, Popconfirm, Segmented, Select, Space, Switch, Table, Tag, Typography, message } from "antd";
 import { WISE_UI_EVENT_SCHEDULED_TASKS_CHANGED } from "../../constants/workflowUiEvents";
 import type { FormInstance } from "antd/es/form";
 import type { ColumnsType } from "antd/es/table";
 import { CronExpressionParser } from "cron-parser";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { EmployeeItem, RepositoryScheduledClaudeTask, WorkflowGraph, WorkflowTemplateItem } from "../../types";
-import { collectTeamMemberEmployeeIds } from "../../utils/collectTeamMemberEmployeeIds";
-import {
-  formatScheduledTaskDispatchTargetLabel,
-  parseScheduledTaskDispatchTargetKey,
-  scheduledTaskDispatchTargetKey,
-  SCHEDULED_TASK_DISPATCH_MAIN,
-} from "../../utils/scheduledTaskDispatchTarget";
+import type { RepositoryScheduledClaudeTask, WorkflowTemplateItem } from "../../types";
 import { PromptMilkdownField } from "../PromptMilkdownField";
 import {
   initialLastScheduledSlotForCron,
@@ -21,14 +14,25 @@ import {
   writeRepositoryScheduledClaudeTasks,
   patchRepositoryScheduledClaudeTask,
 } from "../../services/repositoryScheduledClaudeTasksStore";
-import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
 import {
   SCHEDULED_TASK_EXECUTION_KIND_OPTIONS,
   formatScheduledTaskExecutionKindLabel,
   resolveScheduledTaskExecutionKind,
   type ScheduledTaskExecutionKind,
 } from "../../utils/scheduledTaskExecution";
+import {
+  formatScheduledTaskDispatchTargetLabel,
+  parseScheduledTaskDispatchTargetKey,
+  scheduledTaskDispatchTargetKey,
+  SCHEDULED_TASK_DISPATCH_NEW_SESSION,
+} from "../../utils/scheduledTaskDispatchTarget";
+import {
+  normalizeScheduledTaskScriptFilePath,
+  resolveScheduledTaskScriptSource,
+  type ScheduledTaskScriptSource,
+} from "../../utils/scheduledTaskScript";
 import { ScheduledTaskCronField } from "./ScheduledTaskCronField";
+import { ScheduledTaskScriptFileSelect } from "./ScheduledTaskScriptFileSelect";
 import "./index.css";
 
 export type ScheduledTasksPresentation = "modal" | "overlay";
@@ -43,9 +47,7 @@ interface Props {
   onClose: () => void;
   repositoryPath: string;
   repositoryDisplayName: string;
-  employees: EmployeeItem[];
   workflowTemplates?: WorkflowTemplateItem[];
-  workflowGraphsByWorkflowId?: Record<string, WorkflowGraph>;
   /** 主区+右栏叠层（与技能市场一致）；默认 overlay */
   presentation?: ScheduledTasksPresentation;
 }
@@ -77,9 +79,7 @@ export function RepositoryScheduledTasksModal({
   onClose,
   repositoryPath,
   repositoryDisplayName,
-  employees,
   workflowTemplates = [],
-  workflowGraphsByWorkflowId = {},
   presentation = "overlay",
 }: Props) {
   const [loading, setLoading] = useState(false);
@@ -92,50 +92,21 @@ export function RepositoryScheduledTasksModal({
     executionKind: ScheduledTaskExecutionKind;
     dispatchTargetKey: string;
     enabled: boolean;
+    scriptSource: ScheduledTaskScriptSource;
+    scriptFilePath: string;
     contentMarkdown: string;
   }>();
 
-  const dispatchableEmployees = useMemo(
-    () => employees.filter((e) => !isOmcMonitorEmployeeRecord(e) && e.enabled),
-    [employees],
-  );
-
-  const teamMemberEmployeeIds = useMemo(
-    () => collectTeamMemberEmployeeIds(workflowTemplates, workflowGraphsByWorkflowId),
-    [workflowTemplates, workflowGraphsByWorkflowId],
-  );
-
-  const watchedDispatchTargetKey = Form.useWatch("dispatchTargetKey", form);
   const watchedExecutionKind = Form.useWatch("executionKind", form) ?? "claude";
+  const watchedScriptSource = Form.useWatch("scriptSource", form) ?? "inline";
+  const watchedDispatchTargetKey = Form.useWatch("dispatchTargetKey", form);
 
   const scheduledTaskDispatchSelectOptions = useMemo(() => {
     const currentKey =
       typeof watchedDispatchTargetKey === "string" && watchedDispatchTargetKey.trim()
         ? watchedDispatchTargetKey.trim()
-        : SCHEDULED_TASK_DISPATCH_MAIN;
+        : SCHEDULED_TASK_DISPATCH_NEW_SESSION;
     const parsedCurrent = parseScheduledTaskDispatchTargetKey(currentKey);
-    const baseEmployees = dispatchableEmployees.filter((e) => !teamMemberEmployeeIds.has(e.id));
-    const pinnedEmployee =
-      parsedCurrent.type === "employee" &&
-      parsedCurrent.employeeId &&
-      teamMemberEmployeeIds.has(parsedCurrent.employeeId)
-        ? employees.find((e) => e.id === parsedCurrent.employeeId)
-        : undefined;
-    const employeeOptions = [
-      ...(pinnedEmployee
-        ? [
-            {
-              value: scheduledTaskDispatchTargetKey({ employeeId: pinnedEmployee.id }),
-              label: `${pinnedEmployee.name}（已在团队流程中，请改选工作流）`,
-              disabled: true as const,
-            },
-          ]
-        : []),
-      ...baseEmployees.map((e) => ({
-        value: scheduledTaskDispatchTargetKey({ employeeId: e.id }),
-        label: e.name,
-      })),
-    ];
     const workflowOptions = workflowTemplates.map((wf) => ({
       value: scheduledTaskDispatchTargetKey({ workflowId: wf.id }),
       label: wf.name.trim() || wf.id,
@@ -154,25 +125,15 @@ export function RepositoryScheduledTasksModal({
         : [];
     return [
       {
-        label: "Repo 执行会话",
-        options: [{ value: SCHEDULED_TASK_DISPATCH_MAIN, label: "仓库绑定主会话" }],
-      },
-      {
-        label: "执行员工",
-        options: employeeOptions,
+        label: "会话",
+        options: [{ value: SCHEDULED_TASK_DISPATCH_NEW_SESSION, label: "新建会话" }],
       },
       {
         label: "团队 / 工作流",
         options: [...pinnedWorkflow, ...workflowOptions],
       },
     ];
-  }, [
-    dispatchableEmployees,
-    employees,
-    teamMemberEmployeeIds,
-    watchedDispatchTargetKey,
-    workflowTemplates,
-  ]);
+  }, [watchedDispatchTargetKey, workflowTemplates]);
 
   const reload = useCallback(async () => {
     const path = repositoryPath.trim();
@@ -204,6 +165,7 @@ export function RepositoryScheduledTasksModal({
       cronExpression: "0 9 * * *",
       executionKind: "claude",
       contentMarkdown: "",
+      scriptFilePath: null,
       employeeId: null,
       workflowId: null,
       ccWorkflowId: null,
@@ -217,8 +179,10 @@ export function RepositoryScheduledTasksModal({
       title: "",
       cronExpression: draft.cronExpression,
       executionKind: "claude",
-      dispatchTargetKey: SCHEDULED_TASK_DISPATCH_MAIN,
+      dispatchTargetKey: SCHEDULED_TASK_DISPATCH_NEW_SESSION,
       enabled: true,
+      scriptSource: "inline",
+      scriptFilePath: "",
       contentMarkdown: "",
     });
     setDrawerOpen(true);
@@ -232,6 +196,8 @@ export function RepositoryScheduledTasksModal({
       executionKind: resolveScheduledTaskExecutionKind(row),
       dispatchTargetKey: scheduledTaskDispatchTargetKey(row),
       enabled: row.enabled,
+      scriptSource: resolveScheduledTaskScriptSource(row),
+      scriptFilePath: normalizeScheduledTaskScriptFilePath(row.scriptFilePath) ?? "",
       contentMarkdown: row.contentMarkdown,
     });
     setDrawerOpen(true);
@@ -263,39 +229,47 @@ export function RepositoryScheduledTasksModal({
       const now = Date.now();
       const executionKind = v.executionKind ?? "claude";
       const md = v.contentMarkdown.trim();
-      if (executionKind === "claude" && !md) {
-        message.error("请填写 Claude 执行内容");
-        return;
-      }
-      if (executionKind === "script" && !md) {
-        message.error("请填写脚本内容");
-        return;
+      let scriptFilePath: string | null = null;
+      let contentMarkdown = v.contentMarkdown;
+      let workflowId: string | null = null;
+      if (executionKind === "claude") {
+        if (!md) {
+          message.error("请填写 Claude 执行内容");
+          return;
+        }
+        const dispatchParsed = parseScheduledTaskDispatchTargetKey(v.dispatchTargetKey);
+        workflowId = dispatchParsed.workflowId;
+        if (workflowId && !workflowTemplates.some((wf) => wf.id === workflowId)) {
+          message.error("所选团队工作流不存在");
+          return;
+        }
+      } else if (executionKind === "script") {
+        const source = v.scriptSource === "file" ? "file" : "inline";
+        if (source === "file") {
+          const normalized = normalizeScheduledTaskScriptFilePath(v.scriptFilePath);
+          if (!normalized) {
+            message.error("请选择合法的仓库脚本文件");
+            return;
+          }
+          scriptFilePath = normalized;
+          contentMarkdown = "";
+        } else if (!md) {
+          message.error("请填写脚本内容");
+          return;
+        }
       }
       const isNew = !tasks.some((t) => t.id === editing.id);
       const slot = initialLastScheduledSlotForCron(cron, now);
-      const dispatchParsed =
-        executionKind === "claude"
-          ? parseScheduledTaskDispatchTargetKey(v.dispatchTargetKey)
-          : { type: "main" as const, employeeId: null, workflowId: null };
-      const employeeId = executionKind === "claude" ? dispatchParsed.employeeId : null;
-      const workflowId = executionKind === "claude" ? dispatchParsed.workflowId : null;
-      if (employeeId && teamMemberEmployeeIds.has(employeeId)) {
-        message.error("执行员工不能选择已在团队流程中的员工，请改选团队工作流");
-        return;
-      }
-      if (workflowId && !workflowTemplates.some((wf) => wf.id === workflowId)) {
-        message.error("所选团队工作流不存在");
-        return;
-      }
       if (isNew) {
         const nextRow: RepositoryScheduledClaudeTask = {
           ...editing,
           title: v.title.trim() || "未命名任务",
           cronExpression: cron,
           executionKind,
-          contentMarkdown: v.contentMarkdown,
-          employeeId,
-          workflowId,
+          contentMarkdown,
+          scriptFilePath: executionKind === "script" ? scriptFilePath : null,
+          employeeId: null,
+          workflowId: executionKind === "claude" ? workflowId : null,
           ccWorkflowId: null,
           enabled: v.enabled,
           createdAt: now,
@@ -313,9 +287,10 @@ export function RepositoryScheduledTasksModal({
           title: v.title.trim() || "未命名任务",
           cronExpression: cron,
           executionKind,
-          contentMarkdown: v.contentMarkdown,
-          employeeId,
-          workflowId,
+          contentMarkdown,
+          scriptFilePath: executionKind === "script" ? scriptFilePath : null,
+          employeeId: null,
+          workflowId: executionKind === "claude" ? workflowId : null,
           ccWorkflowId: null,
           enabled: v.enabled,
           updatedAt: now,
@@ -408,15 +383,22 @@ export function RepositoryScheduledTasksModal({
       render: (_, row) => {
         const kind = resolveScheduledTaskExecutionKind(row);
         if (kind === "script") {
-          return <Tag color="green">仓库 Shell</Tag>;
+          const filePath = normalizeScheduledTaskScriptFilePath(row.scriptFilePath);
+          if (filePath) {
+            const base = filePath.split("/").pop() || filePath;
+            return (
+              <HoverHint title={filePath}>
+                <Tag color="cyan">{base}</Tag>
+              </HoverHint>
+            );
+          }
+          return <Tag color="green">内联</Tag>;
         }
         const label = formatScheduledTaskDispatchTargetLabel({
-          employeeId: row.employeeId,
           workflowId: row.workflowId,
-          employeeName: employees.find((e) => e.id === row.employeeId)?.name,
           workflowName: workflowTemplates.find((wf) => wf.id === row.workflowId)?.name,
         });
-        const color = row.workflowId ? "purple" : row.employeeId ? "blue" : "default";
+        const color = row.workflowId?.trim() ? "purple" : "default";
         return <Tag color={color}>{label}</Tag>;
       },
     },
@@ -459,7 +441,7 @@ export function RepositoryScheduledTasksModal({
   const tableScrollY = tableBodyScrollHeight(presentation);
   const hint = (
     <Typography.Paragraph className="app-scheduled-tasks-panel__hint" style={{ marginBottom: 0 }}>
-      按 Cron 在后台触发：支持 Claude 提示词与仓库 Shell 脚本两种方式。Claude 需绑定主会话且非空闲时跳过；脚本在仓库根目录执行。应用需保持运行。
+      按 Cron 在后台触发：Claude 可新建会话或派发团队工作流；脚本支持内联命令或仓库文件。应用需保持运行。
     </Typography.Paragraph>
   );
   const tableNode = (
@@ -550,7 +532,7 @@ export function RepositoryScheduledTasksModal({
       <Drawer
         title={tasks.some((t) => t.id === editing?.id) ? "编辑定时任务" : "新建定时任务"}
         placement="right"
-        size={Math.min(560, typeof window !== "undefined" ? window.innerWidth - 24 : 560)}
+        size={Math.min(600, typeof window !== "undefined" ? window.innerWidth - 24 : 600)}
         open={drawerOpen}
         onClose={() => {
           setDrawerOpen(false);
@@ -569,86 +551,144 @@ export function RepositoryScheduledTasksModal({
           </Space>
         )}
       >
-        <Form form={form} layout="vertical" size="small" requiredMark={false}>
-          <Form.Item
-            className="app-scheduled-tasks-drawer__field"
-            name="title"
-            label="标题"
-            rules={[{ required: true, message: "填写标题" }]}
-          >
-            <Input placeholder="简短名称" allowClear maxLength={80} />
-          </Form.Item>
-          <Form.Item
-            className="app-scheduled-tasks-drawer__field"
-            name="executionKind"
-            label="执行方式"
-            rules={[{ required: true, message: "请选择执行方式" }]}
-          >
-            <Select
-              options={SCHEDULED_TASK_EXECUTION_KIND_OPTIONS.map((item) => ({
-                value: item.value,
-                label: item.label,
-              }))}
-            />
-          </Form.Item>
-          <Form.Item
-            className="app-scheduled-tasks-drawer__field"
-            name="cronExpression"
-            label="执行周期"
-            rules={[{ required: true, message: "请配置执行周期" }]}
-            extra={(
-              <span className="app-scheduled-tasks-modal__mono-muted">
-                可视化 Cron（react-js-cron，分/时/日/月/周）；调度与 `cron-parser` 一致。
-              </span>
-            )}
-          >
-            <ScheduledTaskCronField key={editing?.id ?? "new"} />
-          </Form.Item>
-          {watchedExecutionKind === "claude" ? (
-            <Form.Item
-              className="app-scheduled-tasks-drawer__field"
-              name="dispatchTargetKey"
-              label="执行目标"
-              rules={[{ required: true, message: "请选择执行目标" }]}
-              extra={(
-                <span className="app-scheduled-tasks-modal__mono-muted">
-                  可选主会话、独立员工或团队工作流。已参与团队流程画布的员工请改选对应工作流，勿重复选为员工。
-                </span>
-              )}
-            >
-              <Select
-                showSearch
-                optionFilterProp="label"
-                placeholder="仓库绑定主会话"
-                options={scheduledTaskDispatchSelectOptions}
-              />
-            </Form.Item>
-          ) : null}
-          <Form.Item className="app-scheduled-tasks-drawer__field" name="enabled" label="启用" valuePropName="checked">
-            <Switch size="small" />
-          </Form.Item>
-          {watchedExecutionKind === "script" ? (
-            <Form.Item
-              className="app-scheduled-tasks-drawer__field"
-              name="contentMarkdown"
-              label="脚本内容"
-              rules={[{ required: true, message: "请填写脚本" }]}
-              extra={(
-                <span className="app-scheduled-tasks-modal__mono-muted">
-                  在仓库根目录通过 zsh -c 执行；可多行。非零退出码记为失败。
-                </span>
-              )}
-            >
-              <Input.TextArea rows={12} className="app-scheduled-tasks-drawer__script" placeholder="#!/usr/bin/env bash&#10;npm run build" />
-            </Form.Item>
-          ) : watchedExecutionKind === "claude" ? (
-            <div className="app-scheduled-tasks-drawer__field">
-              <span className="app-scheduled-tasks-drawer__label">执行内容（Markdown）</span>
-              <Form.Item name="contentMarkdown" noStyle rules={[{ required: true, message: "请填写执行内容" }]}>
-                <MilkdownFormBridge form={form} fieldName="contentMarkdown" instanceKey={editing?.id ?? "new"} />
+        <Form form={form} layout="vertical" size="small" requiredMark={false} className="app-scheduled-tasks-drawer__form">
+          <section className="app-scheduled-tasks-drawer__section">
+            <header className="app-scheduled-tasks-drawer__section-head">
+              <span className="app-scheduled-tasks-drawer__section-title">基础</span>
+              <span className="app-scheduled-tasks-drawer__section-desc">名称、方式与启停</span>
+            </header>
+            <div className="app-scheduled-tasks-drawer__section-body">
+              <div className="app-scheduled-tasks-drawer__title-row">
+                <Form.Item
+                  className="app-scheduled-tasks-drawer__field app-scheduled-tasks-drawer__field--grow"
+                  name="title"
+                  label="标题"
+                  rules={[{ required: true, message: "填写标题" }]}
+                >
+                  <Input placeholder="例如：每日巡检" allowClear maxLength={80} />
+                </Form.Item>
+                <Form.Item
+                  className="app-scheduled-tasks-drawer__field app-scheduled-tasks-drawer__field--enabled"
+                  name="enabled"
+                  label="启用"
+                  valuePropName="checked"
+                >
+                  <Switch />
+                </Form.Item>
+              </div>
+              <Form.Item
+                className="app-scheduled-tasks-drawer__field app-scheduled-tasks-drawer__field--kind"
+                name="executionKind"
+                label="执行方式"
+                rules={[{ required: true, message: "请选择执行方式" }]}
+              >
+                <ScheduledTaskExecutionKindCards
+                  onPickScript={() => {
+                    if (!form.getFieldValue("scriptSource")) {
+                      form.setFieldsValue({ scriptSource: "inline", scriptFilePath: "" });
+                    }
+                  }}
+                />
               </Form.Item>
             </div>
-          ) : null}
+          </section>
+
+          <section className="app-scheduled-tasks-drawer__section">
+            <header className="app-scheduled-tasks-drawer__section-head">
+              <span className="app-scheduled-tasks-drawer__section-title">调度</span>
+              <span className="app-scheduled-tasks-drawer__section-desc">何时触发</span>
+            </header>
+            <div className="app-scheduled-tasks-drawer__section-body">
+              <Form.Item
+                className="app-scheduled-tasks-drawer__field"
+                name="cronExpression"
+                label="执行周期"
+                rules={[{ required: true, message: "请配置执行周期" }]}
+                extra={<span className="app-scheduled-tasks-drawer__hint">与 cron-parser 一致（分 / 时 / 日 / 月 / 周）</span>}
+              >
+                <ScheduledTaskCronField key={editing?.id ?? "new"} />
+              </Form.Item>
+            </div>
+          </section>
+
+          <section className="app-scheduled-tasks-drawer__section app-scheduled-tasks-drawer__section--payload">
+            <header className="app-scheduled-tasks-drawer__section-head">
+              <span className="app-scheduled-tasks-drawer__section-title">执行</span>
+              <span className="app-scheduled-tasks-drawer__section-desc">
+                {watchedExecutionKind === "script" ? "脚本或仓库文件" : "目标与提示词"}
+              </span>
+            </header>
+            <div className="app-scheduled-tasks-drawer__section-body">
+              {watchedExecutionKind === "claude" ? (
+                <Form.Item
+                  className="app-scheduled-tasks-drawer__field"
+                  name="dispatchTargetKey"
+                  label="执行目标"
+                  rules={[{ required: true, message: "请选择执行目标" }]}
+                  extra={<span className="app-scheduled-tasks-drawer__hint">默认新建会话；也可派发到团队工作流</span>}
+                >
+                  <Select
+                    showSearch
+                    optionFilterProp="label"
+                    placeholder="新建会话"
+                    options={scheduledTaskDispatchSelectOptions}
+                  />
+                </Form.Item>
+              ) : null}
+
+              {watchedExecutionKind === "script" ? (
+                <>
+                  <Form.Item
+                    className="app-scheduled-tasks-drawer__field"
+                    name="scriptSource"
+                    label="脚本来源"
+                    rules={[{ required: true, message: "请选择脚本来源" }]}
+                  >
+                    <Segmented
+                      block
+                      className="app-scheduled-tasks-drawer__segmented"
+                      options={[
+                        { label: "内联脚本", value: "inline" },
+                        { label: "仓库文件", value: "file" },
+                      ]}
+                    />
+                  </Form.Item>
+                  {watchedScriptSource === "file" ? (
+                    <Form.Item
+                      className="app-scheduled-tasks-drawer__field"
+                      name="scriptFilePath"
+                      label="执行文件"
+                      rules={[{ required: true, message: "请选择执行文件" }]}
+                      extra={<span className="app-scheduled-tasks-drawer__hint">仓库相对路径，触发时用 zsh 执行</span>}
+                    >
+                      <ScheduledTaskScriptFileSelect repositoryPath={repositoryPath} />
+                    </Form.Item>
+                  ) : (
+                    <Form.Item
+                      className="app-scheduled-tasks-drawer__field app-scheduled-tasks-drawer__field--last"
+                      name="contentMarkdown"
+                      label="脚本内容"
+                      rules={[{ required: true, message: "请填写脚本" }]}
+                      extra={<span className="app-scheduled-tasks-drawer__hint">在仓库根目录通过 zsh -c 执行</span>}
+                    >
+                      <Input.TextArea
+                        rows={14}
+                        className="app-scheduled-tasks-drawer__script"
+                        placeholder={"#!/usr/bin/env bash\nnpm run build"}
+                      />
+                    </Form.Item>
+                  )}
+                </>
+              ) : watchedExecutionKind === "claude" ? (
+                <div className="app-scheduled-tasks-drawer__field app-scheduled-tasks-drawer__field--last">
+                  <span className="app-scheduled-tasks-drawer__label">执行内容</span>
+                  <Form.Item name="contentMarkdown" noStyle rules={[{ required: true, message: "请填写执行内容" }]}>
+                    <MilkdownFormBridge form={form} fieldName="contentMarkdown" instanceKey={editing?.id ?? "new"} />
+                  </Form.Item>
+                </div>
+              ) : null}
+            </div>
+          </section>
         </Form>
       </Drawer>
     </>
@@ -663,6 +703,41 @@ function tableBodyScrollHeight(presentation: ScheduledTasksPresentation): number
   return Math.max(200, Math.min(400, window.innerHeight - 280));
 }
 
+function ScheduledTaskExecutionKindCards({
+  value,
+  onChange,
+  onPickScript,
+}: {
+  value?: ScheduledTaskExecutionKind;
+  onChange?: (next: ScheduledTaskExecutionKind) => void;
+  onPickScript?: () => void;
+}) {
+  const selected = value === "script" || value === "claude" ? value : "claude";
+  return (
+    <div className="app-scheduled-tasks-drawer__kind-grid" role="radiogroup" aria-label="执行方式">
+      {SCHEDULED_TASK_EXECUTION_KIND_OPTIONS.map((item) => {
+        const active = selected === item.value;
+        return (
+          <button
+            key={item.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            className={`app-scheduled-tasks-drawer__kind-card${active ? " is-selected" : ""}`}
+            onClick={() => {
+              onChange?.(item.value);
+              if (item.value === "script") onPickScript?.();
+            }}
+          >
+            <span className="app-scheduled-tasks-drawer__kind-card-title">{item.label}</span>
+            <span className="app-scheduled-tasks-drawer__kind-card-desc">{item.description}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 interface MilkdownFormBridgeProps {
   form: FormInstance<{
     title: string;
@@ -670,6 +745,8 @@ interface MilkdownFormBridgeProps {
     executionKind: ScheduledTaskExecutionKind;
     dispatchTargetKey: string;
     enabled: boolean;
+    scriptSource: ScheduledTaskScriptSource;
+    scriptFilePath: string;
     contentMarkdown: string;
   }>;
   fieldName: "contentMarkdown";

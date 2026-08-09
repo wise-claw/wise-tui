@@ -1303,6 +1303,12 @@ export default function App() {
   purgeWorkflowWorkerSessionBindingsRef.current = purgeWorkflowWorkerSessionBindings;
   advanceTeamAfterTurnRef.current = handleClaudeTurnComplete;
 
+  const createSessionRef = useRef(createSession);
+  createSessionRef.current = createSession;
+  const executeSessionRef = useRef(executeSession);
+  executeSessionRef.current = executeSession;
+  const closeSessionRef = useRef(closeSession);
+  closeSessionRef.current = closeSession;
   const handleComposerExecuteRef = useRef(handleComposerExecute);
   handleComposerExecuteRef.current = handleComposerExecute;
   const sendMessageToSessionRef = useRef(sendMessageToSession);
@@ -1404,11 +1410,11 @@ export default function App() {
 
   useScheduledClaudeTaskRunner({
     repositoriesRef: repositoriesLatestRef,
-    sessionsRef: sessionsLatestRef,
-    bindingsRef: repositoryMainBindingsLatestRef,
-    employeesRef: employeesLatestRef,
     workflowTemplatesRef: workflowTemplatesLatestRef,
-    executeRef: handleComposerExecuteRef,
+    createSessionRef,
+    executeSessionRef,
+    executeWithDispatchRef: handleComposerExecuteRef,
+    closeSessionRef,
   });
 
   usePageMonitorAutoFixReload({
@@ -1628,11 +1634,9 @@ export default function App() {
   const workspaceListPlacement = useWorkspaceListPlacementDefault();
   const leftSidebarSectionOrder = useLeftSidebarSectionOrder();
   const showRepositoryIconBadgesInWorkspaceList = useLeftSidebarRepositoryIconBadgesDefault();
-  const showMonitorOnLeft =
-    monitorPanelDefault.visible && monitorPanelDefault.placement === "left";
-  // 工作区树合并运行项后：用「显示」开关控制子树运行项；独立左栏面板仅在关闭工作区树且栏位=左时出现。
+  // 左栏独立运行面板：显示开关打开且栏位=左时展示。
   const showLeftSidebarMonitorPanelMerged =
-    showLeftSidebarWorkspaceList ? monitorPanelDefault.visible : showMonitorOnLeft;
+    monitorPanelDefault.visible && monitorPanelDefault.placement === "left";
   const openBuiltinAssistant = useCallback((assistantId: string) => {
     const trimmed = assistantId.trim();
     if (!trimmed) return;
@@ -3122,9 +3126,7 @@ export default function App() {
         automationPanelProps: {
           repositories,
           activeRepositoryId,
-          employees,
           workflowTemplates,
-          workflowGraphsByWorkflowId,
         },
         artifactsPanelProps: {
           repositories,
@@ -3270,9 +3272,7 @@ export default function App() {
       cockpitSurfaceOpenRequestKey={assistantOpenRequestKey}
       scheduledTasksOverlay={scheduledTasksOverlay}
       onCloseScheduledTasksOverlay={closeScheduledTasksOverlay}
-      scheduledTasksOverlayEmployees={employees}
       scheduledTasksOverlayWorkflowTemplates={workflowTemplates}
-      scheduledTasksOverlayWorkflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
       onCockpitActiveAssistantIdChange={(assistantId) => {
         setCockpitActiveAssistantId(assistantId);
         if (assistantId) setCockpitResumeAssistantId(assistantId);
