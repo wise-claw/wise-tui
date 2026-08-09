@@ -90,19 +90,286 @@
 
 .app-command-palette-scope {
   flex: 1 1 auto;
-  min-width: 160px;
-  max-width: 260px;
+  min-width: 200px;
+  max-width: 320px;
   align-self: center;
-  margin: 2px 0;
+  margin: 3px 0;
 }
 
-.app-command-palette-scope .ant-select {
+.app-command-palette-scope-select {
   width: 100%;
 }
 
-.app-command-palette-scope .ant-select .ant-select-selection-item,
-.app-command-palette-scope .ant-select .ant-select-selection-placeholder {
-  font-size: 12px;
+.app-command-palette-scope-select.ant-select {
+  width: 100%;
+}
+
+.app-command-palette-scope-select .ant-select-selector {
+  min-height: 28px !important;
+  padding-inline: 8px !important;
+  border-radius: 4px !important;
+  align-items: center;
+}
+
+.app-command-palette-scope-select .ant-select-prefix {
+  margin-inline-end: 6px;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.app-command-palette-scope-select .ant-select-selection-item,
+.app-command-palette-scope-select .ant-select-selection-placeholder {
+  font-size: 13px;
+  line-height: 24px;
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+}
+
+.app-command-palette-scope-select.ant-select-focused .ant-select-selector,
+.app-command-palette-scope-select.ant-select-open .ant-select-selector {
+  box-shadow: 0 0 0 1px var(--ant-color-primary-border) inset;
+}
+
+.app-command-palette-scope-folder.explorer-tree-folder-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.app-command-palette-scope-folder .explorer-tree-material-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.app-command-palette-scope-suffix {
+  font-size: 14px;
+  color: var(--ant-color-text-tertiary);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+.app-command-palette-scope-select.ant-select-open .app-command-palette-scope-suffix {
+  color: var(--ant-color-text-secondary);
+}
+
+/* 搜索范围下拉树：对齐 VS Code Explorer 密度与图标 */
+.app-command-palette-scope-dropdown.ant-select-dropdown {
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-border-secondary);
+  box-shadow: var(--ant-box-shadow-secondary);
+  /* 按内容撑开宽度，避免横向滚动条 */
+  width: max-content !important;
+  min-width: 220px;
+  max-width: min(520px, 92vw);
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree {
+  font-size: 13px;
+  background: transparent;
+  line-height: 26px;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree-list,
+.app-command-palette-scope-dropdown .ant-select-tree-list-holder,
+.app-command-palette-scope-dropdown .rc-virtual-list,
+.app-command-palette-scope-dropdown .rc-virtual-list-holder {
+  overflow-x: hidden !important;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree-list-holder-inner,
+.app-command-palette-scope-dropdown .rc-virtual-list-holder-inner {
+  width: max-content !important;
+  min-width: 100%;
+  align-items: stretch !important;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree-treenode {
+  display: flex !important;
+  align-items: center !important;
+  padding: 0 6px 0 2px !important;
+  margin: 0 0 1px !important;
+  border-radius: 4px;
+  width: max-content;
+  min-width: 100%;
+  height: 26px !important;
+  min-height: 26px !important;
+  line-height: 26px !important;
+  box-sizing: border-box;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree-treenode:hover {
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree-treenode-selected {
+  background: var(--ant-color-primary-bg);
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree-indent {
+  align-self: center !important;
+  height: 26px;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree-indent-unit {
+  width: 12px;
+  display: inline-block;
+  height: 100%;
+}
+
+/* 展开箭头：覆盖 antd switcher-icon 的 baseline，与文件夹图标中线对齐 */
+.app-command-palette-scope-dropdown .ant-select-tree .ant-select-tree-switcher {
+  flex: none !important;
+  width: 16px !important;
+  min-width: 16px !important;
+  height: 26px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 26px !important;
+  align-self: center !important;
+  color: var(--ant-color-text-quaternary);
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree .ant-select-tree-switcher::before {
+  display: none !important;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree .ant-select-tree-switcher:hover {
+  color: var(--ant-color-text-secondary);
+}
+
+/* antd 默认 vertical-align:baseline + font-size:10，会把箭头压到行底 */
+.app-command-palette-scope-dropdown .ant-select-tree .ant-select-tree-switcher .ant-select-tree-switcher-icon,
+.app-command-palette-scope-dropdown .ant-select-tree .ant-select-tree-switcher .app-command-palette-scope-switcher {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 16px !important;
+  height: 16px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 14px !important;
+  line-height: 0 !important;
+  vertical-align: middle !important;
+  position: static !important;
+  top: auto !important;
+  transform: none;
+}
+
+.app-command-palette-scope-switcher {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: inherit;
+  line-height: 0;
+  transition: transform 0.12s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree .ant-select-tree-switcher .app-command-palette-scope-switcher--expanded,
+.app-command-palette-scope-switcher--expanded {
+  transform: rotate(90deg);
+}
+
+.app-command-palette-scope-switcher .codicon {
+  font-size: 14px !important;
+  line-height: 1 !important;
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.app-command-palette-scope-switcher-leaf {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+}
+
+/* 内容区：图标 + 文字水平排列、垂直居中（覆盖 antd vertical-align: top） */
+.app-command-palette-scope-dropdown .ant-select-tree .ant-select-tree-node-content-wrapper {
+  min-height: 26px !important;
+  height: 26px !important;
+  line-height: 26px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 4px;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex: 0 0 auto;
+  min-width: max-content;
+  align-self: center !important;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree .ant-select-tree-node-content-wrapper:hover,
+.app-command-palette-scope-dropdown .ant-select-tree .ant-select-tree-node-content-wrapper.ant-select-tree-node-selected {
+  background: transparent !important;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree .ant-select-tree-node-content-wrapper .ant-select-tree-iconEle {
+  width: 16px !important;
+  min-width: 16px !important;
+  height: 16px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: none !important;
+  vertical-align: middle !important;
+  align-self: center !important;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree-iconEle .app-command-palette-scope-folder,
+.app-command-palette-scope-dropdown .ant-select-tree-iconEle .explorer-tree-folder-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree-iconEle .explorer-tree-material-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree .ant-select-tree-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: visible;
+  text-overflow: unset;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 13px;
+  line-height: 16px !important;
+  height: 16px;
+  color: var(--ant-color-text);
+  display: block;
+  margin: 0;
+  padding: 0;
+  padding-inline-end: 6px;
+}
+
+.app-command-palette-scope-dropdown .ant-select-tree-treenode-selected .ant-select-tree-title {
+  color: var(--ant-color-primary);
+  font-weight: 500;
 }
 
 .app-command-palette-input {
@@ -114,7 +381,11 @@
 }
 
 .app-command-palette-input .ant-input-affix-wrapper {
-  padding-inline: 0;
+  padding-inline: 4px 0;
+}
+
+.app-command-palette-input .ant-input-prefix {
+  margin-inline-end: 8px;
 }
 
 .app-command-palette-input .ant-input {

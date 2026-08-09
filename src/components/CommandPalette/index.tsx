@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo, type ReactNode } from "react";
 import { Input, Spin, TreeSelect, message } from "antd";
-import { FolderOutlined, SearchOutlined } from "@ant-design/icons";
-import { ExplorerTreeFileIcon } from "../GitPanel/explorerTreeChrome";
+import { SearchOutlined } from "@ant-design/icons";
+import {
+  ExplorerTreeChevron,
+  ExplorerTreeFileIcon,
+  ExplorerTreeFolderIcon,
+} from "../GitPanel/explorerTreeChrome";
 import { openRepositoryFileWithStoredPreference } from "../../services/openWorkspaceWithPreference";
 import {
   listRepositoryExplorerChildren,
@@ -62,7 +66,7 @@ function CommandPaletteModeTabs({
   onSearchModeChange: (mode: CommandPaletteSearchMode) => void;
 }) {
   return (
-    <div className="app-command-palette-tabs" role="tablist" aria-label="搜索范围">
+    <div className="app-command-palette-tabs" role="tablist" aria-label="搜索模式">
       {SEARCH_MODE_TABS.map(({ mode, label }) => {
         const active = searchMode === mode;
         return (
@@ -79,6 +83,39 @@ function CommandPaletteModeTabs({
         );
       })}
     </div>
+  );
+}
+
+/** 从范围路径取目录名（用于 Material 文件夹图标与树节点短标题）。 */
+function scopeFolderName(value: unknown): string {
+  const path = typeof value === "string" ? value : "";
+  if (!path) return "";
+  const normalized = path.replace(/\\/g, "/");
+  const idx = normalized.lastIndexOf("/");
+  return idx >= 0 ? normalized.slice(idx + 1) : normalized;
+}
+
+/** VS Code 风格折叠箭头：codicon chevron-right，展开时旋转 90°。 */
+function ScopeTreeSwitcherIcon(nodeProps: { expanded?: boolean; isLeaf?: boolean }) {
+  if (nodeProps.isLeaf) return <span className="app-command-palette-scope-switcher-leaf" />;
+  return (
+    <span
+      className={`app-command-palette-scope-switcher${nodeProps.expanded ? " app-command-palette-scope-switcher--expanded" : ""}`}
+      aria-hidden
+    >
+      <ExplorerTreeChevron />
+    </span>
+  );
+}
+
+/** 触发器前缀：当前目录 Material 文件夹图标。 */
+function ScopeSelectPrefix({ scopeDir }: { scopeDir: string }) {
+  return (
+    <ExplorerTreeFolderIcon
+      name={scopeFolderName(scopeDir)}
+      expanded={false}
+      className="app-command-palette-scope-folder"
+    />
   );
 }
 
@@ -123,6 +160,33 @@ interface ScopeTreeNode {
   value: string;
   isLeaf?: boolean;
   children?: ScopeTreeNode[];
+  /** antd TreeSelect 通过节点 icon 渲染；函数可读取 expanded 切换开合图标。 */
+  icon?: (props: { expanded?: boolean }) => ReactNode;
+}
+
+/** 构造带 VS Code Material 文件夹图标的范围树节点。
+ * `title` 使用完整相对路径（供触发器展示与过滤）；树内通过 treeTitleRender 只显示目录名。
+ */
+function createScopeTreeNode(name: string, value: string): ScopeTreeNode {
+  return {
+    title: value || "整个仓库",
+    value,
+    isLeaf: false,
+    icon: (props) => (
+      <ExplorerTreeFolderIcon
+        name={name}
+        expanded={Boolean(props.expanded)}
+        className="app-command-palette-scope-folder"
+      />
+    ),
+  };
+}
+
+/** 下拉树节点标题：根显示「整个仓库」，其余只显示目录名。 */
+function renderScopeTreeTitle(node: { value?: string | number }) {
+  const value = typeof node.value === "string" ? node.value : "";
+  if (!value) return "整个仓库";
+  return scopeFolderName(value);
 }
 
 /** 递归地把 `children` 挂到 value 等于 `targetValue` 的节点下（不可变更新）。 */
@@ -214,7 +278,7 @@ export const CommandPalette = memo(function CommandPalette({
         .filter((e) => e.isDir)
         .map((e) => {
           const name = e.path.split("/").pop() || e.path;
-          return { title: name, value: e.path, isLeaf: false };
+          return createScopeTreeNode(name, e.path);
         });
     },
     [repositoryPath],
@@ -302,7 +366,7 @@ export const CommandPalette = memo(function CommandPalette({
   useEffect(() => {
     if (!open) return;
     setScopeDir(initialScopeDir ?? "");
-    setScopeTreeData([{ title: "整个仓库", value: "", isLeaf: false, children: [] }]);
+    setScopeTreeData([createScopeTreeNode("整个仓库", "")]);
     let cancelled = false;
     void loadScopeChildren("").then((children) => {
       if (cancelled) return;
@@ -451,20 +515,30 @@ export const CommandPalette = memo(function CommandPalette({
           <CommandPaletteModeTabs searchMode={searchMode} onSearchModeChange={onSearchModeChange} />
           <div className="app-command-palette-scope">
             <TreeSelect
-              value={scopeDir || undefined}
+              className="app-command-palette-scope-select"
+              value={scopeDir}
               onChange={(v) => setScopeDir(typeof v === "string" ? v : "")}
               treeData={scopeTreeData}
               loadData={onLoadScopeTreeData}
-              placeholder="搜索范围：整个仓库"
+              placeholder="整个仓库"
               showSearch
               treeNodeFilterProp="title"
               allowClear
-              size="small"
-              variant="borderless"
-              suffixIcon={<FolderOutlined style={{ color: "var(--ant-color-text-tertiary)" }} />}
-              style={{ width: "100%" }}
-              dropdownStyle={{ maxHeight: 400, overflow: "auto" }}
-              listHeight={320}
+              variant="filled"
+              treeDefaultExpandedKeys={[""]}
+              treeIcon
+              switcherIcon={ScopeTreeSwitcherIcon}
+              treeTitleRender={renderScopeTreeTitle}
+              prefix={<ScopeSelectPrefix scopeDir={scopeDir} />}
+              suffixIcon={
+                <span className="codicon codicon-chevron-down app-command-palette-scope-suffix" aria-hidden />
+              }
+              classNames={{ popup: { root: "app-command-palette-scope-dropdown" } }}
+              styles={{ popup: { root: { maxHeight: 400, overflowY: "auto", overflowX: "hidden" } } }}
+              listHeight={360}
+              listItemHeight={26}
+              popupMatchSelectWidth={false}
+              aria-label="搜索范围"
             />
           </div>
         </div>

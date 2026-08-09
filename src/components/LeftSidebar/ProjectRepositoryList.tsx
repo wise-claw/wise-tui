@@ -2,11 +2,6 @@ import type { MutableRefObject } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { App as AntdApp, Typography } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
-import {
-  toggleWorkspaceMemoPanel,
-  useWorkspaceMemoPanelOpen,
-} from "../../stores/workspaceMemoPanelStore";
-import { formatChordForDisplay } from "../../utils/atMentionShortcutChord";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { useRepositoryRunCommandRowPinnedMap } from "../../hooks/useRepositoryRunCommandRowPinned";
@@ -29,7 +24,6 @@ import { repositoryFolderBasename } from "../../utils/repositoryType";
 import {
   ExpandIcon,
   PlusIcon,
-  WorkspaceMemoIcon,
 } from "./SidebarIcons";
 import {
   FloatingRepositoryRow,
@@ -223,9 +217,6 @@ function ProjectRepositoryListInner({
     },
   );
 
-  const headerMemoOpen = useWorkspaceMemoPanelOpen();
-  const requirementsShortcutLabel = formatChordForDisplay("Alt+KeyR");
-
   const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
   const { message } = AntdApp.useApp();
   const [workspaceDropHint, setWorkspaceDropHint] = useState<RepositoryReorderUi["dropHint"]>(null);
@@ -269,17 +260,6 @@ function ProjectRepositoryListInner({
           className="app-repository-header-actions"
           onClick={(e) => { e.stopPropagation(); }}
         >
-          <DeferredHoverTooltip title={`需求（${requirementsShortcutLabel}）`}>
-            <button
-              type="button"
-              className={`app-repository-header-btn${headerMemoOpen ? " app-repository-header-btn--active" : ""}`}
-              aria-label={`需求（${requirementsShortcutLabel}）`}
-              aria-pressed={headerMemoOpen}
-              onClick={() => toggleWorkspaceMemoPanel()}
-            >
-              <WorkspaceMemoIcon />
-            </button>
-          </DeferredHoverTooltip>
           <LeftSidebarQuickActionsPopover
             projectId={activeProjectId}
             repositoryId={activeRepositoryId}
