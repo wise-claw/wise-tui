@@ -558,12 +558,53 @@ pub enum ServerNotification {
         watch_id: String,
         changed_paths: Vec<String>,
     },
+    /// `process/outputDelta` — streamed output chunk for a `process/spawn` run.
+    /// Reuses the same shape as `command/exec/outputDelta` (base64 chunks).
+    ProcessOutputDeltaNotification {
+        process_id: String,
+        stream: String,
+        delta_base64: String,
+        cap_reached: bool,
+    },
+    /// `process/exited` — final exit notification for a `process/spawn` run.
+    ProcessExited {
+        process_id: String,
+        exit_code: i64,
+        stdout: String,
+        stderr: String,
+    },
+    /// `item/reasoning/textDelta` / `item/reasoning/summaryTextDelta` — reasoning
+    /// content / summary increments streamed while the item is in progress.
+    ReasoningTextDelta {
+        item_id: String,
+        delta: String,
+    },
+    /// `item/plan/delta` — proposed plan streaming deltas (EXPERIMENTAL).
+    PlanDelta {
+        item_id: String,
+        delta: String,
+    },
+    /// `item/fileChange/patchUpdated` — live patch changes before the item completes.
+    FileChangePatchUpdated {
+        item_id: String,
+        changes: Value,
+    },
+    /// `warning` / `guardianWarning` — concise system warning for the user.
+    Warning {
+        message: String,
+        thread_id: Option<String>,
+    },
+    /// `thread/compacted` — the thread context was compacted.
+    ThreadCompacted {
+        thread_id: String,
+    },
     // --- Phase 5: Turn plan / diff notifications ---
     /// `turn/planUpdated` — the agent's plan has been updated.
     TurnPlanUpdated {
         thread_id: String,
         turn_id: String,
-        plan: Option<String>,
+        /// `TurnPlanStep[]` as raw JSON (steps carry `status` + `step` text).
+        plan: Option<Value>,
     },
     /// `turn/diffUpdated` — the cumulative diff has been updated.
     TurnDiffUpdated {
@@ -838,7 +879,9 @@ pub fn parse_notification(method: &str, params: Option<Value>) -> ServerNotifica
                 data,
             }
         }
-        "mcpServer/statusUpdated" | "mcp/serverStatusUpdated" => {
+        "mcpServer/statusUpdated"
+        | "mcpServer/startupStatus/updated"
+        | "mcp/serverStatusUpdated" => {
             let name = p
                 .get("name")
                 .or_else(|| p.get("server_name"))
@@ -857,7 +900,9 @@ pub fn parse_notification(method: &str, params: Option<Value>) -> ServerNotifica
                 .map(str::to_string);
             ServerNotification::McpServerStatusUpdated { name, status, error }
         }
-        "mcpServer/oauthLoginCompleted" | "mcp/oauthLoginCompleted" => {
+        "mcpServer/oauthLoginCompleted"
+        | "mcpServer/oauthLogin/completed"
+        | "mcp/oauthLoginCompleted" => {
             let name = p
                 .get("name")
                 .or_else(|| p.get("server"))
@@ -921,6 +966,125 @@ pub fn parse_notification(method: &str, params: Option<Value>) -> ServerNotifica
                 cap_reached,
             }
         }
+        "process/outputDelta" => {
+            let process_id = p
+                .get("processHandle")
+                .or_else(|| p.get("process_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let stream = p
+                .get("stream")
+                .and_then(Value::as_str)
+                .unwrap_or("stdout")
+                .to_string();
+            let delta_base64 = p
+                .get("deltaBase64")
+                .or_else(|| p.get("delta_base64"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let cap_reached = p
+                .get("capReached")
+                .or_else(|| p.get("cap_reached"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            ServerNotification::ProcessOutputDeltaNotification {
+                process_id,
+                stream,
+                delta_base64,
+                cap_reached,
+            }
+        }
+        "process/exited" => {
+            let process_id = p
+                .get("processHandle")
+                .or_else(|| p.get("process_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let exit_code = p
+                .get("exitCode")
+                .or_else(|| p.get("exit_code"))
+                .and_then(Value::as_i64)
+                .unwrap_or(0);
+            let stdout = p
+                .get("stdout")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let stderr = p
+                .get("stderr")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            ServerNotification::ProcessExited {
+                process_id,
+                exit_code,
+                stdout,
+                stderr,
+            }
+        }
+        "item/reasoning/textDelta" | "item/reasoning/summaryTextDelta" => {
+            let item_id = p
+                .get("itemId")
+                .or_else(|| p.get("item_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let delta = p
+                .get("delta")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            ServerNotification::ReasoningTextDelta { item_id, delta }
+        }
+        "item/plan/delta" => {
+            let item_id = p
+                .get("itemId")
+                .or_else(|| p.get("item_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let delta = p
+                .get("delta")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            ServerNotification::PlanDelta { item_id, delta }
+        }
+        "item/fileChange/patchUpdated" => {
+            let item_id = p
+                .get("itemId")
+                .or_else(|| p.get("item_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let changes = p.get("changes").cloned().unwrap_or(Value::Null);
+            ServerNotification::FileChangePatchUpdated { item_id, changes }
+        }
+        "warning" | "guardianWarning" => {
+            let message = p
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let thread_id = p
+                .get("threadId")
+                .or_else(|| p.get("thread_id"))
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            ServerNotification::Warning { message, thread_id }
+        }
+        "thread/compacted" => {
+            let thread_id = p
+                .get("threadId")
+                .or_else(|| p.get("thread_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            ServerNotification::ThreadCompacted { thread_id }
+        }
         "fs/changed" => {
             let watch_id = p
                 .get("watchId")
@@ -943,7 +1107,7 @@ pub fn parse_notification(method: &str, params: Option<Value>) -> ServerNotifica
                 changed_paths,
             }
         }
-        "turn/planUpdated" | "turn/plan_updated" => {
+        "turn/planUpdated" | "turn/plan_updated" | "turn/plan/updated" => {
             let thread_id = p
                 .get("threadId")
                 .or_else(|| p.get("thread_id"))
@@ -956,13 +1120,11 @@ pub fn parse_notification(method: &str, params: Option<Value>) -> ServerNotifica
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string();
-            let plan = p
-                .get("plan")
-                .and_then(Value::as_str)
-                .map(str::to_string);
+            // schema: `plan` 是 `TurnPlanStep[]`（status + step），存原始数组由适配器格式化。
+            let plan = p.get("plan").cloned();
             ServerNotification::TurnPlanUpdated { thread_id, turn_id, plan }
         }
-        "turn/diffUpdated" | "turn/diff_updated" => {
+        "turn/diffUpdated" | "turn/diff_updated" | "turn/diff/updated" => {
             let thread_id = p
                 .get("threadId")
                 .or_else(|| p.get("thread_id"))
@@ -1641,6 +1803,7 @@ fn parse_thread_item(v: Option<&Value>) -> ThreadItem {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn parses_thread_start_response_envelope() {
@@ -1866,5 +2029,122 @@ mod tests {
             other => panic!("expected Image data URL, got {other:?}"),
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+    
+    #[test]
+    fn parses_wire_method_aliases_for_existing_notifications() {
+        // app-server 实际用斜杠风格 method；旧 camelCase 仍兼容。
+        let status = parse_notification(
+            "mcpServer/startupStatus/updated",
+            Some(json!({ "name": "github", "status": "ready" })),
+        );
+        assert!(matches!(
+            status,
+            ServerNotification::McpServerStatusUpdated { name, status, .. }
+                if name == "github" && status == "ready"
+        ));
+
+        let oauth = parse_notification(
+            "mcpServer/oauthLogin/completed",
+            Some(json!({ "name": "github", "success": true })),
+        );
+        assert!(matches!(
+            oauth,
+            ServerNotification::McpOAuthLoginCompleted { name, success, .. }
+                if name == "github" && success
+        ));
+
+        let plan = parse_notification(
+            "turn/plan/updated",
+            Some(json!({ "threadId": "thr", "turnId": "t1", "plan": [{ "status": "in_progress", "step": "调研" }] })),
+        );
+        assert!(matches!(
+            plan,
+            ServerNotification::TurnPlanUpdated { plan: Some(v), .. } if v.is_array()
+        ));
+
+        let diff = parse_notification(
+            "turn/diff/updated",
+            Some(json!({ "threadId": "thr", "turnId": "t1", "diff": "@@ -1 +1 @@" })),
+        );
+        assert!(matches!(
+            diff,
+            ServerNotification::TurnDiffUpdated { diff: Some(d), .. } if d == "@@ -1 +1 @@"
+        ));
+    }
+
+    #[test]
+    fn parses_new_wire_notifications() {
+        let reasoning = parse_notification(
+            "item/reasoning/textDelta",
+            Some(json!({ "itemId": "itm", "threadId": "thr", "turnId": "t1", "delta": "思考中" })),
+        );
+        assert!(matches!(
+            reasoning,
+            ServerNotification::ReasoningTextDelta { item_id, delta } if item_id == "itm" && delta == "思考中"
+        ));
+
+        let plan_delta = parse_notification(
+            "item/plan/delta",
+            Some(json!({ "itemId": "itm", "threadId": "thr", "turnId": "t1", "delta": "步骤一" })),
+        );
+        assert!(matches!(
+            plan_delta,
+            ServerNotification::PlanDelta { item_id, delta } if item_id == "itm" && delta == "步骤一"
+        ));
+
+        let process_out = parse_notification(
+            "process/outputDelta",
+            Some(json!({ "processHandle": "p1", "stream": "stdout", "deltaBase64": "aGk=", "capReached": false })),
+        );
+        assert!(matches!(
+            process_out,
+            ServerNotification::ProcessOutputDeltaNotification { process_id, delta_base64, .. }
+                if process_id == "p1" && delta_base64 == "aGk="
+        ));
+
+        let process_exit = parse_notification(
+            "process/exited",
+            Some(json!({ "processHandle": "p1", "exitCode": 0, "stdout": "ok", "stderr": "" })),
+        );
+        assert!(matches!(
+            process_exit,
+            ServerNotification::ProcessExited { process_id, exit_code, stdout, .. }
+                if process_id == "p1" && exit_code == 0 && stdout == "ok"
+        ));
+
+        let warning = parse_notification("warning", Some(json!({ "message": "磁盘空间不足" })));
+        assert!(matches!(
+            warning,
+            ServerNotification::Warning { message, .. } if message == "磁盘空间不足"
+        ));
+
+        let guardian = parse_notification(
+            "guardianWarning",
+            Some(json!({ "threadId": "thr", "message": "注意隐私" })),
+        );
+        assert!(matches!(
+            guardian,
+            ServerNotification::Warning { message, thread_id: Some(t), .. }
+                if message == "注意隐私" && t == "thr"
+        ));
+
+        let compacted = parse_notification(
+            "thread/compacted",
+            Some(json!({ "threadId": "thr" })),
+        );
+        assert!(matches!(
+            compacted,
+            ServerNotification::ThreadCompacted { thread_id } if thread_id == "thr"
+        ));
+
+        let patch = parse_notification(
+            "item/fileChange/patchUpdated",
+            Some(json!({ "itemId": "itm", "threadId": "thr", "turnId": "t1", "changes": [] })),
+        );
+        assert!(matches!(
+            patch,
+            ServerNotification::FileChangePatchUpdated { item_id, changes } if item_id == "itm" && changes.is_array()
+        ));
     }
 }

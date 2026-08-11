@@ -36,7 +36,6 @@ function ChatMessageListRowContentInner({
     );
   }
   if (row.kind === "files-changed-summary") {
-    if (listVariant === "monitor") return null;
     return <TurnFilesChangedSummaryCard files={row.files} />;
   }
   if (listVariant === "monitor") {

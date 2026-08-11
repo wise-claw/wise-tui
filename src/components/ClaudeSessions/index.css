@@ -10224,23 +10224,6 @@ button.app-message-part-header:disabled:hover {
   line-height: 1.3;
 }
 
-.app-turn-files-changed__review {
-  flex-shrink: 0;
-  border: none;
-  background: transparent;
-  padding: 0;
-  margin: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ant-color-primary);
-  cursor: pointer;
-  line-height: 1.3;
-}
-
-.app-turn-files-changed__review:hover {
-  color: var(--ant-color-primary-hover);
-}
-
 .app-turn-files-changed__list {
   list-style: none;
   margin: 0;
