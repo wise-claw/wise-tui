@@ -1,7 +1,7 @@
 /**
  * 将 Markdown 中的 blob URL（`blob:http://...`）替换为 base64 data URI。
  *
- * Crepe/Milkdown 粘贴图片时默认生成临时 blob URL，页面刷新或过一段时间后
+ * 编辑器粘贴图片时默认生成临时 blob URL，页面刷新或过一段时间后
  * blob URL 失效导致图片丢失。此函数在保存前将所有可访问的 blob URL 转为
  * `data:<mime>;base64,...` 格式，确保图片持久化。
  *

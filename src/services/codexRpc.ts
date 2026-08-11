@@ -71,6 +71,20 @@ export async function respondCodexApproval(
   });
 }
 
+/** Interrupt the current in-flight turn via `turn/interrupt` (cooperative stop). */
+export async function interruptCodexRpc(sessionId: string): Promise<void> {
+  await invoke('interrupt_codex_rpc', {
+    params: { sessionId },
+  });
+}
+
+/** Shut down a Codex RPC session: kill the app-server subprocess and clean up state. */
+export async function shutdownCodexRpc(sessionId: string): Promise<void> {
+  await invoke('shutdown_codex_rpc', {
+    params: { sessionId },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // MCP functions (Phase 3)
 // ---------------------------------------------------------------------------

@@ -44,6 +44,37 @@ describe("opencodeModel helpers", () => {
     ]);
     expect(options.filter((o) => matchesOpencodeModelPickerFilter("  ", o))).toEqual(options);
   });
+
+  test("carries provider info and filters by provider name/id", () => {
+    const options = buildOpencodeModelPickerOptions([
+      {
+        id: "anthropic/claude-sonnet-4",
+        displayName: "Claude Sonnet 4",
+        providerId: "anthropic",
+        providerName: "Anthropic",
+      },
+      {
+        id: "openai/gpt-5",
+        displayName: "GPT-5",
+        providerId: "openai",
+        providerName: "OpenAI",
+      },
+    ]);
+    expect(options[0]).toEqual({ value: OPENCODE_DEFAULT_MODEL, label: "Auto" });
+    expect(options[1]).toEqual({
+      value: "anthropic/claude-sonnet-4",
+      label: "Claude Sonnet 4",
+      providerId: "anthropic",
+      providerName: "Anthropic",
+    });
+    expect(options[2]).toMatchObject({ value: "openai/gpt-5", providerName: "OpenAI" });
+    expect(options.filter((o) => matchesOpencodeModelPickerFilter("anthropic", o))).toEqual([
+      options[1],
+    ]);
+    expect(options.filter((o) => matchesOpencodeModelPickerFilter("OpenAI", o))).toEqual([
+      options[2],
+    ]);
+  });
 });
 
 describe("resolveOpencodeExecModelId", () => {

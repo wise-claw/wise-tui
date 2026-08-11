@@ -1,8 +1,8 @@
-.app-prompt-milkdown-field {
+.app-prompt-rich-text-field {
   width: 100%;
 }
 
-.app-prompt-milkdown-field__label-row {
+.app-prompt-rich-text-field__label-row {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -10,21 +10,22 @@
   margin-bottom: 6px;
 }
 
-.app-prompt-milkdown-field__hint {
+.app-prompt-rich-text-field__hint {
   font-size: 12px;
 }
 
 /* 仓库提示词编辑器视觉对齐 */
-.app-prompt-milkdown-field__editor {
+.app-prompt-rich-text-field__editor {
   min-height: 200px;
   max-height: min(45vh, 400px);
   overflow: auto;
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 8px;
-  padding: 8px;
+  border-radius: 10px;
   background: var(--ant-color-bg-container);
 }
 
-.app-prompt-milkdown-field__editor .app-milkdown-anchor-host {
-  min-height: 160px;
+.app-prompt-rich-text-field__editor .app-tiptap-editor {
+  min-height: 200px;
+  border: none;
+  border-radius: 0;
 }

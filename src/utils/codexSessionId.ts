@@ -19,7 +19,11 @@ export function sessionHasPriorCodexTurn(
 ): boolean {
   return messages.some(
     (message) =>
-      message.role === "system" && message.content.includes("Codex 执行"),
+      message.role === "system" &&
+      // CLI 标记为「Codex 执行中（…）…」，RPC 标记为「Codex RPC 执行中（…）…」；
+      // 只匹配前者会让 codex-rpc 会话永远判定为「无历史回合」，导致每轮都新建线程。
+      (message.content.includes("Codex 执行") ||
+        message.content.includes("Codex RPC 执行")),
   );
 }
 

@@ -10,6 +10,7 @@ use crate::opencode_binary::{
 };
 use crate::opencode_config_dir::{
     effective_opencode_model_from_disk, list_opencode_models_from_config,
+    split_opencode_provider_from_disk,
 };
 use crate::opencode_stream_adapter::{
     opencode_session_clear_line, OpencodeStdoutMap, OpencodeStdoutMapper,
@@ -497,6 +498,19 @@ fn attach_opencode_child_io(
 pub struct OpencodeModelListItem {
     pub id: String,
     pub display_name: String,
+    /// `provider/model` 中的 provider id（如 `anthropic`）。
+    pub provider_id: Option<String>,
+    /// opencode.json `provider.<id>.name` 展示名（如 `Anthropic`）。
+    pub provider_name: Option<String>,
+}
+
+fn split_model_provider(id: &str) -> Option<String> {
+    let trimmed = id.trim();
+    let slash = trimmed.find('/')?;
+    if slash == 0 || slash >= trimmed.len() - 1 {
+        return None;
+    }
+    Some(trimmed[..slash].to_string())
 }
 
 fn strip_ansi_codes(input: &str) -> String {
@@ -556,6 +570,8 @@ fn parse_opencode_models_cli_output(stdout: &str) -> Vec<OpencodeModelListItem> 
         out.push(OpencodeModelListItem {
             id: id.to_string(),
             display_name,
+            provider_id: split_model_provider(&id),
+            provider_name: None,
         });
     }
     out
@@ -588,19 +604,28 @@ pub async fn opencode_list_models() -> Result<Vec<OpencodeModelListItem>, String
     let mut out = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
 
-    for (id, display_name) in list_opencode_models_from_config() {
-        if seen.insert(id.clone()) {
-            out.push(OpencodeModelListItem { id, display_name });
+    for item in list_opencode_models_from_config() {
+        if seen.insert(item.id.clone()) {
+            out.push(OpencodeModelListItem {
+                id: item.id,
+                display_name: item.display_name,
+                provider_id: item.provider_id,
+                provider_name: item.provider_name,
+            });
         }
     }
 
     if let Some(disk) = effective_opencode_model_from_disk() {
         if seen.insert(disk.clone()) {
+            let (provider_id, provider_name) =
+                split_opencode_provider_from_disk(&disk);
             out.insert(
                 0,
                 OpencodeModelListItem {
                     id: disk.clone(),
                     display_name: disk,
+                    provider_id,
+                    provider_name,
                 },
             );
         }

@@ -2412,6 +2412,34 @@ pub(crate) async fn cancel_claude_execution(
         }
     }
 
+    // Codex RPC：app-server 子进程不在 ClaudeProcessState 槽位中，而是注册在
+    // CodexRpcSessionStore（key 为 tab session id）。若不在此中断/关闭，点「结束」后
+    // turn 仍会继续执行并持续推送输出事件。先发送 `turn/interrupt`，再硬关子进程，
+    // 保证输出立刻停止；非 Codex RPC 会话（store 无匹配）静默跳过。
+    {
+        let store_state = app.state::<crate::codex_rpc_commands::CodexRpcSessionStore>();
+        // 无论是否已在 store 中，都登记取消标记：bootstrap 竞态窗口内
+        // `execute_codex_rpc` 尚未入 store，靠该标记在 turn 启动后自检中止。
+        store_state.cancelled.lock().await.insert(sid.to_string());
+        let codex_session_arc = {
+            let sessions = store_state.sessions.lock().await;
+            sessions.get(sid).cloned()
+        };
+        if let Some(codex_session_arc) = codex_session_arc {
+            {
+                let mut session = codex_session_arc.lock().await;
+                // 软中断最多等 2s（transport 默认 300s 超时会拖住「结束」），随后硬关。
+                let _ = tokio::time::timeout(
+                    std::time::Duration::from_secs(2),
+                    session.interrupt_turn(),
+                )
+                .await;
+                let _ = session.shutdown().await;
+            }
+            store_state.sessions.lock().await.remove(sid);
+        }
+    }
+
     // Emit completion
     let complete_payload = ClaudeCompletePayload {
         session_id: session_id.clone(),

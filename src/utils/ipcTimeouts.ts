@@ -5,6 +5,8 @@ export const REPO_EXPLORER_SEARCH_TIMEOUT_MS = 60_000;
 export const REPO_FILE_MUTATION_TIMEOUT_MS = 30_000;
 
 export const SKILLS_SCAN_TIMEOUT_MS = 60_000;
+
+export const AGENTS_EXPLORER_SCAN_TIMEOUT_MS = 15_000;
 export const SKILLS_DETECT_TIMEOUT_MS = 30_000;
 
 /** 看门狗默认：操作超过此时长仍未结束 → 标记为卡住并允许用户解除。 */

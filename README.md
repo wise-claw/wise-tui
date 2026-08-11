@@ -141,7 +141,7 @@ Wise 提供两种入口，可按场景选择：
 |------|------|
 | 桌面壳 | Tauri 2 + Rust |
 | 前端 | React 19、TypeScript、Vite、Ant Design |
-| 编辑器 | Monaco、Milkdown、xterm.js |
+| 编辑器 | Monaco、Tiptap、xterm.js |
 | 工作流 | CC Workflow Studio、@antv/x6 |
 | 持久化 | SQLite（`~/.wise/wise.db`） |
 

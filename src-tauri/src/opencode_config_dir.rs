@@ -88,6 +88,14 @@ pub fn effective_opencode_model_from_disk() -> Option<String> {
     load_opencode_disk_state(false).effective_model
 }
 
+/// 从当前磁盘配置解析 `provider/model` 的提供商信息。
+pub fn split_opencode_provider_from_disk(
+    id: &str,
+) -> (Option<String>, Option<String>) {
+    let config = read_opencode_config_json();
+    split_opencode_provider(&config, id)
+}
+
 pub fn validate_opencode_settings_json(raw: &str) -> Result<Value, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -226,12 +234,51 @@ pub fn read_opencode_user_settings_pretty() -> String {
 }
 
 /// 从 `opencode.json` 提取可选模型（顶层 `model` + `provider.*.models`）。
-pub fn list_opencode_models_from_config() -> Vec<(String, String)> {
+#[derive(Debug, Clone)]
+pub struct OpencodeConfigModel {
+    pub id: String,
+    pub display_name: String,
+    pub provider_id: Option<String>,
+    pub provider_name: Option<String>,
+}
+
+/// 取 `provider.<id>.name` 展示名（如 `anthropic` -> `Anthropic`）。
+fn opencode_provider_name(config: &Value, provider_id: &str) -> Option<String> {
+    config
+        .get("provider")
+        .and_then(Value::as_object)
+        .and_then(|providers| providers.get(provider_id))
+        .and_then(|entry| entry.get("name"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+/// 从 `provider/model` 拆出提供商 id，并尝试在配置中找展示名。
+fn split_opencode_provider(
+    config: &Value,
+    id: &str,
+) -> (Option<String>, Option<String>) {
+    let Some(slash) = id.find('/') else {
+        return (None, None);
+    };
+    if slash == 0 || slash >= id.len() - 1 {
+        return (None, None);
+    }
+    let provider_id = &id[..slash];
+    (
+        Some(provider_id.to_string()),
+        opencode_provider_name(config, provider_id),
+    )
+}
+
+pub fn list_opencode_models_from_config() -> Vec<OpencodeConfigModel> {
     let config = read_opencode_config_json();
-    let mut out: Vec<(String, String)> = Vec::new();
+    let mut out: Vec<OpencodeConfigModel> = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
 
-    let mut push = |id: String, display: String| {
+    let mut push = |id: String, display: String, provider_id: Option<String>, provider_name: Option<String>| {
         let trimmed = id.trim().to_string();
         if trimmed.is_empty() || !seen.insert(trimmed.clone()) {
             return;
@@ -244,11 +291,17 @@ pub fn list_opencode_models_from_config() -> Vec<(String, String)> {
                 d.to_string()
             }
         };
-        out.push((trimmed, label));
+        out.push(OpencodeConfigModel {
+            id: trimmed,
+            display_name: label,
+            provider_id,
+            provider_name,
+        });
     };
 
     if let Some(model) = read_effective_opencode_model(&config) {
-        push(model.clone(), model);
+        let (provider_id, provider_name) = split_opencode_provider(&config, &model);
+        push(model.clone(), model, provider_id, provider_name);
     }
 
     if let Some(provider) = config.get("provider").and_then(Value::as_object) {
@@ -256,6 +309,7 @@ pub fn list_opencode_models_from_config() -> Vec<(String, String)> {
             let Some(models) = entry.get("models").and_then(Value::as_object) else {
                 continue;
             };
+            let provider_name = opencode_provider_name(&config, provider_id);
             for (model_name, meta) in models {
                 let id = format!("{provider_id}/{model_name}");
                 let display = meta
@@ -265,7 +319,12 @@ pub fn list_opencode_models_from_config() -> Vec<(String, String)> {
                     .filter(|s| !s.is_empty())
                     .unwrap_or(model_name)
                     .to_string();
-                push(id, display);
+                push(
+                    id,
+                    display,
+                    Some(provider_id.clone()),
+                    provider_name.clone(),
+                );
             }
         }
     }

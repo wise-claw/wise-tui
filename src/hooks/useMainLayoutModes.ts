@@ -13,6 +13,7 @@ import {
 } from "../services/mainWindowLayout";
 import {
   nextPaneCountInCycle,
+  previousPaneCountInCycle,
   type PaneCount,
   type PaneSlot,
 } from "../constants/mainLayoutWidths";
@@ -404,6 +405,27 @@ export function useMainLayoutModes({
     if (paneCountRef.current <= 1) return;
     void handleChangePaneCount(1);
   }, [handleChangePaneCount]);
+
+  /** 关闭指定额外窗格：移除该槽位并把屏数收敛到上一档（2 屏时回到单屏）。 */
+  const handleClosePaneSlot = useCallback(
+    async (slotIndex: number): Promise<boolean> => {
+      const current = paneCountRef.current;
+      if (current <= 1) return false;
+      const prev = extraPanesLatestRef.current;
+      if (slotIndex < 0 || slotIndex >= prev.length) return false;
+      if (paneChangeInFlightRef.current) {
+        message.info("正在调整多屏布局，请稍候");
+        return false;
+      }
+      // 先移除被关闭的槽位（handleChangePaneCount 会按目标屏数对齐并截断尾槽），
+      // 避免其内部读到仍包含该槽位的旧快照。
+      const withoutSlot = prev.filter((_, index) => index !== slotIndex);
+      extraPanesLatestRef.current = withoutSlot;
+      setExtraPanes(withoutSlot);
+      return handleChangePaneCount(previousPaneCountInCycle(current));
+    },
+    [handleChangePaneCount, setExtraPanes],
+  );
 
   const handleCloseMultiPaneRef = useRef(handleCloseMultiPane);
   handleCloseMultiPaneRef.current = handleCloseMultiPane;
@@ -905,6 +927,7 @@ export function useMainLayoutModes({
     handleNewPaneSessionInNextSlot,
     handleNewPaneProjectSessionInNextSlot,
     handleChangePaneCount,
+    handleClosePaneSlot,
     paneChangeInFlight,
     handleCyclePaneCount,
     handleCloseMultiPane,

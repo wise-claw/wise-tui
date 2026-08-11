@@ -715,7 +715,7 @@
   line-height: 1.2;
 }
 
-.app-workflow-node-edit-form__milkdown-block {
+.app-workflow-node-edit-form__rich-text-block {
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 8px;
   overflow: hidden;
@@ -726,13 +726,14 @@
   width: 126px;
 }
 
-.app-workflow-node-edit-form__milkdown-editor {
+.app-workflow-node-edit-form__rich-text-editor {
   min-height: 130px;
-  padding-left: 24px;
 }
 
-.app-workflow-node-edit-form__milkdown-editor .app-milkdown-viewer {
+.app-workflow-node-edit-form__rich-text-editor .app-tiptap-editor {
   min-height: 130px;
+  border: none;
+  border-radius: 0;
 }
 
 .app-workflow-node-edit-form__label-actions {

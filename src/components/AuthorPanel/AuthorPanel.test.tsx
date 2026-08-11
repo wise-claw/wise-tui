@@ -33,14 +33,20 @@ mock.module("../WorkflowConfigModal", () => ({
   ),
 }));
 
+mock.module("../AgentsExplorerPanel", () => ({
+  AgentsExplorerPanel: ({ repositoryPath }: { repositoryPath?: string | null }) => (
+    <section data-stub="agents-explorer">AgentsExplorer:{repositoryPath ?? ""}</section>
+  ),
+}));
+
 mock.module("../ClaudeHooksConfigPanel", () => ({
   ClaudeHooksConfigPanel: ({ listSearch }: { listSearch?: string }) => (
     <section data-stub="hooks">Hooks:{listSearch ?? ""}</section>
   ),
 }));
 
-mock.module("../PromptMilkdownField", () => ({
-  PromptMilkdownField: ({ label, hint }: { label: string; hint?: string }) => (
+mock.module("../PromptRichTextField", () => ({
+  PromptRichTextField: ({ label, hint }: { label: string; hint?: string }) => (
     <section data-stub="prompt-editor">
       {label}
       {hint ?? ""}
@@ -309,6 +315,7 @@ describe("AuthorPanel", () => {
       "助手模板",
       "MCP 工具",
       "技能市场",
+      "Agents 探索",
       "Hooks",
       "插件市场",
       "执行环境",
@@ -390,6 +397,13 @@ describe("AuthorPanel", () => {
     const { props } = buildProps({ pane: "skills" });
     const html = renderAuthorPanel(props);
     expect(html).toContain("技能");
+  });
+
+  test("agents-explorer pane mounts AgentsExplorerPanel with repository path", () => {
+    const { props } = buildProps({ pane: "agents-explorer" });
+    const html = renderAuthorPanel(props);
+    expect(html).toContain('data-stub="agents-explorer"');
+    expect(html).toContain("AgentsExplorer:/repo");
   });
 
   test("claude-plugins pane mounts ClaudePluginMarketHub", () => {

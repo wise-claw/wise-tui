@@ -716,7 +716,7 @@ export interface RepositoryScheduledClaudeTask {
    * @default "claude"
    */
   executionKind?: RepositoryScheduledTaskExecutionKind;
-  /** Milkdown / 脚本正文：`claude` 为 Markdown 提示；`script` 内联模式下为 zsh -c 执行的命令或脚本 */
+  /** 正文：`claude` 为 Markdown 提示；`script` 内联模式下为 zsh -c 执行的命令或脚本 */
   contentMarkdown: string;
   /**
    * `script` 模式下可选：仓库相对路径的脚本文件。
@@ -1255,7 +1255,7 @@ export interface TaskAnchorDescriptor {
   contextAfter: string;
 }
 
-/** Milkdown 锚点位置缓存（基于 ProseMirror 文档绝对位置）。 */
+/** 任务锚点位置缓存（基于 ProseMirror 文档绝对位置）。 */
 export interface TaskAnchorPosition {
   from: number;
   to: number;
@@ -1278,9 +1278,9 @@ export interface SplitResult {
   claudeSplitMapping?: PrdStoredClaudeSplitMapping;
   /** Claude 返回的任务锚点结构化描述：taskId -> {from,to,textHash,contextBefore,contextAfter}。 */
   taskAnchorDescriptors?: Record<string, TaskAnchorDescriptor>;
-  /** Milkdown 锚点持久化：taskId -> 选区文本（用于编辑后重新定位）。 */
+  /** 任务锚点持久化：taskId -> 选区文本（用于编辑后重新定位）。 */
   taskAnchorTexts?: Record<string, string>;
-  /** Milkdown 锚点位置缓存：taskId -> { from, to }（编辑时优先通过 transaction mapping 跟随）。 */
+  /** 任务锚点位置缓存：taskId -> { from, to }（编辑时优先通过 transaction mapping 跟随）。 */
   taskAnchorPositions?: Record<string, TaskAnchorPosition>;
 }
 

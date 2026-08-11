@@ -25,6 +25,7 @@ import { ClaudePluginMarketHub } from "../ClaudePluginMarketHub";
 import { McpHub } from "../McpHub";
 import { SettingsViewModeProvider } from "../SettingsView";
 import { SkillsHub } from "../SkillsHub";
+import { AgentsExplorerPanel } from "../AgentsExplorerPanel";
 import { WorkflowConfigModal } from "../WorkflowConfigModal";
 import { AUTHOR_TABS, type AuthorPane } from "./AuthorPanelTabs";
 import { writeAuthorPaneToStorage } from "./authorPaneStorage";
@@ -39,6 +40,7 @@ const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
   "assistants",
   "mcp",
   "skills",
+  "agents-explorer",
   "claude-plugins",
   "hooks",
   "workflows",
@@ -127,6 +129,8 @@ export function AuthorPanel({
         return <McpHub {...mcpHubProps} onClose={undefined} />;
       case "skills":
         return <SkillsHub {...skillsHubProps} onClose={undefined} />;
+      case "agents-explorer":
+        return <AgentsExplorerPanel repositoryPath={repositoryPath} onClose={undefined} />;
       case "claude-plugins":
         return <ClaudePluginMarketHub onClose={undefined} />;
       case "hooks":

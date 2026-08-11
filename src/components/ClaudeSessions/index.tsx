@@ -169,6 +169,8 @@ export interface ClaudeSessionsProps {
     patch: Partial<import("../../types/paneRuntimeOverride").PaneRuntimeOverride>,
   ) => void;
   onChangePaneCount?: (count: PaneCount) => void;
+  /** 关闭指定额外窗格（slotIndex 为 extraPanes 下标，2 屏时回到单屏）。 */
+  onClosePaneSlot?: (slotIndex: number) => void | Promise<boolean>;
   onPaneRepositorySelect?: (slotIndex: number, repositoryId: number) => void | Promise<void>;
   onPaneProjectNewSession?: (
     slotIndex: number,
@@ -332,6 +334,7 @@ function ClaudeSessionsShell({
   primaryPaneRuntimeOverride = null,
   onUpdatePaneRuntimeOverride,
   onChangePaneCount,
+  onClosePaneSlot,
   onPaneRepositorySelect,
   onPaneProjectNewSession,
   onNewPaneSession,
@@ -938,6 +941,7 @@ function ClaudeSessionsShell({
           onPaneRepositorySelect={onPaneRepositorySelect}
           onPaneProjectNewSession={onPaneProjectNewSession}
           onNewPaneSession={onNewPaneSession}
+          onClosePaneSlot={onClosePaneSlot}
           onOpenWorkflowConfig={onOpenWorkflowConfig}
           onOpenBuiltinAssistant={onOpenBuiltinAssistant}
           onActivateAssistant={onActivateAssistant}

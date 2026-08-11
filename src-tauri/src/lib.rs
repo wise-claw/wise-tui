@@ -1,3 +1,4 @@
+mod agents_explorer;
 mod app_state_commands;
 mod agent_registry;
 mod assistants;
@@ -9,6 +10,7 @@ mod claude_commands;
 mod claude_events;
 mod codex_binary;
 mod codex_commands;
+mod codex_models;
 mod codex_rpc_commands;
 mod codex_rpc_disk;
 mod codex_rpc_session;

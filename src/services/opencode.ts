@@ -4,6 +4,10 @@ import { executeOpencodeAcp } from "./opencodeAcp";
 export interface OpencodeModelListItem {
   id: string;
   displayName: string;
+  /** `provider/model` 中的 provider id（如 `anthropic`）。 */
+  providerId?: string;
+  /** opencode.json `provider.<id>.name` 展示名（如 `Anthropic`）。 */
+  providerName?: string | null;
 }
 
 export async function listOpencodeModels(): Promise<OpencodeModelListItem[]> {

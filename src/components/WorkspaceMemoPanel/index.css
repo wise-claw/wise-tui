@@ -192,7 +192,7 @@
   border-radius: 8px;
 }
 
-.app-workspace-requirements-panel__editor-wrap .app-milkdown-anchor-host {
+.app-workspace-requirements-panel__editor-wrap .app-tiptap-editor {
   min-height: 220px;
 }
 

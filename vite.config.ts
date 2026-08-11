@@ -57,7 +57,7 @@ function materialIconsStaticPlugin(): Plugin {
 
 /** 仅按需打开的功能块，不应出现在 index 入口的 modulepreload 里。 */
 const DEFERRED_MODULE_PRELOAD_CHUNK =
-  /(?:^|\/)assets\/(?:composer-region|milkdown-vendor|codemirror-vendor|monaco-vendor|terminal-vendor|graph-vendor|mermaid-vendor|AuthorPanel|x6-vendor)/;
+  /(?:^|\/)assets\/(?:composer-region|markdown-vendor|tiptap-vendor|codemirror-vendor|monaco-vendor|terminal-vendor|graph-vendor|mermaid-vendor|AuthorPanel|x6-vendor)/;
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -96,15 +96,22 @@ export default defineConfig(async () => ({
           ) {
             return "graph-vendor";
           }
-          // 仅匹配核心 react / react-dom，勿用 `/react/`（会误伤 @milkdown/react 等）。
+          // 仅匹配核心 react / react-dom，勿用 `/react/`（会误伤 @tiptap/react 等）。
           if (id.includes("node_modules/react-dom/") || id.includes("node_modules/react/")) {
             return "react-vendor";
           }
           if (id.includes("@monaco-editor") || id.includes("/monaco-editor/")) {
             return "monaco-vendor";
           }
-          if (id.includes("@milkdown/") || id.includes("remark-") || id.includes("rehype-")) {
-            return "milkdown-vendor";
+          if (id.includes("remark-") || id.includes("rehype-")) {
+            return "markdown-vendor";
+          }
+          if (
+            id.includes("@tiptap/") ||
+            id.includes("tiptap-markdown") ||
+            id.includes("node_modules/lowlight")
+          ) {
+            return "tiptap-vendor";
           }
           if (id.includes("@codemirror/language-data")) {
             return "codemirror-language-data";

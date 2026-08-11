@@ -1,5 +1,5 @@
 import { Modal, Select, Spin, Typography, message } from "antd";
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   countMarkdownImages,
   materializeRequirementBodyImages,
@@ -21,36 +21,24 @@ import {
 } from "../../types/workspaceRequirements";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import { ErrorBoundary } from "../ErrorBoundary";
-import type { MilkdownEditorHandle } from "../MilkdownViewer";
-import { MilkdownSyntaxToolbar } from "../MilkdownViewer/MilkdownSyntaxToolbar";
 import "./index.css";
 
-const MilkdownEditor = lazy(() =>
-  import("../MilkdownViewer").then((module) => ({ default: module.MilkdownEditor })),
+const TiptapEditor = lazy(() =>
+  import("../TiptapEditor").then((module) => ({ default: module.TiptapEditor })),
 );
 
-function RequirementMilkdownEditor({
-  editorRef,
+function RequirementRichTextEditor({
   editorKey,
   initialBody,
   onChange,
 }: {
-  editorRef: RefObject<MilkdownEditorHandle | null>;
   editorKey: number;
   initialBody: string;
   onChange: (markdown: string) => void;
 }) {
   return (
     <div className="app-workspace-requirements-panel__editor-wrap">
-      <MilkdownSyntaxToolbar editorRef={editorRef} />
-      <MilkdownEditor
-        ref={editorRef}
-        key={editorKey}
-        text={initialBody}
-        onChange={onChange}
-        floatingToolbar
-        blockEdit={false}
-      />
+      <TiptapEditor key={editorKey} text={initialBody} onChange={onChange} floatingToolbar />
     </div>
   );
 }
@@ -91,7 +79,6 @@ export function WorkspaceRequirementCreateModal({
   const [repositoryId, setRepositoryId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const draftBodyRef = useRef("");
-  const editorRef = useRef<MilkdownEditorHandle | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -163,7 +150,7 @@ export function WorkspaceRequirementCreateModal({
       cancelText="取消"
       confirmLoading={saving}
       destroyOnHidden
-      width={720}
+      width={760}
       centered
       zIndex={10000}
       getContainer={() => document.body}
@@ -202,8 +189,7 @@ export function WorkspaceRequirementCreateModal({
           }
         >
           {open ? (
-            <RequirementMilkdownEditor
-              editorRef={editorRef}
+            <RequirementRichTextEditor
               editorKey={editorKey}
               initialBody={draftBody}
               onChange={(md) => {

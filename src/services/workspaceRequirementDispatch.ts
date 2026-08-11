@@ -5,9 +5,18 @@ import {
   deriveRequirementTitle,
   type WorkspaceRequirementItem,
 } from "../types/workspaceRequirements";
+import {
+  countMarkdownImages,
+  extractAbsoluteImagePathsFromMarkdown,
+  stripMarkdownImages,
+} from "../utils/markdownImages";
 
-const MD_IMAGE_RE = /!\[([^\]]*)\]\((data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+)\)/g;
-const MD_ABS_IMAGE_RE = /!\[([^\]]*)\]\((\/[^)\s]+)\)/g;
+export {
+  countMarkdownImages,
+  extractAbsoluteImagePathsFromMarkdown,
+  stripMarkdownImages,
+};
+
 
 function mimeFromDataUrl(dataUrl: string): string {
   const m = /^data:([^;,]+)/i.exec(dataUrl);
@@ -34,25 +43,6 @@ function mimeFromPath(path: string): string {
   return map[ext] ?? "image/png";
 }
 
-/** 去掉 Markdown 图片语法，保留纯文字。 */
-export function stripMarkdownImages(markdown: string): string {
-  return markdown
-    .replace(/!\[[^\]]*\]\([^)]+\)/g, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-/** 从 Markdown 中收集绝对路径图片（已落盘）。 */
-export function extractAbsoluteImagePathsFromMarkdown(markdown: string): string[] {
-  const paths: string[] = [];
-  const re = /!\[[^\]]*\]\((\/[^)\s]+)\)/g;
-  for (const match of markdown.matchAll(re)) {
-    const p = (match[1] ?? "").trim();
-    if (p && !paths.includes(p)) paths.push(p);
-  }
-  return paths;
-}
-
 async function resolveWiseHomeDir(): Promise<string> {
   const home = await homeDir();
   return `${home.replace(/\/+$/, "")}/.wise`;
@@ -76,6 +66,8 @@ export async function materializeRequirementBodyImages(bodyMarkdown: string): Pr
     imagePaths.push(p);
   }
 
+  // 1) Markdown 图片语法：`![alt](data:...)`
+  const MD_IMAGE_RE = /!\[([^\]]*)\]\((data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+)\)/g;
   const dataMatches = [...source.matchAll(MD_IMAGE_RE)];
   for (let i = 0; i < dataMatches.length; i += 1) {
     const match = dataMatches[i]!;
@@ -88,6 +80,23 @@ export async function materializeRequirementBodyImages(bodyMarkdown: string): Pr
     const absPath = await saveComposerImage(wiseHome, filename, dataUrl);
     if (!absPath) continue;
     next = next.replace(full, `![${alt}](${absPath})`);
+    if (!imagePaths.includes(absPath)) imagePaths.push(absPath);
+  }
+
+  // 2) HTML <img src="data:...">：改写 src 为绝对路径，保留 width/align 等展示属性
+  const HTML_DATA_RE = /<img\b[^>]*?\bsrc="(data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+)"[^>]*>/gi;
+  let htmlSeq = dataMatches.length;
+  for (const match of next.matchAll(HTML_DATA_RE)) {
+    const full = match[0]!;
+    const dataUrl = match[1]!;
+    if (!dataUrl.startsWith("data:")) continue;
+    htmlSeq += 1;
+    const mime = mimeFromDataUrl(dataUrl);
+    const filename = `requirement-${htmlSeq}.${extFromMime(mime)}`;
+    const absPath = await saveComposerImage(wiseHome, filename, dataUrl);
+    if (!absPath) continue;
+    const rewritten = full.replace(`src="${dataUrl}"`, `src="${absPath}"`);
+    next = next.replace(full, rewritten);
     if (!imagePaths.includes(absPath)) imagePaths.push(absPath);
   }
 
@@ -152,9 +161,3 @@ export async function buildRequirementDispatchPayload(
   return { promptText, imagePaths: paths, executeBubbleOptions };
 }
 
-/** 供测试：匹配 data URL / 绝对路径图片语法（导出正则计数用）。 */
-export function countMarkdownImages(markdown: string): number {
-  const dataCount = [...markdown.matchAll(MD_IMAGE_RE)].length;
-  const absCount = [...markdown.matchAll(MD_ABS_IMAGE_RE)].length;
-  return dataCount + absCount;
-}

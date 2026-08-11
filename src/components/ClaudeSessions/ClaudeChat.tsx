@@ -594,20 +594,20 @@ export function ClaudeChatInner({
     if (hit.closest(".terminal-shell, .terminal-surface, .terminal-input")) return;
     if (hit.closest(".app-session-quick-actions")) return;
     if (hit.closest("[data-wise-composer-root]")) return;
-    if (hit.closest(".monaco-editor, .milkdown")) return;
+    if (hit.closest(".monaco-editor, .milkdown, .tiptap, .ProseMirror")) return;
     if (document.activeElement === root) return;
     root.focus({ preventScroll: true });
   }, []);
 
   /** 占用中 Esc 仅停止（不撤 transcript）：composer 用 useLayoutEffect 抢先处理「撤回刚发」
-   *  Monaco / milkdown 等富文本/代码编辑器挂载在中栏容器内时，必须排除它们的 Esc
-   *  （如关闭 Monaco find widget、多光标回到单光标、milkdown 浮层收起等），否则用户在
-   *  文件预览、设置 JSON 编辑、消息中的 milkdown 视图里按 Esc 会把正在跑的会话停掉。 */
+   *  Monaco / 富文本编辑器挂载在中栏容器内时，必须排除它们的 Esc
+   *  （如关闭 Monaco find widget、多光标回到单光标、编辑器浮层收起等），否则用户在
+   *  文件预览、设置 JSON 编辑、消息中的富文本视图里按 Esc 会把正在跑的会话停掉。 */
   useEffect(() => {
     function isEditableSurfaceElement(el: Element | null): boolean {
       if (!el) return false;
-      // Monaco 编辑器（含 find/rename/replace widget、菜单）、milkdown 富文本
-      return Boolean(el.closest(".monaco-editor, .milkdown"));
+      // Monaco 编辑器（含 find/rename/replace widget、菜单）、Tiptap 富文本
+      return Boolean(el.closest(".monaco-editor, .milkdown, .tiptap, .ProseMirror"));
     }
     function onWindowEscCapture(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
@@ -625,7 +625,7 @@ export function ClaudeChatInner({
       // slash/@ 弹层 portal 到 body，不在 chat 子树内
       if (document.querySelector(".app-claude-slash-popover")) return;
 
-      // Esc 落在 Monaco 编辑器或 milkdown 富文本上时，让编辑器自己处理
+      // Esc 落在 Monaco 编辑器或 Tiptap 富文本上时，让编辑器自己处理
       // （关闭查找、多光标归一、浮层收起等），不要再冒泡为「取消会话」。
       if (isEditableSurfaceElement(e.target as Element | null)) return;
       if (ae instanceof Element && isEditableSurfaceElement(ae)) return;

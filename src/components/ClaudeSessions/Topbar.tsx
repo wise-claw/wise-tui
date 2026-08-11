@@ -105,6 +105,16 @@ function IconDualPane() {
   );
 }
 
+export function IconClosePane() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <rect x="3" y="3" width="18" height="18" rx="2.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 9l6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M15 9l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function PaneLayoutGlyph({ count }: { count: PaneCount }) {
   const { rows, cols } = paneGridDimensions(count);
   return (
@@ -182,6 +192,7 @@ interface TopbarBtnProps {
   onClick?: () => void;
   onContextMenu?: (event: MouseEvent<HTMLButtonElement>) => void;
   active?: boolean;
+  className?: string;
 }
 
 function TopbarBtn({
@@ -190,10 +201,11 @@ function TopbarBtn({
   onClick,
   onContextMenu,
   active,
+  className,
 }: TopbarBtnProps) {
   return (
     <button
-      className={`app-topbar-btn ${active ? "active" : ""}`}
+      className={`app-topbar-btn ${active ? "active" : ""}${className ? ` ${className}` : ""}`}
       onClick={onClick}
       onContextMenu={onContextMenu}
       type="button"
@@ -239,6 +251,8 @@ export interface TopbarProps {
   /** 多屏切换进行中 */
   paneChangeInFlight?: boolean;
   onChangePaneCount?: (count: PaneCount) => void;
+  /** 关闭当前窗格（仅多屏额外窗格提供）。 */
+  onClosePane?: () => void;
   /** 打开创作台「远程入口」配置页 */
   onOpenRemoteChannels?: () => void;
   /** 中栏「消息/文件/终端」切换器当前视图。 */
@@ -302,6 +316,7 @@ export const Topbar = memo(function Topbar({
   paneCount = 1,
   paneChangeInFlight = false,
   onChangePaneCount,
+  onClosePane,
   onOpenRemoteChannels,
   centerView = "messages",
   onCenterViewChange,
@@ -617,6 +632,14 @@ export const Topbar = memo(function Topbar({
             </span>
           </HoverHint>
         </Popover>
+        {onClosePane ? (
+          <TopbarBtn
+            icon={<IconClosePane />}
+            label="关闭本屏（移除该并行窗格）"
+            onClick={onClosePane}
+            className="app-topbar-btn--close-pane"
+          />
+        ) : null}
         {onChangePaneCount && (
           <Dropdown
             open={paneCountPickerOpen}

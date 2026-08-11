@@ -67,6 +67,13 @@
   min-width: 0;
 }
 
+/* Codex「管理档案」面板锚点：零尺寸占位，面板按 topRight 对齐出现。 */
+.app-composer-model-picker-panel-anchor {
+  display: inline-block;
+  width: 0;
+  height: 0;
+}
+
 .app-composer-model-picker-panel-dropdown .ant-dropdown-menu {
   display: none !important;
 }

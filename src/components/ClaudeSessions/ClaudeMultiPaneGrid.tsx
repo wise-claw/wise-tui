@@ -52,7 +52,7 @@ import { MultiPaneOffscreenRunningPane } from "./MultiPaneOffscreenRunningPane";
 import { runPaneCreateTask } from "./paneCreateLoading";
 import type { RefreshHistorySessionsScope } from "./ClaudeChat";
 import type { PaneAuxLayout, ResolvePaneAuxLayout } from "./paneAuxLayout";
-import { Topbar, type PaneTopbarSharedProps } from "./Topbar";
+import { IconClosePane, Topbar, type PaneTopbarSharedProps } from "./Topbar";
 import { CenterViewControlContext, useCenterView } from "./claudeChatHelpers";
 import { registerPaneCenterViewSetter, syncPaneCenterView } from "../../stores/paneCenterViewControlStore";
 import { useWorkspaceMemoPanelOpen } from "../../stores/workspaceMemoPanelStore";
@@ -166,6 +166,21 @@ function IconNewSession() {
       <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" strokeWidth="1.8" />
       <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/** 空窗格 / 仅文件窗格没有顶栏，右上角悬浮「关闭本屏」按钮作为独立入口。 */
+function PaneCornerCloseButton({ onClose }: { onClose: () => void }) {
+  return (
+    <button
+      type="button"
+      className="app-topbar-btn app-claude-sessions__pane-corner-close"
+      aria-label="关闭本屏（移除该并行窗格）"
+      title="关闭本屏（移除该并行窗格）"
+      onClick={onClose}
+    >
+      <IconClosePane />
+    </button>
   );
 }
 
@@ -620,6 +635,8 @@ interface MultiPaneExtraPaneCellProps {
     options?: { rootPath?: string | null; projectName?: string | null },
   ) => void | Promise<void>;
   onNewPaneSession?: (slotIndex: number, repository: Repository) => void | Promise<void>;
+  /** 关闭本窗格（slotIndex 为 extraPanes 下标）。 */
+  onClosePaneSlot?: (slotIndex: number) => void | Promise<boolean>;
   paneAuxLayout: PaneAuxLayout;
 }
 
@@ -646,6 +663,7 @@ const MultiPaneExtraPaneCell = memo(
     onPaneRepositorySelect,
     onPaneProjectNewSession,
     onNewPaneSession,
+    onClosePaneSlot,
     paneAuxLayout,
   }: MultiPaneExtraPaneCellProps) {
     const resolvedRepo = paneRepo ?? activeRepository;
@@ -749,6 +767,11 @@ const MultiPaneExtraPaneCell = memo(
       markPaneActive(absolutePaneIndex);
       toggleTerminalCenterPanel(absolutePaneIndex);
     }, [absolutePaneIndex]);
+    /** 关闭本 extra pane：会话态走顶栏按钮，空态/仅文件态走右上角悬浮按钮。 */
+    const handleClosePane = useCallback(() => {
+      if (!onClosePaneSlot) return;
+      void onClosePaneSlot(paneIdx);
+    }, [onClosePaneSlot, paneIdx]);
 
     // 把本 extra pane 的 requestCenterView 注册到跨层控制通道，供打开文件时切到「文件」视图。
     // 必须用绝对 pane 索引（slot 0 → pane 1），与 PaneEditorHost / markPaneActive 对齐。
@@ -863,6 +886,7 @@ const MultiPaneExtraPaneCell = memo(
               onCenterViewChange={handleCenterViewChange}
               centerSwitcherVisible={centerSwitcherVisible}
               centerSwitcherOptions={centerSwitcherOptions}
+              onClosePane={onClosePaneSlot ? handleClosePane : undefined}
             />
           ) : null}
           <CenterViewControlContext.Provider value={requestCenterView}>
@@ -971,6 +995,7 @@ const MultiPaneExtraPaneCell = memo(
     if (panelBelowMessages) {
       return (
         <div className="app-claude-sessions__pane app-claude-sessions__pane--file-only">
+          {onClosePaneSlot ? <PaneCornerCloseButton onClose={handleClosePane} /> : null}
           {panelBelowMessages}
         </div>
       );
@@ -978,6 +1003,7 @@ const MultiPaneExtraPaneCell = memo(
 
     return (
       <div className="app-claude-sessions__pane">
+        {onClosePaneSlot ? <PaneCornerCloseButton onClose={handleClosePane} /> : null}
         <SessionEmptyState
           title="窗格执行会话尚未就绪"
           hint="选择仓库后自动创建隔离会话，或点击下方按钮新建。"
@@ -1183,6 +1209,8 @@ export interface ClaudeMultiPaneGridProps {
     options?: { rootPath?: string | null; projectName?: string | null },
   ) => void | Promise<void>;
   onNewPaneSession?: (slotIndex: number, repository: Repository) => void | Promise<void>;
+  /** 关闭指定额外窗格（slotIndex 为 extraPanes 下标）。 */
+  onClosePaneSlot?: (slotIndex: number) => void | Promise<boolean>;
   panelBelowMessages?: ReactNode;
   resolvePaneAuxLayout?: ResolvePaneAuxLayout;
 }
@@ -1211,6 +1239,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
   onPaneRepositorySelect,
   onPaneProjectNewSession,
   onNewPaneSession,
+  onClosePaneSlot,
   panelBelowMessages,
   resolvePaneAuxLayout,
 }: ClaudeMultiPaneGridProps) {
@@ -1392,6 +1421,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
           onPaneRepositorySelect={onPaneRepositorySelect}
           onPaneProjectNewSession={onPaneProjectNewSession}
           onNewPaneSession={onNewPaneSession}
+          onClosePaneSlot={onClosePaneSlot}
           paneAuxLayout={resolveLayout(paneIdx + 1)}
         />
       ))}

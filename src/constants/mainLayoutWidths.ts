@@ -314,6 +314,13 @@ export function nextPaneCountInCycle(current: PaneCount): PaneCount {
   return PANE_COUNT_CYCLE_ORDER[nextIdx];
 }
 
+/** 根据当前屏数计算上一个更小的屏数（单屏关闭按钮：8→6→4→2→1）。 */
+export function previousPaneCountInCycle(current: PaneCount): PaneCount {
+  const idx = PANE_COUNT_CYCLE_ORDER.indexOf(current);
+  if (idx <= 0) return 1;
+  return PANE_COUNT_CYCLE_ORDER[idx - 1];
+}
+
 export function isPaneCount(value: unknown): value is PaneCount {
   return value === 1 || value === 2 || value === 4 || value === 6 || value === 8;
 }

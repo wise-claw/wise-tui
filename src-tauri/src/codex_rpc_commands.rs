@@ -3,7 +3,7 @@
 //! These commands wire [`CodexRpcSession`] to the frontend, providing
 //! `execute_codex_rpc`, `interrupt_codex_rpc`, and `shutdown_codex_rpc`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use serde::Deserialize;
@@ -65,6 +65,9 @@ fn build_codex_rpc_thread_config(
 #[derive(Default, Clone)]
 pub(crate) struct CodexRpcSessionStore {
     pub(crate) sessions: Arc<TokioMutex<HashMap<String, Arc<TokioMutex<CodexRpcSession>>>>>,
+    /// 已发起取消的 session id：`execute_codex_rpc` 在 bootstrap/start_turn 完成前
+    /// 尚未写入 `sessions`，点「结束」时 cancel 只能登记此标记，待 turn 启动后自检中止。
+    pub(crate) cancelled: Arc<TokioMutex<HashSet<String>>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -230,6 +233,13 @@ pub(crate) async fn execute_codex_rpc(
         .filter(|s| !s.is_empty())
         .map(String::from);
 
+    // 清掉同 session id 上一次生命周期残留的取消标记（新请求不等于已取消）。
+    app.state::<CodexRpcSessionStore>()
+        .cancelled
+        .lock()
+        .await
+        .remove(&session_id);
+
     // Register in the session registry so the frontend can track it.
     {
         let registry = app.state::<ClaudeSessionRegistry>();
@@ -364,6 +374,22 @@ pub(crate) async fn execute_codex_rpc(
         let session_store = app.state::<CodexRpcSessionStore>();
         let mut store = session_store.sessions.lock().await;
         store.insert(session_id.clone(), session_arc.clone());
+    }
+
+    // 竞态窗口：用户点「结束」发生在 bootstrap/start_turn 期间（store 尚无条目，
+    // cancel 只登记了 `cancelled` 标记），这里自检到后立即中止，避免 turn 空转输出。
+    {
+        let session_store = app.state::<CodexRpcSessionStore>();
+        let was_cancelled = session_store.cancelled.lock().await.contains(&session_id);
+        if was_cancelled {
+            let _ = session_arc.lock().await.shutdown().await;
+            session_store.sessions.lock().await.remove(&session_id);
+            session_store.cancelled.lock().await.remove(&session_id);
+            let registry = app.state::<ClaudeSessionRegistry>();
+            registry.mark_completed(&session_id, false);
+            emit_rpc_complete(&app, invocation_key.as_deref(), &session_id, false);
+            return Ok(());
+        }
     }
 
     // Track in process state for cancellation support.
@@ -521,6 +547,7 @@ pub(crate) async fn execute_codex_rpc(
             let session_store = app_loop.state::<CodexRpcSessionStore>();
             let mut store = session_store.sessions.lock().await;
             store.remove(&session_id_loop);
+            session_store.cancelled.lock().await.remove(&session_id_loop);
         }
 
         let registry = app_loop.state::<ClaudeSessionRegistry>();
@@ -605,6 +632,7 @@ pub(crate) async fn shutdown_codex_rpc(
             .remove(&params.session_id)
             .ok_or_else(|| format!("No active RPC session: {}", params.session_id))?
     };
+    session_store.cancelled.lock().await.remove(&params.session_id);
 
     let mut session = session_arc.lock().await;
     session

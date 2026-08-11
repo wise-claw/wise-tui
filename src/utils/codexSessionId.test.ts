@@ -56,5 +56,36 @@ describe("codexSessionId helpers", () => {
         },
       ]),
     ).toBe(true);
+    // RPC 模式标记为「Codex RPC 执行中…」，也必须判定为已有历史回合，
+    // 否则 codex-rpc 会话每轮都新建线程、丢失上下文。
+    expect(
+      sessionHasPriorCodexTurn([
+        {
+          role: "system",
+          content: "Codex RPC 执行中（新会话，模型：deepseek-v4-flash，推理：high）…",
+          timestamp: 1,
+          parts: [],
+        },
+      ]),
+    ).toBe(true);
+  });
+
+  test("resolves resume id after codex-rpc system marker", () => {
+    expect(
+      resolveCodexResumeSessionId(
+        {
+          claudeSessionId: "019ff120-f166-72c3-9e1b-a7971b93dc39",
+          messages: [
+            {
+              role: "system",
+              content: "Codex RPC 执行中（续接会话，模型：deepseek-v4-flash）…",
+              timestamp: 1,
+              parts: [],
+            },
+          ],
+        },
+        "tab-1",
+      ),
+    ).toBe("019ff120-f166-72c3-9e1b-a7971b93dc39");
   });
 });

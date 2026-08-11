@@ -9,7 +9,7 @@ import { WORKFLOW_PROMPT_BUILTIN_VARIABLES } from "../../services/workflowPrompt
 import type { WorkflowPromptTemplateConfig } from "../../types/workflowPrompt";
 import type { CanvasNodeItem } from "../workflowGraph/workflowX6CanvasShared";
 
-const MilkdownEditor = lazy(() => import("../MilkdownViewer").then((module) => ({ default: module.MilkdownEditor })));
+const TiptapEditor = lazy(() => import("../TiptapEditor").then((module) => ({ default: module.TiptapEditor })));
 
 export interface WorkflowPromptNodeFormValues {
   title: string;
@@ -177,10 +177,11 @@ export function WorkflowPromptNodeEditModal({
                     label="内容（Markdown）"
                     rules={[{ required: true, message: "请输入消息内容" }]}
                   >
-                    <div className="app-workflow-node-edit-form__milkdown-block">
-                      <div className="app-workflow-node-edit-form__milkdown-editor app-workflow-prompt-edit-modal__editor">
+                    <div className="app-workflow-node-edit-form__rich-text-block">
+                      <div className="app-workflow-node-edit-form__rich-text-editor app-workflow-prompt-edit-modal__editor">
                         <Suspense fallback={null}>
-                          <MilkdownEditor
+                          <TiptapEditor
+                            compact
                             floatingToolbar={false}
                             text={String(form.getFieldValue(["messages", field.name, "content"]) ?? "")}
                             onChange={(markdown) => form.setFieldValue(["messages", field.name, "content"], markdown)}

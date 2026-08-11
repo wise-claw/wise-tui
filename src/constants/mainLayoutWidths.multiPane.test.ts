@@ -12,7 +12,21 @@ import {
   MAIN_LAYOUT_MULTI_PANE_UNIT_PX,
   MAIN_LAYOUT_RESIZE_HANDLE_PX,
   MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX,
+  previousPaneCountInCycle,
 } from "./mainLayoutWidths";
+
+describe("previousPaneCountInCycle", () => {
+  test("多屏单屏关闭收敛到上一档", () => {
+    expect(previousPaneCountInCycle(2)).toBe(1);
+    expect(previousPaneCountInCycle(4)).toBe(2);
+    expect(previousPaneCountInCycle(6)).toBe(4);
+    expect(previousPaneCountInCycle(8)).toBe(6);
+  });
+
+  test("单屏保持不变", () => {
+    expect(previousPaneCountInCycle(1)).toBe(1);
+  });
+});
 
 describe("computeMainWindowMinLogicalWidth", () => {
   test("single pane uses center resize minimum and persisted sider widths", () => {

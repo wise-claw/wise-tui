@@ -1,6 +1,7 @@
 import {
   ApartmentOutlined,
   ApiOutlined,
+  CompassOutlined,
   AppstoreAddOutlined,
   AppstoreOutlined,
   AuditOutlined,
@@ -64,6 +65,7 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
   {
     title: "生态",
     items: [
+      { key: "agents-explorer", label: "Agents 探索", description: "仓库 .agents 下的命令、技能与智能体", icon: <CompassOutlined /> },
       { key: "engine-registry", label: "执行环境", description: "本机 CLI（含 Cursor Agent）", icon: <ThunderboltOutlined /> },
     ],
   },

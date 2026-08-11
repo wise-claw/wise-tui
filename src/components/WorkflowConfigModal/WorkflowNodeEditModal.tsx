@@ -7,7 +7,7 @@ import type { WorkflowStageOutcomeCriterion } from "../../types";
 import type { CanvasNodeItem } from "../workflowGraph/workflowX6CanvasShared";
 import { OPTIMIZE_TONE_OPTIONS, type OptimizeTone } from "./optimizeTone";
 
-const MilkdownEditor = lazy(() => import("../MilkdownViewer").then((module) => ({ default: module.MilkdownEditor })));
+const TiptapEditor = lazy(() => import("../TiptapEditor").then((module) => ({ default: module.TiptapEditor })));
 
 export interface WorkflowNodeEditFormValues {
   title: string;
@@ -109,10 +109,10 @@ export function WorkflowNodeEditModal({
           </span>
         </div>
         <Form.Item name="stageTask" rules={[{ validator: async (_, value: unknown) => { if (typeof value === "string" && value.trim()) return; throw new Error("请输入阶段任务"); } }]}>
-          <div className="app-workflow-node-edit-form__milkdown-block">
-            <div className="app-workflow-node-edit-form__milkdown-editor">
+          <div className="app-workflow-node-edit-form__rich-text-block">
+            <div className="app-workflow-node-edit-form__rich-text-editor">
               <Suspense fallback={null}>
-                <MilkdownEditor floatingToolbar={false} text={String(form.getFieldValue("stageTask") ?? "")} onChange={(markdown) => form.setFieldValue("stageTask", markdown)} />
+                <TiptapEditor compact floatingToolbar={false} text={String(form.getFieldValue("stageTask") ?? "")} onChange={(markdown) => form.setFieldValue("stageTask", markdown)} />
               </Suspense>
             </div>
           </div>
@@ -132,7 +132,7 @@ export function WorkflowNodeEditModal({
           {(fields, { add, remove }) => (
             <Space orientation="vertical" size={12} style={{ width: "100%" }}>
               {fields.map((field) => (
-                <div key={field.key} className="app-workflow-node-edit-form__milkdown-block">
+                <div key={field.key} className="app-workflow-node-edit-form__rich-text-block">
                   <div className="app-workflow-node-edit-form__field-header">
                     <span className="app-workflow-node-edit-form__field-title">成果 {field.name + 1}</span>
                     <Button type="text" size="small" danger icon={<DeleteOutlined />} onClick={() => remove(field.name)}>删除</Button>
@@ -141,9 +141,9 @@ export function WorkflowNodeEditModal({
                     <Input size="small" placeholder="名称，例如：接口契约确认" allowClear />
                   </Form.Item>
                   <Form.Item name={[field.name, "requirement"]} rules={[{ required: true, message: "请用 Markdown 编写该成果的要求" }]}>
-                    <div className="app-workflow-node-edit-form__milkdown-editor">
+                    <div className="app-workflow-node-edit-form__rich-text-editor">
                       <Suspense fallback={null}>
-                        <MilkdownEditor key={field.key} floatingToolbar={false} text={String(form.getFieldValue(["stageSuccessCriteria", field.name, "requirement"]) ?? "")} onChange={(markdown) => form.setFieldValue(["stageSuccessCriteria", field.name, "requirement"], markdown)} />
+                        <TiptapEditor key={field.key} compact floatingToolbar={false} text={String(form.getFieldValue(["stageSuccessCriteria", field.name, "requirement"]) ?? "")} onChange={(markdown) => form.setFieldValue(["stageSuccessCriteria", field.name, "requirement"], markdown)} />
                       </Suspense>
                     </div>
                   </Form.Item>
@@ -185,10 +185,10 @@ export function WorkflowNodeEditModal({
                   </span>
                 </div>
                 <Form.Item name="acceptanceCriteria" rules={[{ required: true, message: "请输入评判标准" }]}>
-                  <div className="app-workflow-node-edit-form__milkdown-block">
-                    <div className="app-workflow-node-edit-form__milkdown-editor">
+                  <div className="app-workflow-node-edit-form__rich-text-block">
+                    <div className="app-workflow-node-edit-form__rich-text-editor">
                       <Suspense fallback={null}>
-                        <MilkdownEditor floatingToolbar={false} text={String(form.getFieldValue("acceptanceCriteria") ?? "")} onChange={(markdown) => form.setFieldValue("acceptanceCriteria", markdown)} />
+                        <TiptapEditor compact floatingToolbar={false} text={String(form.getFieldValue("acceptanceCriteria") ?? "")} onChange={(markdown) => form.setFieldValue("acceptanceCriteria", markdown)} />
                       </Suspense>
                     </div>
                   </div>

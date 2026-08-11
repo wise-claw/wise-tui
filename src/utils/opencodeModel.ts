@@ -8,6 +8,15 @@ export const OPENCODE_DEFAULT_MODEL = "auto";
 export interface OpencodeModelRef {
   id: string;
   displayName?: string;
+  providerId?: string;
+  providerName?: string | null;
+}
+
+export interface OpencodeModelPickerOption {
+  value: string;
+  label: string;
+  providerId?: string;
+  providerName?: string | null;
 }
 
 export function isOpencodeAutoModelId(raw: string | null | undefined): boolean {
@@ -46,31 +55,46 @@ export function formatOpencodeModelLabel(modelId: string, displayName?: string |
 /** Composer 模型下拉过滤：匹配 id 与展示名（大小写不敏感）。 */
 export function matchesOpencodeModelPickerFilter(
   query: string,
-  option: { value: string; label: string },
+  option: OpencodeModelPickerOption,
 ): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
   return (
     option.value.toLowerCase().includes(needle) ||
-    option.label.toLowerCase().includes(needle)
+    option.label.toLowerCase().includes(needle) ||
+    (option.providerId ?? "").toLowerCase().includes(needle) ||
+    (option.providerName ?? "").toLowerCase().includes(needle)
   );
 }
 
 export function buildOpencodeModelPickerOptions(
-  models: ReadonlyArray<{ id: string; displayName?: string | null }>,
-): Array<{ value: string; label: string }> {
+  models: ReadonlyArray<OpencodeModelRef>,
+): OpencodeModelPickerOption[] {
   const seen = new Set<string>();
-  const opts: Array<{ value: string; label: string }> = [];
-  const push = (id: string, displayName?: string | null) => {
+  const opts: OpencodeModelPickerOption[] = [];
+  const push = (
+    id: string,
+    displayName?: string | null,
+    providerId?: string | null,
+    providerName?: string | null,
+  ) => {
     const value = id.trim();
     if (!value || seen.has(value)) return;
     seen.add(value);
-    opts.push({ value, label: formatOpencodeModelLabel(value, displayName) });
+    const option: OpencodeModelPickerOption = {
+      value,
+      label: formatOpencodeModelLabel(value, displayName),
+    };
+    const providerIdTrimmed = providerId?.trim();
+    if (providerIdTrimmed) option.providerId = providerIdTrimmed;
+    const providerNameTrimmed = providerName?.trim();
+    if (providerNameTrimmed) option.providerName = providerNameTrimmed;
+    opts.push(option);
   };
   push(OPENCODE_DEFAULT_MODEL, "Auto");
   for (const item of models) {
     if (isOpencodeAutoModelId(item.id)) continue;
-    push(item.id, item.displayName);
+    push(item.id, item.displayName, item.providerId, item.providerName);
   }
   return opts;
 }

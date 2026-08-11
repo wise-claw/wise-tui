@@ -31,6 +31,7 @@ export function resolveCockpitHubPane(
 
 export type AuthorPane =
   | "workspaces"
+  | "agents-explorer"
   | "agents"
   | "workflows"
   | "mcp"
@@ -55,6 +56,7 @@ export const DEFAULT_AUTHOR_PANE: AuthorPane = "agents";
 
 export const WORKSPACE_SCOPED_AUTHOR_PANES: ReadonlySet<AuthorPane> = new Set([
   "agents",
+  "agents-explorer",
   "workflows",
   "mcp",
   "skills",

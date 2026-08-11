@@ -170,6 +170,7 @@
 .app-claude-sessions__pane {
   /* min-width:0 让 grid minmax(0,1fr) 真正生效，屏幕不够时 pane 自动变窄而非撑破容器超出屏幕；
      理想最小宽度 420px 仍由 splitter clamp（TWO_PANE_MIN_WIDTH_PX）与窗口扩展逻辑守护。 */
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -231,6 +232,25 @@
 .app-claude-sessions__pane--offscreen-running-host {
   align-items: stretch;
   justify-content: stretch;
+}
+
+/* 空窗格 / 仅文件窗格的右上角悬浮「关闭本屏」按钮：这些窗格没有顶栏，
+   需要独立的固定入口才能移除并行窗格（与有会话窗格顶栏按钮同一语义）。 */
+.app-claude-sessions__pane-corner-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 6;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 72%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.app-claude-sessions__pane-corner-close:hover:not(:disabled),
+.app-claude-sessions__pane-corner-close:active:not(:disabled) {
+  background: color-mix(in srgb, var(--ant-color-error) 14%, transparent);
+  color: var(--ant-color-error);
 }
 
 .app-claude-sessions__pane-offscreen-running {
@@ -853,6 +873,13 @@
 .app-topbar-btn--run {
   width: 24px;
   height: 24px;
+}
+
+/* 多屏额外窗格的「关闭本屏」按钮：悬停呈现危险色，明确这是一个移除操作 */
+.app-topbar-btn.app-topbar-btn--close-pane:hover:not(:disabled),
+.app-topbar-btn.app-topbar-btn--close-pane:active:not(:disabled) {
+  background: color-mix(in srgb, var(--ant-color-error) 14%, transparent);
+  color: var(--ant-color-error);
 }
 
 .app-topbar-pane-count-dropdown.ant-dropdown {

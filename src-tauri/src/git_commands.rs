@@ -179,8 +179,20 @@ pub(crate) struct GitWorktreeAddOmcBatchResult {
     branch_name: String,
 }
 
+/// 若 `path` 本身不是 git 仓库根（例如是仓库内的子目录），
+/// 沿父目录向上查找最近的仓库根；找不到任何仓库时回退为原路径。
+fn resolve_repository_root(path: &str) -> PathBuf {
+    match Repository::discover(path) {
+        Ok(repo) => repo
+            .workdir()
+            .map(|w| w.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from(path)),
+        Err(_) => PathBuf::from(path),
+    }
+}
+
 fn open_repo(path: &str) -> Result<Repository, String> {
-    Repository::open(path).map_err(|e| format!("Failed to open git repo: {}", e))
+    Repository::discover(path).map_err(|e| format!("Failed to open git repo: {}", e))
 }
 
 fn git_cli_combined_output(stdout: &[u8], stderr: &[u8]) -> String {
@@ -361,7 +373,7 @@ fn omc_batch_worktree_slug_hex(task_id: &str, attempt: i64) -> String {
 }
 
 pub(crate) fn get_git_branch(path: &str) -> Option<String> {
-    match Repository::open(path) {
+    match Repository::discover(path) {
         Ok(repo) => {
             let head = repo.head().ok()?;
             if head.is_branch() {
@@ -449,6 +461,7 @@ fn compute_ahead_behind(repo: &Repository) -> Result<(usize, usize, Option<Strin
 pub(crate) async fn git_status(path: String) -> Result<GitStatusResponse, String> {
     run_git_blocking("git_status", move || {
         let repo = open_repo(&path)?;
+        let root = resolve_repository_root(&path).to_string_lossy().into_owned();
         let branch = get_git_branch(&path);
 
         let mut opts = StatusOptions::new();
@@ -460,8 +473,8 @@ pub(crate) async fn git_status(path: String) -> Result<GitStatusResponse, String
             .statuses(Some(&mut opts))
             .map_err(|e| format!("Failed to get status: {}", e))?;
 
-        let staged_line_stats = collect_staged_line_stats(&path);
-        let unstaged_line_stats = collect_unstaged_line_stats(&path);
+        let staged_line_stats = collect_staged_line_stats(&root);
+        let unstaged_line_stats = collect_unstaged_line_stats(&root);
 
         // 先收集需要按文件读盘计行的 untracked path，再并行扫描，避免几百个文件串行 fs::read。
         let mut untracked_need_count: Vec<String> = Vec::new();
@@ -480,7 +493,7 @@ pub(crate) async fn git_status(path: String) -> Result<GitStatusResponse, String
             }
             untracked_need_count.push(file_path.to_string());
         }
-        let untracked_line_stats = count_untracked_line_stats_parallel(&path, &untracked_need_count);
+        let untracked_line_stats = count_untracked_line_stats_parallel(&root, &untracked_need_count);
 
         let mut staged: Vec<GitFileStatus> = Vec::new();
         let mut unstaged: Vec<GitFileStatus> = Vec::new();
@@ -580,6 +593,7 @@ pub(crate) async fn git_status(path: String) -> Result<GitStatusResponse, String
 pub(crate) async fn git_status_summary(path: String) -> Result<GitStatusSummaryResponse, String> {
     run_git_blocking("git_status_summary", move || {
         let repo = open_repo(&path)?;
+        let root = resolve_repository_root(&path).to_string_lossy().into_owned();
         let branch = get_git_branch(&path);
 
         let mut opts = StatusOptions::new();
@@ -619,7 +633,7 @@ pub(crate) async fn git_status_summary(path: String) -> Result<GitStatusSummaryR
             }
         }
 
-        let (additions, deletions) = collect_aggregate_line_totals(&path);
+        let (additions, deletions) = collect_aggregate_line_totals(&root);
         let (ahead, behind, upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
 
         Ok(GitStatusSummaryResponse {
@@ -691,7 +705,8 @@ fn collect_aggregate_line_totals(repo_path: &str) -> (usize, usize) {
 }
 
 fn collect_all_untracked_line_totals(repo_path: &str) -> (usize, usize) {
-    let repo = match Repository::open(repo_path) {
+    let root = resolve_repository_root(repo_path);
+    let repo = match Repository::open(&root) {
         Ok(r) => r,
         Err(_) => return (0, 0),
     };
@@ -713,7 +728,7 @@ fn collect_all_untracked_line_totals(repo_path: &str) -> (usize, usize) {
             paths.push(file_path.to_string());
         }
     }
-    let stats = count_untracked_line_stats_parallel(repo_path, &paths);
+    let stats = count_untracked_line_stats_parallel(root.to_string_lossy().as_ref(), &paths);
     let mut adds = 0usize;
     let mut dels = 0usize;
     for (_, (a, d)) in stats {
@@ -788,8 +803,9 @@ fn normalize_stage_pathspec(repo_path: &str, rel_path: &str) -> String {
 #[tauri::command]
 pub(crate) async fn git_stage(path: String, file_path: String) -> Result<(), String> {
     run_git_blocking("git_stage", move || {
-        let spec = normalize_stage_pathspec(&path, &file_path);
-        git_stage_paths_inner(&path, &[spec.as_str()])
+        let root = resolve_repository_root(&path).to_string_lossy().into_owned();
+        let spec = normalize_stage_pathspec(&root, &file_path);
+        git_stage_paths_inner(&root, &[spec.as_str()])
     })
     .await
 }
@@ -801,14 +817,15 @@ pub(crate) async fn git_stage_paths(path: String, file_paths: Vec<String>) -> Re
         if file_paths.is_empty() {
             return Ok(());
         }
+        let root = resolve_repository_root(&path).to_string_lossy().into_owned();
         let mut specs: Vec<String> = file_paths
             .iter()
-            .map(|p| normalize_stage_pathspec(&path, p))
+            .map(|p| normalize_stage_pathspec(&root, p))
             .collect();
         specs.sort();
         specs.dedup();
         let refs: Vec<&str> = specs.iter().map(|s| s.as_str()).collect();
-        git_stage_paths_inner(&path, &refs)
+        git_stage_paths_inner(&root, &refs)
     })
     .await
 }
@@ -820,7 +837,8 @@ pub(crate) async fn git_stage_all(path: String) -> Result<(), String> {
 }
 
 fn git_stage_all_blocking(path: String) -> Result<(), String> {
-    git_stage_paths_inner(&path, &["."])
+    let root = resolve_repository_root(&path).to_string_lossy().into_owned();
+    git_stage_paths_inner(&root, &["."])
 }
 
 fn git_stage_paths_inner(path: &str, pathspecs: &[&str]) -> Result<(), String> {
@@ -1058,10 +1076,11 @@ pub(crate) async fn git_fetch(path: String) -> Result<(), String> {
 #[tauri::command]
 pub(crate) async fn git_discard(path: String, file_path: String) -> Result<(), String> {
     run_git_blocking("git_discard", move || {
-        open_repo(&path)?;
+        let root = resolve_repository_root(&path).to_string_lossy().into_owned();
+        open_repo(&root)?;
         let restore = Command::new("git")
             .arg("-C")
-            .arg(&path)
+            .arg(&root)
             .args(["restore", "--worktree", "--", &file_path])
             .output()
             .map_err(|e| format!("Discard failed to start: {}", e))?;
@@ -1076,7 +1095,7 @@ pub(crate) async fn git_discard(path: String, file_path: String) -> Result<(), S
             }
         }
         run_git_command(
-            &path,
+            &root,
             &["clean", "-fd", "--", &file_path],
             "Discard (clean)",
         )
@@ -2031,9 +2050,10 @@ fn remove_worktree_directory_if_leftover(
 #[tauri::command]
 pub(crate) fn git_worktree_list(path: String) -> Result<Vec<GitWorktreeEntry>, String> {
     open_repo(&path)?;
+    let root = resolve_repository_root(&path).to_string_lossy().into_owned();
     let output = Command::new("git")
         .arg("-C")
-        .arg(&path)
+        .arg(&root)
         .args(["worktree", "list", "--porcelain"])
         .output()
         .map_err(|e| format!("git worktree list failed to start: {}", e))?;
@@ -2048,7 +2068,7 @@ pub(crate) fn git_worktree_list(path: String) -> Result<Vec<GitWorktreeEntry>, S
         });
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    parse_git_worktree_porcelain(&stdout, &path)
+    parse_git_worktree_porcelain(&stdout, &root)
 }
 
 #[tauri::command]
@@ -2877,6 +2897,56 @@ mod git_status_line_totals_tests {
             .find(|f| f.path == "new.txt")
             .expect("untracked file in unstaged list");
         assert_eq!(untracked.additions, 3, "new.txt line count");
+    }
+
+    /// 当前目录不是仓库根（仓库内子目录）时，应沿父目录向上找到仓库并返回其 git 信息。
+    #[tokio::test]
+    async fn git_status_discovers_repository_from_subdirectory() {
+        let dir = tempdir().expect("tempdir");
+        let repo = Repository::init(dir.path()).expect("init");
+        write_and_commit(&repo, "tracked.txt", "line1\n");
+        drop(repo);
+
+        let sub = dir.path().join("nested/deeper");
+        fs::create_dir_all(&sub).expect("mkdir");
+        let sub_path = sub.to_string_lossy().to_string();
+
+        // 子目录下修改仓库根的文件：状态路径应以仓库根为基准返回
+        fs::write(dir.path().join("tracked.txt"), "line1\nline2\n").expect("write");
+
+        let status = git_status(sub_path.clone())
+            .await
+            .expect("git_status from subdir should walk up to repo root");
+        let modified = status
+            .unstaged
+            .iter()
+            .find(|f| f.path == "tracked.txt")
+            .expect("tracked.txt should appear in status from subdir");
+        assert_eq!(modified.additions, 1, "one added line");
+
+        assert!(
+            get_git_branch(&sub_path).is_some(),
+            "branch should be found from subdir"
+        );
+
+        let expected_root = dir.path().canonicalize().expect("canonicalize root");
+        assert_eq!(
+            resolve_repository_root(&sub_path),
+            expected_root,
+            "should resolve upward to repo root"
+        );
+
+        // 从子目录以仓库根相对路径暂存也应成功
+        git_stage(sub_path, "tracked.txt".to_string())
+            .await
+            .expect("stage from subdir");
+        let staged = git_status(dir.path().to_string_lossy().to_string())
+            .await
+            .expect("git_status at root");
+        assert!(
+            staged.staged.iter().any(|f| f.path == "tracked.txt"),
+            "tracked.txt should be staged"
+        );
     }
 
     /// 复现 1000+ untracked 文件时 per-file 行数全 0 的回归。

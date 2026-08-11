@@ -300,11 +300,11 @@
     var(--ant-color-bg-container);
 }
 
-.app-scheduled-tasks-drawer__editor .app-prompt-milkdown-field {
+.app-scheduled-tasks-drawer__editor .app-prompt-rich-text-field {
   padding: 10px 12px 12px;
 }
 
-.app-scheduled-tasks-drawer__editor .app-prompt-milkdown-field__label-row {
+.app-scheduled-tasks-drawer__editor .app-prompt-rich-text-field__label-row {
   display: none;
 }
 

@@ -24,18 +24,23 @@ export interface ResolveCodexExecModelInput {
 
 /**
  * Codex 执行模型：
- * - 始终优先「模型切换 → Codex」默认档案；
+ * - Codex 上下文中，会话级显式切换（session.model 与档案模型不同）优先于档案；
+ * - 否则优先「模型切换 → Codex」默认档案；
  * - 仅当上下文执行环境已是 Codex 且无 Codex 档案时，才回退 session.model；
  * - Claude/Cursor 上下文下绝不使用 session.model（避免误用 Qwen/glm 等 Claude 档案）。
  */
 export function resolveCodexExecModelId(input: ResolveCodexExecModelInput): string | undefined {
   const codexProfileModel = resolveCodexProfileModelFromStore(input.store);
-  if (codexProfileModel) return codexProfileModel;
+  const session = input.sessionModel?.trim();
+  const isCodexContext =
+    input.contextExecutionEngine === "codex" || input.contextExecutionEngine === "codex-rpc";
 
-  if (input.contextExecutionEngine === "codex" || input.contextExecutionEngine === "codex-rpc") {
-    const session = input.sessionModel?.trim();
-    if (session) return session;
+  // Codex 会话里用户显式选的模型（与档案不同）优先，支持 Composer 快速切换运行时模型。
+  if (isCodexContext && session && codexProfileModel && session !== codexProfileModel) {
+    return session;
   }
+  if (codexProfileModel) return codexProfileModel;
+  if (isCodexContext && session) return session;
 
   return undefined;
 }
@@ -62,3 +67,104 @@ export function resolveCodexContextExecutionEngine<T extends ClaudeSessionLike>(
 }
 
 type ClaudeSessionLike = { id: string; repositoryPath: string; repositoryName: string };
+
+// ---------------------------------------------------------------------------
+// Codex 模型选择器（Composer 快速切换）
+// ---------------------------------------------------------------------------
+
+/** 运行态 / 配置来源的 Codex 模型引用（后端 `codex_list_models`）。 */
+export interface CodexModelRef {
+  id: string;
+  displayName?: string;
+  /** `model_providers.<id>`（config.toml 来源）或档案公司名（档案来源）。 */
+  provider?: string | null;
+}
+
+export interface CodexModelPickerOption {
+  value: string;
+  label: string;
+  providerId?: string;
+  /** 命中已配置的 Codex 档案时填充；选中该选项即应用档案。 */
+  profileId?: string;
+}
+
+/** 判断是否可作为 Codex 模型 id 传入（无运行态列表时放行任意非空值）。 */
+export function isCodexModelId(
+  raw: string | null | undefined,
+  knownModels?: readonly CodexModelRef[],
+): boolean {
+  const trimmed = raw?.trim() ?? "";
+  if (!trimmed) return false;
+  if (knownModels && knownModels.length > 0) {
+    return knownModels.some((item) => item.id === trimmed);
+  }
+  return true;
+}
+
+export function formatCodexModelLabel(modelId: string, displayName?: string | null): string {
+  const v = modelId.trim();
+  if (!v) return "默认";
+  const label = displayName?.replace(/\s+/g, " ").trim();
+  if (label && label !== v) return label;
+  return v;
+}
+
+/** Composer 模型下拉过滤：匹配 id、展示名与 provider（大小写不敏感）。 */
+export function matchesCodexModelPickerFilter(
+  query: string,
+  option: CodexModelPickerOption,
+): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return (
+    option.value.toLowerCase().includes(needle) ||
+    option.label.toLowerCase().includes(needle) ||
+    (option.providerId ?? "").toLowerCase().includes(needle)
+  );
+}
+
+/**
+ * 合并 Codex 可选模型：已配置档案（优先，label 用档案名、company 作 provider）+
+ * 运行态目录 / config.toml 模型。同 modelId 去重。
+ */
+export function buildCodexModelPickerOptions(
+  runtimeModels: readonly CodexModelRef[],
+  profiles: readonly import("../types/claudeModelProfile").ClaudeModelProfile[] = [],
+): CodexModelPickerOption[] {
+  const opts: CodexModelPickerOption[] = [];
+  const seen = new Set<string>();
+  const push = (
+    value: string,
+    label: string,
+    providerId?: string,
+    profileId?: string,
+  ) => {
+    const v = value.trim();
+    if (!v || seen.has(v)) return;
+    seen.add(v);
+    opts.push({
+      value: v,
+      label: label.trim() || v,
+      ...(providerId?.trim() ? { providerId: providerId.trim() } : {}),
+      ...(profileId?.trim() ? { profileId: profileId.trim() } : {}),
+    });
+  };
+
+  for (const profile of profiles) {
+    if (profile.engine !== "codex") continue;
+    const id = profile.modelId?.trim();
+    if (!id) continue;
+    push(
+      id,
+      profile.name?.trim() || formatCodexModelLabel(id),
+      profile.company?.trim(),
+      profile.id,
+    );
+  }
+  for (const item of runtimeModels) {
+    const id = item.id.trim();
+    if (!id) continue;
+    push(id, formatCodexModelLabel(id, item.displayName), item.provider?.trim() || undefined);
+  }
+  return opts;
+}

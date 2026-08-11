@@ -1,5 +1,5 @@
 import { Modal, Select, Spin, Typography, message } from "antd";
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readComposerImageAsDataUrl } from "../../services/readComposerImage";
 import {
   countMarkdownImages,
@@ -24,48 +24,46 @@ import {
 } from "../../types/workspaceRequirements";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import { ErrorBoundary } from "../ErrorBoundary";
-import type { MilkdownEditorHandle } from "../MilkdownViewer";
-import { MilkdownSyntaxToolbar } from "../MilkdownViewer/MilkdownSyntaxToolbar";
 import "./index.css";
 
-const MilkdownEditor = lazy(() =>
-  import("../MilkdownViewer").then((module) => ({ default: module.MilkdownEditor })),
+const TiptapEditor = lazy(() =>
+  import("../TiptapEditor").then((module) => ({ default: module.TiptapEditor })),
 );
 
-function RequirementMilkdownEditor({
-  editorRef,
+function RequirementRichTextEditor({
   editorKey,
   initialBody,
   onChange,
 }: {
-  editorRef: RefObject<MilkdownEditorHandle | null>;
   editorKey: number;
   initialBody: string;
   onChange: (markdown: string) => void;
 }) {
   return (
     <div className="app-workspace-requirements-panel__editor-wrap">
-      <MilkdownSyntaxToolbar editorRef={editorRef} />
-      <MilkdownEditor
-        ref={editorRef}
-        key={editorKey}
-        text={initialBody}
-        onChange={onChange}
-        floatingToolbar
-        blockEdit={false}
-      />
+      <TiptapEditor key={editorKey} text={initialBody} onChange={onChange} floatingToolbar />
     </div>
   );
 }
 
 async function hydrateMarkdownImagesForEditor(markdown: string): Promise<string> {
   let next = markdown;
+  // Markdown 图片语法
   const paths = [...markdown.matchAll(/!\[[^\]]*\]\((\/[^)\s]+)\)/g)].map((m) => m[1]!.trim());
   for (const path of paths) {
     if (!path.startsWith("/")) continue;
     const dataUrl = await readComposerImageAsDataUrl(path);
     if (!dataUrl) continue;
     next = next.split(`](${path})`).join(`](${dataUrl})`);
+  }
+  // HTML <img src="/abs">（Tiptap 图片带尺寸/对齐时的序列化形式）
+  for (const match of [...next.matchAll(/<img\b[^>]*?\bsrc="(\/[^"]+)"[^>]*>/gi)]) {
+    const full = match[0]!;
+    const path = match[1]!.trim();
+    if (!path.startsWith("/")) continue;
+    const dataUrl = await readComposerImageAsDataUrl(path);
+    if (!dataUrl) continue;
+    next = next.replace(full, full.replace(`src="${path}"`, `src="${dataUrl}"`));
   }
   return next;
 }
@@ -86,7 +84,6 @@ export function WorkspaceRequirementEditModal({ repositories }: WorkspaceRequire
   const [loadingItem, setLoadingItem] = useState(false);
   const [saving, setSaving] = useState(false);
   const draftBodyRef = useRef("");
-  const editorRef = useRef<MilkdownEditorHandle | null>(null);
   const loadGenRef = useRef(0);
 
   useEffect(() => {
@@ -266,8 +263,7 @@ export function WorkspaceRequirementEditModal({ repositories }: WorkspaceRequire
           }
         >
           {open && !loadingItem ? (
-            <RequirementMilkdownEditor
-              editorRef={editorRef}
+            <RequirementRichTextEditor
               editorKey={editorKey}
               initialBody={draftBody}
               onChange={(md) => {

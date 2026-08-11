@@ -44,3 +44,20 @@ export async function executeCodexRpcCode(
     },
   });
 }
+
+/** Codex 运行态/配置来源的模型选项（后端 `codex_list_models`）。 */
+export interface CodexModelListItem {
+  id: string;
+  displayName: string;
+  /** `model_providers.<id>` 或配置来源标识；可为空。 */
+  provider?: string | null;
+}
+
+/** 从 Codex 运行态获取模型列表（`codex debug models` + `~/.codex/config.toml`）。 */
+export async function listCodexModels(): Promise<CodexModelListItem[]> {
+  try {
+    return await invoke<CodexModelListItem[]>("codex_list_models");
+  } catch {
+    return [];
+  }
+}

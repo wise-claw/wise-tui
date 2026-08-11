@@ -7,7 +7,7 @@ import type { ColumnsType } from "antd/es/table";
 import { CronExpressionParser } from "cron-parser";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RepositoryScheduledClaudeTask, WorkflowTemplateItem } from "../../types";
-import { PromptMilkdownField } from "../PromptMilkdownField";
+import { PromptRichTextField } from "../PromptRichTextField";
 import {
   initialLastScheduledSlotForCron,
   readRepositoryScheduledClaudeTasks,
@@ -683,7 +683,7 @@ export function RepositoryScheduledTasksModal({
                 <div className="app-scheduled-tasks-drawer__field app-scheduled-tasks-drawer__field--last">
                   <span className="app-scheduled-tasks-drawer__label">执行内容</span>
                   <Form.Item name="contentMarkdown" noStyle rules={[{ required: true, message: "请填写执行内容" }]}>
-                    <MilkdownFormBridge form={form} fieldName="contentMarkdown" instanceKey={editing?.id ?? "new"} />
+                    <RichTextFormBridge form={form} fieldName="contentMarkdown" instanceKey={editing?.id ?? "new"} />
                   </Form.Item>
                 </div>
               ) : null}
@@ -738,7 +738,7 @@ function ScheduledTaskExecutionKindCards({
   );
 }
 
-interface MilkdownFormBridgeProps {
+interface RichTextFormBridgeProps {
   form: FormInstance<{
     title: string;
     cronExpression: string;
@@ -753,11 +753,11 @@ interface MilkdownFormBridgeProps {
   instanceKey: string;
 }
 
-function MilkdownFormBridge({ form, fieldName, instanceKey }: MilkdownFormBridgeProps) {
+function RichTextFormBridge({ form, fieldName, instanceKey }: RichTextFormBridgeProps) {
   const value = Form.useWatch(fieldName, form) ?? "";
   return (
     <div className="app-scheduled-tasks-drawer__editor">
-      <PromptMilkdownField
+      <PromptRichTextField
         instanceKey={`scheduled-task-${instanceKey}`}
         label=""
         value={value}

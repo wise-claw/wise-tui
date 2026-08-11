@@ -643,6 +643,21 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     } catch {
       /* no active opencode ACP session for this tab */
     }
+    // Codex RPC：app-server 子进程在 CodexRpcSessionStore（key 为 tab id）中，
+    // 不在 Claude 进程槽位里；先发 `turn/interrupt` 再硬关子进程，确保点「结束」后
+    // turn 不再继续输出。非 Codex RPC 会话（store 无匹配）静默跳过。
+    try {
+      const { interruptCodexRpc, shutdownCodexRpc } = await import("../services/codexRpc");
+      const { promiseWithTimeout } = await import("../utils/promiseWithTimeout");
+      await promiseWithTimeout(
+        interruptCodexRpc(tabSessionId),
+        2000,
+        "中断 Codex RPC 执行",
+      ).catch(() => undefined);
+      await shutdownCodexRpc(tabSessionId).catch(() => undefined);
+    } catch {
+      /* no active codex RPC session for this tab */
+    }
     for (const sid of cancelIds) {
       try {
         await cancelClaudeExecution(sid);
