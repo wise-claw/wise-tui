@@ -794,6 +794,11 @@ export interface ClaudeSession {
   /** First user-line preview from ~/.claude/projects JSONL before messages are loaded */
   diskPreview?: string;
   /**
+   * Codex 线程名（`thread/name/updated`）；非空时优先作为侧栏标题。
+   * 落盘到 tabs.json，重启后恢复。
+   */
+  threadName?: string;
+  /**
    * 为 true 时 `messages` 可能仅为磁盘 jsonl 尾部子集（懒加载）；全量对齐或用户点击「加载完整历史」后为 false。
    * 不落盘，仅运行时。
    */

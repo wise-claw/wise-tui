@@ -563,6 +563,26 @@ export function isHookStartedFromParsed(obj: unknown): boolean {
   return type === "system" && subtype === "hook_started";
 }
 
+/** Codex `thread/status/changed` 适配行：返回归一化会话状态（running/error），否则 null。 */
+export function extractThreadStatusChangedFromParsed(obj: unknown): { status: string } | null {
+  const json = asNonArrayRecord(obj) ?? EMPTY_RECORD;
+  const type = typeof json.type === "string" ? json.type : "";
+  const subtype = typeof json.subtype === "string" ? json.subtype : "";
+  if (type !== "system" || subtype !== "thread_status_changed") return null;
+  const status = typeof json.status === "string" ? json.status.trim() : "";
+  return status.length > 0 ? { status } : null;
+}
+
+/** Codex `thread/name/updated` 适配行：返回新线程名，否则 null。 */
+export function extractThreadNameUpdatedFromParsed(obj: unknown): { name: string } | null {
+  const json = asNonArrayRecord(obj) ?? EMPTY_RECORD;
+  const type = typeof json.type === "string" ? json.type : "";
+  const subtype = typeof json.subtype === "string" ? json.subtype : "";
+  if (type !== "system" || subtype !== "thread_name_updated") return null;
+  const name = typeof json.name === "string" ? json.name.trim() : "";
+  return name.length > 0 ? { name } : null;
+}
+
 /** 向后兼容薄包装：解析一次后转发到 {@link isHookStartedFromParsed}。 */
 export function isHookStartedStreamLine(line: string): boolean {
   return isHookStartedFromParsed(safeJsonParse(line));
@@ -641,4 +661,3 @@ export function parseStreamLineSessionIdFromParsed(obj: unknown): string | null 
 export function parseStreamLineSessionId(line: string): string | null {
   return parseStreamLineSessionIdFromParsed(safeJsonParse(line));
 }
-

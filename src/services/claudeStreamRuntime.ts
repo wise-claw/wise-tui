@@ -23,6 +23,8 @@ import {
   extractPartsFromParsed,
   extractResultErrorMessageFromParsed,
   extractSystemErrorMessageFromParsed,
+  extractThreadNameUpdatedFromParsed,
+  extractThreadStatusChangedFromParsed,
   formatClaudeResultErrorForSessionUi,
   isClaudeHarnessInjectedStreamText,
   isClaudeToolCallParseFailureText,
@@ -546,6 +548,31 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         }),
       );
       onClaudeSessionIdAssigned?.(tid, cursorAgentId);
+    }
+    // Codex `thread/status/changed`：归一化后的 running/error 状态同步到会话（仅提升，不覆盖 completed）。
+    const threadStatusChanged = extractThreadStatusChangedFromParsed(parsed);
+    if (threadStatusChanged) {
+      onStreamActivity?.(tid);
+      const nextStatus = threadStatusChanged.status as ClaudeSession["status"];
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== tid && s.claudeSessionId !== tid) return s;
+          if (s.status === nextStatus) return s;
+          return { ...s, status: nextStatus };
+        }),
+      );
+    }
+    // Codex `thread/name/updated`：更新线程名（落盘随 tabs 持久化，侧栏标题优先使用）。
+    const threadNameUpdated = extractThreadNameUpdatedFromParsed(parsed);
+    if (threadNameUpdated) {
+      onStreamActivity?.(tid);
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== tid && s.claudeSessionId !== tid) return s;
+          if (s.threadName === threadNameUpdated.name) return s;
+          return { ...s, threadName: threadNameUpdated.name };
+        }),
+      );
     }
     const {
       parts,
@@ -1072,4 +1099,3 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     dispose,
   };
 }
-

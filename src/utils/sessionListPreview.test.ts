@@ -67,6 +67,14 @@ describe("sessionListPreview", () => {
     ).toBe("磁盘预览标题");
   });
 
+  test("resolveSessionListPreviewSource prefers threadName over messages", () => {
+    expect(
+      resolveSessionListPreviewSource(
+        session({ messages: [userMsg("帮我优化搜索速度")], threadName: "优化搜索速度" }),
+      ),
+    ).toBe("优化搜索速度");
+  });
+
   test("无用户气泡时优先 diskPreview，避免助手中段污染侧栏", () => {
     expect(
       resolveSessionListPreviewSource(

@@ -9,6 +9,8 @@ import {
   extractPartsFromStreamLine,
   extractResultErrorMessageFromStreamLine,
   extractSystemErrorMessageFromStreamLine,
+  extractThreadNameUpdatedFromParsed,
+  extractThreadStatusChangedFromParsed,
   formatClaudeResultErrorForSessionUi,
   isClaudeHarnessInjectedStreamText,
   isClaudeToolCallParseFailureText,
@@ -372,6 +374,51 @@ describe("extractSystemErrorMessageFromStreamLine", () => {
         JSON.stringify({ type: "system", message: "rate limit exceeded" }),
       ),
     ).toBe("Claude 系统错误: 请求频率超限，请稍后重试（rate limit exceeded）");
+  });
+});
+
+describe("codex thread status / name adapters", () => {
+  test("extractThreadStatusChangedFromParsed reads normalized status", () => {
+    expect(
+      extractThreadStatusChangedFromParsed({
+        type: "system",
+        subtype: "thread_status_changed",
+        status: "running",
+        thread_id: "thr",
+      }),
+    ).toEqual({ status: "running" });
+  });
+
+  test("extractThreadStatusChangedFromParsed ignores other lines", () => {
+    expect(
+      extractThreadStatusChangedFromParsed({
+        type: "system",
+        subtype: "thread_status_changed",
+      }),
+    ).toBeNull();
+    expect(
+      extractThreadStatusChangedFromParsed({ type: "system", subtype: "init" }),
+    ).toBeNull();
+  });
+
+  test("extractThreadNameUpdatedFromParsed reads trimmed name", () => {
+    expect(
+      extractThreadNameUpdatedFromParsed({
+        type: "system",
+        subtype: "thread_name_updated",
+        name: " 优化搜索速度 ",
+      }),
+    ).toEqual({ name: "优化搜索速度" });
+  });
+
+  test("extractThreadNameUpdatedFromParsed ignores empty name", () => {
+    expect(
+      extractThreadNameUpdatedFromParsed({
+        type: "system",
+        subtype: "thread_name_updated",
+        name: "",
+      }),
+    ).toBeNull();
   });
 });
 

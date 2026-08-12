@@ -594,6 +594,38 @@ pub enum ServerNotification {
         message: String,
         thread_id: Option<String>,
     },
+    /// `hook/started` — a Codex hook (PreToolUse / PostToolUse / …) began running.
+    HookStarted {
+        thread_id: String,
+        run: Value,
+    },
+    /// `hook/completed` — a Codex hook finished (completed / failed / blocked / stopped).
+    HookCompleted {
+        thread_id: String,
+        run: Value,
+    },
+    /// `configWarning` — concise configuration warning (summary + optional details/path).
+    ConfigWarning {
+        summary: String,
+        details: Option<String>,
+        path: Option<String>,
+    },
+    /// `deprecationNotice` — a feature / configuration deprecation notice.
+    DeprecationNotice {
+        summary: String,
+        details: Option<String>,
+    },
+    /// `thread/status/changed` — the thread lifecycle status changed
+    /// (`NotLoaded` / `Idle` / `SystemError` / `Active{…}`).
+    ThreadStatusChanged {
+        thread_id: String,
+        status: Value,
+    },
+    /// `thread/name/updated` — the thread name changed (via `thread/setName`).
+    ThreadNameUpdated {
+        thread_id: String,
+        thread_name: Option<String>,
+    },
     /// `thread/compacted` — the thread context was compacted.
     ThreadCompacted {
         thread_id: String,
@@ -1106,6 +1138,85 @@ pub fn parse_notification(method: &str, params: Option<Value>) -> ServerNotifica
                 .and_then(Value::as_str)
                 .map(str::to_string);
             ServerNotification::Warning { message, thread_id }
+        }
+        "hook/started" => {
+            let thread_id = p
+                .get("threadId")
+                .or_else(|| p.get("thread_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let run = p.get("run").cloned().unwrap_or(Value::Null);
+            ServerNotification::HookStarted { thread_id, run }
+        }
+        "hook/completed" => {
+            let thread_id = p
+                .get("threadId")
+                .or_else(|| p.get("thread_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let run = p.get("run").cloned().unwrap_or(Value::Null);
+            ServerNotification::HookCompleted { thread_id, run }
+        }
+        "configWarning" => {
+            let summary = p
+                .get("summary")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let details = p
+                .get("details")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let path = p
+                .get("path")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            ServerNotification::ConfigWarning {
+                summary,
+                details,
+                path,
+            }
+        }
+        "deprecationNotice" => {
+            let summary = p
+                .get("summary")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let details = p
+                .get("details")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            ServerNotification::DeprecationNotice { summary, details }
+        }
+        "thread/status/changed" => {
+            let thread_id = p
+                .get("threadId")
+                .or_else(|| p.get("thread_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let status = p.get("status").cloned().unwrap_or(Value::Null);
+            ServerNotification::ThreadStatusChanged { thread_id, status }
+        }
+        "thread/name/updated" => {
+            let thread_id = p
+                .get("threadId")
+                .or_else(|| p.get("thread_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let thread_name = p
+                .get("threadName")
+                .or_else(|| p.get("thread_name"))
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            ServerNotification::ThreadNameUpdated {
+                thread_id,
+                thread_name,
+            }
         }
         "thread/compacted" => {
             let thread_id = p
@@ -2276,6 +2387,116 @@ mod tests {
             guardian,
             ServerNotification::Warning { message, thread_id: Some(t), .. }
                 if message == "注意隐私" && t == "thr"
+        ));
+
+        let hook_started = parse_notification(
+            "hook/started",
+            Some(json!({
+                "threadId": "thr",
+                "turnId": "t1",
+                "run": {
+                    "id": "hook_1",
+                    "eventName": "PreToolUse",
+                    "status": "running",
+                    "entries": [],
+                },
+            })),
+        );
+        assert!(matches!(
+            hook_started,
+            ServerNotification::HookStarted { thread_id, run }
+                if thread_id == "thr"
+                    && run.get("eventName").and_then(Value::as_str) == Some("PreToolUse")
+        ));
+
+        let hook_completed = parse_notification(
+            "hook/completed",
+            Some(json!({
+                "threadId": "thr",
+                "turnId": "t1",
+                "run": {
+                    "id": "hook_1",
+                    "eventName": "PostToolUse",
+                    "status": "failed",
+                    "statusMessage": "hook timed out",
+                    "entries": [
+                        { "kind": "error", "text": "boom" },
+                        { "kind": "context", "text": "cwd=/repo" },
+                    ],
+                },
+            })),
+        );
+        assert!(matches!(
+            hook_completed,
+            ServerNotification::HookCompleted { thread_id, run }
+                if thread_id == "thr"
+                    && run.get("status").and_then(Value::as_str) == Some("failed")
+        ));
+
+        let config_warning = parse_notification(
+            "configWarning",
+            Some(json!({
+                "summary": "未知配置项",
+                "details": "请检查拼写",
+                "path": "/Users/x/.codex/config.toml",
+            })),
+        );
+        assert!(matches!(
+            config_warning,
+            ServerNotification::ConfigWarning { summary, details: Some(d), path: Some(p) }
+                if summary == "未知配置项" && d == "请检查拼写" && p.ends_with("config.toml")
+        ));
+
+        let deprecation = parse_notification(
+            "deprecationNotice",
+            Some(json!({ "summary": "experimental_feature 已废弃" })),
+        );
+        assert!(matches!(
+            deprecation,
+            ServerNotification::DeprecationNotice { summary, details: None }
+                if summary == "experimental_feature 已废弃"
+        ));
+
+        let thread_status = parse_notification(
+            "thread/status/changed",
+            Some(json!({
+                "threadId": "thr",
+                "status": { "Active": { "activeFlags": ["WaitingOnApproval"] } },
+            })),
+        );
+        assert!(matches!(
+            thread_status,
+            ServerNotification::ThreadStatusChanged { thread_id, status }
+                if thread_id == "thr" && status.get("Active").is_some()
+        ));
+
+        let thread_status_flat = parse_notification(
+            "thread/status/changed",
+            Some(json!({ "threadId": "thr", "status": "SystemError" })),
+        );
+        assert!(matches!(
+            thread_status_flat,
+            ServerNotification::ThreadStatusChanged { status, .. }
+                if status.as_str() == Some("SystemError")
+        ));
+
+        let thread_name = parse_notification(
+            "thread/name/updated",
+            Some(json!({ "threadId": "thr", "threadName": "优化搜索速度" })),
+        );
+        assert!(matches!(
+            thread_name,
+            ServerNotification::ThreadNameUpdated { thread_id, thread_name: Some(n) }
+                if thread_id == "thr" && n == "优化搜索速度"
+        ));
+
+        let thread_name_cleared = parse_notification(
+            "thread/name/updated",
+            Some(json!({ "threadId": "thr", "threadName": null })),
+        );
+        assert!(matches!(
+            thread_name_cleared,
+            ServerNotification::ThreadNameUpdated { thread_name: None, .. }
         ));
 
         let compacted = parse_notification(

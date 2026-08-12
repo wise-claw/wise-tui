@@ -62,8 +62,11 @@ export function deriveSessionListPreviewFromMessages(
  * 调用方再做截断 / 「新会话」回落。
  */
 export function resolveSessionListPreviewSource(
-  session: Pick<ClaudeSession, "messages" | "diskPreview">,
+  session: Pick<ClaudeSession, "messages" | "diskPreview" | "threadName">,
 ): string {
+  // Codex 线程名（thread/name/updated）是服务端生成的会话摘要，优先作标题。
+  const threadName = session.threadName?.trim() ?? "";
+  if (threadName) return threadName;
   const diskPreview = session.diskPreview?.trim() ?? "";
   if (!messagesHaveDisplayUser(session.messages) && diskPreview) {
     if (diskPreview.startsWith(CODE_REVIEW_PROMPT_SIGNATURE)) return CODE_REVIEW_SESSION_LABEL;

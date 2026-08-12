@@ -424,6 +424,173 @@ fn map_notification_to_stream_lines(
             }
         }
 
+        ServerNotification::HookStarted { run, .. } => {
+            let event_name = hook_event_name(run);
+            if event_name.is_empty() {
+                CodexRpcAdaptOutput::default()
+            } else {
+                let run_id = run
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                CodexRpcAdaptOutput::both(vec![json!({
+                    "type": "system",
+                    "subtype": "hook_started",
+                    "hook_name": event_name,
+                    "hook_event": event_name,
+                    "run_id": run_id,
+                })
+                .to_string()])
+            }
+        }
+
+        ServerNotification::HookCompleted { run, .. } => {
+            let event_name = hook_event_name(run);
+            if event_name.is_empty() {
+                CodexRpcAdaptOutput::default()
+            } else {
+                let status = run
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .unwrap_or("completed")
+                    .to_string();
+                let status_message = run
+                    .get("statusMessage")
+                    .or_else(|| run.get("status_message"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                let failed = status.eq_ignore_ascii_case("failed")
+                    || status.eq_ignore_ascii_case("blocked")
+                    || status.eq_ignore_ascii_case("stopped")
+                    || status.eq_ignore_ascii_case("error");
+                // entries：kind 为 Error/Warning/Stop 的输出归到 stderr，其余归到 stdout。
+                let mut stdout_parts = Vec::new();
+                let mut stderr_parts = Vec::new();
+                if let Some(entries) = run.get("entries").and_then(Value::as_array) {
+                    for entry in entries {
+                        let kind = entry
+                            .get("kind")
+                            .and_then(Value::as_str)
+                            .unwrap_or("");
+                        let text = entry
+                            .get("text")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .trim();
+                        if text.is_empty() {
+                            continue;
+                        }
+                        if kind.eq_ignore_ascii_case("error")
+                            || kind.eq_ignore_ascii_case("warning")
+                            || kind.eq_ignore_ascii_case("stop")
+                        {
+                            stderr_parts.push(text.to_string());
+                        } else {
+                            stdout_parts.push(text.to_string());
+                        }
+                    }
+                }
+                let stdout = stdout_parts.join("\n");
+                let stderr = if stderr_parts.is_empty() {
+                    if failed && !status_message.is_empty() {
+                        status_message.clone()
+                    } else {
+                        String::new()
+                    }
+                } else {
+                    stderr_parts.join("\n")
+                };
+                let duration_ms = run
+                    .get("durationMs")
+                    .or_else(|| run.get("duration_ms"))
+                    .and_then(Value::as_i64);
+                let mut line = json!({
+                    "type": "system",
+                    "subtype": "hook_response",
+                    "hook_event": event_name,
+                    "event": event_name,
+                    "outcome": if failed { "error" } else { "success" },
+                    "output": stdout,
+                    "stderr": stderr,
+                });
+                if let Some(ms) = duration_ms {
+                    line["duration_ms"] = json!(ms);
+                }
+                CodexRpcAdaptOutput::both(vec![line.to_string()])
+            }
+        }
+
+        ServerNotification::ConfigWarning {
+            summary,
+            details,
+            path,
+        } => {
+            if summary.trim().is_empty() {
+                CodexRpcAdaptOutput::default()
+            } else {
+                let mut msg = format!("Codex 配置警告：{summary}");
+                if let Some(p) = path.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                    msg.push_str(&format!("\n配置：{p}"));
+                }
+                if let Some(d) = details.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                    msg.push_str(&format!("\n{d}"));
+                }
+                CodexRpcAdaptOutput::both(vec![assistant_text_line(&msg)])
+            }
+        }
+
+        ServerNotification::DeprecationNotice { summary, details } => {
+            if summary.trim().is_empty() {
+                CodexRpcAdaptOutput::default()
+            } else {
+                let mut msg = format!("Codex 弃用提醒：{summary}");
+                if let Some(d) = details.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                    msg.push_str(&format!("\n{d}"));
+                }
+                CodexRpcAdaptOutput::both(vec![assistant_text_line(&msg)])
+            }
+        }
+
+        ServerNotification::ThreadStatusChanged {
+            thread_id, status, ..
+        } => {
+            // 线程状态只做「提升」映射：Active → running、SystemError → error；
+            // Idle / NotLoaded 不覆盖应用自身的 completed / cancelled 状态机。
+            match thread_status_to_session_status(status) {
+                Some(session_status) => {
+                    let mut line = json!({
+                        "type": "system",
+                        "subtype": "thread_status_changed",
+                        "status": session_status,
+                    });
+                    if !thread_id.is_empty() {
+                        line["thread_id"] = json!(thread_id);
+                    }
+                    CodexRpcAdaptOutput::emit_only(vec![line.to_string()])
+                }
+                None => CodexRpcAdaptOutput::default(),
+            }
+        }
+
+        ServerNotification::ThreadNameUpdated { thread_name, .. } => {
+            match thread_name
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                Some(name) => CodexRpcAdaptOutput::emit_only(vec![json!({
+                    "type": "system",
+                    "subtype": "thread_name_updated",
+                    "name": name,
+                })
+                .to_string()]),
+                None => CodexRpcAdaptOutput::default(),
+            }
+        }
+
         ServerNotification::ThreadCompacted { .. } => CodexRpcAdaptOutput::both(vec![
             assistant_text_line("Codex 上下文已压缩，后续对话将基于压缩后的上下文继续。"),
         ]),
@@ -699,6 +866,33 @@ fn web_search_action_text(action: &Value) -> String {
         }
         _ => String::new(),
     }
+}
+
+/// 从 `HookRunSummary` 提取 hook 事件名（如 `PreToolUse` / `PostToolUse`）。
+fn hook_event_name(run: &Value) -> String {
+    run.get("eventName")
+        .or_else(|| run.get("event_name"))
+        .or_else(|| run.get("event"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("")
+        .to_string()
+}
+
+/// 把 Codex `ThreadStatus` 归一化为前端 `ClaudeSession.status`。
+/// 仅映射明确的活跃/错误状态；Idle / NotLoaded 返回 None（不覆盖应用状态机）。
+fn thread_status_to_session_status(status: &Value) -> Option<String> {
+    if let Some(s) = status.as_str() {
+        return match s {
+            "Active" | "active" => Some("running".to_string()),
+            "SystemError" | "systemError" => Some("error".to_string()),
+            _ => None,
+        };
+    }
+    if status.get("Active").is_some() || status.get("active").is_some() {
+        return Some("running".to_string());
+    }
+    None
 }
 
 /// 提取 dynamicToolCall 的 `contentItems`（`inputText`/`inputImage` 对象数组）为文本。
@@ -1203,7 +1397,8 @@ fn map_item_completed(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> 
                 .map(str::trim)
                 .filter(|s| !s.is_empty());
             let failed = status.eq_ignore_ascii_case("failed")
-                || status.eq_ignore_ascii_case("error");
+                || status.eq_ignore_ascii_case("error")
+                || status.eq_ignore_ascii_case("declined");
             let exit_code = item
                 .raw
                 .get("exitCode")
@@ -1228,7 +1423,8 @@ fn map_item_completed(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> 
                 .and_then(Value::as_str)
                 .unwrap_or("completed");
             let failed = status.eq_ignore_ascii_case("failed")
-                || status.eq_ignore_ascii_case("error");
+                || status.eq_ignore_ascii_case("error")
+                || status.eq_ignore_ascii_case("declined");
             map_file_change_changes(
                 &item.id,
                 &item.raw,
@@ -1838,6 +2034,215 @@ mod tests {
         assert_eq!(out.emit.len(), 1);
         assert!(out.emit[0].contains(r#""name":"Bash""#));
         assert!(out.emit[0].contains(r#""status":"running""#));
+    }
+
+    #[test]
+    fn command_execution_declined_maps_to_error() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let completed = ServerNotification::ItemCompleted {
+            item_id: "itm_3".to_string(),
+            turn_id: "t1".to_string(),
+            item: crate::codex_rpc_types::ThreadItem {
+                id: "itm_3".to_string(),
+                item_type: "commandExecution".to_string(),
+                raw: json!({
+                    "command": "rm -rf /tmp/x",
+                    "status": "declined",
+                    "output": "user declined",
+                }),
+            },
+        };
+        let out = adapt(&completed, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains(r#""name":"Bash""#));
+        assert!(out.emit[0].contains(r#""status":"error""#));
+        assert!(out.emit[0].contains("user declined"));
+    }
+
+    #[test]
+    fn file_change_declined_maps_to_error() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let completed = ServerNotification::ItemCompleted {
+            item_id: "itm_fc3".to_string(),
+            turn_id: "t1".to_string(),
+            item: crate::codex_rpc_types::ThreadItem {
+                id: "itm_fc3".to_string(),
+                item_type: "fileChange".to_string(),
+                raw: json!({
+                    "status": "declined",
+                    "reason": "user declined patch",
+                }),
+            },
+        };
+        let out = adapt(&completed, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains(r#""name":"FileChange""#));
+        assert!(out.emit[0].contains(r#""status":"error""#));
+        assert!(out.emit[0].contains("user declined patch"));
+    }
+
+    #[test]
+    fn hook_started_emits_hook_started_system_line() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let notif = ServerNotification::HookStarted {
+            thread_id: "thr".to_string(),
+            run: json!({
+                "id": "hook_1",
+                "eventName": "PreToolUse",
+                "status": "running",
+            }),
+        };
+        let out = adapt(&notif, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains(r#""subtype":"hook_started""#));
+        assert!(out.emit[0].contains("PreToolUse"));
+        assert_eq!(out.persist, out.emit);
+    }
+
+    #[test]
+    fn hook_completed_failed_maps_to_error_outcome_with_stderr() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let notif = ServerNotification::HookCompleted {
+            thread_id: "thr".to_string(),
+            run: json!({
+                "id": "hook_1",
+                "eventName": "PostToolUse",
+                "status": "failed",
+                "statusMessage": "hook timed out",
+                "durationMs": 1234,
+                "entries": [
+                    { "kind": "error", "text": "boom" },
+                    { "kind": "context", "text": "cwd=/repo" },
+                ],
+            }),
+        };
+        let out = adapt(&notif, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains(r#""subtype":"hook_response""#));
+        assert!(out.emit[0].contains(r#""outcome":"error""#));
+        assert!(out.emit[0].contains("cwd=/repo"));
+        assert!(out.emit[0].contains("boom"));
+        assert_eq!(out.persist, out.emit);
+    }
+
+    #[test]
+    fn hook_completed_success_maps_to_success_outcome() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let notif = ServerNotification::HookCompleted {
+            thread_id: "thr".to_string(),
+            run: json!({
+                "id": "hook_2",
+                "eventName": "PostToolUse",
+                "status": "completed",
+                "entries": [{ "kind": "feedback", "text": "done" }],
+            }),
+        };
+        let out = adapt(&notif, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains(r#""outcome":"success""#));
+        assert!(out.emit[0].contains("done"));
+        assert!(!out.emit[0].contains(r#""outcome":"error""#));
+    }
+
+    #[test]
+    fn config_warning_and_deprecation_emit_text_lines() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let warning = ServerNotification::ConfigWarning {
+            summary: "未知配置项".to_string(),
+            details: Some("请检查拼写".to_string()),
+            path: Some("/Users/x/.codex/config.toml".to_string()),
+        };
+        let out = adapt(&warning, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains("Codex 配置警告：未知配置项"));
+        assert!(out.emit[0].contains("config.toml"));
+        assert!(out.emit[0].contains("请检查拼写"));
+
+        let deprecation = ServerNotification::DeprecationNotice {
+            summary: "experimental_feature 已废弃".to_string(),
+            details: Some("迁移到新 API".to_string()),
+        };
+        let out2 = adapt(&deprecation, &mut state);
+        assert_eq!(out2.emit.len(), 1);
+        assert!(out2.emit[0].contains("Codex 弃用提醒：experimental_feature 已废弃"));
+        assert!(out2.emit[0].contains("迁移到新 API"));
+    }
+
+    #[test]
+    fn hook_without_event_name_is_dropped() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let notif = ServerNotification::HookStarted {
+            thread_id: "thr".to_string(),
+            run: json!({ "id": "hook_0", "status": "running" }),
+        };
+        let out = adapt(&notif, &mut state);
+        assert!(out.emit.is_empty());
+        assert!(out.persist.is_empty());
+    }
+
+    #[test]
+    fn thread_status_active_maps_to_running() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let notif = ServerNotification::ThreadStatusChanged {
+            thread_id: "thr".to_string(),
+            status: json!({ "Active": { "activeFlags": ["WaitingOnApproval"] } }),
+        };
+        let out = adapt(&notif, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains(r#""subtype":"thread_status_changed""#));
+        assert!(out.emit[0].contains(r#""status":"running""#));
+        assert!(out.emit[0].contains(r#""thread_id":"thr""#));
+        assert!(out.persist.is_empty(), "状态行不应落盘");
+    }
+
+    #[test]
+    fn thread_status_system_error_maps_to_error() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let notif = ServerNotification::ThreadStatusChanged {
+            thread_id: "thr".to_string(),
+            status: json!("SystemError"),
+        };
+        let out = adapt(&notif, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains(r#""status":"error""#));
+    }
+
+    #[test]
+    fn thread_status_idle_does_not_clobber_completed_state() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let notif = ServerNotification::ThreadStatusChanged {
+            thread_id: "thr".to_string(),
+            status: json!("Idle"),
+        };
+        let out = adapt(&notif, &mut state);
+        assert!(out.emit.is_empty(), "Idle 不应覆盖应用状态机");
+        assert!(out.persist.is_empty());
+    }
+
+    #[test]
+    fn thread_name_updated_emits_name_line() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let notif = ServerNotification::ThreadNameUpdated {
+            thread_id: "thr".to_string(),
+            thread_name: Some("优化搜索速度".to_string()),
+        };
+        let out = adapt(&notif, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains(r#""subtype":"thread_name_updated""#));
+        assert!(out.emit[0].contains("优化搜索速度"));
+        assert!(out.persist.is_empty());
+    }
+
+    #[test]
+    fn thread_name_empty_is_dropped() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let notif = ServerNotification::ThreadNameUpdated {
+            thread_id: "thr".to_string(),
+            thread_name: None,
+        };
+        let out = adapt(&notif, &mut state);
+        assert!(out.emit.is_empty());
+        assert!(out.persist.is_empty());
     }
 
     #[test]
