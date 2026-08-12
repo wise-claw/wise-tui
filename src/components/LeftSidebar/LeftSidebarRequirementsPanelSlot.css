@@ -360,3 +360,13 @@
   padding-top: 8px;
   border-top: 1px solid var(--ant-color-split);
 }
+
+.app-left-sidebar-requirements-panel__delete-popconfirm {
+  max-width: 260px;
+}
+
+.app-left-sidebar-requirements-panel__delete-popconfirm .ant-popconfirm-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

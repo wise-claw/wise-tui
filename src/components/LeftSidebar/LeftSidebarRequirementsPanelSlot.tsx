@@ -343,6 +343,7 @@ function RequirementsPanelRow({
             okButtonProps={{ danger: true, size: "small" }}
             cancelButtonProps={{ size: "small" }}
             placement="bottomLeft"
+            overlayClassName="app-left-sidebar-requirements-panel__delete-popconfirm"
             getPopupContainer={() => document.body}
             onConfirm={onDelete}
           >
