@@ -20,6 +20,8 @@ pub struct CodexRpcStreamAdaptState {
     /// `reasoning` / `plan` item ids whose deltas already streamed live.
     /// On `item/completed` these fall back to persist-only to avoid double paint.
     streamed_thinking_ids: HashSet<String>,
+    /// Latest `turn/tokenUsage/updated` for the current turn; summarized on turn end.
+    turn_token_usage: Option<Value>,
 }
 
 impl CodexRpcStreamAdaptState {
@@ -52,6 +54,18 @@ impl CodexRpcStreamAdaptState {
     fn take_thinking_already_streamed(&mut self, item_id: &str) -> bool {
         let id = item_id.trim();
         !id.is_empty() && self.streamed_thinking_ids.remove(id)
+    }
+
+    fn reset_turn_token_usage(&mut self) {
+        self.turn_token_usage = None;
+    }
+
+    fn record_turn_token_usage(&mut self, usage: Value) {
+        self.turn_token_usage = Some(usage);
+    }
+
+    fn take_turn_token_usage(&mut self) -> Option<Value> {
+        self.turn_token_usage.take()
     }
 }
 
@@ -147,6 +161,7 @@ fn map_notification_to_stream_lines(
         ServerNotification::ThreadClosed { .. } => CodexRpcAdaptOutput::default(),
 
         ServerNotification::TurnStarted { thread_id, .. } => {
+            state.reset_turn_token_usage();
             // Map to a system/init line so the frontend knows a new turn started.
             CodexRpcAdaptOutput::both(vec![json!({
                 "type": "system",
@@ -164,21 +179,32 @@ fn map_notification_to_stream_lines(
             let failed = status.eq_ignore_ascii_case("failed")
                 || status.eq_ignore_ascii_case("errored")
                 || status.eq_ignore_ascii_case("error");
+            let usage_line = state
+                .take_turn_token_usage()
+                .and_then(|usage| format_token_usage_summary(&usage))
+                .map(|summary| assistant_text_line(&summary));
             if failed {
                 let detail = error_message
                     .as_deref()
                     .filter(|s| !s.is_empty())
                     .unwrap_or(status.as_str());
                 if let Some(cleaned) = strip_benign_noise(detail) {
-                    CodexRpcAdaptOutput::both(vec![assistant_text_line(&format!(
-                        "Codex error: {cleaned}"
-                    ))])
+                    let mut lines = vec![assistant_text_line(&format!("Codex error: {cleaned}"))];
+                    if let Some(line) = usage_line {
+                        lines.push(line);
+                    }
+                    CodexRpcAdaptOutput::both(lines)
                 } else {
-                    CodexRpcAdaptOutput::default()
+                    usage_line
+                        .map(|line| CodexRpcAdaptOutput::both(vec![line]))
+                        .unwrap_or_default()
                 }
             } else {
-                // Success completion is signalled via `claude-complete`.
-                CodexRpcAdaptOutput::default()
+                // Success completion is signalled via `claude-complete`; token usage is
+                // the only per-turn summary line emitted here.
+                usage_line
+                    .map(|line| CodexRpcAdaptOutput::both(vec![line]))
+                    .unwrap_or_default()
             }
         }
 
@@ -402,13 +428,133 @@ fn map_notification_to_stream_lines(
             assistant_text_line("Codex 上下文已压缩，后续对话将基于压缩后的上下文继续。"),
         ]),
 
+        ServerNotification::AutoApprovalReviewStarted {
+            review_id,
+            target_item_id,
+            action,
+            review,
+        } => {
+            // 自动审批进行中：以 running 工具卡展示，completed 同 id 合并。
+            let action_text = guardian_action_summary(action);
+            let (_status, risk, _rationale) = guardian_review_parts(review);
+            let mut input = json!({
+                "description": if action_text.is_empty() {
+                    "正在自动审批".to_string()
+                } else {
+                    format!("正在自动审批：{action_text}")
+                },
+                "risk_level": risk,
+            });
+            if let Some(tid) = target_item_id {
+                input["target_item_id"] = json!(tid);
+            }
+            CodexRpcAdaptOutput::both(vec![assistant_tool_use_line(
+                review_id,
+                "approval_review",
+                input,
+                "running",
+                None,
+                None,
+            )])
+        }
+
+        ServerNotification::AutoApprovalReviewCompleted {
+            review_id,
+            target_item_id,
+            action,
+            review,
+            ..
+        } => {
+            let action_text = guardian_action_summary(action);
+            let (status, risk, rationale) = guardian_review_parts(review);
+            let status_label = match status.as_str() {
+                "approved" => "已自动批准",
+                "denied" => "已自动拒绝",
+                "timedOut" => "自动审批超时",
+                "aborted" => "自动审批中止",
+                _ => "自动审批完成",
+            };
+            let failed = matches!(status.as_str(), "denied" | "timedOut" | "aborted");
+            let risk_label = if risk.is_empty() {
+                "未知".to_string()
+            } else {
+                risk.clone()
+            };
+            let outcome = format!("{status_label} · 风险：{risk_label}");
+            let detail = if rationale.is_empty() {
+                outcome
+            } else {
+                format!("{outcome}\n{rationale}")
+            };
+            let mut input = json!({
+                "description": if action_text.is_empty() {
+                    status_label.to_string()
+                } else {
+                    format!("{status_label}：{action_text}")
+                },
+                "risk_level": risk,
+            });
+            if let Some(tid) = target_item_id {
+                input["target_item_id"] = json!(tid);
+            }
+            let output = if failed { None } else { Some(detail.clone()) };
+            let error = if failed { Some(detail) } else { None };
+            CodexRpcAdaptOutput::both(vec![assistant_tool_use_line(
+                review_id,
+                "approval_review",
+                input,
+                if failed { "error" } else { "completed" },
+                output.as_deref(),
+                error,
+            )])
+        }
+
+        ServerNotification::ThreadTokenUsageUpdated { token_usage, .. } => {
+            // 实时 token 更新不逐条展示（避免刷屏）；轮末由 TurnCompleted 汇总输出。
+            state.record_turn_token_usage(token_usage.clone());
+            CodexRpcAdaptOutput::default()
+        }
+
+        ServerNotification::ModelRerouted {
+            from_model,
+            to_model,
+            reason,
+            ..
+        } => {
+            let reason_label = match reason.as_deref() {
+                Some("highRiskCyberActivity") => "（高风险网络活动防护）".to_string(),
+                Some(other) if !other.is_empty() => format!("（{other}）"),
+                _ => String::new(),
+            };
+            if from_model.is_empty() && to_model.is_empty() {
+                CodexRpcAdaptOutput::default()
+            } else if from_model.is_empty() || to_model.is_empty() {
+                let model = if to_model.is_empty() { from_model } else { to_model };
+                CodexRpcAdaptOutput::both(vec![assistant_text_line(&format!(
+                    "Codex 模型已切换：{model}{reason_label}"
+                ))])
+            } else {
+                CodexRpcAdaptOutput::both(vec![assistant_text_line(&format!(
+                    "Codex 模型已切换：{from_model} → {to_model}{reason_label}"
+                ))])
+            }
+        }
+
         // --- Phase 5 notifications ---
 
-        ServerNotification::TurnPlanUpdated { thread_id: _, turn_id: _, plan } => {
+        ServerNotification::TurnPlanUpdated {
+            thread_id: _,
+            turn_id: _,
+            plan,
+            explanation,
+        } => {
             // `plan` 是 `TurnPlanStep[]`；格式化为可读计划文本并以 thinking 卡展示，
             // 前端 reasoning 块可折叠查看。缺失时保持原有 system 行兼容。
             match plan.as_ref().and_then(format_turn_plan_steps) {
-                Some(text) if !text.trim().is_empty() => {
+                Some(mut text) if !text.trim().is_empty() => {
+                    if let Some(explanation) = explanation.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                        text = format!("{text}\n\n说明：{explanation}");
+                    }
                     CodexRpcAdaptOutput::both(vec![assistant_thinking_line(&text)])
                 }
                 _ => CodexRpcAdaptOutput::both(vec![json!({
@@ -503,6 +649,229 @@ fn mcp_result_text(result: &Value) -> Option<String> {
     } else {
         Some(s)
     }
+}
+
+/// 将 `webSearch.action` 对象（search / openPage / findInPage）格式化为可读文本。
+/// `action` 在 wire 上是对象，直接 `as_str` 拿不到——这里显式解析各变体。
+fn web_search_action_text(action: &Value) -> String {
+    if let Some(text) = action.as_str() {
+        return text.to_string();
+    }
+    let Some(obj) = action.as_object() else {
+        return String::new();
+    };
+    let action_type = obj
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or("other");
+    match action_type {
+        "search" => {
+            if let Some(query) = obj.get("query").and_then(Value::as_str) {
+                if !query.is_empty() {
+                    return query.to_string();
+                }
+            }
+            if let Some(queries) = obj.get("queries").and_then(Value::as_array) {
+                let joined = queries
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join(" | ");
+                if !joined.is_empty() {
+                    return joined;
+                }
+            }
+            "搜索".to_string()
+        }
+        "openPage" => obj
+            .get("url")
+            .and_then(Value::as_str)
+            .unwrap_or("打开页面")
+            .to_string(),
+        "findInPage" => {
+            let url = obj.get("url").and_then(Value::as_str).unwrap_or("");
+            let pattern = obj.get("pattern").and_then(Value::as_str).unwrap_or("");
+            [url, pattern]
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(" · ")
+        }
+        _ => String::new(),
+    }
+}
+
+/// 提取 dynamicToolCall 的 `contentItems`（`inputText`/`inputImage` 对象数组）为文本。
+fn dynamic_tool_output_text(content_items: &Value) -> String {
+    let Some(items) = content_items.as_array() else {
+        return content_items
+            .as_str()
+            .map(str::to_string)
+            .unwrap_or_default();
+    };
+    let mut parts = Vec::new();
+    for item in items {
+        let Some(obj) = item.as_object() else {
+            if let Some(s) = item.as_str() {
+                parts.push(s.to_string());
+            }
+            continue;
+        };
+        if let Some(text) = obj.get("text").and_then(Value::as_str) {
+            if !text.is_empty() {
+                parts.push(text.to_string());
+                continue;
+            }
+        }
+        if let Some(url) = obj.get("imageUrl").or_else(|| obj.get("image_url")) {
+            parts.push(url.to_string());
+        }
+    }
+    parts.join("\n")
+}
+
+/// 组装 mcpToolCall 卡片的 input：参数 + 插件/应用上下文（供前端 subtitle 与展开查看）。
+fn mcp_tool_call_input(raw: &Value) -> Value {
+    let mut input = raw
+        .get("arguments")
+        .filter(|v| v.is_object())
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    if let Some(obj) = input.as_object_mut() {
+        if let Some(ctx) = raw.get("appContext") {
+            obj.insert("app_context".to_string(), ctx.clone());
+        }
+        if let Some(plugin_id) = raw.get("pluginId") {
+            obj.insert("plugin_id".to_string(), plugin_id.clone());
+        }
+        if let Some(app_name) = raw
+            .get("appContext")
+            .and_then(|c| c.get("appName"))
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+        {
+            obj.insert("description".to_string(), json!(app_name));
+        }
+    }
+    input
+}
+
+/// 提取 guardian 自动审批 `action`（command / execve / applyPatch / networkAccess /
+/// mcpToolCall / requestPermissions）的可读摘要，用于审批卡片 subtitle。
+fn guardian_action_summary(action: &Value) -> String {
+    let Some(obj) = action.as_object() else {
+        return String::new();
+    };
+    let action_type = obj
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    match action_type {
+        "command" => obj
+            .get("command")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        "execve" => {
+            let program = obj.get("program").and_then(Value::as_str).unwrap_or("");
+            let argv = obj
+                .get("argv")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .unwrap_or_default();
+            [program, argv.as_str()]
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
+        "applyPatch" => obj
+            .get("files")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "文件变更".to_string()),
+        "networkAccess" => {
+            let host = obj.get("host").and_then(Value::as_str).unwrap_or("");
+            let port = obj.get("port").and_then(Value::as_i64).unwrap_or(0);
+            let protocol = obj.get("protocol").and_then(Value::as_str).unwrap_or("");
+            format!("{protocol} {host}:{port}")
+        }
+        "mcpToolCall" => {
+            let server = obj.get("server").and_then(Value::as_str).unwrap_or("");
+            let tool = obj
+                .get("toolName")
+                .or_else(|| obj.get("tool_name"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            format!("{server}:{tool}")
+        }
+        "requestPermissions" => obj
+            .get("reason")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("请求权限")
+            .to_string(),
+        _ => String::new(),
+    }
+}
+
+/// 提取 guardian `review` 的 (status, risk_level, rationale)。
+fn guardian_review_parts(review: &Value) -> (String, String, String) {
+    let status = review
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let risk = review
+        .get("riskLevel")
+        .or_else(|| review.get("risk_level"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let rationale = review
+        .get("rationale")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    (status, risk, rationale)
+}
+
+/// 从 `ThreadTokenUsage` 提取可读的轮次用量摘要（total breakdown）。
+fn format_token_usage_summary(usage: &Value) -> Option<String> {
+    let total = usage.get("total")?;
+    let total_tokens = total.get("totalTokens").and_then(Value::as_u64)?;
+    let input = total
+        .get("inputTokens")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let output = total
+        .get("outputTokens")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let reasoning = total
+        .get("reasoningOutputTokens")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let mut parts = vec![format!("输入 {input}")];
+    if reasoning > 0 {
+        parts.push(format!("思考 {reasoning}"));
+    }
+    parts.push(format!("输出 {output}"));
+    Some(format!(
+        "Codex 本轮用量：{} · 总计 {total_tokens} tokens",
+        parts.join(" · ")
+    ))
 }
 
 /// 将 RPC `fileChange` item 的 `changes[]`（path + kind + diff）映射为 `apply_patch`
@@ -606,11 +975,7 @@ fn map_item_started(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> {
                 .get("query")
                 .and_then(Value::as_str)
                 .unwrap_or("");
-            let action = item
-                .raw
-                .get("action")
-                .and_then(Value::as_str)
-                .unwrap_or("");
+            let action = item.raw.get("action").map(web_search_action_text).unwrap_or_default();
             vec![assistant_tool_use_line(
                 &item.id,
                 "web_search",
@@ -737,12 +1102,7 @@ fn map_item_started(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> {
                 .and_then(Value::as_str)
                 .unwrap_or("unknown");
             let name = format!("{server}:{tool}");
-            let input = item
-                .raw
-                .get("arguments")
-                .filter(|v| v.is_object())
-                .cloned()
-                .unwrap_or_else(|| json!({}));
+            let input = mcp_tool_call_input(&item.raw);
             vec![assistant_tool_use_line(
                 &item.id,
                 &name,
@@ -881,11 +1241,7 @@ fn map_item_completed(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> 
                 .get("query")
                 .and_then(Value::as_str)
                 .unwrap_or("");
-            let action = item
-                .raw
-                .get("action")
-                .and_then(Value::as_str)
-                .unwrap_or("");
+            let action = item.raw.get("action").map(web_search_action_text).unwrap_or_default();
             vec![assistant_tool_use_line(
                 &item.id,
                 "web_search",
@@ -1044,12 +1400,7 @@ fn map_item_completed(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> 
                 .unwrap_or("completed");
             let failed = status.eq_ignore_ascii_case("failed")
                 || status.eq_ignore_ascii_case("error");
-            let input = item
-                .raw
-                .get("arguments")
-                .filter(|v| v.is_object())
-                .cloned()
-                .unwrap_or_else(|| json!({}));
+            let input = mcp_tool_call_input(&item.raw);
             let output = item
                 .raw
                 .get("result")
@@ -1099,13 +1450,7 @@ fn map_item_completed(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> 
             let output = item
                 .raw
                 .get("contentItems")
-                .and_then(Value::as_array)
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str())
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                })
+                .map(dynamic_tool_output_text)
                 .filter(|s| !s.is_empty());
             vec![assistant_tool_use_line(
                 &item.id,
@@ -1889,6 +2234,7 @@ mod tests {
                 { "status": "in_progress", "step": "调研需求" },
                 { "status": "pending", "step": "实现" },
             ])),
+            explanation: Some("按优先级推进".to_string()),
         };
         let out = adapt(&notif, &mut state);
         assert_eq!(out.emit.len(), 1);
@@ -1896,5 +2242,238 @@ mod tests {
         assert!(out.emit[0].contains("调研需求"));
         assert!(out.emit[0].contains("[进行中]"));
         assert!(out.emit[0].contains("[待处理]"));
+        assert!(out.emit[0].contains("说明：按优先级推进"));
+    }
+
+    #[test]
+    fn web_search_action_object_is_parsed() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        // search 变体：action 是对象，query 在 action.query 里。
+        let search = ServerNotification::ItemCompleted {
+            item_id: "itm_w".to_string(),
+            turn_id: "t1".to_string(),
+            item: crate::codex_rpc_types::ThreadItem {
+                id: "itm_w".to_string(),
+                item_type: "webSearch".to_string(),
+                raw: json!({
+                    "query": "wise",
+                    "action": { "type": "search", "query": "rust async", "queries": null },
+                }),
+            },
+        };
+        let out = adapt(&search, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains("rust async"), "action.query should be surfaced");
+
+        // openPage 变体：url 在 action.url 里。
+        let open = ServerNotification::ItemCompleted {
+            item_id: "itm_w2".to_string(),
+            turn_id: "t1".to_string(),
+            item: crate::codex_rpc_types::ThreadItem {
+                id: "itm_w2".to_string(),
+                item_type: "webSearch".to_string(),
+                raw: json!({
+                    "query": "",
+                    "action": { "type": "openPage", "url": "https://example.com/docs" },
+                }),
+            },
+        };
+        let out = adapt(&open, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains("https://example.com/docs"));
+    }
+
+    #[test]
+    fn dynamic_tool_call_content_items_objects_are_extracted() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let call = ServerNotification::ItemCompleted {
+            item_id: "itm_d2".to_string(),
+            turn_id: "t1".to_string(),
+            item: crate::codex_rpc_types::ThreadItem {
+                id: "itm_d2".to_string(),
+                item_type: "dynamicToolCall".to_string(),
+                raw: json!({
+                    "namespace": "local",
+                    "tool": "grep",
+                    "status": "completed",
+                    "arguments": {},
+                    "contentItems": [
+                        { "type": "inputText", "text": "a.rs:1 TODO" },
+                        { "type": "inputImage", "imageUrl": "https://img.example/a.png" },
+                    ],
+                }),
+            },
+        };
+        let out = adapt(&call, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains("a.rs:1 TODO"));
+        assert!(out.emit[0].contains("https://img.example/a.png"));
+    }
+
+    #[test]
+    fn mcp_tool_call_carries_app_context_and_plugin_id() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let call = ServerNotification::ItemCompleted {
+            item_id: "itm_m2".to_string(),
+            turn_id: "t1".to_string(),
+            item: crate::codex_rpc_types::ThreadItem {
+                id: "itm_m2".to_string(),
+                item_type: "mcpToolCall".to_string(),
+                raw: json!({
+                    "server": "connector",
+                    "tool": "search",
+                    "status": "completed",
+                    "arguments": { "query": "wise" },
+                    "appContext": { "appName": "Wise 文档", "connectorId": "wise-docs" },
+                    "pluginId": "openai-docs",
+                    "result": { "content": [{ "type": "text", "text": "ok" }] },
+                }),
+            },
+        };
+        let out = adapt(&call, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains(r#""description":"Wise 文档""#));
+        assert!(out.emit[0].contains(r#""plugin_id":"openai-docs""#));
+        assert!(out.emit[0].contains(r#""connectorId":"wise-docs""#));
+    }
+
+    #[test]
+    fn auto_approval_review_started_and_completed_merge_by_review_id() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let action = json!({ "type": "command", "command": "npm test", "cwd": "/repo", "source": "unifiedExec" });
+
+        let started = ServerNotification::AutoApprovalReviewStarted {
+            review_id: "rev_1".to_string(),
+            target_item_id: Some("itm_cmd".to_string()),
+            action: action.clone(),
+            review: json!({ "status": "inProgress", "riskLevel": "low", "rationale": null }),
+        };
+        let out = adapt(&started, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains(r#""name":"approval_review""#));
+        assert!(out.emit[0].contains(r#""status":"running""#));
+        assert!(out.emit[0].contains("正在自动审批：npm test"));
+        assert!(out.emit[0].contains(r#""risk_level":"low""#));
+        assert!(out.emit[0].contains(r#""target_item_id":"itm_cmd""#));
+
+        let completed = ServerNotification::AutoApprovalReviewCompleted {
+            review_id: "rev_1".to_string(),
+            target_item_id: Some("itm_cmd".to_string()),
+            action,
+            review: json!({
+                "status": "approved",
+                "riskLevel": "low",
+                "rationale": "测试命令，风险低",
+            }),
+            decision_source: Some("agent".to_string()),
+        };
+        let out = adapt(&completed, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains(r#""id":"rev_1""#), "same id so frontend merges");
+        assert!(out.emit[0].contains(r#""status":"completed""#));
+        assert!(out.emit[0].contains("已自动批准 · 风险：low"));
+        assert!(out.emit[0].contains("测试命令，风险低"));
+        assert!(out.emit[0].contains("已自动批准：npm test"));
+    }
+
+    #[test]
+    fn auto_approval_review_denied_maps_to_error() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let completed = ServerNotification::AutoApprovalReviewCompleted {
+            review_id: "rev_2".to_string(),
+            target_item_id: None,
+            action: json!({ "type": "networkAccess", "host": "1.2.3.4", "port": 443, "protocol": "tcp", "target": "outbound" }),
+            review: json!({
+                "status": "denied",
+                "riskLevel": "high",
+                "rationale": "未知目标主机",
+            }),
+            decision_source: Some("agent".to_string()),
+        };
+        let out = adapt(&completed, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains(r#""status":"error""#));
+        assert!(out.emit[0].contains("已自动拒绝 · 风险：high"));
+        assert!(out.emit[0].contains("未知目标主机"));
+        assert!(out.emit[0].contains("tcp 1.2.3.4:443"));
+    }
+
+    #[test]
+    fn token_usage_is_summarized_on_turn_completed() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let usage = ServerNotification::ThreadTokenUsageUpdated {
+            thread_id: "thr".to_string(),
+            turn_id: "t1".to_string(),
+            token_usage: json!({
+                "total": {
+                    "inputTokens": 1200,
+                    "outputTokens": 300,
+                    "reasoningOutputTokens": 80,
+                    "totalTokens": 1580,
+                },
+                "last": { "inputTokens": 20, "outputTokens": 10, "totalTokens": 30 },
+            }),
+        };
+        // 更新本身不展示（避免刷屏）。
+        assert!(adapt(&usage, &mut state).emit.is_empty());
+
+        let completed = ServerNotification::TurnCompleted {
+            turn_id: "t1".to_string(),
+            thread_id: "thr".to_string(),
+            status: "completed".to_string(),
+            error_message: None,
+        };
+        let out = adapt(&completed, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains("Codex 本轮用量"));
+        assert!(out.emit[0].contains("输入 1200"));
+        assert!(out.emit[0].contains("思考 80"));
+        assert!(out.emit[0].contains("输出 300"));
+        assert!(out.emit[0].contains("总计 1580 tokens"));
+
+        // 下一轮没有用量更新时不输出摘要。
+        let out = adapt(&completed, &mut state);
+        assert!(out.emit.is_empty());
+    }
+
+    #[test]
+    fn token_usage_summary_is_kept_on_turn_failure() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let usage = ServerNotification::ThreadTokenUsageUpdated {
+            thread_id: "thr".to_string(),
+            turn_id: "t1".to_string(),
+            token_usage: json!({
+                "total": { "inputTokens": 10, "outputTokens": 5, "totalTokens": 15 },
+                "last": { "inputTokens": 1, "outputTokens": 1, "totalTokens": 2 },
+            }),
+        };
+        assert!(adapt(&usage, &mut state).emit.is_empty());
+
+        let failed = ServerNotification::TurnCompleted {
+            turn_id: "t1".to_string(),
+            thread_id: "thr".to_string(),
+            status: "failed".to_string(),
+            error_message: Some("network error".to_string()),
+        };
+        let out = adapt(&failed, &mut state);
+        assert_eq!(out.emit.len(), 2);
+        assert!(out.emit[0].contains("Codex error"));
+        assert!(out.emit[1].contains("Codex 本轮用量"));
+    }
+
+    #[test]
+    fn model_rerouted_emits_text_hint() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let rerouted = ServerNotification::ModelRerouted {
+            thread_id: "thr".to_string(),
+            turn_id: "t1".to_string(),
+            from_model: "gpt-5.4".to_string(),
+            to_model: "gpt-5.4-mini".to_string(),
+            reason: Some("highRiskCyberActivity".to_string()),
+        };
+        let out = adapt(&rerouted, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains("Codex 模型已切换：gpt-5.4 → gpt-5.4-mini"));
+        assert!(out.emit[0].contains("高风险网络活动防护"));
     }
 }

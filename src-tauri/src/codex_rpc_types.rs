@@ -598,6 +598,35 @@ pub enum ServerNotification {
     ThreadCompacted {
         thread_id: String,
     },
+    /// `item/autoApprovalReview/started` — approval auto-review begins.
+    AutoApprovalReviewStarted {
+        review_id: String,
+        target_item_id: Option<String>,
+        action: Value,
+        review: Value,
+    },
+    /// `item/autoApprovalReview/completed` — approval auto-review finished.
+    AutoApprovalReviewCompleted {
+        review_id: String,
+        target_item_id: Option<String>,
+        action: Value,
+        review: Value,
+        decision_source: Option<String>,
+    },
+    /// `turn/tokenUsage/updated` — real token usage for the active turn.
+    ThreadTokenUsageUpdated {
+        thread_id: String,
+        turn_id: String,
+        token_usage: Value,
+    },
+    /// `model/rerouted` — the model was rerouted to another model mid-turn.
+    ModelRerouted {
+        thread_id: String,
+        turn_id: String,
+        from_model: String,
+        to_model: String,
+        reason: Option<String>,
+    },
     // --- Phase 5: Turn plan / diff notifications ---
     /// `turn/planUpdated` — the agent's plan has been updated.
     TurnPlanUpdated {
@@ -605,6 +634,8 @@ pub enum ServerNotification {
         turn_id: String,
         /// `TurnPlanStep[]` as raw JSON (steps carry `status` + `step` text).
         plan: Option<Value>,
+        /// Optional explanation accompanying the plan update.
+        explanation: Option<String>,
     },
     /// `turn/diffUpdated` — the cumulative diff has been updated.
     TurnDiffUpdated {
@@ -1085,6 +1116,115 @@ pub fn parse_notification(method: &str, params: Option<Value>) -> ServerNotifica
                 .to_string();
             ServerNotification::ThreadCompacted { thread_id }
         }
+        "item/autoApprovalReview/started" => {
+            let review_id = p
+                .get("reviewId")
+                .or_else(|| p.get("review_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let target_item_id = p
+                .get("targetItemId")
+                .or_else(|| p.get("target_item_id"))
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let action = p.get("action").cloned().unwrap_or(Value::Null);
+            let review = p.get("review").cloned().unwrap_or(Value::Null);
+            ServerNotification::AutoApprovalReviewStarted {
+                review_id,
+                target_item_id,
+                action,
+                review,
+            }
+        }
+        "item/autoApprovalReview/completed" => {
+            let review_id = p
+                .get("reviewId")
+                .or_else(|| p.get("review_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let target_item_id = p
+                .get("targetItemId")
+                .or_else(|| p.get("target_item_id"))
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let action = p.get("action").cloned().unwrap_or(Value::Null);
+            let review = p.get("review").cloned().unwrap_or(Value::Null);
+            let decision_source = p
+                .get("decisionSource")
+                .or_else(|| p.get("decision_source"))
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            ServerNotification::AutoApprovalReviewCompleted {
+                review_id,
+                target_item_id,
+                action,
+                review,
+                decision_source,
+            }
+        }
+        "turn/tokenUsage/updated" => {
+            let thread_id = p
+                .get("threadId")
+                .or_else(|| p.get("thread_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let turn_id = p
+                .get("turnId")
+                .or_else(|| p.get("turn_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let token_usage = p
+                .get("tokenUsage")
+                .or_else(|| p.get("token_usage"))
+                .cloned()
+                .unwrap_or(Value::Null);
+            ServerNotification::ThreadTokenUsageUpdated {
+                thread_id,
+                turn_id,
+                token_usage,
+            }
+        }
+        "model/rerouted" => {
+            let thread_id = p
+                .get("threadId")
+                .or_else(|| p.get("thread_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let turn_id = p
+                .get("turnId")
+                .or_else(|| p.get("turn_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let from_model = p
+                .get("fromModel")
+                .or_else(|| p.get("from_model"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let to_model = p
+                .get("toModel")
+                .or_else(|| p.get("to_model"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let reason = p
+                .get("reason")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            ServerNotification::ModelRerouted {
+                thread_id,
+                turn_id,
+                from_model,
+                to_model,
+                reason,
+            }
+        }
         "fs/changed" => {
             let watch_id = p
                 .get("watchId")
@@ -1122,7 +1262,16 @@ pub fn parse_notification(method: &str, params: Option<Value>) -> ServerNotifica
                 .to_string();
             // schema: `plan` 是 `TurnPlanStep[]`（status + step），存原始数组由适配器格式化。
             let plan = p.get("plan").cloned();
-            ServerNotification::TurnPlanUpdated { thread_id, turn_id, plan }
+            let explanation = p
+                .get("explanation")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            ServerNotification::TurnPlanUpdated {
+                thread_id,
+                turn_id,
+                plan,
+                explanation,
+            }
         }
         "turn/diffUpdated" | "turn/diff_updated" | "turn/diff/updated" => {
             let thread_id = p
@@ -2145,6 +2294,88 @@ mod tests {
         assert!(matches!(
             patch,
             ServerNotification::FileChangePatchUpdated { item_id, changes } if item_id == "itm" && changes.is_array()
+        ));
+
+        let review_started = parse_notification(
+            "item/autoApprovalReview/started",
+            Some(json!({
+                "reviewId": "rev_1",
+                "threadId": "thr",
+                "turnId": "t1",
+                "targetItemId": "itm_cmd",
+                "action": { "type": "command", "command": "npm test", "cwd": "/repo", "source": "unifiedExec" },
+                "review": { "status": "inProgress", "riskLevel": "low", "rationale": null },
+            })),
+        );
+        assert!(matches!(
+            review_started,
+            ServerNotification::AutoApprovalReviewStarted {
+                review_id,
+                target_item_id: Some(tid),
+                ..
+            } if review_id == "rev_1" && tid == "itm_cmd"
+        ));
+
+        let review_completed = parse_notification(
+            "item/autoApprovalReview/completed",
+            Some(json!({
+                "reviewId": "rev_1",
+                "threadId": "thr",
+                "turnId": "t1",
+                "targetItemId": null,
+                "decisionSource": "agent",
+                "action": { "type": "command", "command": "npm test", "cwd": "/repo", "source": "unifiedExec" },
+                "review": { "status": "approved", "riskLevel": "low", "rationale": "测试命令" },
+            })),
+        );
+        assert!(matches!(
+            review_completed,
+            ServerNotification::AutoApprovalReviewCompleted {
+                review_id,
+                decision_source: Some(src),
+                review,
+                ..
+            } if review_id == "rev_1" && src == "agent" && review["status"] == "approved"
+        ));
+
+        let usage = parse_notification(
+            "turn/tokenUsage/updated",
+            Some(json!({
+                "threadId": "thr",
+                "turnId": "t1",
+                "tokenUsage": {
+                    "total": { "inputTokens": 100, "outputTokens": 50, "totalTokens": 150 },
+                    "last": { "inputTokens": 10, "outputTokens": 5, "totalTokens": 15 },
+                },
+            })),
+        );
+        assert!(matches!(
+            usage,
+            ServerNotification::ThreadTokenUsageUpdated {
+                thread_id,
+                turn_id,
+                token_usage,
+            } if thread_id == "thr" && turn_id == "t1" && token_usage["total"]["totalTokens"] == 150
+        ));
+
+        let rerouted = parse_notification(
+            "model/rerouted",
+            Some(json!({
+                "threadId": "thr",
+                "turnId": "t1",
+                "fromModel": "gpt-5.4",
+                "toModel": "gpt-5.4-mini",
+                "reason": "highRiskCyberActivity",
+            })),
+        );
+        assert!(matches!(
+            rerouted,
+            ServerNotification::ModelRerouted {
+                from_model,
+                to_model,
+                reason: Some(r),
+                ..
+            } if from_model == "gpt-5.4" && to_model == "gpt-5.4-mini" && r == "highRiskCyberActivity"
         ));
     }
 }
