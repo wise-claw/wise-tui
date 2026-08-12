@@ -211,7 +211,7 @@ describe("filter monitor items by repository", () => {
 });
 
 describe("buildWorkspaceSidebarTreeRows", () => {
-  test("mixes sessions and run items by updatedAt, newest first (dispatch not pinned)", () => {
+  test("pins executing rows to the top, then mixes by updatedAt", () => {
     const t0 = 1_700_000_000_000;
     const sessions = [
       makeSession("sess-new", "/work/a", { createdAt: t0 + 300, content: "latest chat" }),
@@ -247,10 +247,34 @@ describe("buildWorkspaceSidebarTreeRows", () => {
       sessionConversationTaskItems: dispatches,
     });
 
-    expect(rows.map((r) => r.kind)).toEqual(["session", "dispatch", "employee", "session"]);
-    expect(rows.map((r) => r.updatedAt)).toEqual([t0 + 300, t0 + 200, t0 + 100, t0 + 50]);
-    expect(rows[0]!.kind === "session" && rows[0].item.id).toBe("sess-new");
-    expect(rows[1]!.kind === "dispatch" && rows[1].item.key).toBe("dispatch-mid");
+    // 执行中的派发/终端置顶（组内按时间倒序），idle 会话随后仍按时间倒序。
+    expect(rows.map((r) => r.kind)).toEqual(["dispatch", "employee", "session", "session"]);
+    expect(rows.map((r) => r.updatedAt)).toEqual([t0 + 200, t0 + 100, t0 + 300, t0 + 50]);
+    expect(rows[0]!.kind === "dispatch" && rows[0].item.key).toBe("dispatch-mid");
+    expect(rows[1]!.kind === "employee" && rows[1].item.employeeId).toBe("emp-old");
+    expect(rows[2]!.kind === "session" && rows[2].item.id).toBe("sess-new");
+  });
+
+  test("running session is pinned above newer idle session", () => {
+    const t0 = 1_700_000_000_000;
+    const running = makeSession("sess-running", "/work/a", {
+      createdAt: t0 + 100,
+      content: "running",
+    });
+    running.status = "running";
+    const idle = makeSession("sess-idle", "/work/a", {
+      createdAt: t0 + 300,
+      content: "idle latest",
+    });
+    const rows = buildWorkspaceSidebarTreeRows({
+      sessions: [idle, running],
+      repositoryPath: "/work/a",
+      showRunItems: false,
+    });
+    expect(rows.map((r) => (r.kind === "session" ? r.item.id : ""))).toEqual([
+      "sess-running",
+      "sess-idle",
+    ]);
   });
 
   test("does not list the same worker as both dispatch and session", () => {

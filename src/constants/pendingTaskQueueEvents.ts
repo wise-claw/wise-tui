@@ -13,6 +13,8 @@ export interface DispatchRequirementToExecutionEnvironmentDetail {
   source?: "workspace-requirement" | "workspace-requirement-auto";
   /** 关联的需求 id；新建会话时写入会话，执行完成且结果表明已处理时把需求标记为「待验证」。 */
   requirementId?: string;
+  /** 需求归属仓库 id（Wise `Repository.id`）。派发时优先发给该仓库；未设置则发给当前选中仓库。 */
+  requirementRepositoryId?: string | null;
   /**
    * 同步回调：ClaudeChat 已接收并开始派发时调用。
    * `dispatchEvent` 为同步，调用方可据此判断是否有监听方处理。
@@ -38,6 +40,7 @@ export function dispatchRequirementToExecutionEnvironment(
               : promptText,
           source: detail.source,
           requirementId: detail.requirementId,
+          requirementRepositoryId: detail.requirementRepositoryId,
           onAccepted: () => {
             accepted = true;
             detail.onAccepted?.();

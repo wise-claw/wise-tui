@@ -1,8 +1,21 @@
 import type { Editor } from "@tiptap/core";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { BubbleMenu as BubbleMenuComponent } from "@tiptap/react/menus";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { fileToBase64, TiptapToolbar } from "./toolbar";
+import { SlashPopover, type ComposerPlainSurface } from "../ClaudeChatInput/slash-popover";
+import {
+  detectAtSlashTrigger,
+  isAtSlashTriggerSuppressedByPaste,
+  PASTE_TRIGGER_SUPPRESS_MS,
+} from "../ClaudeChatInput/composer-plain-utils";
+import type { TriggerInfo } from "../ClaudeChatInput/slash-trigger";
+import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
+import {
+  applyTiptapPlainEdit,
+  docPositionToPlainOffset,
+  tiptapDocPlainText,
+} from "../../utils/tiptapPlainPosition";
 import {
   collectClipboardImageRefs,
   isLikelyImagePaste,
@@ -64,6 +77,11 @@ export interface TiptapEditorProps {
   text: string;
   readonly?: boolean;
   onChange?: (markdown: string) => void;
+  /**
+   * 启用 @ 提及（终端 / 工作流 / 文件）与 / 命令补全（与会话输入框同款）。
+   * 提供 repositoryPath 后支持仓库文件搜索与 slash 目录；employees / teams 为空时仅展示文件与命令。
+   */
+  mentionSuggestions?: TiptapMentionSuggestions;
   /** 是否显示顶部固定工具栏（语雀风格），默认 true。 */
   toolbar?: boolean;
   /** 是否启用选区气泡工具栏，默认 true。 */
@@ -82,8 +100,31 @@ export interface TiptapEditorProps {
   blockEdit?: boolean;
 }
 
+export interface TiptapMentionSuggestions {
+  repositoryPath: string | null;
+  employees?: Array<{ id: string; name: string }>;
+  teams?: Array<{ id: string; name: string }>;
+  /** 当前会话执行引擎：决定 `/` 补全展示哪套内置命令（与会话输入框一致）。 */
+  sessionExecutionEngine?: SessionExecutionEngine;
+  /** @ 终端可用的执行引擎（与会话输入框一致）；缺省时仅展示 Claude。 */
+  codexAvailable?: boolean;
+  cursorAvailable?: boolean;
+  geminiAvailable?: boolean;
+  opencodeAvailable?: boolean;
+  qoderAvailable?: boolean;
+}
+
 function collapseWs(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function caretRect(ed: Editor): DOMRect | null {
+  try {
+    const coords = ed.view.coordsAtPos(ed.state.selection.from);
+    return new DOMRect(coords.left, coords.top, coords.right - coords.left, coords.bottom - coords.top);
+  } catch {
+    return null;
+  }
 }
 
 function clampPos(pos: number, max: number): number {
@@ -150,6 +191,7 @@ async function insertPastedImageRefs(editor: Editor, refs: ClipboardImageRefs): 
 export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(({
   text,
   onChange,
+  mentionSuggestions,
   readonly = false,
   toolbar = true,
   floatingToolbar = true,
@@ -168,6 +210,16 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(({
   onChangeRef.current = onChange;
   const lastEmittedMarkdownRef = useRef<string | null>(null);
   const applyingExternalRef = useRef(false);
+  const mentionSuggestionsRef = useRef<TiptapMentionSuggestions | undefined>(mentionSuggestions);
+  mentionSuggestionsRef.current = mentionSuggestions;
+  const plainSurfaceRef = useRef<ComposerPlainSurface | null>(null);
+  const triggerRectCacheRef = useRef<{ key: string; rect: DOMRect | null } | null>(null);
+  const suppressTriggerUntilRef = useRef(0);
+  const [mentionTrigger, setMentionTrigger] = useState<TriggerInfo>({
+    mode: null,
+    query: "",
+    rect: null,
+  });
 
   const taskAnchorsRef = useRef<TiptapTaskAnchor[] | undefined>(taskAnchors);
   taskAnchorsRef.current = taskAnchors;
@@ -183,6 +235,40 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(({
 
   const lastResolvedIdsRef = useRef<string[] | null>(null);
   const lastRangesRef = useRef<string | null>(null);
+
+  /** 按光标前的纯文本重算 @ / 命令触发状态（与会话输入框同款规则）。 */
+  const refreshMentionTrigger = useCallback(() => {
+    const ed = editorRef.current;
+    if (!ed || !mentionSuggestionsRef.current) {
+      setMentionTrigger((prev) =>
+        prev.mode === null && prev.query === "" ? prev : { mode: null, query: "", rect: null },
+      );
+      return;
+    }
+    const plainUpToCursor = ed.state.doc.textBetween(0, ed.state.selection.from, "\n");
+    if (isAtSlashTriggerSuppressedByPaste(suppressTriggerUntilRef.current, Date.now())) {
+      setMentionTrigger((prev) =>
+        prev.mode === null && prev.query === "" ? prev : { mode: null, query: "", rect: null },
+      );
+      return;
+    }
+    const detected = detectAtSlashTrigger(plainUpToCursor, plainUpToCursor.length);
+    if (!detected) {
+      setMentionTrigger((prev) =>
+        prev.mode === null && prev.query === "" ? prev : { mode: null, query: "", rect: null },
+      );
+      return;
+    }
+    const rectKey = `${detected.mode}:${detected.triggerStart}`;
+    if (triggerRectCacheRef.current?.key !== rectKey) {
+      triggerRectCacheRef.current = { key: rectKey, rect: caretRect(ed) };
+    }
+    const cachedRect = triggerRectCacheRef.current?.rect ?? null;
+    setMentionTrigger((prev) => {
+      if (prev.mode === detected.mode && prev.query === detected.query) return prev;
+      return { mode: detected.mode, query: detected.query, rect: cachedRect };
+    });
+  }, []);
 
   const reportAnchorResults = useCallback(() => {
     const editor = editorRef.current;
@@ -232,6 +318,11 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(({
     content: text,
     editable: !readonly,
     editorProps: {
+      handlePaste() {
+        // 粘贴是整块插入：内容里的邮箱 / 路径 / 单斜杠除法不应误开 @ / 命令补全。
+        suppressTriggerUntilRef.current = Date.now() + PASTE_TRIGGER_SUPPRESS_MS;
+        return false;
+      },
       handleDrop(_view, event) {
         const ed = editorRef.current;
         if (!ed) return false;
@@ -249,12 +340,16 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(({
       },
     },
     onUpdate: ({ editor: ed }) => {
+      refreshMentionTrigger();
       const markdown = markdownStorage(ed).getMarkdown();
       if (applyingExternalRef.current) return;
       if (markdown === lastEmittedMarkdownRef.current) return;
       lastEmittedMarkdownRef.current = markdown;
       onChangeRef.current?.(markdown);
       reportAnchorResults();
+    },
+    onSelectionUpdate: () => {
+      refreshMentionTrigger();
     },
     onCreate: ({ editor: ed }) => {
       editorRef.current = ed;
@@ -265,6 +360,29 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(({
       });
     },
   });
+
+  plainSurfaceRef.current = {
+    anchorEl: () => editorRef.current?.view.dom ?? null,
+    resolveTriggerAnchorRect: () => {
+      const ed = editorRef.current;
+      return ed ? caretRect(ed) : null;
+    },
+    getPlain: () => {
+      const ed = editorRef.current;
+      return ed ? tiptapDocPlainText(ed.state.doc) : "";
+    },
+    getCursor: () => {
+      const ed = editorRef.current;
+      return ed ? docPositionToPlainOffset(ed.state.doc, ed.state.selection.from) : 0;
+    },
+    setPlainAndCursor: (plain: string) => {
+      const ed = editorRef.current;
+      if (ed) applyTiptapPlainEdit(ed, plain);
+    },
+    focus: () => {
+      editorRef.current?.commands.focus();
+    },
+  };
 
   useEffect(() => {
     return () => {
@@ -647,6 +765,24 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(({
             {"</>"}
           </button>
         </BubbleMenuComponent>
+      ) : null}
+      {mentionSuggestions ? (
+        <SlashPopover
+          surfaceRef={plainSurfaceRef}
+          trigger={mentionTrigger}
+          onDismiss={() => setMentionTrigger({ mode: null, query: "", rect: null })}
+          onSelect={() => {}}
+          repositoryPath={mentionSuggestions.repositoryPath ?? undefined}
+          employeeOptions={mentionSuggestions.employees ?? []}
+          teamOptions={mentionSuggestions.teams ?? []}
+          codexAvailable={mentionSuggestions.codexAvailable ?? false}
+          cursorAvailable={mentionSuggestions.cursorAvailable ?? false}
+          geminiAvailable={mentionSuggestions.geminiAvailable ?? false}
+          opencodeAvailable={mentionSuggestions.opencodeAvailable ?? false}
+          qoderAvailable={mentionSuggestions.qoderAvailable ?? false}
+          sessionExecutionEngine={mentionSuggestions.sessionExecutionEngine}
+          zIndex={12000}
+        />
       ) : null}
     </div>
   );

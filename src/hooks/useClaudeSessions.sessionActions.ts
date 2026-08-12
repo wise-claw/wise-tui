@@ -325,8 +325,8 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     assistantStreamTextByTabRef.current.set(tabSessionId, "");
 
     const spawnEngine = resolveSessionExecutionEngine(spawnSession);
-    // OpenCode / Cursor：Composer 只选模型，必须以 session.model 为准。
-    // 不可走 resolveClaudeExecModelId（会优先 Claude 档案，覆盖会话选择）。
+    // OpenCode / Cursor / Codex / Qoder / Claude：Composer 直接切换模型，以 session.model 为准。
+    // Claude 与 Codex 一致：会话显式选择的模型优先；仅当会话无模型时才回退 Claude 档案。
     const sessionModelTrimmed = spawnSession.model?.trim() || undefined;
     const modelArg =
       spawnEngine === "opencode" ||
@@ -335,10 +335,13 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
       spawnEngine === "codex-rpc" ||
       spawnEngine === "qoder"
         ? sessionModelTrimmed
-        : resolveClaudeExecModelId({
-            sessionModel: spawnSession.model,
-            store: getCachedModelProfileStore(),
-          });
+        : spawnEngine === "claude"
+          ? sessionModelTrimmed ??
+            resolveClaudeExecModelId({ store: getCachedModelProfileStore() })
+          : resolveClaudeExecModelId({
+              sessionModel: spawnSession.model,
+              store: getCachedModelProfileStore(),
+            });
 
     if (terminalFreshTeardown) {
       expectedTurnNonceByTabIdRef.current.delete(tabSessionId);

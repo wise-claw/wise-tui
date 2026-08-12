@@ -8,6 +8,7 @@ import { listOpencodeModels, type OpencodeModelListItem } from "../../services/o
 import { listQoderModels, type QoderModelListItem } from "../../services/qoder";
 import {
   applyClaudeModelProfile,
+  dispatchClaudeUserSettingsChanged,
   dispatchModelProfileStoreChanged,
   getClaudeModelProfileStore,
   WISE_CLAUDE_USER_SETTINGS_CHANGED,
@@ -63,6 +64,11 @@ import {
   matchesQoderModelPickerFilter,
 } from "../../utils/qoderModel";
 import {
+  buildClaudeModelPickerOptions,
+  formatClaudeModelLabel,
+  isKnownClaudePickerModel,
+} from "../../utils/claudeModel";
+import {
   normalizeSessionExecutionEngine,
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
@@ -113,6 +119,18 @@ function opencodeOptionProviderLabel(option: OpencodeModelPickerOption): string 
   const providerName = option.providerName?.trim();
   if (providerName) return providerName;
   return option.providerId?.trim() ?? "";
+}
+
+function matchesClaudeModelPickerFilter(
+  query: string,
+  option: { value: string; label: string },
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    option.value.toLowerCase().includes(q) ||
+    option.label.toLowerCase().includes(q)
+  );
 }
 
 function stopSemiComposerPointerBubble(event: MouseEvent) {
@@ -200,13 +218,17 @@ function ComposerModelPickerImpl({
   const isOpencodeEngine = sessionExecutionEngine === "opencode";
   const isQoderEngine = sessionExecutionEngine === "qoder";
   const isCodexEngine = sessionExecutionEngine === "codex" || sessionExecutionEngine === "codex-rpc";
-  /** Cursor / OpenCode / Qoder / Codex：Composer 快速选择模型；Codex 另有「管理档案」入口。 */
-  const isSelectOnlyEngine = isCursorEngine || isOpencodeEngine || isQoderEngine || isCodexEngine;
+  const isClaudeEngine = sessionExecutionEngine === "claude";
+  /** Cursor / OpenCode / Qoder / Codex / Claude：Composer 快速选择模型；Codex / Claude 另有「管理档案」入口。 */
+  const isSelectOnlyEngine =
+    isCursorEngine || isOpencodeEngine || isQoderEngine || isCodexEngine || isClaudeEngine;
   const profileEngine: ModelProfileEngine | null = isCodexEngine
     ? "codex"
-    : isSelectOnlyEngine
-      ? null
-      : "claude";
+    : isClaudeEngine
+      ? "claude"
+      : isSelectOnlyEngine
+        ? null
+        : "claude";
 
   const [claudePicker, setClaudePicker] = useState<
     Awaited<ReturnType<typeof getClaudeModelPickerOptions>> | null
@@ -309,6 +331,25 @@ function ComposerModelPickerImpl({
   }, [isCodexEngine, session.id, session.model, codexModels, syncModelIfNeeded]);
 
   useEffect(() => {
+    if (!isClaudeEngine) return;
+    const fromProfile =
+      resolveEffectiveModelForProfileEngine("claude", getCachedModelProfileStore())?.trim() || null;
+    const fromSession = session.model?.trim();
+    // 与 Codex 一致：会话模型为已知 Claude 模型且与档案不同，视为 Composer 显式切换，不覆盖。
+    if (
+      fromSession &&
+      isKnownClaudePickerModel(fromSession, claudePicker) &&
+      fromProfile &&
+      fromSession !== fromProfile
+    ) {
+      return;
+    }
+    // 档案生效模型优先（与执行解析一致）；无档案时保留会话模型/配置默认。
+    const nextModel = fromProfile || fromSession || claudePicker?.defaultModel?.trim();
+    if (nextModel) syncModelIfNeeded(nextModel);
+  }, [isClaudeEngine, session.id, session.model, claudePicker, profileStoreRevision, syncModelIfNeeded]);
+
+  useEffect(() => {
     void getClaudeModelProfileStore()
       .then((nextStore) => {
         seedModelProfileStoreCache(nextStore);
@@ -332,6 +373,12 @@ function ComposerModelPickerImpl({
         if (fromProfile) {
           syncModelIfNeeded(fromProfile);
         }
+      } else if (isClaudeEngine) {
+        // 与 Codex 一致：全局档案切换后同步会话模型（显式切换会被下一次档案事件覆盖）。
+        const fromProfile = detail?.effectiveModel?.trim();
+        if (fromProfile) {
+          syncModelIfNeeded(fromProfile);
+        }
       } else if (!isSelectOnlyEngine) {
         const fromProfile = detail?.effectiveModel?.trim();
         if (fromProfile) {
@@ -344,7 +391,13 @@ function ComposerModelPickerImpl({
     };
     window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
     return () => window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
-  }, [isCodexEngine, isSelectOnlyEngine, syncModelIfNeeded, refreshClaudeModelPicker]);
+  }, [
+    isCodexEngine,
+    isClaudeEngine,
+    isSelectOnlyEngine,
+    syncModelIfNeeded,
+    refreshClaudeModelPicker,
+  ]);
 
   useEffect(() => {
     const onOpenModelPicker = () => {
@@ -468,6 +521,15 @@ function ComposerModelPickerImpl({
       }
       return opts;
     }
+    if (isClaudeEngine) {
+      // settings.json 配置模型为权威列表；命中配置模型的档案标注公司并携带 profileId。
+      return buildClaudeModelPickerOptions({
+        picker: claudePicker,
+        profiles: getCachedModelProfileStore()?.profiles ?? [],
+        sessionModel: session.model,
+        currentModel: model,
+      });
+    }
     if (isCodexEngine) {
       const codexProfiles = getCachedModelProfileStore()?.profiles ?? [];
       const opts = buildCodexModelPickerOptions(codexModels ?? [], codexProfiles);
@@ -500,10 +562,12 @@ function ComposerModelPickerImpl({
     isOpencodeEngine,
     isQoderEngine,
     isCodexEngine,
+    isClaudeEngine,
     cursorModels,
     opencodeModels,
     qoderModels,
     codexModels,
+    claudePicker,
     profileStoreRevision,
     session.model,
     model,
@@ -514,7 +578,9 @@ function ComposerModelPickerImpl({
       ? matchesQoderModelPickerFilter
       : isCodexEngine
         ? matchesCodexModelPickerFilter
-        : matchesOpencodeModelPickerFilter;
+        : isClaudeEngine
+          ? matchesClaudeModelPickerFilter
+          : matchesOpencodeModelPickerFilter;
     const filtered = selectOnlyModelOptions.filter((option) =>
       filterFn(selectOnlyFilter, option),
     );
@@ -537,10 +603,16 @@ function ComposerModelPickerImpl({
             key: option.value,
             label: (
               <ComposerModelPickerMenuLabel
-                company={isOpencodeEngine || isCodexEngine ? opencodeOptionProviderLabel(option) : ""}
+                company={
+                  isOpencodeEngine || isCodexEngine
+                    ? opencodeOptionProviderLabel(option)
+                    : isClaudeEngine
+                      ? (option as { company?: string }).company?.trim() ?? ""
+                      : ""
+                }
                 modelName={option.label}
                 title={
-                  isOpencodeEngine || isCodexEngine
+                  isOpencodeEngine || isCodexEngine || isClaudeEngine
                     ? option.value
                     : option.value === option.label
                       ? option.label
@@ -549,15 +621,22 @@ function ComposerModelPickerImpl({
               />
             ),
           }));
-    if (isCodexEngine) {
+    if (isCodexEngine || isClaudeEngine) {
       items.push({ type: "divider" });
       items.push({
-        key: "__manage_codex_profiles__",
-        label: "管理 Codex 档案…",
+        key: isCodexEngine ? "__manage_codex_profiles__" : "__manage_claude_profiles__",
+        label: isCodexEngine ? "管理 Codex 档案…" : "管理 Claude 档案…",
       });
     }
     return items;
-  }, [selectOnlyModelOptions, selectOnlyFilter, isQoderEngine, isCodexEngine, isOpencodeEngine]);
+  }, [
+    selectOnlyModelOptions,
+    selectOnlyFilter,
+    isQoderEngine,
+    isCodexEngine,
+    isClaudeEngine,
+    isOpencodeEngine,
+  ]);
 
   const handleSelectOnlyMenuOpenChange = useCallback((open: boolean) => {
     setSelectOnlyMenuOpen(open);
@@ -576,9 +655,9 @@ function ComposerModelPickerImpl({
       const store = getCachedModelProfileStore();
       const fromActive = resolveActiveModelProfileComposerBarLabel(profileEngine, store);
       if (fromActive) {
-        if (!isCodexEngine) return fromActive;
-        // Codex 会话显式切换模型后（与档案不一致），展示所选模型而非档案名。
-        const effective = resolveEffectiveModelForProfileEngine("codex", store)?.trim();
+        if (!isCodexEngine && !isClaudeEngine) return fromActive;
+        // Codex / Claude：会话显式切换模型后（与档案不一致），展示所选模型而非档案名。
+        const effective = resolveEffectiveModelForProfileEngine(profileEngine, store)?.trim();
         if (effective && model.trim() === effective) return fromActive;
       }
     }
@@ -594,10 +673,19 @@ function ComposerModelPickerImpl({
         if (effective) return formatCodexModelLabel(effective);
         return "默认";
       }
+      if (isClaudeEngine) return formatClaudeModelLabel(model);
       return model;
     }
     return model;
-  }, [selectOnlyModelOptions, model, profileEngine, profileStoreRevision, isSelectOnlyEngine, isCodexEngine]);
+  }, [
+    selectOnlyModelOptions,
+    model,
+    profileEngine,
+    profileStoreRevision,
+    isSelectOnlyEngine,
+    isCodexEngine,
+    isClaudeEngine,
+  ]);
 
   const modelDisplayTitle = formatModelProfileDropdownPartsTitle(
     splitFlatModelDropdownLabel(modelDisplayLabel),
@@ -624,9 +712,14 @@ function ComposerModelPickerImpl({
             normalizeModelProfileEngine(p.engine) === profileEngine,
         );
         if (activeProfile) {
-          if (!isCodexEngine) return resolveModelProfileDropdownParts(activeProfile);
-          // Codex：会话显式切换后展示所选模型；仅与会话模型一致时才展示档案。
-          const effective = resolveEffectiveModelForProfileEngine("codex", profileStore)?.trim();
+          if (!isCodexEngine && !isClaudeEngine) {
+            return resolveModelProfileDropdownParts(activeProfile);
+          }
+          // Codex / Claude：会话显式切换后展示所选模型；仅与会话模型一致时才展示档案。
+          const effective = resolveEffectiveModelForProfileEngine(
+            profileEngine,
+            profileStore,
+          )?.trim();
           if (effective && model.trim() === effective) {
             return resolveModelProfileDropdownParts(activeProfile);
           }
@@ -642,7 +735,15 @@ function ComposerModelPickerImpl({
       if (fromModelId) return splitFlatModelDropdownLabel(fromModelId);
     }
     return splitFlatModelDropdownLabel(modelDisplayLabel);
-  }, [activeProxyRoute, modelDisplayLabel, model, profileEngine, profileStoreRevision, sessionExecutionEngine]);
+  }, [
+    activeProxyRoute,
+    modelDisplayLabel,
+    model,
+    profileEngine,
+    profileStoreRevision,
+    sessionExecutionEngine,
+    isClaudeEngine,
+  ]);
 
   const modelBarTitle = activeProxyRoute?.tooltip ?? modelDisplayTitle;
 
@@ -657,7 +758,7 @@ function ComposerModelPickerImpl({
   const handleSelectOnlyMenuClick = useCallback(
     ({ key }: { key: string }) => {
       if (typeof key !== "string" || key === "__no_match__") return;
-      if (isCodexEngine && key === "__manage_codex_profiles__") {
+      if (key === "__manage_codex_profiles__" || key === "__manage_claude_profiles__") {
         setSelectOnlyMenuOpen(false);
         setSelectOnlyFilter("");
         setPanelOpen(true);
@@ -684,13 +785,43 @@ function ComposerModelPickerImpl({
           return;
         }
       }
+      if (isClaudeEngine) {
+        // 命中 Claude 档案：应用档案（写 settings 并广播，触发流式会话按新模型重连）。
+        const option = selectOnlyModelOptions.find(
+          (o) => o.value === key,
+        ) as { value: string; label: string; company?: string; profileId?: string } | undefined;
+        if (option?.profileId) {
+          const profileId = option.profileId;
+          setSelectOnlyMenuOpen(false);
+          setSelectOnlyFilter("");
+          void applyClaudeModelProfile(profileId)
+            .then((next) => {
+              seedModelProfileStoreCache(next);
+              setProfileStoreRevision((n) => n + 1);
+              dispatchModelProfileStoreChanged(next, {
+                engine: "claude",
+                sessionReconnect: true,
+              });
+            })
+            .catch(() => undefined);
+          return;
+        }
+      }
       if (key !== model) {
         onModelChange(key);
+        if (isClaudeEngine) {
+          // 与 Codex 一致：直接切换会话模型；派发 settings 事件触发流式会话按新模型重连。
+          dispatchClaudeUserSettingsChanged({
+            engine: "claude",
+            effectiveModel: key,
+            sessionReconnect: true,
+          });
+        }
       }
       setSelectOnlyMenuOpen(false);
       setSelectOnlyFilter("");
     },
-    [model, onModelChange, isCodexEngine, selectOnlyModelOptions],
+    [model, onModelChange, isCodexEngine, isClaudeEngine, selectOnlyModelOptions],
   );
 
   const trigger = (
@@ -740,14 +871,18 @@ function ComposerModelPickerImpl({
         ? "切换 Qoder 模型"
         : isCodexEngine
           ? "切换 Codex 模型"
-          : "切换 OpenCode 模型";
+          : isClaudeEngine
+            ? "切换 Claude 模型"
+            : "切换 OpenCode 模型";
     const filterPlaceholder = isCursorEngine
       ? "过滤 Cursor 模型…"
       : isQoderEngine
         ? "过滤 Qoder 模型…"
         : isCodexEngine
           ? "过滤 Codex 模型…"
-          : "过滤 OpenCode 模型…";
+          : isClaudeEngine
+            ? "过滤 Claude 模型…"
+            : "过滤 OpenCode 模型…";
     return (
       <div className="app-composer-model-picker">
         <div className="app-composer-model-picker__row">
@@ -807,7 +942,7 @@ function ComposerModelPickerImpl({
               </span>
             </HoverHint>
           </Dropdown>
-          {isCodexEngine ? (
+          {isCodexEngine || isClaudeEngine ? (
             <Dropdown
               classNames={{
                 root:

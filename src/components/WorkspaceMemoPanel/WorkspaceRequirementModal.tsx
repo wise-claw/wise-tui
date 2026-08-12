@@ -28,11 +28,14 @@ import type { Repository } from "../../types";
 import {
   createWorkspaceRequirementItem,
   deriveRequirementTitle,
+  type WorkspaceRequirementItem,
   type WorkspaceRequirementsPayloadV1,
 } from "../../types/workspaceRequirements";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
+import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { ErrorBoundary } from "../ErrorBoundary";
 import "./index.css";
+import type { TiptapEditorProps } from "../TiptapEditor";
 
 const TiptapEditor = lazy(() =>
   import("../TiptapEditor").then((module) => ({ default: module.TiptapEditor })),
@@ -42,14 +45,22 @@ function RequirementRichTextEditor({
   editorKey,
   initialBody,
   onChange,
+  mentionSuggestions,
 }: {
   editorKey: number;
   initialBody: string;
   onChange: (markdown: string) => void;
+  mentionSuggestions?: TiptapEditorProps["mentionSuggestions"];
 }) {
   return (
     <div className="app-workspace-requirements-panel__editor-wrap">
-      <TiptapEditor key={editorKey} text={initialBody} onChange={onChange} floatingToolbar />
+      <TiptapEditor
+        key={editorKey}
+        text={initialBody}
+        onChange={onChange}
+        floatingToolbar
+        mentionSuggestions={mentionSuggestions}
+      />
     </div>
   );
 }
@@ -68,6 +79,32 @@ function resolveDefaultRepositoryId(
     if (match) return String(match.id);
   }
   return repositories[0] != null ? String(repositories[0].id) : null;
+}
+
+/**
+ * 保存后派发：组装图文 → 派发到执行环境 → 标记已派发。
+ * 返回是否被执行环境接收（未接收时需求已保存，仅未派发）。
+ */
+async function dispatchSavedRequirementToEnvironment(
+  savedItem: WorkspaceRequirementItem,
+  dispatchedAt: number,
+): Promise<boolean> {
+  const payload = await buildRequirementDispatchPayload(savedItem);
+  const accepted = dispatchRequirementToExecutionEnvironment({
+    promptText: payload.promptText,
+    userBubblePrompt: payload.executeBubbleOptions?.userBubblePrompt ?? payload.promptText,
+    source: "workspace-requirement",
+    requirementId: savedItem.id,
+    requirementRepositoryId: savedItem.repositoryId,
+  });
+  if (accepted) {
+    await updateWorkspaceRequirement(savedItem.id, (row) => ({
+      ...row,
+      lastDispatchedAt: dispatchedAt,
+      dispatchAttemptCount: (row.dispatchAttemptCount ?? 0) + 1,
+    }));
+  }
+  return accepted;
 }
 
 /** 把已落盘的 `@绝对路径` 图片读回 data URL，供编辑器展示。 */
@@ -96,15 +133,35 @@ async function hydrateMarkdownImagesForEditor(markdown: string): Promise<string>
 export type WorkspaceRequirementModalProps = {
   repositories: Repository[];
   activeRepositoryId: number | null;
+  /** @ 终端提及数据源（与会话输入框同款）。 */
+  employees?: Array<{ id: string; name: string }>;
+  /** @ 工作流提及数据源（与会话输入框同款）。 */
+  workflowTemplates?: Array<{ id: string; name: string }>;
+  /** 当前会话执行引擎：决定需求编辑器 `/` 补全展示哪套内置命令（与会话输入框一致）。 */
+  sessionExecutionEngine?: SessionExecutionEngine;
+  /** @ 终端可用的执行引擎（与会话输入框同款，缺省仅展示 Claude）。 */
+  codexAvailable?: boolean;
+  cursorAvailable?: boolean;
+  geminiAvailable?: boolean;
+  opencodeAvailable?: boolean;
+  qoderAvailable?: boolean;
 };
 
 /**
  * 全局「新增 / 编辑需求」弹窗：按 store 状态复用同一套编辑器 / 归属仓库 / 图片落盘流程。
- * 新增走 appendWorkspaceRequirement；编辑支持「保存并派发」。
+ * 新增与编辑均支持「保存并派发」。
  */
 export function WorkspaceRequirementModal({
   repositories,
   activeRepositoryId,
+  employees,
+  workflowTemplates,
+  sessionExecutionEngine,
+  codexAvailable,
+  cursorAvailable,
+  geminiAvailable,
+  opencodeAvailable,
+  qoderAvailable,
 }: WorkspaceRequirementModalProps) {
   const createOpen = useWorkspaceRequirementCreateModalOpen();
   const createEpoch = useWorkspaceRequirementCreateModalEpoch();
@@ -207,6 +264,33 @@ export function WorkspaceRequirementModal({
     return options;
   }, [repositories, repositoryId, mode]);
 
+  const mentionSuggestions = useMemo(
+    () => ({
+      repositoryPath:
+        repositories.find((repo) => String(repo.id) === repositoryId)?.path ?? null,
+      employees: employees?.map((item) => ({ id: item.id, name: item.name })),
+      teams: workflowTemplates?.map((item) => ({ id: item.id, name: item.name })),
+      sessionExecutionEngine,
+      codexAvailable,
+      cursorAvailable,
+      geminiAvailable,
+      opencodeAvailable,
+      qoderAvailable,
+    }),
+    [
+      repositories,
+      repositoryId,
+      employees,
+      workflowTemplates,
+      sessionExecutionEngine,
+      codexAvailable,
+      cursorAvailable,
+      geminiAvailable,
+      opencodeAvailable,
+      qoderAvailable,
+    ],
+  );
+
   const handleClose = useCallback(() => {
     if (mode === "edit") {
       closeWorkspaceRequirementEditModal();
@@ -246,8 +330,23 @@ export function WorkspaceRequirementModal({
           const created = createWorkspaceRequirementItem(materialized.bodyMarkdown, now, repositoryId);
           created.title = title;
           created.imagePaths = materialized.imagePaths;
-          await appendWorkspaceRequirement(created);
-          message.success("需求已新增");
+          const saved = await appendWorkspaceRequirement(created);
+          if (!dispatchAfterSave) {
+            message.success("需求已新增");
+            closeWorkspaceRequirementCreateModal();
+            return;
+          }
+          const savedItem = saved.items.find((row) => row.id === created.id);
+          if (!savedItem) {
+            message.error("新增成功但未找到需求，请稍后在面板中重新派发");
+            return;
+          }
+          const accepted = await dispatchSavedRequirementToEnvironment(savedItem, now);
+          if (accepted) {
+            message.success("已保存并派发到执行环境");
+          } else {
+            message.warning("已保存，但当前没有可用执行环境，未派发");
+          }
           closeWorkspaceRequirementCreateModal();
           return;
         }
@@ -273,19 +372,8 @@ export function WorkspaceRequirementModal({
           message.error("保存成功但未找到需求，请稍后在面板中重新派发");
           return;
         }
-        const payload = await buildRequirementDispatchPayload(savedItem);
-        const accepted = dispatchRequirementToExecutionEnvironment({
-          promptText: payload.promptText,
-          userBubblePrompt: payload.executeBubbleOptions?.userBubblePrompt ?? payload.promptText,
-          source: "workspace-requirement",
-          requirementId,
-        });
+        const accepted = await dispatchSavedRequirementToEnvironment(savedItem, now);
         if (accepted) {
-          await updateWorkspaceRequirement(requirementId, (row) => ({
-            ...row,
-            lastDispatchedAt: now,
-            dispatchAttemptCount: (row.dispatchAttemptCount ?? 0) + 1,
-          }));
           message.success("已保存并派发到执行环境");
         } else {
           message.warning("已保存，但当前没有可用执行环境，未派发");
@@ -315,17 +403,15 @@ export function WorkspaceRequirementModal({
       confirmLoading={saving}
       okButtonProps={{ disabled: loadingItem }}
       footer={
-        isEdit
-          ? (_, { OkBtn, CancelBtn }) => (
-              <Space>
-                <CancelBtn />
-                <Button loading={saving} disabled={loadingItem} onClick={() => void handleSave(true)}>
-                  保存并派发
-                </Button>
-                <OkBtn />
-              </Space>
-            )
-          : undefined
+        (_, { OkBtn, CancelBtn }) => (
+          <Space>
+            <CancelBtn />
+            <Button loading={saving} disabled={loadingItem} onClick={() => void handleSave(true)}>
+              保存并派发
+            </Button>
+            <OkBtn />
+          </Space>
+        )
       }
       destroyOnHidden
       width={760}
@@ -379,6 +465,7 @@ export function WorkspaceRequirementModal({
             <RequirementRichTextEditor
               editorKey={editorKey}
               initialBody={draftBody}
+              mentionSuggestions={mentionSuggestions}
               onChange={(md) => {
                 draftBodyRef.current = md;
                 setDraftBody(md);

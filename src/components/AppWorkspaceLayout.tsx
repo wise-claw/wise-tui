@@ -55,6 +55,7 @@ import type { PaneAuxLayout } from "./ClaudeSessions/paneAuxLayout";
 import { waitLayoutFrames } from "../services/mainWindowLayout";
 import type { WorkflowTemplateItem } from "../types";
 import { resolveCockpitHubPane, type ViewMode } from "../types/viewMode";
+import { resolveEngineForSession } from "../utils/sessionExecutionEngine";
 import { AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { dispatchRepositoryFileEditorClosed, type OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { requestExplorerFocus } from "../constants/explorerUiEvents";
@@ -62,6 +63,11 @@ import { writePendingExplorerReveal } from "../utils/pendingExplorerReveal";
 import { resolveExplorerRevealTargetForOpen } from "../utils/explorerRevealTarget";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 import { useWorkspaceFileTreeRail } from "../hooks/useWorkspaceFileTreeRail";
+import { useAgentRegistryCodexAvailable } from "../hooks/useAgentRegistryCodexAvailable";
+import { useAgentRegistryCursorAvailable } from "../hooks/useAgentRegistryCursorAvailable";
+import { useAgentRegistryGeminiAvailable } from "../hooks/useAgentRegistryGeminiAvailable";
+import { useAgentRegistryOpencodeAvailable } from "../hooks/useAgentRegistryOpencodeAvailable";
+import { useAgentRegistryQoderAvailable } from "../hooks/useAgentRegistryQoderAvailable";
 import { hydrateOpenAppPreference } from "../services/openAppPreference";
 import { ErrorBoundary } from "./ErrorBoundary";
 import {
@@ -831,6 +837,34 @@ export function AppWorkspaceLayout({
       claudeSessionsProps.activeSessionId,
     ],
   );
+
+  /** 需求编辑器 `/` 补全跟随当前主会话执行引擎：切到 Codex RPC 后输入 / 加载 Codex 命令。 */
+  const requirementModalExecutionEngine = useMemo(() => {
+    const activeSession = claudeSessionsProps.sessions.find(
+      (session) => session.id === claudeSessionsProps.activeSessionId,
+    );
+    if (!activeSession) return undefined;
+    return resolveEngineForSession(
+      activeSession,
+      claudeSessionsProps.repositories ?? [],
+      claudeSessionsProps.employees ?? [],
+      claudeSessionsProps.activeRepository,
+    );
+  }, [
+    sessionsStructureKey,
+    claudeSessionsProps.sessions,
+    claudeSessionsProps.activeSessionId,
+    claudeSessionsProps.repositories,
+    claudeSessionsProps.employees,
+    claudeSessionsProps.activeRepository,
+  ]);
+
+  /** 需求编辑器 `@` 终端选项：与会话输入框一致，按 Agent Registry 探测可用引擎。 */
+  const codexAvailable = useAgentRegistryCodexAvailable();
+  const cursorAvailable = useAgentRegistryCursorAvailable();
+  const geminiAvailable = useAgentRegistryGeminiAvailable();
+  const opencodeAvailable = useAgentRegistryOpencodeAvailable();
+  const qoderAvailable = useAgentRegistryQoderAvailable();
 
   /**
    * 旧布尔派生：本组件保留按 ViewMode 内部派生的旧布尔语义（与 P0 阶段
@@ -1964,6 +1998,14 @@ export function AppWorkspaceLayout({
               <WorkspaceRequirementModal
                 repositories={claudeSessionsProps.repositories ?? []}
                 activeRepositoryId={claudeSessionsProps.activeRepository?.id ?? null}
+                employees={claudeSessionsProps.employees}
+                workflowTemplates={claudeSessionsProps.workflowTemplates}
+                sessionExecutionEngine={requirementModalExecutionEngine}
+                codexAvailable={codexAvailable}
+                cursorAvailable={cursorAvailable}
+                geminiAvailable={geminiAvailable}
+                opencodeAvailable={opencodeAvailable}
+                qoderAvailable={qoderAvailable}
               />
 
               <Suspense fallback={null}>

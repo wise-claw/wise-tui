@@ -1315,20 +1315,46 @@ export default function App() {
   const sendMessageToSessionRef = useRef(sendMessageToSession);
   sendMessageToSessionRef.current = sendMessageToSession;
 
+  /** 需求派发按归属仓库锚定主会话时使用；在 useAppSidebarSelection 之后赋值（渲染期完成，事件触发前已就绪）。 */
+  const ensureRepositoryMainSessionRef = useRef<
+    ((repository: Repository) => Promise<string | null>) | null
+  >(null);
+
   const handleDispatchExecutionEnvironment = useCallback(
     async (input: {
       prompt: string;
       userBubblePrompt?: string;
       defaultInstructionApplied?: string;
       requirementId?: string;
+      requirementRepositoryId?: string | null;
     }) => {
-      const mainSessionId =
-        resolveExecutionEnvironmentDispatchAnchorSessionId({
-          activeSessionId,
-          sessions: sessionsLatestRef.current,
-          repositoryMainSessionBindings: repositoryMainBindingsLatestRef.current,
-          repositories: repositoriesLatestRef.current,
-        }) ?? activeSessionId;
+      // 需求派发优先发给需求归属仓库：有设置则锚定该仓库主会话，否则回退到当前选中仓库。
+      let mainSessionId: string | null = null;
+      const requirementRepositoryId =
+        typeof input.requirementRepositoryId === "string" ? input.requirementRepositoryId.trim() : "";
+      if (requirementRepositoryId) {
+        const targetRepository = repositoriesLatestRef.current.find(
+          (repo) => String(repo.id) === requirementRepositoryId,
+        );
+        if (targetRepository) {
+          try {
+            mainSessionId =
+              (await ensureRepositoryMainSessionRef.current?.(targetRepository)) ?? null;
+          } catch (err) {
+            // 需求归属仓库主会话创建失败时回退到当前选中仓库，不中断派发。
+            console.error("[DispatchExecutionEnvironment] ensure requirement repo session failed", err);
+          }
+        }
+      }
+      if (!mainSessionId) {
+        mainSessionId =
+          resolveExecutionEnvironmentDispatchAnchorSessionId({
+            activeSessionId,
+            sessions: sessionsLatestRef.current,
+            repositoryMainSessionBindings: repositoryMainBindingsLatestRef.current,
+            repositories: repositoriesLatestRef.current,
+          }) ?? activeSessionId;
+      }
       if (!mainSessionId) return;
       await dispatchExecutionEnvironmentFromMainSession(
         {
@@ -2248,6 +2274,7 @@ export default function App() {
     suppressProjectSelectToChatRef,
     onRestoreHistorySessionAsMainComplete: () => setInspectorHistorySessionId(null),
   });
+  ensureRepositoryMainSessionRef.current = ensureRepositoryMainSession;
 
   async function handleCreateRepositoryTask(repository: Repository, mode: TaskMode) {
     if (mode === "chat") {

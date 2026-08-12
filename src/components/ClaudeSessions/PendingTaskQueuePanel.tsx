@@ -9,6 +9,7 @@ import {
 } from "../../utils/pendingQueueExecutor";
 import { singleTextPrompt } from "../ClaudeChatInput/composer-plain-utils";
 import { ComposerPlainEditSurface } from "../ClaudeChatInput/composerPlainEditSurface";
+import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 
 // ── Icons ──
 
@@ -68,6 +69,8 @@ interface Props {
   employees?: EmployeeItem[];
   employeeMentions?: Array<{ id: string; name: string }>;
   teamMentions?: Array<{ id: string; name: string }>;
+  /** 当前会话执行引擎：编辑排队任务时 `/` 补全展示对应引擎的内置命令。 */
+  sessionExecutionEngine?: SessionExecutionEngine;
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
   geminiAvailable?: boolean;
@@ -106,6 +109,7 @@ export function PendingTaskQueuePanel({
   employees = [],
   employeeMentions = [],
   teamMentions = [],
+  sessionExecutionEngine,
   codexAvailable = true,
   cursorAvailable = true,
   geminiAvailable = false,
@@ -359,6 +363,7 @@ export function PendingTaskQueuePanel({
               geminiAvailable={geminiAvailable}
               opencodeAvailable={opencodeAvailable}
               qoderAvailable={qoderAvailable}
+              sessionExecutionEngine={sessionExecutionEngine}
               canSend={editText.trim().length > 0}
               onMessageSend={(plain) => saveEdit(plain)}
               placeholder="@ 终端/工作流/文件，/ 命令，Enter 保存，Shift+Enter 换行"

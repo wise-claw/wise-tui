@@ -127,12 +127,25 @@ export function filterTeamMonitorForRepository(
   });
 }
 
-/** 侧栏展开子树行：终端 / 派发 / 工作流 / 会话，统一按时间混排（不置顶派发）。 */
+/** 侧栏展开子树行：终端 / 派发 / 工作流 / 会话。执行中的行置顶，其余按时间倒序。 */
 export type WorkspaceSidebarTreeRow =
   | { kind: "employee"; item: EmployeeMonitorItem; updatedAt: number }
   | { kind: "dispatch"; item: SessionConversationTaskItem; updatedAt: number }
   | { kind: "team"; item: TeamMonitorItem; updatedAt: number }
   | { kind: "session"; item: ClaudeSession; updatedAt: number };
+
+/** 行是否处于执行中：运行/连接中的会话与运行中的终端、派发、工作流都算。 */
+function workspaceSidebarRowIsRunning(row: WorkspaceSidebarTreeRow): boolean {
+  switch (row.kind) {
+    case "session":
+      return row.item.status === "running" || row.item.status === "connecting";
+    case "employee":
+    case "team":
+      return row.item.status === "in_progress";
+    case "dispatch":
+      return row.item.status === "running";
+  }
+}
 
 export function buildWorkspaceSidebarTreeRows(input: {
   sessions: ReadonlyArray<ClaudeSession>;
@@ -178,6 +191,10 @@ export function buildWorkspaceSidebarTreeRows(input: {
   }
 
   rows.sort((a, b) => {
+    // 执行中置顶（会话/终端/派发/工作流一视同仁），组内仍按时间倒序。
+    const aRunning = workspaceSidebarRowIsRunning(a) ? 1 : 0;
+    const bRunning = workspaceSidebarRowIsRunning(b) ? 1 : 0;
+    if (aRunning !== bRunning) return bRunning - aRunning;
     const byTime = b.updatedAt - a.updatedAt;
     if (byTime !== 0) return byTime;
     // 时间相同：稳定次键，避免点击/重渲时行序互换。

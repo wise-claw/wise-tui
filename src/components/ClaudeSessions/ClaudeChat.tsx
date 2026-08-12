@@ -196,6 +196,7 @@ interface Props {
     prompt: string;
     userBubblePrompt?: string;
     requirementId?: string;
+    requirementRepositoryId?: string | null;
   }) => void | Promise<void>;
   onSessionModelChange: (model: string) => void;
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
@@ -1431,6 +1432,7 @@ export function ClaudeChatInner({
         prompt: promptWithMention,
         userBubblePrompt: userBubble,
         requirementId: detail.requirementId,
+        requirementRepositoryId: detail.requirementRepositoryId,
       });
     };
     window.addEventListener(WISE_UI_EVENT_DISPATCH_REQUIREMENT_TO_EXEC_ENV, onDispatchRequirement);
@@ -2045,6 +2047,7 @@ export function ClaudeChatInner({
             employees={employees}
             employeeMentions={employeeMentionOptions}
             teamMentions={publishedTeamMentions}
+            sessionExecutionEngine={sessionExecutionEngine}
             codexAvailable={codexAvailable}
             cursorAvailable={cursorAvailable}
             geminiAvailable={geminiAvailable}

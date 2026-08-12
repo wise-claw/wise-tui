@@ -78,6 +78,8 @@ interface SlashPopoverProps {
   onAtMentionDefaultTargetChange?: (target: AtMentionDefaultTarget) => void | Promise<void>;
   /** 当前会话执行引擎：决定 `/` 补全展示哪套内置命令。 */
   sessionExecutionEngine?: SessionExecutionEngine;
+  /** 弹出层 z-index；在 Ant Modal（如需求弹窗 z-index 10000）等高层级容器内需显式调高。 */
+  zIndex?: number;
 }
 
 function reservedSlashLabelsForEngine(
@@ -164,6 +166,7 @@ export function SlashPopover({
   atMentionDefaultTarget = DEFAULT_AT_MENTION_DEFAULT_TARGET,
   onAtMentionDefaultTargetChange,
   sessionExecutionEngine = "claude",
+  zIndex = 1200,
 }: SlashPopoverProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [fileResults, setFileResults] = useState<SlashOption[]>([]);
@@ -488,7 +491,7 @@ export function SlashPopover({
     position: "fixed",
     left: `${placement.left}px`,
     bottom: `${placement.bottom}px`,
-    zIndex: 1200,
+    zIndex,
     width: "480px",
     background: opaqueBackground,
     backgroundColor: opaqueBackground,

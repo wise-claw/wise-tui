@@ -127,6 +127,8 @@ export interface ClaudeSessionsProps {
   onDispatchExecutionEnvironment?: (input: {
     prompt: string;
     userBubblePrompt?: string;
+    requirementId?: string;
+    requirementRepositoryId?: string | null;
   }) => void | Promise<void>;
   onDispatchSessionFeedbackLoop?: (input: {
     anchorSessionId: string;

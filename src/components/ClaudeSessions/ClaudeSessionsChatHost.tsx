@@ -135,6 +135,8 @@ export interface ClaudeSessionsChatHostProps {
   onDispatchExecutionEnvironment?: (input: {
     prompt: string;
     userBubblePrompt?: string;
+    requirementId?: string;
+    requirementRepositoryId?: string | null;
   }) => void | Promise<void>;
   onSendMessage: (prompt: string) => void;
   onCancelSession: (sessionId: string, opts?: { retractLastUserTurn?: boolean }) => void;

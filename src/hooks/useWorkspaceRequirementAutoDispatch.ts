@@ -147,6 +147,7 @@ export function useWorkspaceRequirementAutoDispatchEngine({
             userBubblePrompt: built.executeBubbleOptions?.userBubblePrompt ?? built.promptText,
             source: "workspace-requirement-auto",
             requirementId: item.id,
+            requirementRepositoryId: item.repositoryId,
           });
         } catch (err) {
           console.error("[WorkspaceRequirementAutoDispatch] build/dispatch failed", err);

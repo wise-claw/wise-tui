@@ -251,6 +251,9 @@ const CLAUDE_ONLY_LOCAL_HEADS = new Set([
   "compact",
 ]);
 
+/** Codex agent 原生支持、在 app-server 会话可直发的命令（不再按 Claude 专用拦截）。 */
+const CODEX_NATIVE_HEAD_OVERRIDES = new Set(["hooks", "compact"]);
+
 /**
  * 解析 Wise 本地处理的斜杠命令（嵌入式会话中原生 TUI 不可用者）。
  * 非 Claude 引擎：只拦截跨引擎可用的本地命令，Claude 专用 redirect / 插件命令不再误伤。
@@ -267,7 +270,12 @@ export function parseComposerLocalSlashCommand(
   const head = trimmed.slice(1).split(/\s+/)[0]?.toLowerCase() ?? "";
 
   // 非 Claude：Claude 专用本地命令改为明确提示，避免走 Claude IPC 或错误 redirect。
-  if (!isClaudeEngine && CLAUDE_ONLY_LOCAL_HEADS.has(head)) {
+  // Codex agent 原生支持 /hooks、/compact（app-server 可直发），不再按 Claude 专用拦截。
+  if (
+    !isClaudeEngine &&
+    CLAUDE_ONLY_LOCAL_HEADS.has(head) &&
+    !(catalogGroup === "codex" && CODEX_NATIVE_HEAD_OVERRIDES.has(head))
+  ) {
     if (head === "compact") {
       return redirectCommand(
         trimmed,
@@ -379,7 +387,8 @@ export function parseComposerLocalSlashCommand(
     }
   } else {
     // 非 Claude：/diff、/resume 等 TUI 命令给出引擎中立指引，不走 Claude 文案。
-    if (/^\/diff\b/i.test(trimmed)) {
+    // Codex agent 原生支持 /diff、/review，直发引擎处理。
+    if (/^\/diff\b/i.test(trimmed) && catalogGroup !== "codex") {
       return redirectCommand(
         trimmed,
         "交互式 /diff 在嵌入式会话中不可用。\n请使用侧栏 Git 面板查看改动。",

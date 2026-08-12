@@ -247,6 +247,8 @@ export interface MultiPaneSharedChatProps {
   onDispatchExecutionEnvironment?: (input: {
     prompt: string;
     userBubblePrompt?: string;
+    requirementId?: string;
+    requirementRepositoryId?: string | null;
   }) => void | Promise<void>;
   onUpdateSessionModel: (sessionId: string, model: string) => void;
   onUpdateSessionConnectionKind: (sessionId: string, kind: ClaudeSessionConnectionKind) => void | Promise<void>;

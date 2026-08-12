@@ -8,6 +8,7 @@ import { useAtMentionDefaultTarget } from "../../hooks/useAtMentionDefaultTarget
 import { SlashPopover } from "./slash-popover";
 import type { ComposerPlainSurface } from "./slash-popover";
 import type { TriggerInfo } from "./slash-trigger";
+import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { composerTokenHighlightExtensions } from "./composerTokenHighlightExtension";
 import {
   contentsToPlain,
@@ -115,6 +116,8 @@ export interface ComposerPlainEditSurfaceProps {
   repositoryPath?: string;
   employeeMentions?: Array<{ id: string; name: string }>;
   teamMentions?: Array<{ id: string; name: string }>;
+  /** 当前会话执行引擎：决定 `/` 补全展示哪套内置命令（与会话输入框一致）。 */
+  sessionExecutionEngine?: SessionExecutionEngine;
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
   geminiAvailable?: boolean;
@@ -138,6 +141,7 @@ export function ComposerPlainEditSurface({
   repositoryPath,
   employeeMentions = [],
   teamMentions = [],
+  sessionExecutionEngine,
   codexAvailable = true,
   cursorAvailable = true,
   geminiAvailable = false,
@@ -364,6 +368,7 @@ export function ComposerPlainEditSurface({
           qoderAvailable={qoderAvailable}
           atMentionDefaultTarget={atMentionDefaultTarget}
           onAtMentionDefaultTargetChange={(next) => void saveAtMentionDefaultTarget(next)}
+          sessionExecutionEngine={sessionExecutionEngine}
         />
         {semiEditorReady ? (
           <AIChatInput

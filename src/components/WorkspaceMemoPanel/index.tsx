@@ -328,6 +328,7 @@ export function WorkspaceMemoPanel() {
           userBubblePrompt: payload.executeBubbleOptions?.userBubblePrompt ?? payload.promptText,
           source: "workspace-requirement",
           requirementId: item.id,
+          requirementRepositoryId: item.repositoryId,
         });
         if (!accepted) {
           message.warning("当前没有可用主会话，无法派发到执行环境");

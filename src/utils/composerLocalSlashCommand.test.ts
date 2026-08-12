@@ -148,12 +148,21 @@ describe("parseComposerLocalSlashCommand", () => {
     expect(plugin?.redirectMessage).toContain("Codex");
     expect(parseComposerLocalSlashCommand("/clear", "codex-rpc")?.kind).toBe("clear");
     expect(parseComposerLocalSlashCommand("/model", "codex-rpc")?.kind).toBe("models");
+    // Codex agent 原生命令直发引擎，不做本地拦截
+    expect(parseComposerLocalSlashCommand("/compact", "codex-rpc")).toBeNull();
+    expect(parseComposerLocalSlashCommand("/compact 聚焦重构", "codex-rpc")).toBeNull();
+    expect(parseComposerLocalSlashCommand("/hooks", "codex-rpc")).toBeNull();
+    expect(parseComposerLocalSlashCommand("/diff", "codex-rpc")).toBeNull();
+    // /resume 由 Wise 会话管理承担，仍本地指引
+    expect(parseComposerLocalSlashCommand("/resume", "codex-rpc")?.kind).toBe("redirect");
   });
 
   test("cursor and opencode keep shared local commands", () => {
     expect(parseComposerLocalSlashCommand("/new", "cursor")?.kind).toBe("clear");
     expect(parseComposerLocalSlashCommand("/models", "opencode")?.kind).toBe("models");
     expect(parseComposerLocalSlashCommand("/compact", "cursor")?.kind).toBe("redirect");
+    expect(parseComposerLocalSlashCommand("/diff", "cursor")?.kind).toBe("redirect");
+    expect(parseComposerLocalSlashCommand("/hooks", "opencode")?.kind).toBe("redirect");
   });
 
   test("parses /ultracode 三种语义", () => {
