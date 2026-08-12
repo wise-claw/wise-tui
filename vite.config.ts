@@ -66,8 +66,38 @@ export default defineConfig(async () => ({
   assetsInclude: ["**/*.wasm"],
   plugins: [react(), materialIconsStaticPlugin()],
   resolve: {
-    /** 避免多份 React 进入不同 chunk，引发 `useLayoutEffect` of undefined。 */
-    dedupe: ["react", "react-dom"],
+    /**
+     * 避免多份 React / ProseMirror 进入不同 chunk：
+     * - React 多份会引发 `useLayoutEffect` of undefined；
+     * - prosemirror-model/view 被 nested node_modules 重复安装时，`splitBlock`（Enter）与
+     *   列表/表格等 transform 命令会抛 "multiple versions of prosemirror-model were loaded"，
+     *   导致 tiptap 内 Enter 与工具栏按钮失效。强制解析到项目根目录同一份。
+     */
+    dedupe: [
+      "react",
+      "react-dom",
+      "prosemirror-model",
+      "prosemirror-view",
+      "prosemirror-state",
+      "prosemirror-transform",
+      "prosemirror-commands",
+      "prosemirror-schema-list",
+      "prosemirror-tables",
+      "prosemirror-keymap",
+    ],
+  },
+  optimizeDeps: {
+    /** 开发态 esbuild 预构建同样强制单份，避免 dev 与 build 行为不一致。 */
+    dedupe: [
+      "prosemirror-model",
+      "prosemirror-view",
+      "prosemirror-state",
+      "prosemirror-transform",
+      "prosemirror-commands",
+      "prosemirror-schema-list",
+      "prosemirror-tables",
+      "prosemirror-keymap",
+    ],
   },
   build: {
     modulePreload: {

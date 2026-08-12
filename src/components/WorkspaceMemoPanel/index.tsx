@@ -6,10 +6,21 @@ import {
   SendOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
-import { Button, Checkbox, Empty, Modal, Spin, Tag, Typography, message } from "antd";
+import {
+  Button,
+  Checkbox,
+  Empty,
+  InputNumber,
+  Modal,
+  Spin,
+  Switch,
+  Tag,
+  message,
+} from "antd";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { dispatchRequirementToExecutionEnvironment } from "../../constants/pendingTaskQueueEvents";
+import { useWorkspaceRequirementAutoDispatchSetting } from "../../hooks/useWorkspaceRequirementAutoDispatch";
 import {
   buildRequirementDispatchPayload,
   stripMarkdownImages,
@@ -18,6 +29,7 @@ import {
   loadWorkspaceRequirements,
   saveWorkspaceRequirements,
   WISE_WORKSPACE_REQUIREMENTS_CHANGED,
+  WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_MIN,
 } from "../../services/workspaceRequirementsStore";
 import {
   closeWorkspaceMemoPanel,
@@ -28,12 +40,14 @@ import { loadRepositories } from "../../services/repository";
 import type { Repository } from "../../types";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import type { WorkspaceRequirementItem, WorkspaceRequirementsPayloadV1 } from "../../types/workspaceRequirements";
+import { MarkdownBody } from "../ClaudeSessions/MarkdownElements";
 import "./index.css";
 
-function previewText(item: WorkspaceRequirementItem): string {
+function markdownPreview(item: WorkspaceRequirementItem): string {
   const body = stripMarkdownImages(item.bodyMarkdown || item.description || "");
-  if (!body || body === item.title) return "";
-  return body.replace(/\s+/g, " ").trim();
+  const flat = body.replace(/\s+/g, " ").trim();
+  if (!flat || flat === item.title) return "";
+  return body;
 }
 
 function thumbSrc(path: string): string {
@@ -82,7 +96,7 @@ const RequirementRow = memo(function RequirementRow({
   const dispatching = dispatchingId === item.id;
   const thumbs = item.imagePaths.slice(0, 3);
   const moreImages = Math.max(0, item.imagePaths.length - thumbs.length);
-  const desc = previewText(item);
+  const desc = markdownPreview(item);
 
   return (
     <li
@@ -115,18 +129,24 @@ const RequirementRow = memo(function RequirementRow({
               {item.imagePaths.length}
             </Tag>
           ) : null}
+          {done ? (
+            <Tag color="success" className="app-workspace-requirements-panel__tag">
+              已验证
+            </Tag>
+          ) : null}
           {item.lastDispatchedAt != null ? (
             <Tag className="app-workspace-requirements-panel__tag">已派发</Tag>
           ) : null}
+          {item.status === "verifying" ? (
+            <Tag color="warning" className="app-workspace-requirements-panel__tag">
+              待验证
+            </Tag>
+          ) : null}
         </div>
         {desc ? (
-          <Typography.Paragraph
-            className="app-workspace-requirements-panel__desc"
-            type="secondary"
-            ellipsis={{ rows: 1, expandable: false }}
-          >
-            {desc}
-          </Typography.Paragraph>
+          <div className="app-workspace-requirements-panel__md-desc app-markdown">
+            <MarkdownBody source={desc} />
+          </div>
         ) : null}
         {thumbs.length > 0 ? (
           <div className="app-workspace-requirements-panel__thumbs">
@@ -182,6 +202,13 @@ export function WorkspaceMemoPanel() {
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [saving, setSaving] = useState(false);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+  const {
+    enabled: autoDispatch,
+    setEnabled: setAutoDispatch,
+    concurrency: autoDispatchConcurrency,
+    setConcurrency: setAutoDispatchConcurrency,
+  } =
+    useWorkspaceRequirementAutoDispatchSetting();
   const mountedRef = useRef(true);
   const itemsRef = useRef(items);
   itemsRef.current = items;
@@ -300,6 +327,7 @@ export function WorkspaceMemoPanel() {
           promptText: payload.promptText,
           userBubblePrompt: payload.executeBubbleOptions?.userBubblePrompt ?? payload.promptText,
           source: "workspace-requirement",
+          requirementId: item.id,
         });
         if (!accepted) {
           message.warning("当前没有可用主会话，无法派发到执行环境");
@@ -351,6 +379,7 @@ export function WorkspaceMemoPanel() {
   }, [handleClose]);
 
   const openItems = items.filter((item) => item.status === "open");
+  const verifyingItems = items.filter((item) => item.status === "verifying");
   const doneItems = items.filter((item) => item.status === "done");
   const isMacShortcut =
     typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform);
@@ -375,7 +404,34 @@ export function WorkspaceMemoPanel() {
           </div>
           <div className="app-file-editor-tab-bar-actions">
             <span className="app-workspace-memo-panel__save-status">
-              {saving ? "保存中…" : `${openItems.length} 项待办`}
+              {saving ? "保存中…" : `${openItems.length + verifyingItems.length} 项待办`}
+            </span>
+            <span
+              className="app-workspace-memo-panel__auto-dispatch"
+              title={
+                autoDispatch
+                  ? `自动派发已开启：新增/编辑的待办需求会自动派发到当前执行环境；并发上限 ${autoDispatchConcurrency}（按当前运行会话数动态派发）`
+                  : "开启后新增/编辑的待办需求会自动派发到当前执行环境"
+              }
+            >
+              <Switch
+                size="small"
+                checked={autoDispatch}
+                onChange={(checked) => void setAutoDispatch(checked)}
+                aria-label="自动派发"
+              />
+              <span>自动派发</span>
+              <InputNumber
+                size="small"
+                min={WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_MIN}
+                value={autoDispatchConcurrency}
+                onChange={(value) => {
+                  if (value != null) void setAutoDispatchConcurrency(value);
+                }}
+                className="app-workspace-memo-panel__auto-dispatch-concurrency"
+                aria-label="自动派发并发数"
+              />
+              <span>并发</span>
             </span>
             <Button
               type="primary"
@@ -423,6 +479,25 @@ export function WorkspaceMemoPanel() {
               </Empty>
             ) : (
               <ul className="app-workspace-requirements-panel__list">
+                {verifyingItems.length > 0 ? (
+                  <li className="app-workspace-requirements-panel__section-label">待验证</li>
+                ) : null}
+                {verifyingItems.map((item) => {
+                  const repo = resolveRepositoryMeta(item.repositoryId);
+                  return (
+                  <RequirementRow
+                    key={item.id}
+                    item={item}
+                    repositoryLabel={repo.label}
+                    repositoryMissing={repo.missing}
+                    dispatchingId={dispatchingId}
+                    onToggleDone={(row) => void handleToggleDone(row)}
+                    onEdit={openEdit}
+                    onDelete={handleDelete}
+                    onDispatch={(row) => void handleDispatch(row)}
+                  />
+                  );
+                })}
                 {openItems.map((item) => {
                   const repo = resolveRepositoryMeta(item.repositoryId);
                   return (

@@ -58,6 +58,7 @@ import {
   shouldApplyClaudeTurnComplete,
 } from "../utils/claudeTurnCompleteGate";
 import { isWiseAppFocused } from "../utils/isWiseAppFocused";
+import { markWorkspaceRequirementVerifying } from "./workspaceRequirementsStore";
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
 type SetActiveSessionId = (updater: (prev: string | null) => string | null) => void;
@@ -943,6 +944,11 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     });
     if (uiSuccess && session) {
       finalizeTodosAfterSuccessfulTurn(session.id, session.messages);
+    }
+    // 需求自动派发联动：会话成功完成后把关联需求标记为「待验证」，等待人工验证。
+    const linkedRequirementId = sessionAfterFlush?.requirementId ?? session?.requirementId;
+    if (uiSuccess && linkedRequirementId) {
+      void markWorkspaceRequirementVerifying(linkedRequirementId);
     }
     // 多员工/多会话并行时：仅当「当前仍指向本会话」时才清空，避免误清其它仍在流式中的标签
     const refT = streamingTargetIdRef.current;

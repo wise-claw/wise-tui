@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { message } from "antd";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { type Components, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { attachExternalLinkDelegation, isSafeExternalHref, openExternalUrl } from "../../services/openExternal";
 import { plainTextToLinkedHtml } from "../../utils/autolinkUrl";
@@ -198,12 +198,14 @@ export const MarkdownBody = memo(function MarkdownBody({
   depth = 0,
   components: componentsOverrides,
   rehypePlugins,
+  urlTransform,
 }: {
   source: string;
   streaming?: boolean;
   depth?: number;
   components?: Partial<Components>;
   rehypePlugins?: any[];
+  urlTransform?: UrlTransform;
 }) {
   const displaySource = useMemo(
     () => (depth === 0 ? source : prepareMarkdownForDisplay(source, { streaming })),
@@ -221,7 +223,12 @@ export const MarkdownBody = memo(function MarkdownBody({
   if (!displaySource.trim()) return null;
 
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={mergedComponents}>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={rehypePlugins}
+      components={mergedComponents}
+      urlTransform={urlTransform}
+    >
       {displaySource}
     </ReactMarkdown>
   );

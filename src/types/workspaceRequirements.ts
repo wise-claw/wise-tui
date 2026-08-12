@@ -1,4 +1,4 @@
-export type WorkspaceRequirementStatus = "open" | "done";
+export type WorkspaceRequirementStatus = "open" | "verifying" | "done";
 
 export interface WorkspaceRequirementItem {
   id: string;
@@ -77,7 +77,9 @@ export function createWorkspaceRequirementItem(
 }
 
 function normalizeStatus(raw: unknown): WorkspaceRequirementStatus {
-  return raw === "done" ? "done" : "open";
+  if (raw === "done") return "done";
+  if (raw === "verifying") return "verifying";
+  return "open";
 }
 
 function normalizeImagePaths(raw: unknown): string[] {

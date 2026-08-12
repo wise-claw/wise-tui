@@ -10,7 +10,9 @@ export interface DispatchRequirementToExecutionEnvironmentDetail {
   promptText: string;
   /** 写入 worker 气泡的正文；默认与 promptText 相同 */
   userBubblePrompt?: string;
-  source?: "workspace-requirement";
+  source?: "workspace-requirement" | "workspace-requirement-auto";
+  /** 关联的需求 id；新建会话时写入会话，执行完成后把需求标记为「待验证」。 */
+  requirementId?: string;
   /**
    * 同步回调：ClaudeChat 已接收并开始派发时调用。
    * `dispatchEvent` 为同步，调用方可据此判断是否有监听方处理。
@@ -35,6 +37,7 @@ export function dispatchRequirementToExecutionEnvironment(
               ? detail.userBubblePrompt.trim()
               : promptText,
           source: detail.source,
+          requirementId: detail.requirementId,
           onAccepted: () => {
             accepted = true;
             detail.onAccepted?.();
@@ -77,6 +80,7 @@ export function dispatchEnqueuePendingTask(
     promptText: detail.promptText,
     userBubblePrompt: detail.userBubblePrompt,
     source: detail.source,
+    requirementId: detail.requirementId,
     onAccepted: detail.onAccepted ?? detail.onEnqueued,
   });
 }

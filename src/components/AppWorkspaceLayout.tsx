@@ -80,8 +80,7 @@ import {
 import { setPageMonitorAutoFixHandler } from "../stores/chromeDevtoolsMonitorRuntimeStore";
 import type { CenterView } from "./ClaudeSessions/ClaudeChat";
 import { WORKSPACE_MEMO_PANEL_NODE } from "./WorkspaceMemoPanel";
-import { WorkspaceRequirementCreateModal } from "./WorkspaceMemoPanel/WorkspaceRequirementCreateModal";
-import { WorkspaceRequirementEditModal } from "./WorkspaceMemoPanel/WorkspaceRequirementEditModal";
+import { WorkspaceRequirementModal } from "./WorkspaceMemoPanel/WorkspaceRequirementModal";
 import { WORKSPACE_QUICK_ACTIONS_PANEL_NODE } from "./WorkspaceQuickActionsCenterPanel";
 import { TERMINAL_CENTER_SLOT_SENTINEL } from "./TerminalPanel/terminalCenterSlot";
 import { WorkspaceFileTreeRail } from "./WorkspaceFileTreeRail";
@@ -1962,12 +1961,9 @@ export function AppWorkspaceLayout({
                 <ConnectedRepositoryFilePreviewModal />
               </Suspense>
 
-              <WorkspaceRequirementCreateModal
+              <WorkspaceRequirementModal
                 repositories={claudeSessionsProps.repositories ?? []}
                 activeRepositoryId={claudeSessionsProps.activeRepository?.id ?? null}
-              />
-              <WorkspaceRequirementEditModal
-                repositories={claudeSessionsProps.repositories ?? []}
               />
 
               <Suspense fallback={null}>

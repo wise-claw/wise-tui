@@ -65,6 +65,25 @@ describe("workspaceRequirements", () => {
     expect(parsed.items[0]!.repositoryId).toBe("42");
   });
 
+  test("parseWorkspaceRequirementsPayload keeps verifying status", () => {
+    const raw = JSON.stringify({
+      version: 1,
+      items: [
+        {
+          id: "v1",
+          title: "验证中",
+          bodyMarkdown: "body",
+          status: "verifying",
+          createdAt: 1,
+          updatedAt: 2,
+          sortOrder: 1,
+        },
+      ],
+    });
+    const parsed = parseWorkspaceRequirementsPayload(raw);
+    expect(parsed.items[0]!.status).toBe("verifying");
+  });
+
   test("createWorkspaceRequirementItem stores repositoryId", () => {
     const item = createWorkspaceRequirementItem("建商城", Date.now(), "7");
     expect(item.repositoryId).toBe("7");
@@ -107,6 +126,22 @@ describe("workspaceRequirements", () => {
     const open = createWorkspaceRequirementItem("open");
     open.sortOrder = 2;
     expect(sortWorkspaceRequirementItems([done, open]).map((i) => i.title)).toEqual(["open", "done"]);
+  });
+
+  test("sortWorkspaceRequirementItems keeps verifying before done", () => {
+    const done = createWorkspaceRequirementItem("done");
+    done.status = "done";
+    done.sortOrder = 1;
+    const verifying = createWorkspaceRequirementItem("verifying");
+    verifying.status = "verifying";
+    verifying.sortOrder = 2;
+    const open = createWorkspaceRequirementItem("open");
+    open.sortOrder = 3;
+    expect(sortWorkspaceRequirementItems([done, verifying, open]).map((i) => i.title)).toEqual([
+      "open",
+      "verifying",
+      "done",
+    ]);
   });
 });
 

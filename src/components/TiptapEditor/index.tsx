@@ -3,6 +3,17 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { BubbleMenu as BubbleMenuComponent } from "@tiptap/react/menus";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import { fileToBase64, TiptapToolbar } from "./toolbar";
+import {
+  collectClipboardImageRefs,
+  isLikelyImagePaste,
+  safeGetData,
+  type ClipboardImageRefs,
+} from "../../utils/collectClipboardImageFiles";
+import {
+  fetchRemoteImageAsDataUrl,
+  readLocalImageAsDataUrl,
+  readSystemClipboardImage,
+} from "../../services/pastedImageRefs";
 import { buildTiptapExtensions, toggleTaskItemChecked } from "./extensions";
 import {
   collectResolvedAnchorRanges,
@@ -117,6 +128,25 @@ async function insertImageFiles(editor: Editor, files: File[]): Promise<void> {
   chain.run();
 }
 
+/** 远端 URL / 本地路径兜底：转 base64 插入；远端下载失败时保留原 URL（保存阶段再兜底落盘）。 */
+async function insertPastedImageRefs(editor: Editor, refs: ClipboardImageRefs): Promise<void> {
+  const entries: Array<{ src: string; alt: string }> = [];
+  for (const url of refs.remoteUrls) {
+    const dataUrl = await fetchRemoteImageAsDataUrl(url);
+    entries.push(dataUrl ? { src: dataUrl, alt: "" } : { src: url, alt: "" });
+  }
+  for (const path of refs.localPaths) {
+    const dataUrl = await readLocalImageAsDataUrl(path);
+    if (dataUrl) entries.push({ src: dataUrl, alt: "" });
+  }
+  if (entries.length === 0) return;
+  const chain = editor.chain().focus();
+  for (const entry of entries) {
+    chain.setImage({ src: entry.src, alt: entry.alt });
+  }
+  chain.run();
+}
+
 export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(({
   text,
   onChange,
@@ -202,18 +232,6 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(({
     content: text,
     editable: !readonly,
     editorProps: {
-      handlePaste(_view, event) {
-        const ed = editorRef.current;
-        if (!ed) return false;
-        const items = Array.from(event.clipboardData?.items ?? []);
-        const files = items
-          .map((item) => item.getAsFile())
-          .filter((file): file is File => file != null && file.type.startsWith("image/"));
-        if (files.length === 0) return false;
-        event.preventDefault();
-        void insertImageFiles(ed, files);
-        return true;
-      },
       handleDrop(_view, event) {
         const ed = editorRef.current;
         if (!ed) return false;
@@ -253,6 +271,76 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(({
       editorRef.current = null;
     };
   }, []);
+
+  /**
+   * 容器 capture 阶段拦截图片粘贴（与 Claude 输入区同款模式，WKWebView 下最稳）：
+   * 覆盖截图/复制图片文件、files 兜底、text/html data URL、网页复制图片的远端 URL、
+   * 以及 Finder 复制图片文件的 file:// 路径。命中任一图片引用即拦截，避免只落下 URL 文本。
+   * ProseMirror 自身 handlePaste 在部分 webview 拿不到 clipboardData，这里统一接管。
+   */
+  const handlePastedImageRefs = useCallback((event: ClipboardEvent) => {
+    const ed = editorRef.current;
+    const host = hostRef.current;
+    if (!ed || !host) return false;
+    const target = event.target;
+    if (target instanceof Node) {
+      const contentEl = host.querySelector(".tiptap.ProseMirror");
+      if (contentEl && !contentEl.contains(target)) return false;
+    }
+    const refs = collectClipboardImageRefs(event.clipboardData);
+
+    if (refs.files.length > 0) {
+      event.preventDefault();
+      event.stopPropagation();
+      void insertImageFiles(ed, refs.files);
+      return true;
+    }
+
+    const data = event.clipboardData;
+    const hasFallbackRefs = refs.remoteUrls.length > 0 || refs.localPaths.length > 0;
+    const hasText =
+      data != null
+      && (safeGetData(data, "text/plain") !== "" || safeGetData(data, "text/html") !== "");
+    const imageHint = data != null && isLikelyImagePaste(data);
+
+    // WKWebView 下 DOM 拿不到图片数据（截屏、网页复制图片）时，从系统剪贴板直接读图兜底。
+    // 普通文本粘贴（hasText 且有内容）不探测，避免每次粘贴都做一次原生调用。
+    const shouldProbeSystem = hasFallbackRefs || imageHint || !hasText;
+    if (hasFallbackRefs || imageHint) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    if (shouldProbeSystem) {
+      const plain = data ? safeGetData(data, "text/plain") : "";
+      void readSystemClipboardImage().then((dataUrl) => {
+        const edNow = editorRef.current;
+        if (!edNow) return;
+        if (dataUrl) {
+          edNow.chain().focus().setImage({ src: dataUrl, alt: "" }).run();
+          return;
+        }
+        if (hasFallbackRefs) {
+          void insertPastedImageRefs(edNow, refs);
+          return;
+        }
+        // 系统剪贴板里其实没有图片（可能只复制了图片 URL 文本），补回原文本。
+        if (plain && (imageHint || !data)) {
+          edNow.chain().focus().insertContent(plain).run();
+        }
+      });
+    }
+    return hasFallbackRefs || imageHint;
+  }, []);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || readonly) return;
+    const onPasteCapture = (e: ClipboardEvent) => {
+      handlePastedImageRefs(e);
+    };
+    host.addEventListener("paste", onPasteCapture, true);
+    return () => host.removeEventListener("paste", onPasteCapture, true);
+  }, [readonly, handlePastedImageRefs]);
 
   /** readonly 切换时同步编辑器可编辑状态。 */
   useEffect(() => {

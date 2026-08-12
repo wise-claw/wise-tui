@@ -21,11 +21,18 @@ mock.module("./workspaceInspectorDb", () => ({
 }));
 
 const {
+  WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_KEY,
+  WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_KEY,
   WORKSPACE_REQUIREMENTS_SETTING_KEY,
   appendWorkspaceRequirement,
+  getWorkspaceRequirementAutoDispatch,
+  getWorkspaceRequirementAutoDispatchConcurrency,
   loadWorkspaceRequirements,
+  markWorkspaceRequirementVerifying,
   resetWorkspaceRequirementsWriteQueueForTests,
   saveWorkspaceRequirements,
+  setWorkspaceRequirementAutoDispatch,
+  setWorkspaceRequirementAutoDispatchConcurrency,
 } = await import("./workspaceRequirementsStore");
 
 describe("workspaceRequirementsStore write queue", () => {
@@ -80,5 +87,84 @@ describe("workspaceRequirementsStore write queue", () => {
     await saveWorkspaceRequirements([a]);
     const next = await appendWorkspaceRequirement(b);
     expect(next.items.map((item) => item.id)).toEqual([a.id, b.id]);
+  });
+});
+
+describe("workspaceRequirementsStore auto dispatch setting", () => {
+  beforeEach(() => {
+    settings.clear();
+    getAppSetting.mockClear();
+    setAppSetting.mockClear();
+  });
+
+  test("defaults to disabled when unset", async () => {
+    expect(await getWorkspaceRequirementAutoDispatch()).toBe(false);
+  });
+
+  test("set persists and reads back", async () => {
+    await setWorkspaceRequirementAutoDispatch(true);
+    expect(settings.get(WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_KEY)).toBe("1");
+    expect(await getWorkspaceRequirementAutoDispatch()).toBe(true);
+
+    await setWorkspaceRequirementAutoDispatch(false);
+    expect(settings.get(WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_KEY)).toBe("0");
+    expect(await getWorkspaceRequirementAutoDispatch()).toBe(false);
+  });
+});
+
+describe("workspaceRequirementsStore auto dispatch concurrency", () => {
+  beforeEach(() => {
+    settings.clear();
+    getAppSetting.mockClear();
+    setAppSetting.mockClear();
+  });
+
+  test("defaults to 2 when unset", async () => {
+    expect(await getWorkspaceRequirementAutoDispatchConcurrency()).toBe(2);
+  });
+
+  test("set persists the value", async () => {
+    await setWorkspaceRequirementAutoDispatchConcurrency(3);
+    expect(settings.get(WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_KEY)).toBe("3");
+    expect(await getWorkspaceRequirementAutoDispatchConcurrency()).toBe(3);
+  });
+
+  test("上限放开：大值原样保留，仅收敛下限", async () => {
+    await setWorkspaceRequirementAutoDispatchConcurrency(99);
+    expect(await getWorkspaceRequirementAutoDispatchConcurrency()).toBe(99);
+    await setWorkspaceRequirementAutoDispatchConcurrency(0);
+    expect(await getWorkspaceRequirementAutoDispatchConcurrency()).toBe(1);
+    await setWorkspaceRequirementAutoDispatchConcurrency(-5);
+    expect(await getWorkspaceRequirementAutoDispatchConcurrency()).toBe(1);
+  });
+});
+
+describe("workspaceRequirementsStore mark verifying", () => {
+  beforeEach(() => {
+    settings.clear();
+    getAppSetting.mockClear();
+    setAppSetting.mockClear();
+    resetWorkspaceRequirementsWriteQueueForTests();
+  });
+
+  test("marks open requirement as verifying", async () => {
+    const a = createWorkspaceRequirementItem("需求 A", 1);
+    await saveWorkspaceRequirements([a]);
+    await markWorkspaceRequirementVerifying(a.id);
+    const loaded = await loadWorkspaceRequirements();
+    expect(loaded.items.find((row) => row.id === a.id)?.status).toBe("verifying");
+  });
+
+  test("does not downgrade done requirement", async () => {
+    const a = createWorkspaceRequirementItem("需求 A", 1);
+    a.status = "done";
+    await saveWorkspaceRequirements([a]);
+    await markWorkspaceRequirementVerifying(a.id);
+    const loaded = await loadWorkspaceRequirements();
+    expect(loaded.items.find((row) => row.id === a.id)?.status).toBe("done");
+  });
+
+  test("ignores missing requirement", async () => {
+    await expect(markWorkspaceRequirementVerifying("missing-id")).resolves.toBeUndefined();
   });
 });

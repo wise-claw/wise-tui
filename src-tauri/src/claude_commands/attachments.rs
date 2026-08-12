@@ -1,9 +1,11 @@
 use crate::wise_dir;
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use reqwest::Client;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 use uuid::Uuid;
 
 /// Launches macOS `screencapture -i` for interactive area selection.
@@ -163,6 +165,242 @@ fn composer_image_mime_from_path(path: &Path) -> &'static str {
         Some("heic") | Some("heif") => "image/heic",
         _ => "application/octet-stream",
     }
+}
+
+const MAX_PASTED_IMAGE_BYTES: usize = 20 * 1024 * 1024;
+const PASTED_IMAGE_FETCH_TIMEOUT_SECS: u64 = 20;
+
+#[derive(Serialize)]
+pub(crate) struct FetchedImageData {
+    mime: String,
+    base64: String,
+}
+
+fn is_image_path(path: &str) -> bool {
+    let ext = Path::new(path)
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase());
+    matches!(
+        ext.as_deref(),
+        Some("png")
+            | Some("jpg")
+            | Some("jpeg")
+            | Some("gif")
+            | Some("webp")
+            | Some("svg")
+            | Some("bmp")
+            | Some("ico")
+            | Some("avif")
+            | Some("heic")
+            | Some("heif")
+    )
+}
+
+/// 粘贴「网页复制图片」兜底：剪贴板只有远端 `<img src>` 时，经后端下载（绕过 CORS）转 base64。
+#[tauri::command]
+pub(crate) async fn wise_fetch_remote_image(url: String) -> Result<FetchedImageData, String> {
+    let trimmed = url.trim();
+    if !trimmed.starts_with("https://") && !trimmed.starts_with("http://") {
+        return Err("仅支持 http/https 图片地址".into());
+    }
+    let client = Client::builder()
+        .timeout(Duration::from_secs(PASTED_IMAGE_FETCH_TIMEOUT_SECS))
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15")
+        .build()
+        .map_err(|e| format!("创建网络客户端失败: {e}"))?;
+    let response = client
+        .get(trimmed)
+        .send()
+        .await
+        .map_err(|e| format!("图片下载失败: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("图片下载失败（HTTP {}）", response.status().as_u16()));
+    }
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+    let mime = if content_type.starts_with("image/") {
+        content_type
+    } else if is_image_path(trimmed) {
+        composer_image_mime_from_path(Path::new(trimmed)).to_string()
+    } else {
+        return Err("响应不是图片".into());
+    };
+
+    let mut body: Vec<u8> = Vec::new();
+    let mut stream = response;
+    loop {
+        match stream.chunk().await {
+            Ok(Some(chunk)) => {
+                body.extend_from_slice(&chunk);
+                if body.len() > MAX_PASTED_IMAGE_BYTES {
+                    return Err(format!(
+                        "图片超过 {}MB，未粘贴",
+                        MAX_PASTED_IMAGE_BYTES / 1024 / 1024
+                    ));
+                }
+            }
+            Ok(None) => break,
+            Err(e) => return Err(format!("图片下载失败: {e}")),
+        }
+    }
+    Ok(FetchedImageData {
+        mime,
+        base64: B64.encode(&body),
+    })
+}
+
+/// 粘贴「Finder 复制图片文件」兜底：剪贴板只有 `file://` 路径时，读盘转 base64。
+#[tauri::command]
+pub(crate) fn wise_read_local_image(abs_path: String) -> Result<FetchedImageData, String> {
+    let trimmed = abs_path.trim();
+    let path = PathBuf::from(trimmed);
+    if !path.is_absolute() {
+        return Err("必须是绝对路径".into());
+    }
+    if !is_image_path(trimmed) {
+        return Err("仅支持常见图片文件".into());
+    }
+    if !path.is_file() {
+        return Err("图片文件不存在".into());
+    }
+    let meta = fs::metadata(&path).map_err(|e| format!("读取图片失败: {e}"))?;
+    if meta.len() > MAX_PASTED_IMAGE_BYTES as u64 {
+        return Err(format!(
+            "图片超过 {}MB，未粘贴",
+            MAX_PASTED_IMAGE_BYTES / 1024 / 1024
+        ));
+    }
+    let bytes = fs::read(&path).map_err(|e| format!("读取图片失败: {e}"))?;
+    Ok(FetchedImageData {
+        mime: composer_image_mime_from_path(&path).to_string(),
+        base64: B64.encode(&bytes),
+    })
+}
+
+/// 粘贴图片最终兜底：macOS WKWebView 的 DOM paste 事件经常拿不到剪贴板图片
+/// （`items`/`files` 为空，只剩 URL 文本或什么都没有），这里直接从系统剪贴板读取。
+/// 优先命中 PNG/JPEG/GIF/WebP 等原始 UTI；TIFF 转 PNG；仅文件 URL 时读盘。
+#[tauri::command]
+pub(crate) fn wise_read_clipboard_image() -> Result<FetchedImageData, String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        return Err("系统剪贴板读取仅支持 macOS".into());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use core::ffi::c_void;
+        use objc2_app_kit::{
+            NSBitmapImageFileType, NSBitmapImageRep, NSPasteboard, NSPasteboardTypeFileURL,
+            NSPasteboardTypePNG, NSPasteboardTypeTIFF,
+        };
+        use objc2_foundation::{NSData, NSDictionary, NSString};
+
+        fn data_to_bytes(data: &NSData) -> Vec<u8> {
+            let len = data.length() as usize;
+            if len == 0 {
+                return Vec::new();
+            }
+            let mut buf = vec![0u8; len];
+            unsafe {
+                data.getBytes_length(
+                    core::ptr::NonNull::new(buf.as_mut_ptr().cast::<c_void>()).unwrap(),
+                    len,
+                );
+            }
+            buf
+        }
+
+        fn encode(mime: &str, bytes: Vec<u8>) -> Result<FetchedImageData, String> {
+            if bytes.is_empty() {
+                return Err("剪贴板图片数据为空".into());
+            }
+            if bytes.len() > MAX_PASTED_IMAGE_BYTES {
+                return Err(format!(
+                    "图片超过 {}MB，未粘贴",
+                    MAX_PASTED_IMAGE_BYTES / 1024 / 1024
+                ));
+            }
+            Ok(FetchedImageData {
+                mime: mime.to_string(),
+                base64: B64.encode(&bytes),
+            })
+        }
+
+        let pb = NSPasteboard::generalPasteboard();
+
+        // 1) 直接可读的图片 UTI
+        if let Some(data) = unsafe { pb.dataForType(NSPasteboardTypePNG) } {
+            return encode("image/png", data_to_bytes(&data));
+        }
+        let direct_utis: &[(&str, &str)] = &[
+            ("public.jpeg", "image/jpeg"),
+            ("public.gif", "image/gif"),
+            ("public.webp", "image/webp"),
+            ("public.bmp", "image/bmp"),
+            ("public.heic", "image/heic"),
+            ("public.heif", "image/heif"),
+        ];
+        for (uti, mime) in direct_utis {
+            let type_ref = NSString::from_str(uti);
+            if let Some(data) = pb.dataForType(&type_ref) {
+                return encode(mime, data_to_bytes(&data));
+            }
+        }
+
+        // 2) TIFF → PNG（网页/截图复制图片的常见落点）
+        if let Some(tiff) = unsafe { pb.dataForType(NSPasteboardTypeTIFF) } {
+            if let Some(rep) = NSBitmapImageRep::imageRepWithData(&tiff) {
+                let png = unsafe {
+                    rep.representationUsingType_properties(
+                        NSBitmapImageFileType::PNG,
+                        &NSDictionary::new(),
+                    )
+                };
+                if let Some(png) = png {
+                    return encode("image/png", data_to_bytes(&png));
+                }
+            }
+        }
+
+        // 3) Finder 复制的图片文件 → 读盘
+        if let Some(url_str) = unsafe { pb.stringForType(NSPasteboardTypeFileURL) } {
+            if let Some(path) = decode_file_url(&url_str.to_string()) {
+                if is_image_path(&path) {
+                    if let Ok(data) = wise_read_local_image(path) {
+                        return Ok(data);
+                    }
+                }
+            }
+        }
+
+        Err("系统剪贴板中没有图片".into())
+    }
+}
+
+/// `file:///a/b.png` → `/a/b.png`（percent-decode）；普通绝对路径原样返回。
+fn decode_file_url(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut path = trimmed.to_string();
+    if let Some(rest) = path.strip_prefix("file://") {
+        path = if let Some(slash) = rest.find('/') {
+            rest[slash..].to_string()
+        } else {
+            return None;
+        };
+    }
+    if !path.starts_with('/') {
+        return None;
+    }
+    urlencoding::decode(&path).ok().map(|s| s.into_owned())
 }
 
 fn repository_bucket_key(repository_path: &str) -> String {

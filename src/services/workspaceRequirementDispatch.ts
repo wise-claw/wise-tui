@@ -10,6 +10,7 @@ import {
   extractAbsoluteImagePathsFromMarkdown,
   stripMarkdownImages,
 } from "../utils/markdownImages";
+import { fetchRemoteImageAsDataUrl } from "./pastedImageRefs";
 
 export {
   countMarkdownImages,
@@ -100,6 +101,33 @@ export async function materializeRequirementBodyImages(bodyMarkdown: string): Pr
     if (!imagePaths.includes(absPath)) imagePaths.push(absPath);
   }
 
+  // 3) 远端图片 `![alt](https://...)` / `<img src="https://...">`：下载落盘，防止粘贴兜底保留下来的远端引用丢失。
+  const MAX_REMOTE_FETCHES = 6;
+  const REMOTE_MD_RE = /!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g;
+  const REMOTE_HTML_RE = /<img\b[^>]*?\bsrc="(https?:\/\/[^"]+)"[^>]*>/gi;
+  const remoteMatches = [
+    ...[...next.matchAll(REMOTE_MD_RE)].map((m) => ({ full: m[0]!, url: m[2]! })),
+    ...[...next.matchAll(REMOTE_HTML_RE)].map((m) => {
+      const src = m[1]!;
+      return { full: m[0]!, url: src };
+    }),
+  ];
+  let remoteFetched = 0;
+  for (const { full, url } of remoteMatches) {
+    if (remoteFetched >= MAX_REMOTE_FETCHES) break;
+    if (!/^https?:\/\//i.test(url)) continue;
+    const dataUrl = await fetchRemoteImageAsDataUrl(url);
+    if (!dataUrl) continue;
+    remoteFetched += 1;
+    const mime = mimeFromDataUrl(dataUrl);
+    const filename = `requirement-remote-${remoteFetched}.${extFromMime(mime)}`;
+    const absPath = await saveComposerImage(wiseHome, filename, dataUrl);
+    if (!absPath) continue;
+    const rewritten = full.replace(url, absPath);
+    next = next.replace(full, rewritten);
+    if (!imagePaths.includes(absPath)) imagePaths.push(absPath);
+  }
+
   // 再扫一遍改写后的绝对路径（防遗漏）
   for (const p of extractAbsoluteImagePathsFromMarkdown(next)) {
     if (!imagePaths.includes(p)) imagePaths.push(p);
@@ -160,4 +188,3 @@ export async function buildRequirementDispatchPayload(
 
   return { promptText, imagePaths: paths, executeBubbleOptions };
 }
-

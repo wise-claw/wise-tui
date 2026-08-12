@@ -195,6 +195,7 @@ interface Props {
   onDispatchExecutionEnvironment?: (input: {
     prompt: string;
     userBubblePrompt?: string;
+    requirementId?: string;
   }) => void | Promise<void>;
   onSessionModelChange: (model: string) => void;
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
@@ -1426,6 +1427,7 @@ export function ClaudeChatInner({
       void onDispatchExecutionEnvironment({
         prompt: promptWithMention,
         userBubblePrompt: userBubble,
+        requirementId: detail.requirementId,
       });
     };
     window.addEventListener(WISE_UI_EVENT_DISPATCH_REQUIREMENT_TO_EXEC_ENV, onDispatchRequirement);
@@ -2206,4 +2208,3 @@ export function ClaudeChatInner({
 }
 
 export const ClaudeChat = memo(ClaudeChatInner, claudeChatPropsEqual);
-

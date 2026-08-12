@@ -202,6 +202,7 @@ import { useWorkspaceListPlacementDefault } from "./hooks/useWorkspaceListPlacem
 import { useLeftSidebarSectionOrder } from "./hooks/useLeftSidebarSectionOrder";
 import { useLeftSidebarRepositoryIconBadgesDefault } from "./hooks/useLeftSidebarRepositoryIconBadgesDefault";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
+import { useWorkspaceRequirementAutoDispatchEngine } from "./hooks/useWorkspaceRequirementAutoDispatch";
 import { invalidateWorkflowRunCacheForRepository } from "./hooks/useWorkflowRun";
 import { deleteAppSetting, getAppSetting, setAppSetting } from "./services/appSettingsStore";
 import { persistMultiPaneLayoutState } from "./services/multiPaneLayoutPersist";
@@ -1319,6 +1320,7 @@ export default function App() {
       prompt: string;
       userBubblePrompt?: string;
       defaultInstructionApplied?: string;
+      requirementId?: string;
     }) => {
       const mainSessionId =
         resolveExecutionEnvironmentDispatchAnchorSessionId({
@@ -1351,6 +1353,7 @@ export default function App() {
           prompt: input.prompt,
           userBubblePrompt: input.userBubblePrompt,
           defaultInstructionApplied: input.defaultInstructionApplied,
+          requirementId: input.requirementId,
         },
       );
     },
@@ -1416,6 +1419,21 @@ export default function App() {
     executeWithDispatchRef: handleComposerExecuteRef,
     closeSessionRef,
   });
+
+  // 自动派发并发控制：实时统计当前运行/连接中的会话数，动态决定每轮可派发条数。
+  const countRunningSessionsRef = useRef<() => number>(() => 0);
+  countRunningSessionsRef.current = () => {
+    const sessions = getClaudeSessionsSnapshot();
+    let running = 0;
+    for (const session of sessions) {
+      if (session.status === "running" || session.status === "connecting") {
+        running += 1;
+      }
+    }
+    return running;
+  };
+
+  useWorkspaceRequirementAutoDispatchEngine({ countRunningSessionsRef });
 
   usePageMonitorAutoFixReload({
     getSessions: () => sessionsLatestRef.current,

@@ -14,6 +14,25 @@ export const WORKSPACE_REQUIREMENTS_SETTING_KEY = "wise.workspaceRequirements.v1
 /** 需求列表落库后广播，供需求面板刷新（全局新增弹窗与面板列表解耦）。 */
 export const WISE_WORKSPACE_REQUIREMENTS_CHANGED = "wise:workspace-requirements-changed";
 
+/** 需求模块自动派发总开关（app_settings）。 */
+export const WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_KEY = "wise.workspaceRequirements.autoDispatch.v1";
+
+/** 自动派发开关变化广播；detail 为最新开关值。 */
+export const WISE_WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CHANGED =
+  "wise:workspace-requirements-auto-dispatch-changed";
+
+/** 自动派发并发数上限（app_settings）。 */
+export const WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_KEY =
+  "wise.workspaceRequirements.autoDispatchConcurrency.v1";
+
+/** 自动派发并发数默认值 / 下限（上限放开，由用户自由设置）。 */
+export const WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_DEFAULT = 2;
+export const WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_MIN = 1;
+
+/** 自动派发并发数变化广播；detail 为最新值。 */
+export const WISE_WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_CHANGED =
+  "wise:workspace-requirements-auto-dispatch-concurrency-changed";
+
 /** 是否已尝试从旧备忘录 Markdown 迁移一次 */
 const WORKSPACE_REQUIREMENTS_MEMO_MIGRATED_KEY = "wise.workspaceRequirements.memoMigrated.v1";
 
@@ -82,6 +101,53 @@ export async function loadWorkspaceRequirements(): Promise<WorkspaceRequirements
   }
 }
 
+/** 读取需求自动派发开关。 */
+export async function getWorkspaceRequirementAutoDispatch(): Promise<boolean> {
+  const raw = await getAppSetting(WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_KEY);
+  return raw === "1";
+}
+
+/** 写入需求自动派发开关并广播，供两个需求面板与派发引擎同步。 */
+export async function setWorkspaceRequirementAutoDispatch(enabled: boolean): Promise<void> {
+  await setAppSetting(
+    WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_KEY,
+    enabled ? "1" : "0",
+  );
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent<boolean>(WISE_WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CHANGED, {
+        detail: enabled,
+      }),
+    );
+  }
+}
+
+/** 读取自动派发并发数（仅收敛下限）。 */
+export async function getWorkspaceRequirementAutoDispatchConcurrency(): Promise<number> {
+  const raw = await getAppSetting(WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_KEY);
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    return WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_DEFAULT;
+  }
+  return Math.max(WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_MIN, Math.round(value));
+}
+
+/** 写入自动派发并发数并广播。 */
+export async function setWorkspaceRequirementAutoDispatchConcurrency(value: number): Promise<void> {
+  const normalized = Math.max(
+    WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_MIN,
+    Math.round(value),
+  );
+  await setAppSetting(WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_KEY, String(normalized));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent<number>(WISE_WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_CHANGED, {
+        detail: normalized,
+      }),
+    );
+  }
+}
+
 export async function saveWorkspaceRequirements(
   items: WorkspaceRequirementItem[],
 ): Promise<WorkspaceRequirementsPayloadV1> {
@@ -120,6 +186,23 @@ export async function updateWorkspaceRequirement(
     }
     return writeRequirementsPayload(next);
   });
+}
+
+/**
+ * 会话执行成功后把关联需求标记为「待验证」（等待人工验证完成）。
+ * 幂等：已完成的（done）需求不会被倒回待验证。
+ */
+export async function markWorkspaceRequirementVerifying(id: string): Promise<void> {
+  try {
+    await updateWorkspaceRequirement(id, (row) =>
+      row.status === "done"
+        ? row
+        : { ...row, status: "verifying", updatedAt: Date.now() },
+    );
+  } catch (err) {
+    // 需求可能在会话运行期间被删除/整表覆盖，忽略即可。
+    console.error("[WorkspaceRequirements] mark verifying failed", err);
+  }
 }
 
 /** @internal test helper */

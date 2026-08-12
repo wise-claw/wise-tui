@@ -1,24 +1,32 @@
-import { Modal, Select, Spin, Typography, message } from "antd";
+import { Button, Modal, Select, Space, Spin, Typography, message } from "antd";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { dispatchRequirementToExecutionEnvironment } from "../../constants/pendingTaskQueueEvents";
 import { readComposerImageAsDataUrl } from "../../services/readComposerImage";
 import {
+  buildRequirementDispatchPayload,
   countMarkdownImages,
   materializeRequirementBodyImages,
   stripMarkdownImages,
 } from "../../services/workspaceRequirementDispatch";
 import {
+  appendWorkspaceRequirement,
   loadWorkspaceRequirements,
   updateWorkspaceRequirement,
   WISE_WORKSPACE_REQUIREMENTS_CHANGED,
 } from "../../services/workspaceRequirementsStore";
 import {
+  closeWorkspaceRequirementCreateModal,
   closeWorkspaceRequirementEditModal,
+  useWorkspaceRequirementCreateModalDefaultRepositoryId,
+  useWorkspaceRequirementCreateModalEpoch,
+  useWorkspaceRequirementCreateModalOpen,
   useWorkspaceRequirementEditModalEpoch,
   useWorkspaceRequirementEditModalOpen,
   useWorkspaceRequirementEditModalRequirementId,
 } from "../../stores/workspaceMemoPanelStore";
 import type { Repository } from "../../types";
 import {
+  createWorkspaceRequirementItem,
   deriveRequirementTitle,
   type WorkspaceRequirementsPayloadV1,
 } from "../../types/workspaceRequirements";
@@ -46,6 +54,23 @@ function RequirementRichTextEditor({
   );
 }
 
+function resolveDefaultRepositoryId(
+  preferred: string | null,
+  activeRepositoryId: number | null,
+  repositories: Repository[],
+): string | null {
+  if (preferred) {
+    const match = repositories.find((repo) => String(repo.id) === preferred);
+    if (match) return String(match.id);
+  }
+  if (activeRepositoryId != null) {
+    const match = repositories.find((repo) => repo.id === activeRepositoryId);
+    if (match) return String(match.id);
+  }
+  return repositories[0] != null ? String(repositories[0].id) : null;
+}
+
+/** 把已落盘的 `@绝对路径` 图片读回 data URL，供编辑器展示。 */
 async function hydrateMarkdownImagesForEditor(markdown: string): Promise<string> {
   let next = markdown;
   // Markdown 图片语法
@@ -68,17 +93,30 @@ async function hydrateMarkdownImagesForEditor(markdown: string): Promise<string>
   return next;
 }
 
-export type WorkspaceRequirementEditModalProps = {
+export type WorkspaceRequirementModalProps = {
   repositories: Repository[];
+  activeRepositoryId: number | null;
 };
 
 /**
- * 全局「编辑需求」弹窗：不打开 / 不切换中栏需求 tab。
+ * 全局「新增 / 编辑需求」弹窗：按 store 状态复用同一套编辑器 / 归属仓库 / 图片落盘流程。
+ * 新增走 appendWorkspaceRequirement；编辑支持「保存并派发」。
  */
-export function WorkspaceRequirementEditModal({ repositories }: WorkspaceRequirementEditModalProps) {
-  const open = useWorkspaceRequirementEditModalOpen();
-  const editorKey = useWorkspaceRequirementEditModalEpoch();
+export function WorkspaceRequirementModal({
+  repositories,
+  activeRepositoryId,
+}: WorkspaceRequirementModalProps) {
+  const createOpen = useWorkspaceRequirementCreateModalOpen();
+  const createEpoch = useWorkspaceRequirementCreateModalEpoch();
+  const preferredRepositoryId = useWorkspaceRequirementCreateModalDefaultRepositoryId();
+  const editOpen = useWorkspaceRequirementEditModalOpen();
+  const editEpoch = useWorkspaceRequirementEditModalEpoch();
   const requirementId = useWorkspaceRequirementEditModalRequirementId();
+
+  const mode: "create" | "edit" = editOpen ? "edit" : "create";
+  const open = createOpen || editOpen;
+  const editorKey = mode === "edit" ? editEpoch : createEpoch;
+
   const [draftBody, setDraftBody] = useState("");
   const [repositoryId, setRepositoryId] = useState<string | null>(null);
   const [loadingItem, setLoadingItem] = useState(false);
@@ -87,12 +125,22 @@ export function WorkspaceRequirementEditModal({ repositories }: WorkspaceRequire
   const loadGenRef = useRef(0);
 
   useEffect(() => {
-    if (!open || !requirementId) return;
-    const gen = ++loadGenRef.current;
-    setLoadingItem(true);
+    if (!open) return;
     setDraftBody("");
     draftBodyRef.current = "";
     setRepositoryId(null);
+    setLoadingItem(false);
+    if (mode === "create") {
+      setRepositoryId(
+        resolveDefaultRepositoryId(preferredRepositoryId, activeRepositoryId, repositories),
+      );
+    }
+  }, [open, mode, editorKey, preferredRepositoryId, activeRepositoryId, repositories]);
+
+  useEffect(() => {
+    if (mode !== "edit" || !open || !requirementId) return;
+    const gen = ++loadGenRef.current;
+    setLoadingItem(true);
 
     void loadWorkspaceRequirements()
       .then(async (payload) => {
@@ -126,10 +174,10 @@ export function WorkspaceRequirementEditModal({ repositories }: WorkspaceRequire
       .finally(() => {
         if (loadGenRef.current === gen) setLoadingItem(false);
       });
-  }, [open, editorKey, requirementId]);
+  }, [mode, open, editorKey, requirementId]);
 
   useEffect(() => {
-    if (!open) return;
+    if (mode !== "edit" || !open) return;
     function onRequirementsChanged(event: Event) {
       const detail = (event as CustomEvent<WorkspaceRequirementsPayloadV1>).detail;
       if (!detail || !Array.isArray(detail.items) || !requirementId) return;
@@ -143,83 +191,143 @@ export function WorkspaceRequirementEditModal({ repositories }: WorkspaceRequire
     return () => {
       window.removeEventListener(WISE_WORKSPACE_REQUIREMENTS_CHANGED, onRequirementsChanged);
     };
-  }, [open, requirementId]);
+  }, [mode, open, requirementId]);
 
   const repositoryOptions = useMemo(() => {
     const options = repositories.map((repo) => ({
       value: String(repo.id),
       label: repositoryFolderBasename(repo),
     }));
-    if (repositoryId && !options.some((option) => option.value === repositoryId)) {
+    if (mode === "edit" && repositoryId && !options.some((option) => option.value === repositoryId)) {
       options.unshift({
         value: repositoryId,
         label: `未知仓库 (${repositoryId})`,
       });
     }
     return options;
-  }, [repositories, repositoryId]);
+  }, [repositories, repositoryId, mode]);
 
   const handleClose = useCallback(() => {
-    closeWorkspaceRequirementEditModal();
-  }, []);
+    if (mode === "edit") {
+      closeWorkspaceRequirementEditModal();
+    } else {
+      closeWorkspaceRequirementCreateModal();
+    }
+  }, [mode]);
 
-  const handleSave = useCallback(async () => {
-    if (!requirementId) return;
-    const rawBody = draftBodyRef.current.trim();
-    if (!rawBody) {
-      message.warning("请填写需求图文内容（可粘贴/拖入图片）");
-      return;
-    }
-    if (!repositoryId) {
-      message.warning("请选择归属仓库");
-      return;
-    }
-    const repoExists = repositories.some((repo) => String(repo.id) === repositoryId);
-    if (!repoExists) {
-      message.warning("所选仓库不存在，请重新选择");
-      return;
-    }
-    setSaving(true);
-    try {
-      const materialized = await materializeRequirementBodyImages(rawBody);
-      if (!stripMarkdownImages(materialized.bodyMarkdown) && materialized.imagePaths.length === 0) {
-        message.warning("请填写文字或插入图片");
+  const handleSave = useCallback(
+    async (dispatchAfterSave: boolean) => {
+      if (mode === "edit" && !requirementId) return;
+      const rawBody = draftBodyRef.current.trim();
+      if (!rawBody) {
+        message.warning("请填写需求图文内容（可粘贴/拖入图片）");
         return;
       }
-      const title = deriveRequirementTitle(materialized.bodyMarkdown);
-      const now = Date.now();
-      await updateWorkspaceRequirement(requirementId, (row) => ({
-        ...row,
-        title,
-        bodyMarkdown: materialized.bodyMarkdown,
-        imagePaths: materialized.imagePaths,
-        repositoryId,
-        updatedAt: now,
-      }));
-      message.success("需求已更新");
-      closeWorkspaceRequirementEditModal();
-    } catch (err) {
-      console.error("[WorkspaceRequirements] edit modal save failed", err);
-      message.error(err instanceof Error ? err.message : "保存需求失败");
-    } finally {
-      setSaving(false);
-    }
-  }, [repositories, repositoryId, requirementId]);
+      if (!repositoryId) {
+        message.warning("请选择归属仓库");
+        return;
+      }
+      const repoExists = repositories.some((repo) => String(repo.id) === repositoryId);
+      if (!repoExists) {
+        message.warning("所选仓库不存在，请重新选择");
+        return;
+      }
+      setSaving(true);
+      try {
+        const materialized = await materializeRequirementBodyImages(rawBody);
+        if (!stripMarkdownImages(materialized.bodyMarkdown) && materialized.imagePaths.length === 0) {
+          message.warning("请填写文字或插入图片");
+          return;
+        }
+        const title = deriveRequirementTitle(materialized.bodyMarkdown);
+        const now = Date.now();
+
+        if (mode === "create") {
+          const created = createWorkspaceRequirementItem(materialized.bodyMarkdown, now, repositoryId);
+          created.title = title;
+          created.imagePaths = materialized.imagePaths;
+          await appendWorkspaceRequirement(created);
+          message.success("需求已新增");
+          closeWorkspaceRequirementCreateModal();
+          return;
+        }
+
+        if (!requirementId) return;
+        const saved = await updateWorkspaceRequirement(requirementId, (row) => ({
+          ...row,
+          title,
+          bodyMarkdown: materialized.bodyMarkdown,
+          imagePaths: materialized.imagePaths,
+          repositoryId,
+          // 保存并派发视为重新执行：已完结/待验证的需求回到 open，会话完成后会再次标记待验证。
+          ...(dispatchAfterSave && row.status !== "open" ? { status: "open" } : {}),
+          updatedAt: now,
+        }));
+        if (!dispatchAfterSave) {
+          message.success("需求已更新");
+          closeWorkspaceRequirementEditModal();
+          return;
+        }
+        const savedItem = saved.items.find((row) => row.id === requirementId);
+        if (!savedItem) {
+          message.error("保存成功但未找到需求，请稍后在面板中重新派发");
+          return;
+        }
+        const payload = await buildRequirementDispatchPayload(savedItem);
+        const accepted = dispatchRequirementToExecutionEnvironment({
+          promptText: payload.promptText,
+          userBubblePrompt: payload.executeBubbleOptions?.userBubblePrompt ?? payload.promptText,
+          source: "workspace-requirement",
+          requirementId,
+        });
+        if (accepted) {
+          await updateWorkspaceRequirement(requirementId, (row) => ({
+            ...row,
+            lastDispatchedAt: now,
+          }));
+          message.success("已保存并派发到执行环境");
+        } else {
+          message.warning("已保存，但当前没有可用执行环境，未派发");
+        }
+        closeWorkspaceRequirementEditModal();
+      } catch (err) {
+        console.error("[WorkspaceRequirements] modal save failed", err);
+        message.error(err instanceof Error ? err.message : "保存需求失败");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [mode, repositories, repositoryId, requirementId],
+  );
 
   const draftImageCount = countMarkdownImages(draftBody);
+  const isEdit = mode === "edit";
 
   return (
     <Modal
-      title="编辑需求"
+      title={isEdit ? "编辑需求" : "新增需求"}
       open={open}
-      onOk={() => void handleSave()}
+      onOk={() => void handleSave(false)}
       onCancel={handleClose}
       okText="保存"
       cancelText="取消"
       confirmLoading={saving}
       okButtonProps={{ disabled: loadingItem }}
+      footer={
+        isEdit
+          ? (_, { OkBtn, CancelBtn }) => (
+              <Space>
+                <CancelBtn />
+                <Button loading={saving} disabled={loadingItem} onClick={() => void handleSave(true)}>
+                  保存并派发
+                </Button>
+                <OkBtn />
+              </Space>
+            )
+          : undefined
+      }
       destroyOnHidden
-      width={720}
+      width={760}
       centered
       zIndex={10000}
       getContainer={() => document.body}
@@ -243,9 +351,13 @@ export function WorkspaceRequirementEditModal({ repositories }: WorkspaceRequire
           style={{ width: "100%" }}
           aria-label="归属仓库"
           status={
-            repositoryId && repositories.some((repo) => String(repo.id) === repositoryId)
+            isEdit &&
+            repositoryId &&
+            repositories.some((repo) => String(repo.id) === repositoryId)
               ? undefined
-              : "warning"
+              : isEdit
+                ? "warning"
+                : undefined
           }
         />
       </div>
@@ -262,7 +374,7 @@ export function WorkspaceRequirementEditModal({ repositories }: WorkspaceRequire
             </div>
           }
         >
-          {open && !loadingItem ? (
+          {open && (!isEdit || !loadingItem) ? (
             <RequirementRichTextEditor
               editorKey={editorKey}
               initialBody={draftBody}

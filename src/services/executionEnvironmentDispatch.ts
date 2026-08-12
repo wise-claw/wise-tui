@@ -29,6 +29,8 @@ export type ExecutionEnvironmentDispatchDeps = {
       skipActivate?: boolean;
       connectionKind?: "oneshot" | "streaming";
       initialExecutionEngine?: SessionExecutionEngine;
+      /** 关联的需求 id：会话成功完成后由需求模块标记为「待验证」。 */
+      requirementId?: string;
     },
   ) => Promise<string>;
   executeSession: (
@@ -80,6 +82,7 @@ export async function dispatchExecutionEnvironmentFromMainSession(
     prompt: string;
     userBubblePrompt?: string;
     defaultInstructionApplied?: string;
+    requirementId?: string;
   },
 ): Promise<boolean> {
   const mainSession = deps.getSessions().find((item) => item.id === input.mainSessionId);
@@ -140,6 +143,7 @@ export async function dispatchExecutionEnvironmentFromMainSession(
         skipActivate: true,
         connectionKind,
         initialExecutionEngine: plan.executionEngine,
+        ...(input.requirementId ? { requirementId: input.requirementId } : {}),
       }),
     ),
   );

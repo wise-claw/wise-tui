@@ -820,6 +820,11 @@ export interface ClaudeSession {
    */
   executionEngine?: SessionExecutionEngine;
   /**
+   * 关联的需求 id（需求模块派发到执行环境时写入）。
+   * 会话成功完成后由需求模块把该需求标记为「待验证」。
+   */
+  requirementId?: string;
+  /**
    * 为 true 时标记为「右栏侧会话」：专用于右栏对当前仓库的独立对话，
    * 不计入中栏会话 tab 列表（`filterSessionsForWorkspace` 排除），
    * 也不写入 `repositoryMainSessionBindings`，故不影响中栏 active 解析。

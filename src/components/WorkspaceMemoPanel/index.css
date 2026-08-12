@@ -13,6 +13,27 @@
   padding: 0 4px;
 }
 
+.app-workspace-memo-panel__auto-dispatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 6px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--ant-color-text-tertiary);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.app-workspace-memo-panel__auto-dispatch-concurrency {
+  width: 52px;
+}
+
+.app-workspace-memo-panel__auto-dispatch-concurrency .ant-input-number-input {
+  font-size: 11px;
+  padding: 0 4px;
+}
+
 .app-workspace-memo-panel__save-status--error {
   color: var(--ant-color-error);
 }
@@ -115,11 +136,16 @@
   font-size: 10px;
 }
 
-.app-workspace-requirements-panel__desc {
-  margin: 1px 0 0 !important;
+.app-workspace-requirements-panel__md-desc.app-markdown {
+  margin: 1px 0 0;
   font-size: 11px;
   line-height: 1.35;
-  white-space: pre-wrap;
+  color: var(--ant-color-text-secondary);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  word-break: break-word;
 }
 
 .app-workspace-requirements-panel__thumbs {
@@ -193,9 +219,31 @@
 }
 
 .app-workspace-requirements-panel__editor-wrap .app-tiptap-editor {
-  min-height: 220px;
+  min-height: 0;
+  /* 编辑器填满 wrap 可视高度，顶部快捷栏保持固定，只有正文区滚动。 */
+  flex: 1 1 auto;
+}
+
+.app-workspace-requirements-panel__editor-wrap .app-tiptap-editor__stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .app-workspace-requirements-edit-modal .ant-modal-body {
   padding-top: 8px;
+}
+
+/* 需求弹窗内编辑器：去掉双层边框，正文上下留白均衡（编辑态而非阅读态）。 */
+.app-workspace-requirements-edit-modal .app-tiptap-editor {
+  border: none;
+  border-radius: 0;
+}
+
+.app-workspace-requirements-edit-modal .app-tiptap-editor__stage {
+  padding: 8px 12px;
+}
+
+.app-workspace-requirements-edit-modal .app-tiptap-editor__paper {
+  padding: 20px 28px 28px;
 }
