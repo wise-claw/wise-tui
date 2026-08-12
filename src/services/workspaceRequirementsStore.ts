@@ -189,7 +189,7 @@ export async function updateWorkspaceRequirement(
 }
 
 /**
- * 会话执行成功后把关联需求标记为「待验证」（等待人工验证完成）。
+ * 会话执行完成且执行结果表明需求确实被处理时，把关联需求标记为「待验证」（等待人工验证完成）。
  * 幂等：已完成的（done）需求不会被倒回待验证。
  */
 export async function markWorkspaceRequirementVerifying(id: string): Promise<void> {

@@ -1433,7 +1433,26 @@ export default function App() {
     return running;
   };
 
-  useWorkspaceRequirementAutoDispatchEngine({ countRunningSessionsRef });
+  // 自动派发补派兜底：收集当前运行/连接中会话关联的需求 id，
+  // 用于判断「已派发但无对应运行会话」的需求是否需要按原逻辑补派。
+  const getRunningRequirementIdsRef = useRef<() => ReadonlySet<string>>(() => new Set());
+  getRunningRequirementIdsRef.current = () => {
+    const ids = new Set<string>();
+    for (const session of getClaudeSessionsSnapshot()) {
+      if (
+        (session.status === "running" || session.status === "connecting") &&
+        session.requirementId
+      ) {
+        ids.add(session.requirementId);
+      }
+    }
+    return ids;
+  };
+
+  useWorkspaceRequirementAutoDispatchEngine({
+    countRunningSessionsRef,
+    getRunningRequirementIdsRef,
+  });
 
   usePageMonitorAutoFixReload({
     getSessions: () => sessionsLatestRef.current,

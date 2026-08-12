@@ -4,6 +4,12 @@ import type { WorkspaceRequirementItem } from "../types/workspaceRequirements";
 export const AUTO_DISPATCH_MAX_PER_SWEEP = 2;
 
 /**
+ * 单个需求累计派发次数上限（含首次派发与后续重试）。
+ * 超过后不再自动补派，等待用户手动处理。
+ */
+export const AUTO_DISPATCH_MAX_RETRY_ATTEMPTS = 3;
+
+/**
  * 自动派发候选判定：open 且（从未派发过 或 派发后又被编辑过）。
  * `updatedAt > lastDispatchedAt` 既覆盖新增，也覆盖「编辑后重新派发」。
  */
@@ -55,4 +61,53 @@ export function planAutoDispatchSweep(
   const slots = autoDispatchAvailableSlots(concurrency, runningSessions);
   if (slots <= 0) return [];
   return selectAutoDispatchTargets(items, Math.min(slots, AUTO_DISPATCH_MAX_PER_SWEEP));
+}
+
+/**
+ * 补派候选判定：需求列表中已无「未标记」需求可派时，兜底检查已派发的 open 需求。
+ * 仅当该需求累计派发次数未达上限、且没有对应运行中/连接中的会话时才补派。
+ */
+export function isRequirementAutoDispatchRetryEligible(
+  item: WorkspaceRequirementItem,
+  runningRequirementIds: ReadonlySet<string>,
+): boolean {
+  if (item.status !== "open") return false;
+  if (item.lastDispatchedAt == null) return false;
+  if (isRequirementAutoDispatchEligible(item)) return false;
+  if ((item.dispatchAttemptCount ?? 0) >= AUTO_DISPATCH_MAX_RETRY_ATTEMPTS) return false;
+  return !runningRequirementIds.has(item.id);
+}
+
+/**
+ * 选取本轮补派目标：已派发且无运行中会话的 open 需求，
+ * 按最近派发时间升序（最旧优先），再截断到 `max` 条。
+ */
+export function selectAutoDispatchRetryTargets(
+  items: readonly WorkspaceRequirementItem[],
+  runningRequirementIds: ReadonlySet<string>,
+  max: number = AUTO_DISPATCH_MAX_PER_SWEEP,
+): WorkspaceRequirementItem[] {
+  return items
+    .filter((item) => isRequirementAutoDispatchRetryEligible(item, runningRequirementIds))
+    .sort((a, b) => a.lastDispatchedAt! - b.lastDispatchedAt!)
+    .slice(0, Math.max(0, max));
+}
+
+/**
+ * 规划一轮自动派发（含补派兜底）：先按既有逻辑派发「未标记」需求；
+ * 若本轮没有任何可派发的未标记需求，则对「已派发但没有对应运行中会话」的需求补派，
+ * 每个需求累计最多派发 `AUTO_DISPATCH_MAX_RETRY_ATTEMPTS` 次。
+ */
+export function planAutoDispatchSweepWithRetry(
+  concurrency: number,
+  runningSessions: number,
+  runningRequirementIds: ReadonlySet<string>,
+  items: readonly WorkspaceRequirementItem[],
+): WorkspaceRequirementItem[] {
+  const slots = autoDispatchAvailableSlots(concurrency, runningSessions);
+  if (slots <= 0) return [];
+  const max = Math.min(slots, AUTO_DISPATCH_MAX_PER_SWEEP);
+  const targets = selectAutoDispatchTargets(items, max);
+  if (targets.length > 0) return targets;
+  return selectAutoDispatchRetryTargets(items, runningRequirementIds, max);
 }

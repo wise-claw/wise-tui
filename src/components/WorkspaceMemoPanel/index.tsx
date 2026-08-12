@@ -341,6 +341,7 @@ export function WorkspaceMemoPanel() {
                 bodyMarkdown: row.bodyMarkdown || item.bodyMarkdown,
                 imagePaths: payload.imagePaths.length > 0 ? payload.imagePaths : row.imagePaths,
                 lastDispatchedAt: now,
+                dispatchAttemptCount: (row.dispatchAttemptCount ?? 0) + 1,
                 updatedAt: now,
               }
             : row,

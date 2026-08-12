@@ -11,7 +11,7 @@ export interface DispatchRequirementToExecutionEnvironmentDetail {
   /** 写入 worker 气泡的正文；默认与 promptText 相同 */
   userBubblePrompt?: string;
   source?: "workspace-requirement" | "workspace-requirement-auto";
-  /** 关联的需求 id；新建会话时写入会话，执行完成后把需求标记为「待验证」。 */
+  /** 关联的需求 id；新建会话时写入会话，执行完成且结果表明已处理时把需求标记为「待验证」。 */
   requirementId?: string;
   /**
    * 同步回调：ClaudeChat 已接收并开始派发时调用。

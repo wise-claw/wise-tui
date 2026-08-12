@@ -29,7 +29,7 @@ export type ExecutionEnvironmentDispatchDeps = {
       skipActivate?: boolean;
       connectionKind?: "oneshot" | "streaming";
       initialExecutionEngine?: SessionExecutionEngine;
-      /** 关联的需求 id：会话成功完成后由需求模块标记为「待验证」。 */
+      /** 关联的需求 id：会话执行完成且结果表明已处理时由需求模块标记为「待验证」。 */
       requirementId?: string;
     },
   ) => Promise<string>;

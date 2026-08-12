@@ -2,10 +2,14 @@ import { describe, expect, test } from "bun:test";
 import type { WorkspaceRequirementItem } from "../types/workspaceRequirements";
 import {
   AUTO_DISPATCH_MAX_PER_SWEEP,
+  AUTO_DISPATCH_MAX_RETRY_ATTEMPTS,
   autoDispatchAvailableSlots,
   isRequirementAutoDispatchEligible,
+  isRequirementAutoDispatchRetryEligible,
   planAutoDispatchSweep,
+  planAutoDispatchSweepWithRetry,
   selectAutoDispatchTargets,
+  selectAutoDispatchRetryTargets,
 } from "./workspaceRequirementAutoDispatch";
 
 function item(
@@ -20,6 +24,7 @@ function item(
     createdAt: 1,
     updatedAt: 1,
     lastDispatchedAt: null,
+    dispatchAttemptCount: 0,
     repositoryId: null,
     ...partial,
   };
@@ -110,5 +115,112 @@ describe("workspaceRequirementAutoDispatch", () => {
     expect(planAutoDispatchSweep(2, 1, items)).toHaveLength(1);
     expect(planAutoDispatchSweep(2, 2, items)).toHaveLength(0);
     expect(planAutoDispatchSweep(4, 0, items)).toHaveLength(AUTO_DISPATCH_MAX_PER_SWEEP);
+  });
+
+  test("isRequirementAutoDispatchRetryEligible requires dispatched open item", () => {
+    const running = new Set<string>();
+    expect(
+      isRequirementAutoDispatchRetryEligible(
+        item({ id: "a", lastDispatchedAt: 100 }),
+        running,
+      ),
+    ).toBe(true);
+    expect(isRequirementAutoDispatchRetryEligible(item({ id: "a" }), running)).toBe(false);
+    expect(
+      isRequirementAutoDispatchRetryEligible(
+        item({ id: "a", status: "done", lastDispatchedAt: 100 }),
+        running,
+      ),
+    ).toBe(false);
+    expect(
+      isRequirementAutoDispatchRetryEligible(
+        item({ id: "a", status: "verifying", lastDispatchedAt: 100 }),
+        running,
+      ),
+    ).toBe(false);
+  });
+
+  test("isRequirementAutoDispatchRetryEligible skips items with a running session", () => {
+    expect(
+      isRequirementAutoDispatchRetryEligible(
+        item({ id: "a", lastDispatchedAt: 100 }),
+        new Set(["a"]),
+      ),
+    ).toBe(false);
+  });
+
+  test("isRequirementAutoDispatchRetryEligible skips edited (eligible) items", () => {
+    expect(
+      isRequirementAutoDispatchRetryEligible(
+        item({ id: "a", updatedAt: 200, lastDispatchedAt: 100 }),
+        new Set(),
+      ),
+    ).toBe(false);
+  });
+
+  test("isRequirementAutoDispatchRetryEligible caps at max retry attempts", () => {
+    expect(
+      isRequirementAutoDispatchRetryEligible(
+        item({ id: "a", lastDispatchedAt: 100, dispatchAttemptCount: 2 }),
+        new Set(),
+      ),
+    ).toBe(true);
+    expect(
+      isRequirementAutoDispatchRetryEligible(
+        item({ id: "a", lastDispatchedAt: 100, dispatchAttemptCount: 3 }),
+        new Set(),
+      ),
+    ).toBe(false);
+    expect(AUTO_DISPATCH_MAX_RETRY_ATTEMPTS).toBe(3);
+  });
+
+  test("selectAutoDispatchRetryTargets picks oldest dispatched without running session", () => {
+    const targets = selectAutoDispatchRetryTargets(
+      [
+        item({ id: "new", updatedAt: 100 }),
+        item({ id: "running", lastDispatchedAt: 100 }),
+        item({ id: "old", lastDispatchedAt: 50 }),
+        item({ id: "exhausted", lastDispatchedAt: 200, dispatchAttemptCount: 3 }),
+        item({ id: "sent", lastDispatchedAt: 150 }),
+      ],
+      new Set(["running"]),
+      2,
+    );
+    expect(targets.map((t) => t.id)).toEqual(["old", "sent"]);
+  });
+
+  test("planAutoDispatchSweepWithRetry prefers eligible targets over retry", () => {
+    const items = [item({ id: "dispatched", lastDispatchedAt: 100 })];
+    const withEligible = [
+      item({ id: "fresh", updatedAt: 100 }),
+      item({ id: "dispatched", lastDispatchedAt: 100 }),
+    ];
+    expect(
+      planAutoDispatchSweepWithRetry(4, 0, new Set(), withEligible).map((t) => t.id),
+    ).toEqual(["fresh"]);
+    expect(planAutoDispatchSweepWithRetry(4, 0, new Set(), items).map((t) => t.id)).toEqual([
+      "dispatched",
+    ]);
+  });
+
+  test("planAutoDispatchSweepWithRetry respects running sessions and slots", () => {
+    const items = [
+      item({ id: "old", lastDispatchedAt: 50 }),
+      item({ id: "sent", lastDispatchedAt: 150 }),
+    ];
+    expect(
+      planAutoDispatchSweepWithRetry(2, 0, new Set(["sent"]), items).map((t) => t.id),
+    ).toEqual(["old"]);
+    expect(planAutoDispatchSweepWithRetry(2, 2, new Set(), items)).toEqual([]);
+  });
+
+  test("planAutoDispatchSweepWithRetry stops retrying at max attempts", () => {
+    const items = [
+      item({ id: "a", lastDispatchedAt: 100, dispatchAttemptCount: 3 }),
+      item({ id: "b", lastDispatchedAt: 200, dispatchAttemptCount: 2 }),
+    ];
+    expect(planAutoDispatchSweepWithRetry(4, 0, new Set(), items).map((t) => t.id)).toEqual([
+      "b",
+    ]);
   });
 });

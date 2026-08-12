@@ -16,7 +16,8 @@ import {
 } from "../services/workspaceRequirementsStore";
 import {
   autoDispatchAvailableSlots,
-  planAutoDispatchSweep,
+  isRequirementAutoDispatchEligible,
+  planAutoDispatchSweepWithRetry,
 } from "../utils/workspaceRequirementAutoDispatch";
 import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
 
@@ -86,8 +87,10 @@ export function useWorkspaceRequirementAutoDispatchSetting(): {
  */
 export function useWorkspaceRequirementAutoDispatchEngine({
   countRunningSessionsRef,
+  getRunningRequirementIdsRef,
 }: {
   countRunningSessionsRef: MutableRefObject<() => number>;
+  getRunningRequirementIdsRef: MutableRefObject<() => ReadonlySet<string>>;
 }): void {
   const enabledRef = useRef(false);
   const concurrencyRef = useRef(WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_DEFAULT);
@@ -116,9 +119,11 @@ export function useWorkspaceRequirementAutoDispatchEngine({
     try {
       const payload = await loadWorkspaceRequirements();
       // 单轮派发上限 = min(并发槽位, AUTO_DISPATCH_MAX_PER_SWEEP)，并发再大也不会一次全丢。
-      const targets = planAutoDispatchSweep(
+      // 无「未标记」需求时兜底补派：已派发但没有对应运行中会话的需求，累计最多 3 次。
+      const targets = planAutoDispatchSweepWithRetry(
         concurrencyRef.current,
         countRunningSessionsRef.current(),
+        getRunningRequirementIdsRef.current(),
         payload.items,
       );
       for (const item of targets) {
@@ -149,12 +154,17 @@ export function useWorkspaceRequirementAutoDispatchEngine({
         if (!accepted) continue;
         dispatched += 1;
         const dispatchedAt = Date.now();
+        // 补派会累加派发次数（达到 3 次后停止）；「未标记」需求（新增/编辑过）重新计为一次。
+        const nextAttemptCount = isRequirementAutoDispatchEligible(item)
+          ? 1
+          : (item.dispatchAttemptCount ?? 0) + 1;
         try {
           await updateWorkspaceRequirement(item.id, (row) => ({
             ...row,
             bodyMarkdown: row.bodyMarkdown || item.bodyMarkdown,
             imagePaths: imagePaths.length > 0 ? imagePaths : row.imagePaths,
             lastDispatchedAt: dispatchedAt,
+            dispatchAttemptCount: nextAttemptCount,
             updatedAt: dispatchedAt,
           }));
         } catch (err) {
@@ -170,7 +180,7 @@ export function useWorkspaceRequirementAutoDispatchEngine({
     } finally {
       sweepingRef.current = false;
     }
-  }, [countRunningSessionsRef]);
+  }, [countRunningSessionsRef, getRunningRequirementIdsRef]);
 
   const scheduleDebouncedSweep = useCallback(() => {
     if (changeTimerRef.current != null) {

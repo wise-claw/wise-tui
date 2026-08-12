@@ -84,6 +84,36 @@ describe("workspaceRequirements", () => {
     expect(parsed.items[0]!.status).toBe("verifying");
   });
 
+  test("parseWorkspaceRequirementsPayload normalizes dispatchAttemptCount", () => {
+    const raw = JSON.stringify({
+      version: 1,
+      items: [
+        {
+          id: "a",
+          title: "Alpha",
+          bodyMarkdown: "body",
+          status: "open",
+          createdAt: 1,
+          updatedAt: 2,
+          sortOrder: 1,
+          dispatchAttemptCount: 2,
+        },
+        {
+          id: "b",
+          title: "Beta",
+          bodyMarkdown: "body",
+          status: "open",
+          createdAt: 1,
+          updatedAt: 2,
+          sortOrder: 2,
+        },
+      ],
+    });
+    const parsed = parseWorkspaceRequirementsPayload(raw);
+    expect(parsed.items.find((i) => i.id === "a")?.dispatchAttemptCount).toBe(2);
+    expect(parsed.items.find((i) => i.id === "b")?.dispatchAttemptCount).toBe(0);
+  });
+
   test("createWorkspaceRequirementItem stores repositoryId", () => {
     const item = createWorkspaceRequirementItem("建商城", Date.now(), "7");
     expect(item.repositoryId).toBe("7");

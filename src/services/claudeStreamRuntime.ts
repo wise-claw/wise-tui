@@ -59,6 +59,7 @@ import {
 } from "../utils/claudeTurnCompleteGate";
 import { isWiseAppFocused } from "../utils/isWiseAppFocused";
 import { markWorkspaceRequirementVerifying } from "./workspaceRequirementsStore";
+import { requirementTurnResultProcessed } from "../utils/requirementTurnResult";
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
 type SetActiveSessionId = (updater: (prev: string | null) => string | null) => void;
@@ -945,10 +946,20 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     if (uiSuccess && session) {
       finalizeTodosAfterSuccessfulTurn(session.id, session.messages);
     }
-    // 需求自动派发联动：会话成功完成后把关联需求标记为「待验证」，等待人工验证。
+    // 需求自动派发联动：会话成功完成，且执行结果表明需求确实被处理
+    // （有实际执行动作、最终回复未声明无法完成）时，才把关联需求标记为「待验证」。
     const linkedRequirementId = sessionAfterFlush?.requirementId ?? session?.requirementId;
-    if (uiSuccess && linkedRequirementId) {
+    const requirementProcessed = requirementTurnResultProcessed({
+      messages: sessionAfterFlush?.messages ?? session?.messages ?? [],
+      previewRaw,
+    });
+    if (uiSuccess && linkedRequirementId && requirementProcessed) {
       void markWorkspaceRequirementVerifying(linkedRequirementId);
+    } else if (uiSuccess && linkedRequirementId && !requirementProcessed) {
+      console.info(
+        "[WorkspaceRequirements] 会话执行完成但执行结果未表明需求被处理，保持待办：",
+        linkedRequirementId,
+      );
     }
     // 多员工/多会话并行时：仅当「当前仍指向本会话」时才清空，避免误清其它仍在流式中的标签
     const refT = streamingTargetIdRef.current;

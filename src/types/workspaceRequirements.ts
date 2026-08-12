@@ -19,6 +19,11 @@ export interface WorkspaceRequirementItem {
   /** 最近一次派发到待执行队列的时间；未派发为 null */
   lastDispatchedAt: number | null;
   /**
+   * 累计派发次数（含自动重试）。自动重试仅在同一需求无对应运行中会话时触发，
+   * 且最多派发 3 次（见 AUTO_DISPATCH_MAX_RETRY_ATTEMPTS）。
+   */
+  dispatchAttemptCount: number;
+  /**
    * 归属仓库 id（Wise `Repository.id`）。
    * 旧数据可能为 null；新增时必须指定。
    */
@@ -72,6 +77,7 @@ export function createWorkspaceRequirementItem(
     createdAt: now,
     updatedAt: now,
     lastDispatchedAt: null,
+    dispatchAttemptCount: 0,
     repositoryId: repoId,
   };
 }
@@ -108,6 +114,10 @@ function normalizeItem(raw: unknown): WorkspaceRequirementItem | null {
     typeof row.lastDispatchedAt === "number" && Number.isFinite(row.lastDispatchedAt) && row.lastDispatchedAt > 0
       ? row.lastDispatchedAt
       : null;
+  const dispatchAttemptCount =
+    typeof row.dispatchAttemptCount === "number" && Number.isFinite(row.dispatchAttemptCount)
+      ? Math.max(0, Math.round(row.dispatchAttemptCount))
+      : 0;
 
   const legacyDescription = typeof row.description === "string" ? row.description : "";
   const bodyMarkdown =
@@ -129,6 +139,7 @@ function normalizeItem(raw: unknown): WorkspaceRequirementItem | null {
     createdAt,
     updatedAt,
     lastDispatchedAt,
+    dispatchAttemptCount,
     repositoryId,
   };
 }

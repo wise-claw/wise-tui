@@ -284,6 +284,7 @@ export function WorkspaceRequirementModal({
           await updateWorkspaceRequirement(requirementId, (row) => ({
             ...row,
             lastDispatchedAt: now,
+            dispatchAttemptCount: (row.dispatchAttemptCount ?? 0) + 1,
           }));
           message.success("已保存并派发到执行环境");
         } else {

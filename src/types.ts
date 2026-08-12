@@ -821,7 +821,7 @@ export interface ClaudeSession {
   executionEngine?: SessionExecutionEngine;
   /**
    * 关联的需求 id（需求模块派发到执行环境时写入）。
-   * 会话成功完成后由需求模块把该需求标记为「待验证」。
+   * 会话执行完成且执行结果表明需求确实被处理时，由需求模块把该需求标记为「待验证」。
    */
   requirementId?: string;
   /**
