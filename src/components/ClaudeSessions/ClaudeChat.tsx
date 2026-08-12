@@ -1423,7 +1423,10 @@ export function ClaudeChatInner({
           ? detail.userBubblePrompt.trim()
           : promptText;
       detail.onAccepted?.();
-      message.success("需求已派发到执行环境");
+      // 自动派发按轮汇总提示（见 useWorkspaceRequirementAutoDispatch），避免每个需求各弹一条成功框。
+      if (detail.source !== "workspace-requirement-auto") {
+        message.success("需求已派发到执行环境");
+      }
       void onDispatchExecutionEnvironment({
         prompt: promptWithMention,
         userBubblePrompt: userBubble,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
+import { message } from "antd";
 import { dispatchRequirementToExecutionEnvironment } from "../constants/pendingTaskQueueEvents";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 import { buildRequirementDispatchPayload } from "../services/workspaceRequirementDispatch";
@@ -174,6 +175,7 @@ export function useWorkspaceRequirementAutoDispatchEngine({
       }
       if (dispatched > 0) {
         cooldownUntilRef.current = Date.now() + AUTO_DISPATCH_SWEEP_COOLDOWN_MS;
+        message.success(`已自动派发 ${dispatched} 条需求到执行环境`);
       }
     } catch (err) {
       console.error("[WorkspaceRequirementAutoDispatch] sweep failed", err);

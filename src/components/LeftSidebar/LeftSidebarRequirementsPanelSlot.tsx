@@ -7,7 +7,7 @@ import {
   WarningOutlined,
 } from "@ant-design/icons";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { App as AntdApp, Button, Image, Popconfirm, Popover, Switch } from "antd";
+import { App as AntdApp, Button, Image, Input, Popconfirm, Popover, Switch } from "antd";
 import {
   memo,
   useCallback,
@@ -36,6 +36,7 @@ import {
   loadWorkspaceRequirements,
   saveWorkspaceRequirements,
   updateWorkspaceRequirement,
+  WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_MIN,
   WISE_WORKSPACE_REQUIREMENTS_CHANGED,
 } from "../../services/workspaceRequirementsStore";
 import {
@@ -371,8 +372,12 @@ function LeftSidebarRequirementsPanelSlotInner({
   const scrollRootRef = useRef<HTMLDivElement>(null);
   const visibleRows = useRequirementsPanelVisibleRows();
   const memoPanelOpen = useWorkspaceMemoPanelOpen();
-  const { enabled: autoDispatch, setEnabled: setAutoDispatch, concurrency: autoDispatchConcurrency } =
-    useWorkspaceRequirementAutoDispatchSetting();
+  const {
+    enabled: autoDispatch,
+    setEnabled: setAutoDispatch,
+    concurrency: autoDispatchConcurrency,
+    setConcurrency: setAutoDispatchConcurrency,
+  } = useWorkspaceRequirementAutoDispatchSetting();
   const [items, setItems] = useState<WorkspaceRequirementItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
@@ -584,6 +589,21 @@ function LeftSidebarRequirementsPanelSlotInner({
                 checked={autoDispatch}
                 onChange={(checked) => void setAutoDispatch(checked)}
                 aria-label="自动派发"
+              />
+              <Input
+                size="small"
+                value={autoDispatchConcurrency}
+                inputMode="numeric"
+                onChange={(value) => {
+                  const raw = value.target.value.trim();
+                  if (!/^\d+$/.test(raw)) return;
+                  const parsed = Number(raw);
+                  void setAutoDispatchConcurrency(
+                    Math.max(WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_MIN, parsed),
+                  );
+                }}
+                className="app-left-sidebar-requirements-panel__auto-dispatch-concurrency"
+                aria-label="自动派发并发数"
               />
             </span>
           </DeferredHoverTooltip>
