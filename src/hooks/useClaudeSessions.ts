@@ -32,6 +32,7 @@ import {
   type CursorSdkAttachment,
 } from "../services/cursorComposerPrompt";
 import { resolveClaudeExecModelId } from "../utils/claudeModel";
+import { resolveCodexProfileModelFromStore } from "../utils/codexModel";
 import { resolveCodexResumeSessionId } from "../utils/codexSessionId";
 import { resolveOpencodeResumeSessionId } from "../utils/opencodeSessionId";
 import { resolveQoderResumeSessionId } from "../utils/qoderSessionId";
@@ -2983,7 +2984,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         claudeSessionId: null,
         repositoryPath: normalizeRepositoryPathKey(repositoryPath) || repositoryPath.trim(),
         repositoryName,
-        model: opts?.initialModel?.trim() || "sonnet",
+        model:
+          opts?.initialModel?.trim() ||
+          (opts?.initialExecutionEngine === "codex" || opts?.initialExecutionEngine === "codex-rpc"
+            ? ""
+            : "sonnet"),
         status: "idle",
         messages: [],
         createdAt: Date.now(),
@@ -3029,6 +3034,21 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (!opts?.initialModel?.trim()) {
         void (async () => {
           try {
+            const engine = opts?.initialExecutionEngine;
+            // Codex 标签页不继承 Claude 侧默认模型（避免 MiniMax-M3 等泄漏到 codex provider）；
+            // 仅应用「模型切换 → Codex」档案模型，缺省时由 codex 使用 config.toml 默认模型。
+            if (engine === "codex" || engine === "codex-rpc") {
+              const codexProfileModel = resolveCodexProfileModelFromStore(
+                getCachedModelProfileStore(),
+              );
+              if (!codexProfileModel?.trim()) return;
+              setSessions((prev) => {
+                const next = prev.map((s) => (s.id === id ? { ...s, model: codexProfileModel } : s));
+                sessionsRef.current = next;
+                return next;
+              });
+              return;
+            }
             const profileModel = resolveClaudeExecModelId({ store: getCachedModelProfileStore() });
             const configModel = profileModel ?? (await getCachedClaudeConfigModel(repositoryPath));
             if (!configModel?.trim()) return;

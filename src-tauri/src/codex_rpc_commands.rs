@@ -295,16 +295,23 @@ pub(crate) async fn execute_codex_rpc(
 
     // Resolve effective model for vision vs path-only turn shaping.
     // params.model wins; otherwise fall back to ~/.codex/config.toml `model =`.
-    let effective_model = params
+    // 模型白名单护栏：未知模型（如 Claude 侧泄漏的 MiniMax-M3）不下发，
+    // 回退 config.toml 默认模型，避免 provider 以 invalid_request_error 拒绝。
+    let mut effective_model = params
         .model
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .or_else(|| {
-            let envelope = crate::codex_config_dir::read_codex_profile_envelope();
-            crate::codex_config_dir::read_effective_codex_model_from_envelope(&envelope)
-        });
+        .map(str::to_string);
+    if let Some(m) = effective_model.as_deref() {
+        if !crate::codex_models::codex_model_is_known(m).await {
+            effective_model = None;
+        }
+    }
+    let effective_model = effective_model.or_else(|| {
+        let envelope = crate::codex_config_dir::read_codex_profile_envelope();
+        crate::codex_config_dir::read_effective_codex_model_from_envelope(&envelope)
+    });
     session.set_active_model(effective_model.as_deref());
 
     let thread_result = if let Some(thread_id) = resume_id {

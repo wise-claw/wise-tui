@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use crate::claude_events::{
     emit_adapted_stream_payload, CLAUDE_STREAM_EVENT_COMPLETE, CLAUDE_STREAM_EVENT_OUTPUT,
 };
-use crate::codex_commands::strip_benign_noise;
+use crate::codex_commands::{codex_line_is_benign_noise, strip_benign_noise};
 use crate::codex_rpc_types::{ServerNotification, ServerRequest};
 
 /// Per-turn adapt state so token deltas and `item/completed` snapshots do not double-paint.
@@ -415,7 +415,9 @@ fn map_notification_to_stream_lines(
         }
 
         ServerNotification::Warning { message, .. } => {
-            if message.trim().is_empty() {
+            // 模型元数据回退等一次性噪音警告（codex 未识别自定义模型元数据）不展示，
+            // 与 exec 链路的 benign-noise 过滤保持一致。
+            if message.trim().is_empty() || codex_line_is_benign_noise(&message) {
                 CodexRpcAdaptOutput::default()
             } else {
                 CodexRpcAdaptOutput::both(vec![assistant_text_line(&format!(
@@ -2471,6 +2473,28 @@ mod tests {
         let out = adapt(&compacted, &mut state);
         assert_eq!(out.emit.len(), 1);
         assert!(out.emit[0].contains("上下文已压缩"));
+    }
+
+    #[test]
+    fn warning_metadata_noise_is_suppressed() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let noise = ServerNotification::Warning {
+            message: "Model metadata for deepseek-v4-flash not found. Defaulting to fallback metadata; this can degrade performance and cause issues."
+                .to_string(),
+            thread_id: None,
+        };
+        let out = adapt(&noise, &mut state);
+        assert!(out.emit.is_empty());
+        assert!(out.persist.is_empty());
+
+        // 真实可行动警告仍需展示。
+        let actionable = ServerNotification::Warning {
+            message: "API key 无效".to_string(),
+            thread_id: None,
+        };
+        let out = adapt(&actionable, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains("Codex 警告：API key 无效"));
     }
 
     #[test]

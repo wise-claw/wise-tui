@@ -214,6 +214,83 @@ pub async fn codex_list_models() -> Result<Vec<CodexModelListItem>, String> {
     Ok(out)
 }
 
+// ---------------------------------------------------------------------------
+// 模型白名单护栏：Codex 执行时只透传「配置已声明」或「运行态目录已知」的模型。
+// 未知模型（如 Claude 侧 MiniMax-M3 泄漏到 codex）不下发，回退 config.toml 默认
+// 模型，避免 provider（如火山方舟 deepseek）以 invalid_request_error 拒绝。
+// ---------------------------------------------------------------------------
+
+/// `codex debug models` 目录的短 TTL 缓存（该查询会拉起 codex 二进制，较重）。
+static CODEX_MODEL_CATALOG_CACHE: std::sync::OnceLock<
+    std::sync::Mutex<Option<(std::time::Instant, std::collections::BTreeSet<String>)>>,
+> = std::sync::OnceLock::new();
+
+const CODEX_MODEL_CATALOG_CACHE_TTL_SECS: u64 = 60;
+
+fn cached_codex_model_catalog() -> Option<std::collections::BTreeSet<String>> {
+    let lock = CODEX_MODEL_CATALOG_CACHE.get_or_init(|| std::sync::Mutex::new(None));
+    let guard = lock.lock().ok()?;
+    let (at, models) = guard.as_ref()?;
+    if at.elapsed().as_secs() > CODEX_MODEL_CATALOG_CACHE_TTL_SECS {
+        None
+    } else {
+        Some(models.clone())
+    }
+}
+
+fn store_codex_model_catalog(models: std::collections::BTreeSet<String>) {
+    if let Some(lock) = CODEX_MODEL_CATALOG_CACHE.get() {
+        if let Ok(mut guard) = lock.lock() {
+            *guard = Some((std::time::Instant::now(), models));
+        }
+    }
+}
+
+/// config.toml 是否已声明该模型（顶层 `model` / `[model_providers.*]` 的 `model`、`models`）。
+fn codex_model_configured_in(config: &str, model: &str) -> bool {
+    collect_codex_configured_models(config).iter().any(|m| m.id == model)
+}
+
+/// 模型是否可安全下发给 codex：
+/// 1. config.toml 已声明；
+/// 2. 或运行态 `codex debug models` 目录命中。
+/// 目录查询失败/无输出时放行，保持现状行为，避免误杀自定义 provider 模型。
+pub(crate) async fn codex_model_is_known(model: &str) -> bool {
+    let model = model.trim();
+    if model.is_empty() {
+        return true;
+    }
+    let envelope = read_codex_profile_envelope();
+    if codex_model_configured_in(&envelope.config, model) {
+        return true;
+    }
+    if let Some(catalog) = cached_codex_model_catalog() {
+        return catalog.contains(model);
+    }
+
+    let mut catalog = std::collections::BTreeSet::new();
+    if let Some(path) = find_codex_binary().ok() {
+        let mut cmd = tokio::process::Command::new(&path);
+        cmd.arg("debug").arg("models");
+        let path_env = codex_merged_path_env();
+        apply_codex_child_env(&mut cmd, &path_env);
+        if let Ok(output) = cmd.output().await {
+            if output.status.success() {
+                if let Ok(stdout) = String::from_utf8(output.stdout) {
+                    for item in parse_codex_models_catalog(&stdout) {
+                        catalog.insert(item.id);
+                    }
+                }
+            }
+        }
+    }
+    if catalog.is_empty() {
+        return true;
+    }
+    store_codex_model_catalog(catalog.clone());
+    catalog.contains(model)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -290,5 +367,21 @@ models = ["qwen3.5", "qwen3.5-max", ""]
             items.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
             vec!["qwen3.5", "qwen3.5-max"]
         );
+    }
+
+    #[test]
+    fn guard_accepts_config_declared_models_only() {
+        let config = r#"
+model_provider = "volc-ark-coding"
+model = "deepseek-v4-flash"
+
+[model_providers.volc-ark-coding]
+models = ["deepseek-v4-pro", "deepseek-v4-flash"]
+"#;
+        assert!(codex_model_configured_in(config, "deepseek-v4-flash"));
+        assert!(codex_model_configured_in(config, "deepseek-v4-pro"));
+        // Claude 侧模型不在 codex 配置/目录中，应被护栏拦下。
+        assert!(!codex_model_configured_in(config, "MiniMax-M3"));
+        assert!(!codex_model_configured_in(config, "sonnet"));
     }
 }

@@ -610,7 +610,16 @@ pub(crate) async fn execute_codex_code(
     if !use_wise_bridge {
         ensure_active_codex_profile_applied(&db)?;
     }
-    let exec_model = proxy_model.or_else(|| normalize_codex_model(model.as_deref()));
+    // 模型白名单护栏：仅透传 codex 已知模型（config.toml 声明或运行态目录）；
+    // 未知模型（如 Claude 侧泄漏的 MiniMax-M3）不下发，回退 config.toml 默认模型。
+    let exec_model = if let Some(proxy) = proxy_model {
+        Some(proxy)
+    } else {
+        match normalize_codex_model(model.as_deref()) {
+            Some(m) if crate::codex_models::codex_model_is_known(&m).await => Some(m),
+            _ => None,
+        }
+    };
 
     validate_codex_project_path(&project_path)?;
 
