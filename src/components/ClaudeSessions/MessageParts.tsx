@@ -162,7 +162,7 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
   const hasBody = text.trim().length > 0;
   const collapsed = !expanded;
 
-  // 折叠态（max-height ≈ 4 行）下测量正文是否溢出；展开态不消费 overflows，免测。
+  // 折叠态（max-height ≈ 1 行）下测量正文是否溢出；展开态不消费 overflows，免测。
   useLayoutEffect(() => {
     if (expanded) return;
     const el = bodyRef.current;

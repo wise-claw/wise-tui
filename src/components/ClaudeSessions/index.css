@@ -5453,7 +5453,7 @@
 
 .app-message-part-reasoning-show__flow--clamped {
   max-height: calc(
-    var(--app-reasoning-font-size) * var(--app-reasoning-line-height) * 4
+    var(--app-reasoning-font-size) * var(--app-reasoning-line-height) * 1
   );
   overflow: hidden;
 }
