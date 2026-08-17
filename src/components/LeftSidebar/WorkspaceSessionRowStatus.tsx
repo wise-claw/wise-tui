@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
+import { useElementInfiniteSpin } from "../../hooks/useElementInfiniteSpin";
 
 export type WorkspaceSessionRowLiveStatus =
   | "idle"
@@ -71,8 +72,11 @@ export function useWorkspaceSessionRowVisualStatus(
 }
 
 function RunningIcon() {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  useElementInfiniteSpin(svgRef, 750);
   return (
     <svg
+      ref={svgRef}
       className="app-workspace-session-status__svg app-workspace-session-status__svg--spin"
       viewBox="0 0 16 16"
       aria-hidden

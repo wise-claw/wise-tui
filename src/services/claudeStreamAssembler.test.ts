@@ -9,6 +9,7 @@ import {
   mergeAssistantParts,
   mergeTextPartsByContainment,
   reconcileResultFullTextParts,
+  MAX_ASSISTANT_TEXT_REASONING_CHARS,
 } from "./claudeStreamAssembler";
 
 function session(messages: ClaudeSession["messages"]): ClaudeSession {
@@ -501,6 +502,85 @@ describe("appendAssistantStreamParts", () => {
       { type: "text", text: CURSOR_FULL_TURN_TEXT },
     ]);
     expect(current.messages[1]?.content).toBe(CURSOR_FULL_TURN_TEXT);
+  });
+});
+
+describe("assistant message memory limits", () => {
+  function textReasoningChars(messages: readonly ClaudeMessage[]): number {
+    let n = 0;
+    for (const msg of messages) {
+      for (const part of msg.parts ?? []) {
+        if (part.type === "text" || part.type === "reasoning") {
+          n += part.text.length;
+        }
+      }
+    }
+    return n;
+  }
+
+  test("reasoning-only overflow keeps head + middle notice + tail (preview stays real thinking)", () => {
+    const base = session([]);
+    const next = appendAssistantStreamParts(base, [
+      { type: "reasoning", text: "思".repeat(40000) },
+    ]);
+    const msg = next.messages[0]!;
+    const part = msg.parts[0]!;
+    expect(part.type).toBe("reasoning");
+    expect(part.text.startsWith("思".repeat(400))).toBe(true);
+    expect(part.text.endsWith("思".repeat(100))).toBe(true);
+    expect(part.text).toContain("…[已省略较早前 ");
+    // 省略 notice 不再顶到开头：折叠预览继续显示真实思考头部
+    expect(part.text.startsWith("…[已省略")).toBe(false);
+    expect(textReasoningChars(next.messages)).toBeLessThanOrEqual(
+      MAX_ASSISTANT_TEXT_REASONING_CHARS,
+    );
+  });
+
+  test("text-only overflow still strips from start and prepends notice", () => {
+    const base = session([]);
+    const next = appendAssistantStreamParts(base, [
+      { type: "text", text: "答".repeat(40000) },
+    ]);
+    const msg = next.messages[0]!;
+    const part = msg.parts[0]!;
+    expect(part.type).toBe("text");
+    expect(part.text.startsWith("…[已省略较早前 ")).toBe(true);
+    expect(part.text.endsWith("答".repeat(100))).toBe(true);
+    expect(textReasoningChars(next.messages)).toBeLessThanOrEqual(
+      MAX_ASSISTANT_TEXT_REASONING_CHARS,
+    );
+  });
+
+  test("reasoning + text overflow yields reasoning tail to keep text intact", () => {
+    const base = session([]);
+    const reasoning = "思".repeat(30000);
+    const text = "答".repeat(10000);
+    const next = appendAssistantStreamParts(base, [
+      { type: "reasoning", text: reasoning },
+      { type: "text", text },
+    ]);
+    const msg = next.messages[0]!;
+    const textPart = msg.parts.find((p) => p.type === "text")!;
+    const reasoningPart = msg.parts.find((p) => p.type === "reasoning")!;
+    expect(textPart.text).toBe(text);
+    expect(reasoningPart.text.startsWith("思".repeat(400))).toBe(true);
+    expect(reasoningPart.text).toContain("…[已省略较早前 ");
+    expect(textReasoningChars(next.messages)).toBeLessThanOrEqual(
+      MAX_ASSISTANT_TEXT_REASONING_CHARS,
+    );
+  });
+
+  test("under-cap reasoning/text pass through untouched", () => {
+    const base = session([]);
+    const next = appendAssistantStreamParts(base, [
+      { type: "reasoning", text: "先思考一下" },
+      { type: "text", text: "结论：可以。" },
+    ]);
+    const msg = next.messages[0]!;
+    expect(msg.parts).toEqual([
+      { type: "reasoning", text: "先思考一下" },
+      { type: "text", text: "结论：可以。" },
+    ]);
   });
 });
 

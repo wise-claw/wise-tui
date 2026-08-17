@@ -111,8 +111,11 @@
 }
 
 .app-workspace-session-status__svg--spin {
+  /* 旋转由 WAAPI（useElementInfiniteSpin）驱动：WebKit 重排移动 DOM 会重启 CSS 动画导致转圈卡住。
+     此样式仅作无 WAAPI 的旧引擎兜底，并固定旋转中心保证各引擎一致。 */
   animation: app-workspace-session-status-spin 0.75s linear infinite;
   will-change: transform;
+  transform-origin: 50% 50%;
 }
 
 .app-workspace-session-status__track {

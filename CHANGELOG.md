@@ -2,6 +2,18 @@
 
 本项目所有重要变更将记录于此文件。
 
+## [Unreleased]
+
+### ✨ 页面监控能力扩充
+
+- **新增 Web Vitals 采集**：`page-vitals`（LCP / CLS / INP / FCP / TTFB），经注入 PerformanceObserver 脚本经 CDP binding 回传。
+- **新增长任务与慢请求监控**：`long-task`（≥500ms 主线程阻塞）、`slow-request`（请求耗时 ≥3s，含 2xx 接口）。
+- **新增页面崩溃检测**：`page-crash`（`Page.crashEvent`），进入 AI 自动修复链路。
+- **资源类型标注**：`network-http` / `network-failed` 附带 CDP 资源类型（Image / Script / Stylesheet / Font 等）。
+- **性能诊断不触发自动修复**：vitals / long-task / slow-request 仅展示于监控面板（info 样式），避免开发期噪音。
+- **三条链路同步**：CDP 直连（launch / attach）、Chrome 扩展（extension）、注入脚本（`inject-vitals.js` 与 Rust 内嵌常量同步）。
+- 调研文档：`docs/page-monitor-expansion.md`。
+
 ## [1.4.0] - 2026-07-22
 
 1.4.0 围绕"终端与多窗格布局全面重构、Qoder / Cursor / OpenCode 三引擎生态整合、操作卡顿与派发稳定性兜底、Markdown 编辑器与工作区体验增强"四条主线推进。核心亮点包括：**终端渲染引擎由 ghostty 切换为 alacritty 并按职责拆分模块**、**终端面板支持中栏显示并完善多窗格布局配置**、**Qoder 二进制与流式命令全链路集成**、**新增工作区全局备忘录与 Milkdown 语法工具栏屑**、**工作区待办新增全局作用域**、**引入操作卡顿看门狗与 IPC 超时兜底机制**，以及 Markdown 行级编辑热力图、Agent 注册表扫描、多源 AI 用量聚合等可观测性增强。

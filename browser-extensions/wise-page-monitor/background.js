@@ -1,5 +1,10 @@
+import { PAGE_INJECTION_SOURCE } from "./inject-vitals.js";
+
 const DEFAULT_PORTS = [17321, 17322, 17323, 17324, 17325];
 const POLL_ALARM = "wise-page-monitor-poll";
+const WISE_BINDING_NAME = "__wiseMonitorReport";
+const SLOW_REQUEST_REPORT_MS = 3000;
+const LONG_TASK_REPORT_MS = 500;
 
 /** @type {Map<number, { sessionId: string, url: string }>} */
 const attachedTabs = new Map();
@@ -114,6 +119,9 @@ async function attachTab(tabId, sessionId, monitorUrl) {
   await send("Runtime.enable");
   await send("Page.enable");
   await send("Log.enable");
+  await send("Runtime.addBinding", { name: WISE_BINDING_NAME });
+  await send("Page.addScriptToEvaluateOnNewDocument", { source: PAGE_INJECTION_SOURCE });
+  await send("Runtime.evaluate", { expression: PAGE_INJECTION_SOURCE });
 }
 
 async function detachTab(tabId) {
@@ -223,7 +231,7 @@ chrome.debugger.onDetach.addListener((source) => {
   if (source.tabId != null) attachedTabs.delete(source.tabId);
 });
 
-/** @type {Map<string, { method: string, url: string }>} */
+/** @type {Map<string, { method: string, url: string, timestamp: number }>} */
 const requestMetaById = new Map();
 
 chrome.debugger.onEvent.addListener((source, method, params) => {
@@ -278,17 +286,84 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
     requestMetaById.set(String(requestId), {
       method: String(params?.request?.method || "GET"),
       url: String(params?.request?.url || ""),
+      timestamp: Number(params?.timestamp || 0),
+    });
+    return;
+  }
+
+  if (method === "Runtime.bindingCalled") {
+    if (params?.name !== WISE_BINDING_NAME) return;
+    let payload = null;
+    try {
+      payload = JSON.parse(String(params?.payload || ""));
+    } catch {
+      return;
+    }
+    if (!payload || typeof payload !== "object") return;
+    if (payload.kind === "vitals") {
+      const metric = String(payload.metric || "");
+      const value = Number(payload.value);
+      if (!metric || !Number.isFinite(value)) return;
+      if (!["lcp", "cls", "inp", "fcp", "ttfb"].includes(metric)) return;
+      void postIssue({
+        sessionId,
+        kind: "page-vitals",
+        message: metric === "cls" ? `CLS ${value}` : `${metric.toUpperCase()} ${Math.round(value)}ms`,
+        url: payload.url ? String(payload.url) : null,
+        metric,
+        value,
+      });
+    } else if (payload.kind === "long-task") {
+      const value = Number(payload.value);
+      if (!Number.isFinite(value)) return;
+      if (Math.round(value) < LONG_TASK_REPORT_MS) return;
+      void postIssue({
+        sessionId,
+        kind: "long-task",
+        message: `${Math.round(value)}ms main-thread block`,
+        url: payload.url ? String(payload.url) : null,
+        value,
+        durationMs: Math.round(value),
+      });
+    }
+    return;
+  }
+
+  if (method === "Page.crashEvent") {
+    void postIssue({
+      sessionId,
+      kind: "page-crash",
+      message: "main frame crashed",
     });
     return;
   }
 
   if (method === "Network.responseReceived") {
     const status = Number(params?.response?.status || 0);
-    if (status < 400) return;
     const requestId = String(params?.requestId || "");
     const cached = requestMetaById.get(requestId);
     const url = cached?.url || params?.response?.url || "";
     const reqMethod = cached?.method || "GET";
+    const resourceType = String(params?.type || "");
+    if (status < 400) {
+      const responseTs = Number(params?.timestamp || 0);
+      if (responseTs > 0 && (cached?.timestamp || 0) > 0 && url) {
+        const duration = Math.round((responseTs - cached.timestamp) * 1000);
+        if (duration >= SLOW_REQUEST_REPORT_MS) {
+          void postIssue({
+            sessionId,
+            kind: "slow-request",
+            message: `${reqMethod} ${url} ${status} in ${duration}ms`,
+            url: url || null,
+            method: reqMethod,
+            status,
+            durationMs: duration,
+            resourceType: resourceType || null,
+          });
+        }
+      }
+      return;
+    }
     void postIssue({
       sessionId,
       kind: "network-http",
@@ -296,6 +371,7 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
       url: url || null,
       method: reqMethod,
       status,
+      resourceType: resourceType || null,
     });
     return;
   }
@@ -308,12 +384,14 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
     const cached = requestMetaById.get(requestId);
     requestMetaById.delete(requestId);
     const url = cached?.url || "";
+    const resourceType = String(params?.type || "");
     void postIssue({
       sessionId,
       kind: "network-failed",
       message: errorText,
       url: url || null,
       method: cached?.method || "GET",
+      resourceType: resourceType || null,
     });
   }
 });

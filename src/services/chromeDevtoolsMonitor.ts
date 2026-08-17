@@ -10,7 +10,11 @@ export type ChromeDevtoolsIssueKind =
   | "console-error"
   | "console-warning"
   | "network-http"
-  | "network-failed";
+  | "network-failed"
+  | "page-crash"
+  | "page-vitals"
+  | "long-task"
+  | "slow-request";
 
 export type ChromeDevtoolsIssue = {
   sessionId: string;
@@ -19,7 +23,31 @@ export type ChromeDevtoolsIssue = {
   url?: string | null;
   method?: string | null;
   status?: number | null;
+  /** Web Vitals 指标名：lcp | cls | inp | fcp | ttfb */
+  metric?: string | null;
+  /** Web Vitals / 长任务数值（CLS 为比值，其余为毫秒） */
+  value?: number | null;
+  /** 慢请求 / 长任务耗时（毫秒） */
+  durationMs?: number | null;
+  /** CDP 资源类型：XHR / Fetch / Image / Script / Stylesheet / Font 等 */
+  resourceType?: string | null;
 };
+
+/** 诊断类问题：仅展示，不触发 AI 自动修复（性能 / 耗时类指标）。 */
+const PAGE_MONITOR_DIAGNOSTIC_KINDS = new Set(["page-vitals", "long-task", "slow-request"]);
+
+export function isPageMonitorDiagnosticKind(kind: string | null | undefined): boolean {
+  return PAGE_MONITOR_DIAGNOSTIC_KINDS.has(String(kind ?? "").trim().toLowerCase());
+}
+
+/** XHR/fetch 之外的资源类型前缀（静态资源失败更醒目）。 */
+const API_RESOURCE_TYPES = new Set(["xhr", "fetch", "document", "websocket", "eventsource"]);
+
+function resourceTypeTag(resourceType?: string | null): string {
+  const type = String(resourceType ?? "").trim();
+  if (!type) return "";
+  return API_RESOURCE_TYPES.has(type.toLowerCase()) ? "" : `[${type}] `;
+}
 
 /** `launch` = 独立窗口；`attach` = 附着调试口；`extension` = Chrome 扩展。 */
 export type PageMonitorChromeMode = "launch" | "attach" | "extension";
@@ -51,20 +79,44 @@ export function formatChromeDevtoolsIssueLine(issue: ChromeDevtoolsIssue): strin
 
   switch (kind) {
     case "network-http": {
-      if (url && status != null) return `${method} ${url} ${status}`;
+      const tag = resourceTypeTag(issue.resourceType);
+      if (url && status != null) return `${tag}${method} ${url} ${status}`;
       if (message) return message;
-      return `GET ${url || "/"} ${status ?? 500}`;
+      return `${tag}GET ${url || "/"} ${status ?? 500}`;
     }
     case "network-failed": {
+      const tag = resourceTypeTag(issue.resourceType);
       const detail = message || "failed";
       return url
-        ? `Chrome network failed: ${detail} ${url}`
-        : `Chrome network failed: ${detail}`;
+        ? `${tag}Chrome network failed: ${detail} ${url}`
+        : `${tag}Chrome network failed: ${detail}`;
     }
     case "console-warning":
       return `Chrome console warning: ${message || "warning"}`;
     case "console-error":
       return `Chrome console error: ${message || "error"}`;
+    case "page-crash":
+      return `Chrome page crash: ${message || "page crashed"}`;
+    case "page-vitals": {
+      const metric = (issue.metric ?? "").trim().toUpperCase();
+      const value = issue.value;
+      if (metric && value != null) {
+        const formatted = metric === "CLS" ? String(value) : `${Math.round(value)}ms`;
+        return `Chrome vitals ${metric}: ${formatted}`;
+      }
+      return `Chrome vitals: ${message || "performance metric"}`;
+    }
+    case "long-task": {
+      const duration = Math.round(issue.value ?? issue.durationMs ?? 0);
+      return `Chrome long task: ${duration}ms`;
+    }
+    case "slow-request": {
+      if (issue.durationMs != null && url) {
+        const statusPart = issue.status != null ? ` ${issue.status}` : "";
+        return `${method} ${url}${statusPart} in ${issue.durationMs}ms`;
+      }
+      return `Chrome slow request: ${message || "slow request"}`;
+    }
     case "page-error":
     default:
       return `Chrome page error: ${message || "error"}`;

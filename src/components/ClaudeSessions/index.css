@@ -1470,6 +1470,10 @@
   font-weight: 600;
 }
 
+.app-run-command-popover__log-line--info {
+  color: var(--ant-color-text-tertiary);
+}
+
 .app-run-command-popover__btn {
   border: 1px solid var(--ant-color-border);
   background: var(--ant-color-bg-container);

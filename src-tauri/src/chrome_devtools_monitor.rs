@@ -25,12 +25,105 @@ const ACTIVE_PORT_FILE: &str = "DevToolsActivePort";
 const ATTACH_TIMEOUT: Duration = Duration::from_secs(12);
 const ATTACH_POLL: Duration = Duration::from_millis(200);
 const DEFAULT_ATTACH_DEBUG_PORT: u16 = 9222;
+/// 注入脚本通过该 binding 把性能指标/长任务回传 CDP。
+const WISE_BINDING_NAME: &str = "__wiseMonitorReport";
+/// 请求耗时超过该阈值（毫秒）即上报 slow-request。
+const SLOW_REQUEST_REPORT_MS: u64 = 3_000;
+/// 长任务超过该阈值（毫秒）即上报 long-task。
+const LONG_TASK_REPORT_MS: u64 = 500;
+
+/// 注入到页面主世界的 Web Vitals / 长任务采集脚本。
+/// 经 `Runtime.addBinding` 回传 JSON：`{kind:"vitals",metric,value}` 或 `{kind:"long-task",value,url}`。
+/// 请与 browser-extensions/wise-page-monitor/inject-vitals.js 保持同步。
+const PAGE_INJECTION_SCRIPT: &str = r#"(function () {
+  try {
+    if (window.__wiseVitalsInstalled) return;
+    window.__wiseVitalsInstalled = true;
+    var report = function (payload) {
+      try { window.__wiseMonitorReport(JSON.stringify(payload)); } catch (e) {}
+    };
+    var round = function (n) { return Math.round(n); };
+    try {
+      var nav = performance.getEntriesByType("navigation")[0];
+      if (nav && nav.responseStart > 0) {
+        report({ kind: "vitals", metric: "ttfb", value: round(nav.responseStart) });
+      }
+      var paintObs = new PerformanceObserver(function (list) {
+        for (var i = 0; i < list.getEntries().length; i++) {
+          var e = list.getEntries()[i];
+          if (e.name === "first-contentful-paint") {
+            report({ kind: "vitals", metric: "fcp", value: round(e.startTime) });
+          }
+        }
+      });
+      paintObs.observe({ type: "paint", buffered: true });
+    } catch (e) {}
+    try {
+      var lcpSeen = null;
+      var lcpObs = new PerformanceObserver(function (list) {
+        var entries = list.getEntries();
+        var e = entries[entries.length - 1];
+        if (e && e.startTime !== lcpSeen) {
+          lcpSeen = e.startTime;
+          report({ kind: "vitals", metric: "lcp", value: round(e.startTime) });
+        }
+      });
+      lcpObs.observe({ type: "largest-contentful-paint", buffered: true });
+    } catch (e) {}
+    try {
+      var clsValue = 0;
+      var clsTimer = null;
+      var clsReport = function () {
+        clsTimer = null;
+        report({ kind: "vitals", metric: "cls", value: +clsValue.toFixed(3) });
+      };
+      var clsObs = new PerformanceObserver(function (list) {
+        for (var i = 0; i < list.getEntries().length; i++) {
+          var e = list.getEntries()[i];
+          if (!e.hadRecentInput) clsValue += e.value;
+        }
+        if (clsTimer == null) clsTimer = setTimeout(clsReport, 1000);
+      });
+      clsObs.observe({ type: "layout-shift", buffered: true });
+      window.addEventListener("pagehide", function () {
+        if (clsValue > 0) clsReport();
+      });
+    } catch (e) {}
+    try {
+      var inpMax = 0;
+      var inpObs = new PerformanceObserver(function (list) {
+        for (var i = 0; i < list.getEntries().length; i++) {
+          var d = list.getEntries()[i].duration;
+          if (d > inpMax) inpMax = d;
+        }
+      });
+      inpObs.observe({ type: "event", durationThreshold: 100, buffered: true });
+      window.addEventListener("pagehide", function () {
+        if (inpMax > 0) report({ kind: "vitals", metric: "inp", value: round(inpMax) });
+      });
+    } catch (e) {}
+    try {
+      var ltObs = new PerformanceObserver(function (list) {
+        for (var i = 0; i < list.getEntries().length; i++) {
+          var e = list.getEntries()[i];
+          if (e.duration >= 500) {
+            var src = "";
+            if (e.attribution && e.attribution[0]) src = e.attribution[0].containerSrc || "";
+            report({ kind: "long-task", value: round(e.duration), url: src });
+          }
+        }
+      });
+      ltObs.observe({ type: "longtask", buffered: true });
+    } catch (e) {}
+  } catch (e) {}
+})();"#;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChromeDevtoolsIssue {
     pub session_id: String,
     /// `page-error` | `console-error` | `console-warning` | `network-http` | `network-failed`
+    /// `page-crash` | `page-vitals` | `long-task` | `slow-request`
     pub kind: String,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -39,6 +132,14 @@ pub struct ChromeDevtoolsIssue {
     pub method: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metric: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_type: Option<String>,
 }
 
 enum MonitorCmd {
@@ -443,6 +544,18 @@ fn extract_console_text(params: &Value) -> String {
     joined.trim().to_string()
 }
 
+#[derive(Debug, Deserialize)]
+struct BindingPayload {
+    kind: Option<String>,
+    metric: Option<String>,
+    value: Option<f64>,
+    url: Option<String>,
+}
+
+fn parse_binding_payload(raw: &str) -> Option<BindingPayload> {
+    serde_json::from_str(raw).ok()
+}
+
 async fn run_cdp_loop(
     app: AppHandle,
     session_id: String,
@@ -461,13 +574,17 @@ async fn run_cdp_loop(
                 url: None,
                 method: None,
                 status: None,
+                metric: None,
+                value: None,
+                duration_ms: None,
+                resource_type: None,
             },
         );
         return;
     };
     let (mut write, mut read) = ws.split();
     let next_id = AtomicU64::new(1);
-    let mut request_urls: HashMap<String, (String, String)> = HashMap::new();
+    let mut request_urls: HashMap<String, (String, String, f64)> = HashMap::new();
 
     let send = |method: &str, params: Value| {
         let id = next_id.fetch_add(1, Ordering::Relaxed);
@@ -479,6 +596,15 @@ async fn run_cdp_loop(
         send("Runtime.enable", json!({})),
         send("Page.enable", json!({})),
         send("Log.enable", json!({})),
+        send("Runtime.addBinding", json!({ "name": WISE_BINDING_NAME })),
+        send(
+            "Page.addScriptToEvaluateOnNewDocument",
+            json!({ "source": PAGE_INJECTION_SCRIPT }),
+        ),
+        send(
+            "Runtime.evaluate",
+            json!({ "expression": PAGE_INJECTION_SCRIPT }),
+        ),
     ];
     if let Some(url) = navigate_url {
         bootstrap.push(send("Page.navigate", json!({ "url": url })));
@@ -529,6 +655,10 @@ async fn run_cdp_loop(
                             url: params.pointer("/exceptionDetails/url").and_then(|v| v.as_str()).map(|s| s.to_string()),
                             method: None,
                             status: None,
+                            metric: None,
+                            value: None,
+                            duration_ms: None,
+                            resource_type: None,
                         });
                     }
                     "Runtime.consoleAPICalled" => {
@@ -546,25 +676,125 @@ async fn run_cdp_loop(
                             url: None,
                             method: None,
                             status: None,
+                            metric: None,
+                            value: None,
+                            duration_ms: None,
+                            resource_type: None,
+                        });
+                    }
+                    "Runtime.bindingCalled" => {
+                        let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                        if name != WISE_BINDING_NAME {
+                            continue;
+                        }
+                        let raw = params.get("payload").and_then(|v| v.as_str()).unwrap_or("");
+                        let Some(payload) = parse_binding_payload(raw) else { continue; };
+                        match payload.kind.as_deref() {
+                            Some("vitals") => {
+                                let Some(metric) = payload.metric else { continue; };
+                                let Some(value) = payload.value else { continue; };
+                                if !matches!(metric.as_str(), "lcp" | "cls" | "inp" | "fcp" | "ttfb") {
+                                    continue;
+                                }
+                                let message = if metric == "cls" {
+                                    format!("CLS {value}")
+                                } else {
+                                    format!("{} {}ms", metric.to_uppercase(), value.round() as u64)
+                                };
+                                emit_issue(&app, ChromeDevtoolsIssue {
+                                    session_id: session_id.clone(),
+                                    kind: "page-vitals".into(),
+                                    message,
+                                    url: payload.url,
+                                    method: None,
+                                    status: None,
+                                    metric: Some(metric),
+                                    value: Some(value),
+                                    duration_ms: None,
+                                    resource_type: None,
+                                });
+                            }
+                            Some("long-task") => {
+                                let Some(value) = payload.value else { continue; };
+                                if (value.round() as u64) < LONG_TASK_REPORT_MS {
+                                    continue;
+                                }
+                                let duration = value.round() as u64;
+                                emit_issue(&app, ChromeDevtoolsIssue {
+                                    session_id: session_id.clone(),
+                                    kind: "long-task".into(),
+                                    message: format!("{duration}ms main-thread block"),
+                                    url: payload.url,
+                                    method: None,
+                                    status: None,
+                                    metric: None,
+                                    value: Some(value),
+                                    duration_ms: Some(duration),
+                                    resource_type: None,
+                                });
+                            }
+                            _ => {}
+                        }
+                    }
+                    "Page.crashEvent" => {
+                        emit_issue(&app, ChromeDevtoolsIssue {
+                            session_id: session_id.clone(),
+                            kind: "page-crash".into(),
+                            message: "main frame crashed".into(),
+                            url: None,
+                            method: None,
+                            status: None,
+                            metric: None,
+                            value: None,
+                            duration_ms: None,
+                            resource_type: None,
                         });
                     }
                     "Network.requestWillBeSent" => {
                         let Some(request_id) = params.get("requestId").and_then(|v| v.as_str()) else { continue; };
                         let method_name = params.pointer("/request/method").and_then(|v| v.as_str()).unwrap_or("GET");
                         let url = params.pointer("/request/url").and_then(|v| v.as_str()).unwrap_or("");
-                        request_urls.insert(request_id.to_string(), (method_name.to_string(), url.to_string()));
+                        let timestamp = params.get("timestamp").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        request_urls.insert(
+                            request_id.to_string(),
+                            (method_name.to_string(), url.to_string(), timestamp),
+                        );
                     }
                     "Network.responseReceived" => {
                         let Some(request_id) = params.get("requestId").and_then(|v| v.as_str()) else { continue; };
                         let status = params.pointer("/response/status").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
-                        if status < 400 { continue; }
-                        let (method_name, url) = request_urls
+                        let (method_name, url, request_ts) = request_urls
                             .get(request_id)
                             .cloned()
                             .unwrap_or_else(|| {
                                 let u = params.pointer("/response/url").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                                ("GET".into(), u)
+                                ("GET".into(), u, 0.0)
                             });
+                        let resource_type = params
+                            .get("type")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        if status < 400 {
+                            let response_ts = params.get("timestamp").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            if response_ts > 0.0 && request_ts > 0.0 && !url.is_empty() {
+                                let duration = ((response_ts - request_ts) * 1000.0) as u64;
+                                if duration >= SLOW_REQUEST_REPORT_MS {
+                                    emit_issue(&app, ChromeDevtoolsIssue {
+                                        session_id: session_id.clone(),
+                                        kind: "slow-request".into(),
+                                        message: format!("{method_name} {url} {status} in {duration}ms"),
+                                        url: Some(url),
+                                        method: Some(method_name),
+                                        status: Some(status),
+                                        metric: None,
+                                        value: None,
+                                        duration_ms: Some(duration),
+                                        resource_type,
+                                    });
+                                }
+                            }
+                            continue;
+                        }
                         emit_issue(&app, ChromeDevtoolsIssue {
                             session_id: session_id.clone(),
                             kind: "network-http".into(),
@@ -572,6 +802,10 @@ async fn run_cdp_loop(
                             url: Some(url),
                             method: Some(method_name),
                             status: Some(status),
+                            metric: None,
+                            value: None,
+                            duration_ms: None,
+                            resource_type,
                         });
                     }
                     "Network.loadingFailed" => {
@@ -581,9 +815,13 @@ async fn run_cdp_loop(
                         if lower.contains("abort") || lower.contains("cancel") {
                             continue;
                         }
-                        let (method_name, url) = request_urls
+                        let (method_name, url, _) = request_urls
                             .remove(request_id)
-                            .unwrap_or_else(|| ("GET".into(), String::new()));
+                            .unwrap_or_else(|| ("GET".into(), String::new(), 0.0));
+                        let resource_type = params
+                            .get("type")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
                         emit_issue(&app, ChromeDevtoolsIssue {
                             session_id: session_id.clone(),
                             kind: "network-failed".into(),
@@ -591,6 +829,10 @@ async fn run_cdp_loop(
                             url: if url.is_empty() { None } else { Some(url) },
                             method: Some(method_name),
                             status: None,
+                            metric: None,
+                            value: None,
+                            duration_ms: None,
+                            resource_type,
                         });
                     }
                     _ => {}
@@ -833,7 +1075,9 @@ pub fn chrome_page_monitor_open_extension_dir(app: AppHandle) -> Result<(), Stri
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_url_for_match, score_page_url_match, urlencoding_minimal};
+    use super::{
+        normalize_url_for_match, parse_binding_payload, score_page_url_match, urlencoding_minimal,
+    };
 
     #[test]
     fn url_match_prefers_exact() {
@@ -867,5 +1111,24 @@ mod tests {
         let enc = urlencoding_minimal("http://localhost:3000/a b");
         assert!(enc.contains("http://localhost:3000/a"));
         assert!(enc.contains("%20"));
+    }
+
+    #[test]
+    fn binding_payload_parses_vitals_and_long_task() {
+        let vitals = parse_binding_payload(r#"{"kind":"vitals","metric":"lcp","value":2500}"#)
+            .expect("vitals payload");
+        assert_eq!(vitals.kind.as_deref(), Some("vitals"));
+        assert_eq!(vitals.metric.as_deref(), Some("lcp"));
+        assert_eq!(vitals.value, Some(2500.0));
+        assert!(vitals.url.is_none());
+
+        let long_task =
+            parse_binding_payload(r#"{"kind":"long-task","value":812,"url":"http://x/a.js"}"#)
+                .expect("long-task payload");
+        assert_eq!(long_task.kind.as_deref(), Some("long-task"));
+        assert_eq!(long_task.value, Some(812.0));
+        assert_eq!(long_task.url.as_deref(), Some("http://x/a.js"));
+
+        assert!(parse_binding_payload("not json").is_none());
     }
 }

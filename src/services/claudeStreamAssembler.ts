@@ -20,6 +20,14 @@ const MAX_TOOL_PART_OUTPUT_CHARS = 18_000;
  */
 const TEXT_REASONING_HEADROOM = 220;
 
+/**
+ * reasoning 截断时保留的头部长度：覆盖折叠单行预览（约 60-70 字）并在展开后给出开头上下文，
+ * 使流式期思考卡预览稳定显示真实思考内容，而不是被省略 notice 顶掉。
+ */
+const REASONING_HEAD_KEEP_CHARS = 400;
+/** 中间省略 notice 的预留长度（`\n\n…[已省略较早前 N 字以控制内存]\n\n`，N 位数增长也覆盖）。 */
+const REASONING_NOTICE_BUDGET = 48;
+
 function countTextReasoningChars(parts: MessagePart[]): number {
   let n = 0;
   for (const p of parts) {
@@ -30,14 +38,68 @@ function countTextReasoningChars(parts: MessagePart[]): number {
   return n;
 }
 
-function stripTextReasoningFromStart(parts: MessagePart[], removeCount: number): MessagePart[] {
-  if (removeCount <= 0) {
-    return [...parts];
+function countTextChars(parts: MessagePart[]): number {
+  let n = 0;
+  for (const p of parts) {
+    if (p.type === "text") {
+      n += p.text.length;
+    }
   }
-  let remaining = removeCount;
+  return n;
+}
+
+function reasoningOmissionNotice(omitted: number): string {
+  return `\n\n…[已省略较早前 ${String(omitted)} 字以控制内存]\n\n`;
+}
+
+/**
+ * reasoning 头部保护式截断：保留思考开头（折叠预览稳定显示真实内容）与最近尾部（流式期持续可见），
+ * 中间以省略 notice 承接。预算不足时按 part 顺序先保更早的 reasoning，让位给正文 text。
+ */
+function capReasoningPartsByBudget(parts: MessagePart[], budget: number): MessagePart[] {
+  let remaining = Math.max(0, budget);
   const out: MessagePart[] = [];
   for (const p of parts) {
-    if (p.type === "tool_use") {
+    if (p.type !== "reasoning") {
+      out.push(p);
+      continue;
+    }
+    if (remaining <= 0) {
+      continue;
+    }
+    const text = p.text;
+    if (text.length <= remaining) {
+      remaining -= text.length;
+      out.push(p);
+      continue;
+    }
+    const noticeMax = Math.min(REASONING_NOTICE_BUDGET, remaining);
+    const headKeep = Math.min(REASONING_HEAD_KEEP_CHARS, remaining - noticeMax);
+    const tailKeep = Math.max(0, remaining - headKeep - noticeMax);
+    const head = headKeep > 0 ? text.slice(0, headKeep) : "";
+    const tail = tailKeep > 0 ? text.slice(-tailKeep) : "";
+    const omitted = text.length - head.length - tail.length;
+    remaining = 0;
+    out.push({ type: "reasoning", text: head + reasoningOmissionNotice(omitted) + tail });
+  }
+  return out;
+}
+
+/**
+ * text 预算内截断：保留正文尾部（流式正文实时可见），从头部剥离，
+ * 首个存续 text part 前置省略 notice（对齐原有「省略较早前」语义）。
+ */
+function capTextPartsByBudget(parts: MessagePart[], budget: number): MessagePart[] {
+  const textChars = countTextChars(parts);
+  if (textChars <= budget) {
+    return parts;
+  }
+  const remove = textChars - budget;
+  let remaining = remove;
+  let noticePlaced = false;
+  const out: MessagePart[] = [];
+  for (const p of parts) {
+    if (p.type !== "text") {
       out.push(p);
       continue;
     }
@@ -49,29 +111,16 @@ function stripTextReasoningFromStart(parts: MessagePart[], removeCount: number):
     const sliceText = p.text.slice(remaining);
     remaining = 0;
     if (sliceText.length > 0) {
-      out.push(p.type === "text" ? { type: "text", text: sliceText } : { type: "reasoning", text: sliceText });
+      out.push({
+        type: "text",
+        text: noticePlaced
+          ? sliceText
+          : `…[已省略较早前 ${String(remove)} 字以控制内存]\n\n${sliceText}`,
+      });
+      noticePlaced = true;
     }
   }
   return out;
-}
-
-function prependTextReasoningNotice(parts: MessagePart[], omittedChars: number): MessagePart[] {
-  if (omittedChars <= 0) {
-    return parts;
-  }
-  const notice = `…[已省略较早前 ${String(omittedChars)} 字以控制内存]\n\n`;
-  const idx = parts.findIndex((p) => p.type === "text" || p.type === "reasoning");
-  if (idx < 0) {
-    return [{ type: "text", text: notice.trimEnd() }, ...parts];
-  }
-  const next = [...parts];
-  const fp = next[idx];
-  if (fp.type === "text") {
-    next[idx] = { type: "text", text: notice + fp.text };
-  } else if (fp.type === "reasoning") {
-    next[idx] = { type: "reasoning", text: notice + fp.text };
-  }
-  return next;
 }
 
 function capToolUseOutputs(parts: MessagePart[]): MessagePart[] {
@@ -115,11 +164,12 @@ function enforceAssistantMessageMemoryLimits(
     return { ...message, parts, content };
   }
   const stripTarget = MAX_ASSISTANT_TEXT_REASONING_CHARS - TEXT_REASONING_HEADROOM;
-  const remove = trBefore - stripTarget;
-  parts = stripTextReasoningFromStart(parts, remove);
-  const trAfter = countTextReasoningChars(parts);
-  const omitted = Math.max(0, trBefore - trAfter);
-  parts = prependTextReasoningNotice(parts, omitted);
+  // 正文 text 的流式尾部最重要（用户实时阅读），优先为其保留预算；
+  // reasoning 用剩余预算做「头部保护 + 中间省略 + 尾部保留」，避免折叠预览被 notice 顶掉。
+  const textChars = countTextChars(parts);
+  const textBudget = Math.min(textChars, stripTarget);
+  parts = capReasoningPartsByBudget(parts, stripTarget - textBudget);
+  parts = capTextPartsByBudget(parts, textBudget);
   const content = textContentFromParts(parts);
   return { ...message, parts, content };
 }

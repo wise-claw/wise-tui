@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Wise 页面监控",
-  "version": "0.1.0",
-  "description": "将日常 Chrome 标签的页面异常 / console / 网络错误转发到 Wise 页面监控与 AI 自动修复。",
+  "version": "0.2.0",
+  "description": "将日常 Chrome 标签的页面异常 / console / 网络错误 / Web Vitals / 长任务 / 页面崩溃转发到 Wise 页面监控与 AI 自动修复。",
   "permissions": ["debugger", "tabs", "storage", "alarms"],
   "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
   "background": {

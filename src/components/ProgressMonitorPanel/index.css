@@ -1204,8 +1204,11 @@
 }
 
 .app-monitor-panel__subagent-status-svg--spin {
+  /* 旋转由 WAAPI（useElementInfiniteSpin）驱动：WebKit 重排移动 DOM 会重启 CSS 动画导致转圈卡住。
+     此样式仅作无 WAAPI 的旧引擎兜底，并固定旋转中心保证各引擎一致。 */
   animation: app-monitor-panel-spinner-rotate 0.72s linear infinite;
   will-change: transform;
+  transform-origin: 50% 50%;
 }
 
 .app-monitor-panel__subagent-status-svg--pulse {
@@ -1998,8 +2001,10 @@
   width: 15px;
   height: 15px;
   display: block;
+  /* 旋转由 WAAPI（useElementInfiniteSpin）驱动，WebKit 重排移动 DOM 时不会重启/冻结；旧引擎走 CSS 兜底。 */
   animation: app-monitor-panel-spinner-rotate 0.72s linear infinite;
   will-change: transform;
+  transform-origin: 50% 50%;
 }
 
 .app-monitor-panel__status-spinner-track {

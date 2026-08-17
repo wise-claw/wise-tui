@@ -3,6 +3,7 @@ import { subscribeChromeDevtoolsIssue } from "../services/events";
 import {
   buildPageMonitorAutoFixPrompt,
   formatChromeDevtoolsIssueLine,
+  isPageMonitorDiagnosticKind,
   isPageMonitorIgnorableNoise,
   normalizePageMonitorChromeMode,
   normalizePageMonitorDebugPort,
@@ -231,14 +232,22 @@ function handleIssue(payload: ChromeDevtoolsIssue): void {
     return;
   }
   const issues = collectRunLogIssues(`${line}\n`);
-  if (issues.length === 0) return;
+  const diagnostic = isPageMonitorDiagnosticKind(payload.kind);
+  if (issues.length === 0 && !diagnostic) return;
+
+  const preview = [
+    ...state.issuePreview,
+    { text: line, kind: issues[0]?.kind ?? "info" },
+  ].slice(-12);
+
+  // 性能 / 耗时类诊断：仅展示，不进修复指纹，也不触发 AI 自动修复。
+  if (issues.length === 0) {
+    patchState(sessionId, { issuePreview: preview });
+    return;
+  }
 
   internals.issueTail = `${internals.issueTail}${line}\n`.slice(-10_000);
   const kindSummary = summarizeRunLogIssueKinds(issues);
-  const preview = [
-    ...state.issuePreview,
-    { text: line, kind: issues[0]?.kind ?? "error" },
-  ].slice(-12);
 
   const fingerprint = buildRunErrorFingerprint(internals.issueTail);
   internals.lastErrorFingerprint = fingerprint;

@@ -27,7 +27,7 @@ export const RUN_ERROR_REGEX =
 
 /** 运行错误 / 异常（不含单纯 warn，避免把全部告警都标成 error 级）。 */
 const RUN_LOG_ERROR_REGEX =
-  /(?:^|[\s\[\]\(\){}:：;；,.，。|/\\'"-])(?:error|err!|fatal|critical|exception|traceback|panic|failed|failure|npm\s*err|build\s*failed|compile\s*error|compilation\s*error|typeerror|referenceerror|syntaxerror|rangeerror|urierror|aggregateerror)(?:$|[\s\[\]\(\){}:：;；,.，。|/\\'"-])/i;
+  /(?:^|[\s\[\]\(\){}:：;；,.，。|/\\'"-])(?:error|err!|fatal|critical|exception|traceback|panic|crash(?:es|ed|ing)?|failed|failure|npm\s*err|build\s*failed|compile\s*error|compilation\s*error|typeerror|referenceerror|syntaxerror|rangeerror|urierror|aggregateerror)(?:$|[\s\[\]\(\){}:：;；,.，。|/\\'"-])/i;
 const RUN_LOG_ERROR_CJK_REGEX = /(?:编译失败|构建失败|报错|(?:^|[^\u4e00-\u9fff])失败(?:$|[^\u4e00-\u9fff]))/;
 
 /** Next.js / Vite 等终端符号 + 中英文告警词。 */

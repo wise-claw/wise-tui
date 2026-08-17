@@ -161,7 +161,15 @@ async fn post_issue(
     let kind = issue.kind.trim().to_ascii_lowercase();
     let allowed_kind = matches!(
         kind.as_str(),
-        "page-error" | "console-error" | "console-warning" | "network-http" | "network-failed"
+        "page-error"
+            | "console-error"
+            | "console-warning"
+            | "network-http"
+            | "network-failed"
+            | "page-crash"
+            | "page-vitals"
+            | "long-task"
+            | "slow-request"
     );
     if !allowed_kind || issue.message.trim().is_empty() {
         return with_cors(

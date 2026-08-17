@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildPageMonitorAutoFixPrompt,
   formatChromeDevtoolsIssueLine,
+  isPageMonitorDiagnosticKind,
   isPageMonitorIgnorableNoise,
   normalizePageMonitorChromeMode,
   normalizePageMonitorDebugPort,
@@ -58,6 +59,87 @@ describe("formatChromeDevtoolsIssueLine", () => {
     );
     expect(line).toContain("failed");
     expect(detectRunLogIssue(line)?.kind).toBe("http");
+  });
+
+  test("formats page crash as error", () => {
+    const line = formatChromeDevtoolsIssueLine(
+      issue({ kind: "page-crash", message: "main frame crashed" }),
+    );
+    expect(line).toContain("Chrome page crash");
+    expect(detectRunLogIssue(line)?.kind).toBe("error");
+  });
+
+  test("formats Web Vitals diagnostics", () => {
+    const lcp = formatChromeDevtoolsIssueLine(
+      issue({ kind: "page-vitals", message: "LCP 2500ms", metric: "lcp", value: 2500 }),
+    );
+    expect(lcp).toBe("Chrome vitals LCP: 2500ms");
+    expect(detectRunLogIssue(lcp)).toBeNull();
+
+    const cls = formatChromeDevtoolsIssueLine(
+      issue({ kind: "page-vitals", message: "CLS 0.123", metric: "cls", value: 0.123 }),
+    );
+    expect(cls).toBe("Chrome vitals CLS: 0.123");
+  });
+
+  test("formats long task and slow request", () => {
+    const longTask = formatChromeDevtoolsIssueLine(
+      issue({ kind: "long-task", message: "812ms main-thread block", value: 812, durationMs: 812 }),
+    );
+    expect(longTask).toBe("Chrome long task: 812ms");
+    expect(detectRunLogIssue(longTask)).toBeNull();
+
+    const slow = formatChromeDevtoolsIssueLine(
+      issue({
+        kind: "slow-request",
+        message: "GET http://localhost:3000/api/x 200 in 5120ms",
+        url: "http://localhost:3000/api/x",
+        method: "GET",
+        status: 200,
+        durationMs: 5120,
+      }),
+    );
+    expect(slow).toBe("GET http://localhost:3000/api/x 200 in 5120ms");
+  });
+
+  test("tags non-API resource types on network issues", () => {
+    const img = formatChromeDevtoolsIssueLine(
+      issue({
+        kind: "network-http",
+        message: "GET https://cdn/x.png 404",
+        url: "https://cdn/x.png",
+        method: "GET",
+        status: 404,
+        resourceType: "Image",
+      }),
+    );
+    expect(img).toBe("[Image] GET https://cdn/x.png 404");
+    expect(detectRunLogIssue(img)?.kind).toBe("http");
+
+    const api = formatChromeDevtoolsIssueLine(
+      issue({
+        kind: "network-http",
+        message: "GET http://localhost:3000/api/x 500",
+        url: "http://localhost:3000/api/x",
+        method: "GET",
+        status: 500,
+        resourceType: "Fetch",
+      }),
+    );
+    expect(api).toBe("GET http://localhost:3000/api/x 500");
+  });
+});
+
+describe("isPageMonitorDiagnosticKind", () => {
+  test("marks performance diagnostics", () => {
+    expect(isPageMonitorDiagnosticKind("page-vitals")).toBe(true);
+    expect(isPageMonitorDiagnosticKind("long-task")).toBe(true);
+    expect(isPageMonitorDiagnosticKind("slow-request")).toBe(true);
+    expect(isPageMonitorDiagnosticKind("SLOW-REQUEST")).toBe(true);
+    expect(isPageMonitorDiagnosticKind("page-error")).toBe(false);
+    expect(isPageMonitorDiagnosticKind("page-crash")).toBe(false);
+    expect(isPageMonitorDiagnosticKind(null)).toBe(false);
+    expect(isPageMonitorDiagnosticKind(undefined)).toBe(false);
   });
 });
 

@@ -1,4 +1,5 @@
-import { memo } from "react";
+import { memo, useRef } from "react";
+import { useElementInfiniteSpin } from "../../hooks/useElementInfiniteSpin";
 import type { RepositoryMemberMonitorSubagentItem, SessionConversationTaskItem } from "../../types";
 import { sessionConversationTaskStatusLabel } from "../../utils/sessionConversationTasks";
 
@@ -19,8 +20,10 @@ function statusLabel(status: SubagentStatusIndicatorStatus): string {
 }
 
 function RunningIcon() {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  useElementInfiniteSpin(svgRef, 720);
   return (
-    <svg className="app-monitor-panel__subagent-status-svg app-monitor-panel__subagent-status-svg--spin" viewBox="0 0 16 16" aria-hidden>
+    <svg ref={svgRef} className="app-monitor-panel__subagent-status-svg app-monitor-panel__subagent-status-svg--spin" viewBox="0 0 16 16" aria-hidden>
       <circle className="app-monitor-panel__subagent-status-track" cx="8" cy="8" r="6.25" fill="none" />
       <circle className="app-monitor-panel__subagent-status-arc app-monitor-panel__subagent-status-arc--running" cx="8" cy="8" r="6.25" fill="none" />
     </svg>

@@ -53,7 +53,7 @@ export function PageMonitorPanel({
       <header className="app-run-command-popover__header">
         <span className="app-run-command-popover__title">页面监控</span>
         <HoverHint
-          title="经 CDP / Chrome 扩展监听页面异常、console 报错/告警、接口 4xx/5xx 与网络失败。「独立窗口」另开专用 Chrome；「附着已有」需 --remote-debugging-port；「Chrome 扩展」监控日常 Chrome 标签。"
+          title="经 CDP / Chrome 扩展监听页面异常、console 报错/告警、接口 4xx/5xx、网络失败、慢请求（≥3s）、Web Vitals（LCP/CLS/INP/FCP/TTFB）、长任务（≥500ms）与页面崩溃；性能类诊断仅展示、不触发 AI 自动修复。「独立窗口」另开专用 Chrome；「附着已有」需 --remote-debugging-port；「Chrome 扩展」监控日常 Chrome 标签。"
           placement="topLeft"
         >
           <button
@@ -222,7 +222,11 @@ export function PageMonitorPanel({
               <div
                 key={`${index}-${line.text}`}
                 className={`app-run-command-popover__log-line${
-                  line.kind !== "warning" ? " app-run-command-popover__log-line--error" : ""
+                  line.kind === "error" || line.kind === "http"
+                    ? " app-run-command-popover__log-line--error"
+                    : line.kind === "info"
+                      ? " app-run-command-popover__log-line--info"
+                      : ""
                 }`}
               >
                 {line.text}

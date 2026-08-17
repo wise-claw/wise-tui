@@ -54,6 +54,7 @@ import {
 import { sanitizeOmcDirectBatchPreviewLineForList } from "../../utils/claudeInvocationText";
 import { OmcDirectBatchInvocationDetailDrawer } from "./OmcDirectBatchInvocationDetailDrawer";
 import { HistorySessionRestoreButton } from "./HistorySessionRestoreButton";
+import { useElementInfiniteSpin } from "../../hooks/useElementInfiniteSpin";
 import { buildMonitorSessionListRowModel } from "./monitorSessionDisplay";
 import {
   matchSessionByKeyword,
@@ -590,6 +591,17 @@ const OmcDirectBatchInProgressPopover = memo(function OmcDirectBatchInProgressPo
   );
 });
 
+function InProgressStatusSpinner() {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  useElementInfiniteSpin(svgRef, 720);
+  return (
+    <svg ref={svgRef} className="app-monitor-panel__status-spinner-svg" viewBox="0 0 16 16" aria-hidden>
+      <circle className="app-monitor-panel__status-spinner-track" cx="8" cy="8" r="6.25" fill="none" />
+      <circle className="app-monitor-panel__status-spinner-arc" cx="8" cy="8" r="6.25" fill="none" />
+    </svg>
+  );
+}
+
 function statusText(status: "in_progress" | "idle") {
   if (status === "in_progress") {
     return (
@@ -599,11 +611,8 @@ function statusText(status: "in_progress" | "idle") {
         aria-label="进行中"
         title="进行中"
       >
-          <svg className="app-monitor-panel__status-spinner-svg" viewBox="0 0 16 16" aria-hidden>
-            <circle className="app-monitor-panel__status-spinner-track" cx="8" cy="8" r="6.25" fill="none" />
-            <circle className="app-monitor-panel__status-spinner-arc" cx="8" cy="8" r="6.25" fill="none" />
-          </svg>
-        </span>
+        <InProgressStatusSpinner />
+      </span>
     );
   }
   return (
