@@ -15,7 +15,6 @@ export interface SessionQuickActionCatalog {
 
 const SYSTEM_ACTION_IDS = new Set<SessionQuickActionId>([
   "new-session",
-  "push",
   "compact-context",
 ]);
 

@@ -8,7 +8,9 @@ export type SessionTopbarOverflowPanel =
   | "opencodeProxy"
   | "llmProxy"
   | "sessionDataLink"
-  | "sessionFeedbackLoop";
+  | "sessionFeedbackLoop"
+  | "multiPane"
+  | "terminal";
 
 function TopbarMenuIconSvg({ children }: { children: ReactNode }) {
   return (
@@ -87,6 +89,14 @@ function IconSessionFeedbackLoopMenu() {
   );
 }
 
+function IconMultiPaneMenu() {
+  return <TopbarMenuIconSvg><rect x="3" y="4" width="8" height="16" rx="1.5" stroke="currentColor" strokeWidth="1.7" /><rect x="13" y="4" width="8" height="16" rx="1.5" stroke="currentColor" strokeWidth="1.7" /></TopbarMenuIconSvg>;
+}
+
+function IconTerminalMenu() {
+  return <TopbarMenuIconSvg><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.7" /><path d="m7 9 3 3-3 3M13 15h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></TopbarMenuIconSvg>;
+}
+
 const OVERFLOW_MENU_ICONS: Record<SessionTopbarOverflowPanel, ReactNode> = {
   fcc: <IconFccProxyMenu />,
   fccTraffic: <IconFccTrafficMenu />,
@@ -94,6 +104,8 @@ const OVERFLOW_MENU_ICONS: Record<SessionTopbarOverflowPanel, ReactNode> = {
   llmProxy: <IconLlmProxyMenu />,
   sessionDataLink: <IconSessionDataLinkMenu />,
   sessionFeedbackLoop: <IconSessionFeedbackLoopMenu />,
+  multiPane: <IconMultiPaneMenu />,
+  terminal: <IconTerminalMenu />,
 };
 
 export function topbarOverflowMenuIcon(panel: SessionTopbarOverflowPanel): ReactNode {

@@ -32,12 +32,16 @@ import { getClaudeChatMessageScrollBridge } from "../../stores/claudeChatMessage
 import { ClaudeChatQuickActionsChrome } from "./ClaudeChatQuickActionsChrome";
 import { composerRegionChunk } from "./ClaudeChatComposerTray";
 import type { CenterView } from "../../stores/paneCenterViewControlStore";
+import { adjustMainWindowLogicalWidthByDelta } from "../../services/mainWindowLayout";
+import { useCenterViewControl } from "./claudeChatHelpers";
+
+/** 与 index.css 的 `.app-claude-chat-aux-rail` min-width 保持一致。 */
+const SESSION_AUX_RAIL_WINDOW_DELTA_PX = 560;
 
 const ClaudeChatComposerTrayLazy = lazy(() =>
   import("./ClaudeChatComposerTray").then((module) => ({ default: module.ClaudeChatComposerTray })),
 );
 import { ClaudeChatNotificationDock } from "./ClaudeChatNotificationDock";
-import { ClaudeChatSessionOwnerBar } from "./ClaudeChatSessionOwnerBar";
 import { prefetchSessionConversationTaskDetailDrawer } from "../ProgressMonitorPanel/prefetchSessionConversationTaskDetailDrawer";
 import {
   SessionConversationTaskDetailDrawer,
@@ -47,10 +51,7 @@ import { useExecutionEnvironmentDispatchTasksForChat } from "../../hooks/useExec
 import { createDispatchFailureTracker } from "../../hooks/dispatchFailureTracker";
 import { claimPendingTaskQueueOwner } from "../../stores/pendingTaskQueueOwnerStore";
 import { hasActiveSessionTurn, subscribeSessionTurns } from "../../stores/sessionTurnStore";
-import {
-  ClaudeChatSessionFeaturePanel,
-  type RefreshHistorySessionsScope,
-} from "./ClaudeChatSessionFeaturePanel";
+import type { RefreshHistorySessionsScope } from "./ClaudeChatSessionFeaturePanel";
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
 import type { DualPaneComposerRepositoryPickerProps } from "../ClaudeChatInput";
 import { PendingTaskQueuePanel } from "./PendingTaskQueuePanel";
@@ -290,6 +291,8 @@ interface Props {
   hideSessionTools?: boolean;
   /** 中栏当前视图（由顶栏切换器控制）。无对应 panel 时忽略。 */
   centerView?: CenterView;
+  /** 右侧功能栏当前功能变化；消息固定展示，不再参与切换。 */
+  onCenterViewChange?: (view: CenterView) => void;
   /**
    * 中栏「消息通知」浮层；默认关闭（有未读也不展示）。顶栏铃铛收件箱不受影响。
    * 多屏副窗格应设为 false，避免重复订阅通知 feed 与 IPC 拉取。
@@ -449,6 +452,7 @@ export function ClaudeChatInner({
   hideMessages = false,
   hideSessionTools = false,
   centerView = "messages",
+  onCenterViewChange,
   enableSessionNotificationFeed = false,
   resolveTaskListOmcInvokeConcurrency: _resolveTaskListOmcInvokeConcurrency,
   repositoryMainBindings = {},
@@ -1562,7 +1566,7 @@ export function ClaudeChatInner({
     [workflowTemplates, workflowGraphStatusByWorkflowId],
   );
 
-  const { featurePanelProps, appendSessionSendTrace } = useClaudeChatSessionFeaturePanel({
+  const { appendSessionSendTrace } = useClaudeChatSessionFeaturePanel({
     session,
     sessions,
     allSessionsForHistory,
@@ -1927,6 +1931,61 @@ export function ClaudeChatInner({
   const hasTerminalPanel = Boolean(panelBelowTerminal);
   const hasAnyAuxPanel =
     hasFilesPanel || hasRequirementsPanel || hasQuickActionsPanel || hasTerminalPanel;
+  const auxRailWindowDeltaRef = useRef(0);
+  const centerViewControl = useCenterViewControl();
+  const workbenchRef = useRef<HTMLDivElement | null>(null);
+  const [auxRailWidth, setAuxRailWidth] = useState(SESSION_AUX_RAIL_WINDOW_DELTA_PX);
+  const auxRailResizeActiveRef = useRef(false);
+  const shouldExpandWindowForAuxRail = paneIndex === 0 && hasAnyAuxPanel && !hideMessages;
+
+  useEffect(() => {
+    if (shouldExpandWindowForAuxRail && auxRailWindowDeltaRef.current === 0) {
+      auxRailWindowDeltaRef.current = SESSION_AUX_RAIL_WINDOW_DELTA_PX;
+      void adjustMainWindowLogicalWidthByDelta(SESSION_AUX_RAIL_WINDOW_DELTA_PX);
+      return;
+    }
+    if (!shouldExpandWindowForAuxRail && auxRailWindowDeltaRef.current > 0) {
+      const delta = auxRailWindowDeltaRef.current;
+      auxRailWindowDeltaRef.current = 0;
+      void adjustMainWindowLogicalWidthByDelta(-delta);
+    }
+  }, [shouldExpandWindowForAuxRail]);
+
+  useEffect(() => {
+    return () => {
+      const delta = auxRailWindowDeltaRef.current;
+      auxRailWindowDeltaRef.current = 0;
+      if (delta > 0) void adjustMainWindowLogicalWidthByDelta(-delta);
+    };
+  }, []);
+
+  const resizeAuxRailFromPointer = useCallback((clientX: number) => {
+    const bounds = workbenchRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    const maxWidth = Math.max(SESSION_AUX_RAIL_WINDOW_DELTA_PX, bounds.width - 320);
+    setAuxRailWidth(
+      Math.min(maxWidth, Math.max(SESSION_AUX_RAIL_WINDOW_DELTA_PX, bounds.right - clientX)),
+    );
+  }, []);
+
+  const handleAuxRailResizePointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    auxRailResizeActiveRef.current = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeAuxRailFromPointer(event.clientX);
+    event.preventDefault();
+  }, [resizeAuxRailFromPointer]);
+
+  const handleAuxRailResizePointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (!auxRailResizeActiveRef.current) return;
+    resizeAuxRailFromPointer(event.clientX);
+  }, [resizeAuxRailFromPointer]);
+
+  const handleAuxRailResizePointerEnd = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    auxRailResizeActiveRef.current = false;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
   const effectiveCenterView: CenterView = (() => {
     if (centerView === "messages") return "messages";
     if (centerView === "files" && hasFilesPanel) return "files";
@@ -1940,16 +1999,32 @@ export function ClaudeChatInner({
     return "messages";
   })();
 
-  const messagesPaneVisible =
-    !hideMessages && (!hasAnyAuxPanel || effectiveCenterView === "messages");
+  const effectiveAuxView: CenterView = effectiveCenterView === "messages"
+    ? hasFilesPanel
+      ? "files"
+      : hasRequirementsPanel
+        ? "requirements"
+        : hasQuickActionsPanel
+          ? "quickActions"
+          : hasTerminalPanel
+            ? "terminal"
+            : "messages"
+    : effectiveCenterView;
+  const messagesPaneVisible = !hideMessages;
   const filesPaneVisible =
-    hasFilesPanel && (hideMessages || effectiveCenterView === "files");
+    hasFilesPanel && (hideMessages || effectiveAuxView === "files");
   const requirementsPaneVisible =
-    hasRequirementsPanel && (hideMessages || effectiveCenterView === "requirements");
+    hasRequirementsPanel && (hideMessages || effectiveAuxView === "requirements");
   const quickActionsPaneVisible =
-    hasQuickActionsPanel && (hideMessages || effectiveCenterView === "quickActions");
+    hasQuickActionsPanel && (hideMessages || effectiveAuxView === "quickActions");
   const terminalPaneVisible =
-    hasTerminalPanel && (hideMessages || effectiveCenterView === "terminal");
+    hasTerminalPanel && (hideMessages || effectiveAuxView === "terminal");
+  const auxOptions = [
+    hasFilesPanel ? { label: "文件", value: "files" as const } : null,
+    hasRequirementsPanel ? { label: "需求", value: "requirements" as const } : null,
+    hasQuickActionsPanel ? { label: "快捷操作", value: "quickActions" as const } : null,
+    hasTerminalPanel ? { label: "终端", value: "terminal" as const } : null,
+  ].filter((item): item is NonNullable<typeof item> => item !== null);
 
   return (
     <div
@@ -1958,28 +2033,12 @@ export function ClaudeChatInner({
       tabIndex={-1}
       onPointerDownCapture={onChatPointerDownCapture}
     >
-      {!hideSessionTools && !deferHeavySubtree ? (
-        <ClaudeChatSessionFeaturePanel {...featurePanelProps} />
-      ) : null}
-
-
-      {!hideMessages ? (
-        <ClaudeChatSessionOwnerBar
-          session={session}
-          type={sessionOwnerInfo.type}
-          typeLabel={sessionOwnerInfo.typeLabel}
-          name={sessionOwnerInfo.name}
-          effectiveReturnMainSessionId={effectiveReturnMainSessionId}
-          onCancel={onCancel}
-          onReturnMainSession={handleReturnMainSession}
-        />
-      ) : null}
-
       <div className="app-claude-chat-body">
         <div className="app-claude-chat-main">
 
+      <div ref={workbenchRef} className={`app-claude-chat-workbench${hasAnyAuxPanel && !hideMessages ? " has-aux-rail" : ""}`}>
       <div
-        className={`app-claude-chat-center-pane${messagesPaneVisible ? "" : " is-hidden"}`}
+        className={`app-claude-chat-center-pane app-claude-chat-messages-pane${messagesPaneVisible ? "" : " is-hidden"}`}
         // keep-alive 隐藏时用 inert 移出键盘焦点（visibility:hidden 仍可能进 Tab 序）
         inert={messagesPaneVisible ? undefined : true}
         aria-hidden={messagesPaneVisible ? undefined : true}
@@ -1991,7 +2050,7 @@ export function ClaudeChatInner({
             hideMessagesScroll={
               hideMessages ||
               deferHeavySubtree ||
-              (hasAnyAuxPanel && effectiveCenterView !== "messages")
+              !messagesPaneVisible
             }
             fullTranscriptLoading={fullTranscriptLoading}
             onReloadFullDiskTranscript={onReloadFullDiskTranscript}
@@ -2008,6 +2067,39 @@ export function ClaudeChatInner({
           />
         ) : null}
       </div>
+      {hasAnyAuxPanel && !hideMessages ? (
+        <div
+          className="app-claude-chat-aux-resizer"
+          role="separator"
+          aria-label="调整消息区与功能栏宽度"
+          aria-orientation="vertical"
+          onPointerDown={handleAuxRailResizePointerDown}
+          onPointerMove={handleAuxRailResizePointerMove}
+          onPointerUp={handleAuxRailResizePointerEnd}
+          onPointerCancel={handleAuxRailResizePointerEnd}
+        />
+      ) : null}
+      {hasAnyAuxPanel ? (
+        <aside
+          className={`app-claude-chat-aux-rail${hideMessages ? " is-full-width" : ""}`}
+          aria-label="会话功能栏"
+          style={hideMessages ? undefined : { flexBasis: auxRailWidth, width: auxRailWidth }}
+        >
+          {!hideMessages && auxOptions.length > 1 ? (
+            <div className="app-claude-chat-aux-rail__tabs" role="tablist" aria-label="会话功能">
+              {auxOptions.map((option) => (
+                <button key={option.value} type="button" role="tab"
+                  aria-selected={effectiveAuxView === option.value}
+                  className={`app-claude-chat-aux-rail__tab${effectiveAuxView === option.value ? " is-active" : ""}`}
+                  onClick={() => {
+                    (centerViewControl ?? onCenterViewChange)?.(option.value);
+                  }}>
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div className="app-claude-chat-aux-rail__content">
       {/*
        * files pane：centerView !== "files" 时直接 unmount，强制 git diff Monaco 等
        * 重型编辑器随 Segmented 切走被卸载，杜绝 keep-alive 模式下 `is-hidden`
@@ -2036,9 +2128,16 @@ export function ClaudeChatInner({
           {panelBelowTerminal}
         </div>
       ) : null}
+          </div>
+        </aside>
+      ) : null}
+      </div>
 
       {showPendingTaskQueue ? (
-        <div className="app-pending-task-queue-anchor">
+        <div
+          className="app-pending-task-queue-anchor"
+          style={hasAnyAuxPanel && !hideMessages ? { width: `calc(100% - ${auxRailWidth + 9}px)` } : undefined}
+        >
           <PendingTaskQueuePanel
             sessionId={session.id}
             sessionStatus={session.status}
@@ -2084,19 +2183,19 @@ export function ClaudeChatInner({
         />
       ) : null}
 
-      <div className="app-claude-chat-bottom">
+      <div
+        className="app-claude-chat-bottom"
+        style={hasAnyAuxPanel && !hideMessages ? { width: `calc(100% - ${auxRailWidth + 9}px)` } : undefined}
+      >
         {!deferHeavySubtree ? (
           <ClaudeChatQuickActionsChrome
             sessionId={session.id}
-            gitRepositoryPath={gitRepositoryPath}
             repositoryId={sessionRepository?.id ?? null}
-            executionEngine={sessionExecutionEngine}
             onCreateNewSession={onCreateNewSession}
             creatingNewSession={creatingNewSession}
             onOpenBuiltinAssistant={onOpenBuiltinAssistant}
             onActivateAssistant={onActivateAssistant}
             onOpenAssistantsHub={onOpenAssistantsHub}
-            onDispatchExecutionEnvironment={onDispatchExecutionEnvironment}
           />
         ) : null}
         {!deferHeavySubtree ? (

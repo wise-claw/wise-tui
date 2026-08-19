@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 🎨 交互调整
+
+- **移除会话快捷条的「推送」按钮**：快捷条不再显示「新建会话」右侧的一体化提交/推送按钮；git 提交与推送能力保留在 Git 面板，快捷动作目录同步下线 `push` 项。
+
 ### ✨ 页面监控能力扩充
 
 - **新增 Web Vitals 采集**：`page-vitals`（LCP / CLS / INP / FCP / TTFB），经注入 PerformanceObserver 脚本经 CDP binding 回传。

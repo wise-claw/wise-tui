@@ -1998,6 +1998,106 @@
   contain: layout style;
 }
 
+.app-claude-chat-workbench {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-claude-chat-workbench.has-aux-rail > .app-claude-chat-messages-pane {
+  flex: 1 1 0;
+}
+
+.app-claude-chat-aux-rail {
+  display: flex;
+  flex: 0 0 560px;
+  /* 打开时 ClaudeChat 同步把主窗口加宽同样的逻辑像素，保住消息主栏的可用宽度。 */
+  min-width: 560px;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ant-color-bg-container);
+}
+
+.app-claude-chat-aux-resizer {
+  position: relative;
+  z-index: 4;
+  flex: 0 0 9px;
+  width: 9px;
+  min-height: 0;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.app-claude-chat-aux-resizer::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 4px;
+  width: 1px;
+  background: var(--ant-color-split);
+  transition: width var(--wise-motion-fast) var(--wise-ease-out), background-color var(--wise-motion-fast) var(--wise-ease-out);
+}
+
+.app-claude-chat-aux-resizer:hover::before,
+.app-claude-chat-aux-resizer:active::before,
+.app-claude-chat-aux-resizer:focus-visible::before {
+  width: 2px;
+  background: var(--ant-color-primary);
+}
+
+.app-claude-chat-aux-rail.is-full-width {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.app-claude-chat-aux-rail__tabs {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 4px 8px 0;
+  gap: 2px;
+  border-bottom: 1px solid var(--ant-color-split);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-claude-chat-aux-rail__tab {
+  appearance: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 3px 10px 5px;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.app-claude-chat-aux-rail__tab:hover,
+.app-claude-chat-aux-rail__tab.is-active {
+  color: var(--ant-color-text);
+}
+
+.app-claude-chat-aux-rail__tab.is-active {
+  border-bottom-color: var(--ant-color-primary);
+  font-weight: 500;
+}
+
+.app-claude-chat-aux-rail__content {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-claude-chat-aux-rail__content > .app-claude-chat-center-pane {
+  flex: 1 1 0;
+}
+
 /* 消息 / 文件（终端）视图：互斥显示，但 keep-alive 保留挂载与尺寸。
  * 勿用 display:none——隐藏后 clientWidth/Height 归零，会导致：
  * 1) 消息虚拟列表 / content-visibility 切回后空白；
@@ -2549,7 +2649,8 @@
   min-width: 0;
 }
 
-.app-topbar-overflow-dropdown .app-topbar-overflow-menu-inner .ant-dropdown-menu-item {
+.app-topbar-overflow-dropdown .app-topbar-overflow-menu-inner .ant-dropdown-menu-item,
+.app-topbar-overflow-dropdown .app-topbar-overflow-menu-inner .ant-dropdown-menu-submenu-title {
   padding: 0 6px;
   margin-inline: 0;
   border-radius: 4px;
@@ -2560,12 +2661,14 @@
   gap: 4px;
 }
 
-.app-topbar-overflow-dropdown .app-topbar-overflow-menu-inner .ant-dropdown-menu-item > .ant-dropdown-menu-title-content {
+.app-topbar-overflow-dropdown .app-topbar-overflow-menu-inner .ant-dropdown-menu-item > .ant-dropdown-menu-title-content,
+.app-topbar-overflow-dropdown .app-topbar-overflow-menu-inner .ant-dropdown-menu-submenu-title > .ant-dropdown-menu-title-content {
   flex: 1 1 auto;
   min-height: 0;
 }
 
-.app-topbar-overflow-dropdown .app-topbar-overflow-menu-inner .ant-dropdown-menu-item-icon {
+.app-topbar-overflow-dropdown .app-topbar-overflow-menu-inner .ant-dropdown-menu-item-icon,
+.app-topbar-overflow-dropdown .app-topbar-overflow-menu-inner .ant-dropdown-menu-submenu-title .ant-dropdown-menu-item-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -8368,11 +8471,6 @@ button.app-message-part-header:disabled:hover {
   margin-left: auto;
 }
 
-.app-session-quick-pill-slot {
-  flex-shrink: 0;
-  display: inline-flex;
-}
-
 .app-session-quick-pill {
   flex-shrink: 0;
   display: inline-flex;
@@ -8455,11 +8553,6 @@ button.app-message-part-header:disabled:hover {
   color: var(--ant-color-warning);
 }
 
-.app-session-quick-pill--push {
-  gap: 3px;
-  padding: 0 7px;
-}
-
 .app-session-quick-pill--more {
   padding: 0 6px;
 }
@@ -8483,10 +8576,6 @@ button.app-message-part-header:disabled:hover {
   color: var(--ant-color-warning);
 }
 
-.app-session-quick-pill__icon--green {
-  color: var(--ant-color-success);
-}
-
 .app-session-quick-pill__icon--neutral {
   color: var(--ant-color-text-secondary);
 }
@@ -8495,35 +8584,6 @@ button.app-message-part-header:disabled:hover {
   font-size: 11px;
   font-weight: 600;
   color: inherit;
-}
-
-.app-session-quick-pill__stats {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 10px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.app-session-quick-pill__stats--pulse {
-  animation: app-session-notification-count-pop 0.48s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
-
-.app-session-quick-pill__add {
-  color: var(--ant-color-success);
-}
-
-.app-session-quick-pill__del {
-  color: var(--ant-color-error);
-}
-
-.app-session-quick-pill__ahead {
-  color: var(--ant-color-success);
-}
-
-.app-session-quick-pill__behind {
-  color: var(--ant-color-error);
 }
 
 /* 会话区左下浮层：不占用布局，宽度 260px，可收起 */
@@ -8613,203 +8673,6 @@ button.app-message-part-header:disabled:hover {
   max-height: calc(5 * var(--app-session-notification-row-height));
   overflow-x: hidden;
   overflow-y: auto;
-}
-
-.app-session-owner-panel {
-  position: absolute;
-  /* 与 .app-claude-session-feature-panel 同高居中（该面板为 chat 首子节点） */
-  top: calc(var(--app-session-feature-panel-height, 32px) / 2);
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 12;
-  box-sizing: border-box;
-  width: max-content;
-  max-width: calc(100% - 24px);
-  margin: 0;
-  padding: 0 12px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: nowrap;
-  pointer-events: auto;
-}
-
-.app-session-owner-panel__tag {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  white-space: nowrap;
-  border-radius: 999px;
-  padding: 1px 8px;
-  font-size: 12px;
-  line-height: 18px;
-  font-weight: bold;
-}
-
-.app-session-owner-panel__tag--main {
-  color: var(--ant-color-text-secondary);
-}
-
-.app-session-owner-panel__tag--employee {
-  background: var(--ant-color-success-bg);
-  color: var(--ant-color-success);
-}
-
-.app-session-owner-panel__tag--team {
-  background: var(--ant-color-primary-bg);
-  color: var(--ant-color-primary);
-}
-
-.app-session-owner-panel__text {
-  min-width: 0;
-  flex: 1;
-  font-size: 12px;
-  color: var(--ant-color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.app-session-owner-panel__end-btn {
-  flex-shrink: 0;
-  height: 20px;
-  padding: 0 10px;
-  margin: 0;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 6px;
-  background: var(--ant-color-bg-container);
-  color: var(--ant-color-error);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-
-.app-session-owner-panel__end-btn:hover {
-  background: var(--ant-color-error-bg);
-  border-color: color-mix(in srgb, var(--ant-color-error) 35%, var(--ant-color-border-secondary));
-  color: var(--ant-color-error-hover, var(--ant-color-error));
-}
-
-.app-session-owner-panel__return-btn {
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 6px;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  color: var(--ant-color-text-secondary);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.app-session-owner-panel__return-btn:hover {
-  background: var(--ant-color-fill-secondary);
-  color: var(--ant-color-text);
-}
-
-.app-session-owner-panel__return-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
-/* 主会话展示消息时：收紧居中浮动的最大宽度，避免遮住左右两侧工具栏按钮 */
-.app-session-owner-panel--with-message {
-  max-width: calc(100% - 300px);
-}
-
-.app-session-owner-panel__msg-text {
-  min-width: 0;
-  max-width: 480px;
-  flex: 0 1 auto;
-  display: block;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--ant-color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border: none;
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.app-session-owner-panel__msg-text:hover {
-  color: var(--ant-color-primary);
-}
-
-.app-session-owner-panel__msg-text:focus-visible {
-  outline: 2px solid var(--ant-color-primary);
-  outline-offset: 2px;
-}
-
-.app-session-owner-panel__message-popover {
-  max-width: min(560px, calc(100vw - 48px));
-}
-
-.app-session-owner-panel__message-popover-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.app-session-owner-panel__message-popover-label {
-  font-size: 12px;
-  color: var(--ant-color-text-tertiary);
-}
-
-.app-session-owner-panel__message-popover-text {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ant-color-text);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 320px;
-  overflow: auto;
-  user-select: text;
-}
-
-.app-session-owner-panel__message-popover-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.app-session-owner-panel__copy-btn {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 6px;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  color: var(--ant-color-text-secondary);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-
-.app-session-owner-panel__copy-btn:hover {
-  background: var(--ant-color-fill-secondary);
-  border-color: var(--ant-color-primary);
-  color: var(--ant-color-primary);
-}
-
-.app-session-owner-panel__copy-btn svg {
-  font-size: 13px;
 }
 
 .app-session-notification-panel__head {

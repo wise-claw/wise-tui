@@ -406,7 +406,6 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
     centerView,
     setCenterView,
     requestCenterView,
-    visible: centerSwitcherVisible,
   } = useCenterView(
     {
       hasFiles: Boolean(panelBelowMessages),
@@ -418,27 +417,6 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   );
   // useMemo 稳定引用：否则每次 grid 重渲都新建数组，Topbar 的 memo(topbarPropsEqual) 对
   // 数组做 Object.is 比较恒 false，memo 永不命中、每个 pane 重渲都整棵重渲 Topbar chrome。
-  const centerSwitcherOptions = useMemo<Array<{ label: string; value: CenterView }>>(
-    () => {
-      const options: Array<{ label: string; value: CenterView }> = [
-        { label: "消息", value: "messages" },
-      ];
-      if (panelBelowMessages) {
-        options.push({ label: "文件", value: "files" });
-      }
-      if (panelBelowRequirements) {
-        options.push({ label: "需求", value: "requirements" });
-      }
-      if (panelBelowQuickActions) {
-        options.push({ label: "快捷操作", value: "quickActions" });
-      }
-      if (terminalMounted) {
-        options.push({ label: "终端", value: "terminal" });
-      }
-      return options;
-    },
-    [panelBelowMessages, panelBelowRequirements, panelBelowQuickActions, terminalMounted],
-  );
   const handleCenterViewChange = useCallback(
     (view: CenterView) => {
       // 打开文件会 collapse 终端；Segmented 切回「终端」时必须先恢复可见，
@@ -485,8 +463,6 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
           terminalCollapsed={!terminalVisible}
           centerView={centerView}
           onCenterViewChange={handleCenterViewChange}
-          centerSwitcherVisible={centerSwitcherVisible}
-          centerSwitcherOptions={centerSwitcherOptions}
         />
       ) : null}
       <CenterViewControlContext.Provider value={requestCenterView}>
@@ -566,6 +542,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
             hideMessages={paneAuxLayout.hideMessages}
             hideSessionTools={paneAuxLayout.hideSessionTools}
             centerView={centerView}
+            onCenterViewChange={handleCenterViewChange}
             enableSessionNotificationFeed={false}
         resolveTaskListOmcInvokeConcurrency={shared.resolveTaskListOmcInvokeConcurrency}
         repositoryMainBindings={shared.repositoryMainBindings}
@@ -730,7 +707,6 @@ const MultiPaneExtraPaneCell = memo(
       centerView,
       setCenterView,
       requestCenterView,
-      visible: centerSwitcherVisible,
     } = useCenterView(
       {
         hasFiles: Boolean(panelBelowMessages),
@@ -741,21 +717,6 @@ const MultiPaneExtraPaneCell = memo(
       hidePaneMessages,
     );
     // useMemo 稳定引用：让 pane 级 Topbar 的 memo 恢复命中（数组 Object.is 恒 false 会击穿）。
-    const centerSwitcherOptions = useMemo<Array<{ label: string; value: CenterView }>>(
-      () => {
-        const options: Array<{ label: string; value: CenterView }> = [
-          { label: "消息", value: "messages" },
-        ];
-        if (panelBelowMessages) {
-          options.push({ label: "文件", value: "files" });
-        }
-        if (terminalMounted) {
-          options.push({ label: "终端", value: "terminal" });
-        }
-        return options;
-      },
-      [panelBelowMessages, terminalMounted],
-    );
     const handleCenterViewChange = useCallback(
       (view: CenterView) => {
         if (view === "terminal") {
@@ -886,8 +847,6 @@ const MultiPaneExtraPaneCell = memo(
               onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(resolvedRepo?.path ?? "")}
               centerView={centerView}
               onCenterViewChange={handleCenterViewChange}
-              centerSwitcherVisible={centerSwitcherVisible}
-              centerSwitcherOptions={centerSwitcherOptions}
               onClosePane={onClosePaneSlot ? handleClosePane : undefined}
             />
           ) : null}
@@ -964,6 +923,7 @@ const MultiPaneExtraPaneCell = memo(
             hideMessages={hidePaneMessages}
             hideSessionTools={paneAuxLayout.hideSessionTools}
             centerView={centerView}
+            onCenterViewChange={handleCenterViewChange}
             enableSessionNotificationFeed={false}
             resolveTaskListOmcInvokeConcurrency={shared.resolveTaskListOmcInvokeConcurrency}
             repositoryMainBindings={shared.repositoryMainBindings}

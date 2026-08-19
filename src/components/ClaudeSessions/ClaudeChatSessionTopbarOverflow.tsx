@@ -2,6 +2,7 @@ import { Dropdown, type MenuProps } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { memo, useCallback, useMemo, useState } from "react";
 import type { ClaudeSession } from "../../types";
+import { PANE_COUNT_OPTIONS, type PaneCount } from "../../constants/mainLayoutWidths";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
 import { FccTopbarTrigger } from "./FccTopbarTrigger";
 import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
@@ -34,6 +35,11 @@ export interface ClaudeChatSessionTopbarOverflowProps {
   onSessionInsightsAiAnalysis?: (prompt: string) => void | Promise<void>;
   onDispatchSessionFeedbackLoop?: SessionFeedbackLoopTopbarTriggerProps["onDispatchSessionFeedbackLoop"];
   getClaudeSessions?: () => readonly ClaudeSession[];
+  paneCount?: PaneCount;
+  paneChangeInFlight?: boolean;
+  onChangePaneCount?: (count: PaneCount) => void;
+  terminalActive?: boolean;
+  onToggleTerminal?: () => void;
 }
 
 export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTopbarOverflow({
@@ -42,6 +48,11 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
   onSessionInsightsAiAnalysis,
   onDispatchSessionFeedbackLoop,
   getClaudeSessions,
+  paneCount = 1,
+  paneChangeInFlight = false,
+  onChangePaneCount,
+  terminalActive = false,
+  onToggleTerminal,
 }: ClaudeChatSessionTopbarOverflowProps) {
   const topbarChrome = useWiseTopbarChromeVisibility();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -49,6 +60,8 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
 
   const overflowItems = useMemo(() => {
     const items: Array<{ key: SessionTopbarOverflowPanel; label: string; disabled?: boolean }> = [];
+    if (onChangePaneCount) items.push({ key: "multiPane", label: paneChangeInFlight ? "多屏（切换中…）" : `多屏 · ${paneCount}屏`, disabled: paneChangeInFlight });
+    if (onToggleTerminal) items.push({ key: "terminal", label: terminalActive ? "收起内置终端" : "打开内置终端" });
     if (!topbarChrome.showFccTopbar) {
       items.push({ key: "fcc", label: "Free Claude Code" });
     }
@@ -74,22 +87,32 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
       });
     }
     return items;
-  }, [topbarChrome, mainSessionForDataLink]);
+  }, [topbarChrome, mainSessionForDataLink, onChangePaneCount, onToggleTerminal, paneChangeInFlight, paneCount, terminalActive]);
 
   const handlePanelOpenChange = useCallback((panel: SessionTopbarOverflowPanel, open: boolean) => {
     setActivePanel(open ? panel : null);
   }, []);
 
   const menuItems = useMemo((): MenuProps["items"] => {
-    return overflowItems.map((item) => ({
+    return overflowItems.map((item) => item.key === "multiPane" ? {
       key: item.key,
       icon: topbarOverflowMenuIcon(item.key),
       label: <span className="app-topbar-overflow-menu-label">{item.label}</span>,
       disabled: item.disabled,
-    }));
-  }, [overflowItems]);
+      children: PANE_COUNT_OPTIONS.map((count) => ({
+        key: `pane:${count}`,
+        label: count === 1 ? "单屏" : `${count}屏`,
+        disabled: count === paneCount || paneChangeInFlight,
+      })),
+    } : {
+      key: item.key,
+      icon: topbarOverflowMenuIcon(item.key),
+      label: <span className="app-topbar-overflow-menu-label">{item.label}</span>,
+      disabled: item.disabled,
+    });
+  }, [overflowItems, paneChangeInFlight, paneCount]);
 
-  if (!repositoryPath.trim() || overflowItems.length === 0) {
+  if ((!repositoryPath.trim() && !onChangePaneCount && !onToggleTerminal) || overflowItems.length === 0) {
     return null;
   }
 
@@ -101,6 +124,17 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
           className: "app-topbar-overflow-menu-inner",
           onClick: ({ key, domEvent }) => {
             domEvent.stopPropagation();
+            if (key.startsWith("pane:")) {
+              const count = Number(key.slice(5)) as PaneCount;
+              if (PANE_COUNT_OPTIONS.includes(count) && count !== paneCount) onChangePaneCount?.(count);
+              setMenuOpen(false);
+              return;
+            }
+            if (key === "terminal") {
+              onToggleTerminal?.();
+              setMenuOpen(false);
+              return;
+            }
             setMenuOpen(false);
             const panel = key as SessionTopbarOverflowPanel;
             setActivePanel(panel);
@@ -112,7 +146,7 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
         onOpenChange={setMenuOpen}
         classNames={{ root: "app-topbar-overflow-dropdown" }}
       >
-        <HoverHint title="更多：默认配置中隐藏的顶栏工具" open={menuOpen ? false : undefined} getPopupContainer={() => document.body}>
+        <HoverHint title="更多会话工具" open={menuOpen ? false : undefined} getPopupContainer={() => document.body}>
           <button
             type="button"
             className={`app-topbar-btn app-topbar-overflow-btn${menuOpen ? " active" : ""}`}

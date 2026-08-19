@@ -13,7 +13,6 @@ export const SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY_V1 = "wise.session.quickAc
 
 export type SystemSessionQuickActionId =
   | "new-session"
-  | "push"
   | "compact-context";
 
 /** 系统动作 + 内置助手 id + 动态助手模板 id（custom:/ext-） */
@@ -56,7 +55,6 @@ const BUILTIN_QUICK_ACTION_META = Object.fromEntries(
 
 export const SESSION_QUICK_ACTION_META: Record<SessionQuickActionId, SessionQuickActionMeta> = {
   "new-session": { id: "new-session", label: "新建会话", pillLabel: "新建会话" },
-  push: { id: "push", label: "推送", pillLabel: "推送" },
   "compact-context": { id: "compact-context", label: "压缩上下文", pillLabel: "压缩上下文" },
   ...BUILTIN_QUICK_ACTION_META,
 };
@@ -64,7 +62,6 @@ export const SESSION_QUICK_ACTION_META: Record<SessionQuickActionId, SessionQuic
 /** 配置面板与合并时的稳定目录顺序 */
 export const SESSION_QUICK_ACTION_CATALOG_ORDER: SessionQuickActionId[] = [
   "new-session",
-  "push",
   "compact-context",
   ...SESSION_QUICK_BUILTIN_ASSISTANTS.map((row) => row.id),
 ];
@@ -73,7 +70,6 @@ export const DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT: SessionQuickActionsLayoutV1 =
   version: 1,
   items: [
     { id: "new-session", visible: true, zone: "primary" },
-    { id: "push", visible: true, zone: "primary" },
     { id: "compact-context", visible: false, zone: "overflow" },
   ],
 };

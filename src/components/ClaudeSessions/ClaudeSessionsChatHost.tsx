@@ -198,6 +198,7 @@ export interface ClaudeSessionsChatHostProps {
   panelBelowTerminal?: React.ReactNode;
   /** 中栏当前视图（由顶栏切换器控制）：单屏路径透传给 ClaudeChat；多屏各 pane 自持。 */
   centerView?: CenterView;
+  onCenterViewChange?: (view: CenterView) => void;
   hideMessages?: boolean;
   hideSessionTools?: boolean;
   resolvePaneAuxLayout?: ResolvePaneAuxLayout;
@@ -316,6 +317,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   panelBelowQuickActions,
   panelBelowTerminal,
   centerView,
+  onCenterViewChange,
   hideMessages = false,
   hideSessionTools = false,
   resolvePaneAuxLayout,
@@ -803,6 +805,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
           panelBelowQuickActions={panelBelowQuickActions}
           panelBelowTerminal={panelBelowTerminal}
           centerView={centerView}
+          onCenterViewChange={onCenterViewChange}
           hideMessages={hideMessages}
           hideSessionTools={hideSessionTools}
           resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}

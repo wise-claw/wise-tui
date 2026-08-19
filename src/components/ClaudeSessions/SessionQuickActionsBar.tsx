@@ -35,9 +35,7 @@ export interface SessionQuickActionsBarProps {
   onActivateAssistant?: (assistant: AssistantEntry) => void | Promise<void>;
   /** 进入 Author 域「助手模板」管理页 */
   onOpenAssistantsHub?: () => void;
-  /** 推送按钮（由父组件组装：拉取 / AI 生成提交信息 / 提交 / 推送，无弹窗） */
-  pushControl: ReactNode;
-  /** 常用语 chip，展示在快捷条主行（推送与「更多」之间） */
+  /** 常用语 chip，展示在快捷条主行（「更多」按钮之前） */
   commonPhrasesSlot?: ReactNode;
   /** 主行尾部的额外 slot（位于常用语之后、「更多」按钮之前） */
   extraTrailingSlot?: ReactNode;
@@ -71,7 +69,6 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
   onOpenBuiltinAssistant,
   onActivateAssistant,
   onOpenAssistantsHub,
-  pushControl,
   commonPhrasesSlot = null,
   extraTrailingSlot = null,
 }: SessionQuickActionsBarProps) {
@@ -156,13 +153,6 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
         </button>
       );
     }
-    if (id === "push") {
-      return (
-        <div key={id} className="app-session-quick-pill-slot">
-          {pushControl}
-        </div>
-      );
-    }
     if (isAssistantTemplateQuickActionId(id)) {
       const iconTone = "neutral";
       return (
@@ -209,14 +199,6 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
           onClick: () => {
             invokeCreateNewSession();
           },
-        };
-      }
-      if (id === "push") {
-        return {
-          key: id,
-          label: meta.label,
-          disabled: true,
-          title: "推送请使用外显按钮（含 diff 统计）",
         };
       }
       return { key: id, label: meta.label };

@@ -1,7 +1,7 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../../types";
 import { HoverHint } from "../shared/HoverHint";
 import { AppearanceThemeToggle } from "../AppearanceThemeToggle";
-import { Dropdown, message, Popover, Segmented, Spin } from "antd";
+import { message, Popover, Spin } from "antd";
 import { lazy, Suspense, memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
 import { RemoteEntryTopbarStrip } from "../RemoteEntryTopbarStrip";
@@ -26,7 +26,7 @@ import { useRepositoryRunCommand } from "../../hooks/useRepositoryRunCommand";
 import { PageMonitorTopbarTrigger } from "../ChromeDevtoolsMonitor";
 import { resolveChatTopbarContext } from "../../utils/workspaceSelectionState";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
-import { PANE_COUNT_OPTIONS, paneGridDimensions, type PaneCount } from "../../constants/mainLayoutWidths";
+import type { PaneCount } from "../../constants/mainLayoutWidths";
 import { topbarPropsEqual } from "./topbarPropsEqual";
 import type { CenterView } from "./ClaudeChat";
 
@@ -96,15 +96,6 @@ function IconTerminal() {
   );
 }
 
-function IconDualPane() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <rect x="3" y="3" width="8" height="18" rx="2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <rect x="13" y="3" width="8" height="18" rx="2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 export function IconClosePane() {
   return (
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
@@ -112,61 +103,6 @@ export function IconClosePane() {
       <path d="M9 9l6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M15 9l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
-  );
-}
-
-function PaneLayoutGlyph({ count }: { count: PaneCount }) {
-  const { rows, cols } = paneGridDimensions(count);
-  return (
-    <span
-      className="app-topbar-pane-layout-glyph"
-      style={{
-        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-        gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-      }}
-      aria-hidden
-    >
-      {Array.from({ length: count }, (_, index) => (
-        <span key={index} className="app-topbar-pane-layout-glyph__cell" />
-      ))}
-    </span>
-  );
-}
-
-function paneCountOptionLabel(count: PaneCount): string {
-  return count === 1 ? "单屏" : `${count}屏`;
-}
-
-function PaneCountPickerPanel({
-  paneCount,
-  disabled,
-  onSelect,
-}: {
-  paneCount: PaneCount;
-  disabled?: boolean;
-  onSelect: (count: PaneCount) => void;
-}) {
-  return (
-    <div className="app-topbar-pane-count-picker" role="menu" aria-label="多屏布局">
-      {PANE_COUNT_OPTIONS.map((count) => {
-        const selected = count === paneCount;
-        return (
-          <button
-            key={count}
-            type="button"
-            role="menuitemradio"
-            aria-checked={selected}
-            className={`app-topbar-pane-count-picker__option${selected ? " is-selected" : ""}`}
-            disabled={disabled}
-            title={count === 1 ? "单屏（关闭多屏）" : `${count}屏布局`}
-            onClick={() => onSelect(count)}
-          >
-            <PaneLayoutGlyph count={count} />
-            <span className="app-topbar-pane-count-picker__label">{paneCountOptionLabel(count)}</span>
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -318,10 +254,6 @@ export const Topbar = memo(function Topbar({
   onChangePaneCount,
   onClosePane,
   onOpenRemoteChannels,
-  centerView = "messages",
-  onCenterViewChange,
-  centerSwitcherVisible = false,
-  centerSwitcherOptions = [],
 }: TopbarProps) {
   const topbarChrome = useWiseTopbarChromeVisibility();
   const [selectedOpenAppId, setSelectedOpenAppId] = useState<string>(() => {
@@ -329,7 +261,6 @@ export const Topbar = memo(function Topbar({
   });
   const [runPopoverOpen, setRunPopoverOpen] = useState(false);
   const [externalTerminalPopoverOpen, setExternalTerminalPopoverOpen] = useState(false);
-  const [paneCountPickerOpen, setPaneCountPickerOpen] = useState(false);
 
   const topbarContext = useMemo(
     () =>
@@ -396,15 +327,6 @@ export const Topbar = memo(function Topbar({
                 icon={<IconCollapseSidebar collapsed={collapsed ?? false} />}
                 label={collapsed ? "展开侧边栏" : "收起侧边栏"}
                 onClick={onToggleSidebar}
-              />
-            ) : null}
-            {centerSwitcherVisible && onCenterViewChange && centerSwitcherOptions.length > 0 ? (
-              <Segmented
-                className="app-topbar-center-switcher"
-                size="small"
-                value={centerView}
-                onChange={(value) => onCenterViewChange(value as CenterView)}
-                options={centerSwitcherOptions}
               />
             ) : null}
             {showRepoTitle ? (
@@ -640,58 +562,20 @@ export const Topbar = memo(function Topbar({
             className="app-topbar-btn--close-pane"
           />
         ) : null}
-        {onChangePaneCount && (
-          <Dropdown
-            open={paneCountPickerOpen}
-            onOpenChange={setPaneCountPickerOpen}
-            trigger={["click"]}
-            placement="bottomRight"
-            rootClassName="app-topbar-pane-count-dropdown"
-            popupRender={() => (
-              <PaneCountPickerPanel
-                paneCount={paneCount}
-                disabled={paneChangeInFlight}
-                onSelect={(count) => {
-                  setPaneCountPickerOpen(false);
-                  if (count === paneCount) return;
-                  onChangePaneCount(count);
-                }}
-              />
-            )}
-          >
-            <button
-              className={`app-topbar-btn ${paneCount > 1 ? "active" : ""}`}
-              type="button"
-              disabled={paneChangeInFlight}
-              title={
-                paneChangeInFlight
-                  ? "正在切换多屏布局…"
-                  : paneCount > 1
-                    ? `${paneCount}屏模式（⌥K 切换 · ⌥⇧K 关闭）`
-                    : "多屏：打开多个隔离并行窗格（快捷键 ⌥K）"
-              }
-            >
-              {paneChangeInFlight ? <Spin size="small" /> : <IconDualPane />}
-            </button>
-          </Dropdown>
-        )}
-        {onToggleTerminal && (
-          <TopbarBtn
-            icon={<IconTerminal />}
-            label="内置终端 (⌃`)"
-            active={terminalPanelMounted && !terminalCollapsed}
-            onClick={onToggleTerminal}
-          />
-        )}
         <AppearanceThemeToggle />
         <div className="app-topbar-divider" />
-        {topbarToolsReady ? (
+        {topbarToolsReady || onChangePaneCount || onToggleTerminal ? (
           <ClaudeChatSessionTopbarOverflow
             repositoryPath={topbarOpenPath}
             mainSessionForDataLink={mainSessionForDataLink}
             onSessionInsightsAiAnalysis={onSessionInsightsAiAnalysis}
             onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}
             getClaudeSessions={getClaudeSessions}
+            paneCount={paneCount}
+            paneChangeInFlight={paneChangeInFlight}
+            onChangePaneCount={onChangePaneCount}
+            terminalActive={terminalPanelMounted && !terminalCollapsed}
+            onToggleTerminal={onToggleTerminal}
           />
         ) : null}
       </div>
