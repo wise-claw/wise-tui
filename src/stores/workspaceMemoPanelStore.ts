@@ -12,6 +12,8 @@ import { requestPaneCenterView } from "./paneCenterViewControlStore";
 
 type MemoPanelState = {
   open: boolean;
+  /** 从左栏定位到右栏的当前需求。 */
+  selectedRequirementId: string | null;
   createModalOpen: boolean;
   /** 每次打开新增弹窗递增，用于重置编辑器实例 */
   createModalEpoch: number;
@@ -35,6 +37,7 @@ function getState(): MemoPanelState {
   if (!g[STATE_KEY]) {
     g[STATE_KEY] = {
       open: false,
+      selectedRequirementId: null,
       createModalOpen: false,
       createModalEpoch: 0,
       createModalDefaultRepositoryId: null,
@@ -57,6 +60,9 @@ function getState(): MemoPanelState {
     };
     if (state.createModalDefaultRepositoryId === undefined) {
       state.createModalDefaultRepositoryId = null;
+    }
+    if (state.selectedRequirementId === undefined) {
+      state.selectedRequirementId = null;
     }
     if (state.editModalOpen === undefined) {
       state.editModalOpen = false;
@@ -112,6 +118,10 @@ function emitEditModal(): void {
 
 export function getWorkspaceMemoPanelOpen(): boolean {
   return getState().open;
+}
+
+export function getWorkspaceMemoPanelSelectedRequirementId(): string | null {
+  return getState().selectedRequirementId;
 }
 
 export function subscribeWorkspaceMemoPanel(listener: () => void): () => void {
@@ -195,9 +205,13 @@ export function useWorkspaceRequirementCreateModalDefaultRepositoryId(): string 
   );
 }
 
-export function openWorkspaceMemoPanel(): void {
+export function openWorkspaceMemoPanel(requirementId?: string | null): void {
   const state = getState();
+  const selectedId = requirementId?.trim() || null;
+  const selectionChanged = selectedId != null && selectedId !== state.selectedRequirementId;
+  if (selectedId) state.selectedRequirementId = selectedId;
   if (state.open) {
+    if (selectionChanged) emit();
     requestPaneCenterView(0, "requirements");
     return;
   }
@@ -288,4 +302,12 @@ export function toggleWorkspaceMemoPanel(): void {
 
 export function useWorkspaceMemoPanelOpen(): boolean {
   return useSyncExternalStore(subscribeWorkspaceMemoPanel, getWorkspaceMemoPanelOpen, () => false);
+}
+
+export function useWorkspaceMemoPanelSelectedRequirementId(): string | null {
+  return useSyncExternalStore(
+    subscribeWorkspaceMemoPanel,
+    getWorkspaceMemoPanelSelectedRequirementId,
+    () => null,
+  );
 }

@@ -19,6 +19,7 @@ mock.module("./pastedImageRefs", () => ({
 }));
 
 import {
+  buildRequirementDispatchPayload,
   materializeRequirementBodyImages,
   stripMarkdownImages,
 } from "./workspaceRequirementDispatch";
@@ -66,5 +67,43 @@ describe("materializeRequirementBodyImages", () => {
     );
     expect(fetchCalls).toEqual([]);
     expect(result.bodyMarkdown).toContain("/Users/test/.wise/composer-images/requirement-1.png");
+  });
+});
+
+describe("buildRequirementDispatchPayload", () => {
+  test("直接派发需求正文，不添加指令或标题包装", async () => {
+    const result = await buildRequirementDispatchPayload({
+      id: "req-1",
+      title: "登录页调整",
+      description: "",
+      bodyMarkdown: "按钮改为蓝色。",
+      imagePaths: [],
+      repositoryId: "1",
+      status: "open",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    expect(result.promptText).toBe("按钮改为蓝色。");
+    expect(result.promptText).not.toContain("请实现以下需求");
+    expect(result.promptText).not.toContain("## 登录页调整");
+  });
+
+  test("图片只改写落盘地址，不追加附图说明", async () => {
+    const result = await buildRequirementDispatchPayload({
+      id: "req-2",
+      title: "按图调整",
+      description: "",
+      bodyMarkdown: "参考图片：\n\n![截图](data:image/png;base64,AQIDBA==)",
+      imagePaths: [],
+      repositoryId: "1",
+      status: "open",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    expect(result.promptText).toContain("参考图片：");
+    expect(result.promptText).toContain("![截图](/Users/test/.wise/composer-images/requirement-1.png)");
+    expect(result.promptText).not.toContain("附图：");
   });
 });

@@ -2010,11 +2010,29 @@
   flex: 1 1 0;
 }
 
+/* 双栏时右栏覆盖完整会话高度（含输入框所在行），左侧内容为它预留宽度。 */
+.app-claude-chat-workbench.has-aux-rail {
+  box-sizing: border-box;
+  padding-right: calc(var(--app-session-aux-rail-width) + 9px);
+  overflow: visible;
+}
+
+.app-claude-chat-workbench.has-aux-rail > .app-claude-chat-aux-rail {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 3;
+}
+
+.app-claude-chat-workbench.has-aux-rail > .app-claude-chat-aux-resizer {
+  position: absolute;
+  inset: 0 var(--app-session-aux-rail-width) 0 auto;
+}
+
 .app-claude-chat-aux-rail {
   display: flex;
-  flex: 0 0 560px;
-  /* 打开时 ClaudeChat 同步把主窗口加宽同样的逻辑像素，保住消息主栏的可用宽度。 */
-  min-width: 560px;
+  flex: 0 0 640px;
+  /* 默认宽于窗口扩展补偿量：打开右栏后消息主栏会适度收窄，三栏比例更协调。 */
+  min-width: 480px;
   min-height: 0;
   flex-direction: column;
   overflow: hidden;

@@ -6,7 +6,7 @@ export const WISE_UI_EVENT_DISPATCH_REQUIREMENT_TO_EXEC_ENV =
   "wise:dispatch-requirement-to-execution-environment";
 
 export interface DispatchRequirementToExecutionEnvironmentDetail {
-  /** 已组装的图文正文（可含 `附图：@/path`），不含 @执行引擎 前缀 */
+  /** 需求原始图文正文，不含 @执行引擎 路由前缀 */
   promptText: string;
   /** 写入 worker 气泡的正文；默认与 promptText 相同 */
   userBubblePrompt?: string;

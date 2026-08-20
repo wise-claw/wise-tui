@@ -10,6 +10,7 @@ import {
   useCallback,
   useMemo,
   useSyncExternalStore,
+  type CSSProperties,
   type PointerEvent,
 } from "react";
 import { runWhenIdle } from "../../utils/deferIdle";
@@ -35,8 +36,12 @@ import type { CenterView } from "../../stores/paneCenterViewControlStore";
 import { adjustMainWindowLogicalWidthByDelta } from "../../services/mainWindowLayout";
 import { useCenterViewControl } from "./claudeChatHelpers";
 
+/** 会话功能栏默认宽度；比窗口扩展量略大，让右栏打开时消息区适度收窄。 */
+const SESSION_AUX_RAIL_DEFAULT_WIDTH_PX = 640;
 /** 与 index.css 的 `.app-claude-chat-aux-rail` min-width 保持一致。 */
-const SESSION_AUX_RAIL_WINDOW_DELTA_PX = 560;
+const SESSION_AUX_RAIL_MIN_WIDTH_PX = 480;
+/** 打开功能栏时仅补偿部分宽度，避免窗口变宽后消息区仍显得过宽。 */
+const SESSION_AUX_RAIL_WINDOW_DELTA_PX = 480;
 
 const ClaudeChatComposerTrayLazy = lazy(() =>
   import("./ClaudeChatComposerTray").then((module) => ({ default: module.ClaudeChatComposerTray })),
@@ -1934,7 +1939,7 @@ export function ClaudeChatInner({
   const auxRailWindowDeltaRef = useRef(0);
   const centerViewControl = useCenterViewControl();
   const workbenchRef = useRef<HTMLDivElement | null>(null);
-  const [auxRailWidth, setAuxRailWidth] = useState(SESSION_AUX_RAIL_WINDOW_DELTA_PX);
+  const [auxRailWidth, setAuxRailWidth] = useState(SESSION_AUX_RAIL_DEFAULT_WIDTH_PX);
   const auxRailResizeActiveRef = useRef(false);
   const shouldExpandWindowForAuxRail = paneIndex === 0 && hasAnyAuxPanel && !hideMessages;
 
@@ -1962,9 +1967,9 @@ export function ClaudeChatInner({
   const resizeAuxRailFromPointer = useCallback((clientX: number) => {
     const bounds = workbenchRef.current?.getBoundingClientRect();
     if (!bounds) return;
-    const maxWidth = Math.max(SESSION_AUX_RAIL_WINDOW_DELTA_PX, bounds.width - 320);
+    const maxWidth = Math.max(SESSION_AUX_RAIL_MIN_WIDTH_PX, bounds.width - 320);
     setAuxRailWidth(
-      Math.min(maxWidth, Math.max(SESSION_AUX_RAIL_WINDOW_DELTA_PX, bounds.right - clientX)),
+      Math.min(maxWidth, Math.max(SESSION_AUX_RAIL_MIN_WIDTH_PX, bounds.right - clientX)),
     );
   }, []);
 
@@ -2036,7 +2041,15 @@ export function ClaudeChatInner({
       <div className="app-claude-chat-body">
         <div className="app-claude-chat-main">
 
-      <div ref={workbenchRef} className={`app-claude-chat-workbench${hasAnyAuxPanel && !hideMessages ? " has-aux-rail" : ""}`}>
+      <div
+        ref={workbenchRef}
+        className={`app-claude-chat-workbench${hasAnyAuxPanel && !hideMessages ? " has-aux-rail" : ""}`}
+        style={
+          hasAnyAuxPanel && !hideMessages
+            ? ({ "--app-session-aux-rail-width": `${auxRailWidth}px` } as CSSProperties)
+            : undefined
+        }
+      >
       <div
         className={`app-claude-chat-center-pane app-claude-chat-messages-pane${messagesPaneVisible ? "" : " is-hidden"}`}
         // keep-alive 隐藏时用 inert 移出键盘焦点（visibility:hidden 仍可能进 Tab 序）

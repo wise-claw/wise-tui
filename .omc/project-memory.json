@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1785845132830,
+  "lastScanned": 1787234229250,
   "projectRoot": "/Users/sjl/Documents/github/wise-tui",
   "techStack": {
     "languages": [
@@ -42,12 +42,12 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "echo \"=== tsc 类型检查结果 ===\"; cat /private/tmp/claude-501/-Users-sjl-Documents-github-wise-tui/034fe66a-5084-4c76-92c7-d0c11dc9656c/tasks/bv1e614cz.output\necho \"\"; echo \"=== bun test 结果 ===\"; cat /private/tmp/claude-501/-Users-sjl-Documents-github-wise-tui/034fe66a-5084-4c76-92c7-d0c11dc9656c/tasks/bw29kut17.output",
-    "testCommand": "echo \"=== tsc 类型检查结果 ===\"; cat /private/tmp/claude-501/-Users-sjl-Documents-github-wise-tui/034fe66a-5084-4c76-92c7-d0c11dc9656c/tasks/bv1e614cz.output\necho \"\"; echo \"=== bun test 结果 ===\"; cat /private/tmp/claude-501/-Users-sjl-Documents-github-wise-tui/034fe66a-5084-4c76-92c7-d0c11dc9656c/tasks/bw29kut17.output",
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
-      "postinstall": "bun run scripts/patch-crepe-slash-menu.mjs && bun run scripts/patch-antd-modal-confirm-mask-closable.mjs && bun run scripts/patch-antd-scroll-into-view-if-needed.mjs",
+      "postinstall": "bun run scripts/patch-antd-modal-confirm-mask-closable.mjs && bun run scripts/patch-antd-scroll-into-view-if-needed.mjs",
       "dev": "vite",
       "build": "tsc -p tsconfig.app.json && vite build",
       "test": "bun test",
@@ -86,14 +86,14 @@
       "path": "browser-extensions",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1785845132823,
+      "lastAccessed": 1787234229243,
       "keyFiles": []
     },
     "design": {
       "path": "design",
       "purpose": null,
-      "fileCount": 1,
-      "lastAccessed": 1785845132823,
+      "fileCount": 2,
+      "lastAccessed": 1787234229244,
       "keyFiles": [
         "product-ux-engineering-audit-2026-05-14.md"
       ]
@@ -102,7 +102,7 @@
       "path": "dist",
       "purpose": "Distribution/build output",
       "fileCount": 4,
-      "lastAccessed": 1785845132826,
+      "lastAccessed": 1787234229245,
       "keyFiles": [
         "index.html",
         "mascot.html",
@@ -113,22 +113,24 @@
     "docs": {
       "path": "docs",
       "purpose": "Documentation",
-      "fileCount": 0,
-      "lastAccessed": 1785845132826,
-      "keyFiles": []
+      "fileCount": 1,
+      "lastAccessed": 1787234229245,
+      "keyFiles": [
+        "page-monitor-expansion.md"
+      ]
     },
     "examples": {
       "path": "examples",
       "purpose": "Example code",
       "fileCount": 0,
-      "lastAccessed": 1785845132826,
+      "lastAccessed": 1787234229245,
       "keyFiles": []
     },
     "extras": {
       "path": "extras",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1785845132826,
+      "lastAccessed": 1787234229245,
       "keyFiles": [
         "check-prd-split-evolution.mjs"
       ]
@@ -137,7 +139,7 @@
       "path": "imgs",
       "purpose": null,
       "fileCount": 6,
-      "lastAccessed": 1785845132826,
+      "lastAccessed": 1787234229246,
       "keyFiles": [
         "add-execution-env.gif",
         "add-workspace.gif",
@@ -150,7 +152,7 @@
       "path": "public",
       "purpose": "Public files",
       "fileCount": 2,
-      "lastAccessed": 1785845132826,
+      "lastAccessed": 1787234229246,
       "keyFiles": [
         "tauri.svg",
         "vite.svg"
@@ -159,8 +161,8 @@
     "scripts": {
       "path": "scripts",
       "purpose": "Build/utility scripts",
-      "fileCount": 7,
-      "lastAccessed": 1785845132826,
+      "fileCount": 6,
+      "lastAccessed": 1787234229246,
       "keyFiles": [
         "_tmp_sim_stream.mts",
         "build-claude-settings-schema-zh.mjs",
@@ -173,7 +175,7 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 9,
-      "lastAccessed": 1785845132826,
+      "lastAccessed": 1787234229246,
       "keyFiles": [
         "App.css",
         "App.tsx",
@@ -186,7 +188,7 @@
       "path": "src-tauri",
       "purpose": null,
       "fileCount": 7,
-      "lastAccessed": 1785845132827,
+      "lastAccessed": 1787234229246,
       "keyFiles": [
         "Cargo.lock",
         "Cargo.toml",
@@ -198,19 +200,19 @@
     "dist/assets": {
       "path": "dist/assets",
       "purpose": "Static assets",
-      "fileCount": 307,
-      "lastAccessed": 1785845132827,
+      "fileCount": 252,
+      "lastAccessed": 1787234229247,
       "keyFiles": [
-        "ApiOutlined-29EXlQ9S.js",
-        "AppImpl-By5GcoHA.js",
-        "AppImpl-Dn1bjZT9.css"
+        "ApiOutlined-CO0Sa8tg.js",
+        "AppImpl-DBC3ox-5.css",
+        "AppImpl-Dvm5k70X.js"
       ]
     },
     "src/__tests__": {
       "path": "src/__tests__",
       "purpose": "Test files",
       "fileCount": 1,
-      "lastAccessed": 1785845132828,
+      "lastAccessed": 1787234229247,
       "keyFiles": [
         "codexProviderPresets.test.ts"
       ]
@@ -219,7 +221,7 @@
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 1,
-      "lastAccessed": 1785845132828,
+      "lastAccessed": 1787234229247,
       "keyFiles": [
         "react.svg"
       ]
@@ -228,7 +230,7 @@
       "path": "src/components",
       "purpose": "UI components",
       "fileCount": 24,
-      "lastAccessed": 1785845132828,
+      "lastAccessed": 1787234229247,
       "keyFiles": [
         "AppWorkspaceLayout.lazy.ts",
         "AppWorkspaceLayout.tsx",
@@ -239,7 +241,7 @@
       "path": "src/data",
       "purpose": "Data files",
       "fileCount": 5,
-      "lastAccessed": 1785845132828,
+      "lastAccessed": 1787234229247,
       "keyFiles": [
         "claude-code-settings.schema.en.json",
         "claude-code-settings.schema.json",

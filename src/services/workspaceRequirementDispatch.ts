@@ -1,10 +1,7 @@
 import { homeDir } from "@tauri-apps/api/path";
 import type { ClaudeComposerExecuteBubbleOptions } from "../types";
 import { saveComposerImage } from "./saveComposerImage";
-import {
-  deriveRequirementTitle,
-  type WorkspaceRequirementItem,
-} from "../types/workspaceRequirements";
+import type { WorkspaceRequirementItem } from "../types/workspaceRequirements";
 import {
   countMarkdownImages,
   extractAbsoluteImagePathsFromMarkdown,
@@ -136,15 +133,6 @@ export async function materializeRequirementBodyImages(bodyMarkdown: string): Pr
   return { bodyMarkdown: next, imagePaths };
 }
 
-function formatComposerMessageWithImages(main: string, imageBits: string[]): string {
-  if (imageBits.length === 0) return main.trim();
-  const tail = imageBits.join(" ");
-  if (!main.trim()) {
-    return `附图：${tail}`.trim();
-  }
-  return `${main.trim()}\n\n附图：${tail}`.trim();
-}
-
 export interface RequirementDispatchPayload {
   promptText: string;
   imagePaths: string[];
@@ -152,19 +140,14 @@ export interface RequirementDispatchPayload {
 }
 
 /**
- * 将需求图文组装为待执行队列可消费的 prompt（文字 + 本地 `@` 图片路径）。
- * 若 body 仍含 data URL，会先落盘再组装。
+ * 直接使用需求图文正文作为派发 prompt，不额外添加标题、指令或附件说明。
+ * 若正文仍含 data URL，会先落盘并只改写其中的图片地址。
  */
 export async function buildRequirementDispatchPayload(
   item: WorkspaceRequirementItem,
 ): Promise<RequirementDispatchPayload> {
   const materialized = await materializeRequirementBodyImages(item.bodyMarkdown || item.description || "");
-  const title = (item.title.trim() || deriveRequirementTitle(materialized.bodyMarkdown)).trim() || "无标题需求";
-  const bodyText = stripMarkdownImages(materialized.bodyMarkdown);
-  const main =
-    bodyText && bodyText !== title
-      ? `请实现以下需求：\n\n## ${title}\n\n${bodyText}`
-      : `请实现以下需求：\n\n${title}`;
+  const promptText = materialized.bodyMarkdown.trim() || item.title.trim();
 
   const paths =
     materialized.imagePaths.length > 0
@@ -173,8 +156,6 @@ export async function buildRequirementDispatchPayload(
         ? item.imagePaths.filter((p) => typeof p === "string" && p.trim().startsWith("/"))
         : [];
 
-  const imageBits = paths.map((p) => `@${p}`);
-  const promptText = formatComposerMessageWithImages(main, imageBits);
   const executeBubbleOptions: ClaudeComposerExecuteBubbleOptions | undefined =
     paths.length > 0
       ? {

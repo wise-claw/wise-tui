@@ -449,7 +449,8 @@ export function WorkspaceRequirementModal({
         />
       </div>
       <Typography.Paragraph type="secondary" className="app-workspace-requirements-panel__edit-hint">
-        支持粘贴 / 拖入图片。保存后图片会落到本地 `~/.wise/composer-images/`，派发时以
+        支持从剪贴板复制粘贴或拖入图片；选中图片后拖动右下角控制点即可缩放大小。
+        保存后图片会落到本地 `~/.wise/composer-images/`，派发时以
         `@当前执行环境` + 文字 + 本地路径开 worker，不占主会话。
         {draftImageCount > 0 ? ` 当前草稿含 ${draftImageCount} 张图。` : null}
       </Typography.Paragraph>

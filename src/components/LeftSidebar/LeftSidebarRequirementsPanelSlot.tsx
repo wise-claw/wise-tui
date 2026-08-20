@@ -6,8 +6,7 @@ import {
   SendOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { App as AntdApp, Button, Image, Input, Popconfirm, Popover, Switch } from "antd";
+import { App as AntdApp, Input, Popconfirm, Switch, Tag } from "antd";
 import {
   memo,
   useCallback,
@@ -27,11 +26,7 @@ import {
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { useRequirementsPanelVisibleRows } from "../../hooks/useRequirementsPanelVisibleRows";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
-import {
-  buildRequirementDispatchPayload,
-  countMarkdownImages,
-  stripMarkdownImages,
-} from "../../services/workspaceRequirementDispatch";
+import { buildRequirementDispatchPayload } from "../../services/workspaceRequirementDispatch";
 import {
   loadWorkspaceRequirements,
   saveWorkspaceRequirements,
@@ -46,17 +41,17 @@ import {
   toggleWorkspaceMemoPanel,
   useWorkspaceMemoPanelOpen,
 } from "../../stores/workspaceMemoPanelStore";
+import {
+  type WorkspaceRequirementStatus,
+} from "../../constants/workspaceRequirementStatusFilter";
 import type { Repository } from "../../types";
 import type {
   WorkspaceRequirementItem,
   WorkspaceRequirementsPayloadV1,
 } from "../../types/workspaceRequirements";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
-import { MarkdownBody } from "../ClaudeSessions/MarkdownElements";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { ExpandIcon, PlusIcon, WorkspaceMemoIcon } from "./SidebarIcons";
-import { defaultUrlTransform, type Components, type UrlTransform } from "react-markdown";
-import rehypeRaw from "rehype-raw";
 import "./LeftSidebarRequirementsPanelSlot.css";
 
 export type LeftSidebarRequirementsPanelSlotProps = {
@@ -86,46 +81,6 @@ function stopRowAction(event: ReactMouseEvent) {
   event.stopPropagation();
 }
 
-function markdownImageSrc(src: string): string {
-  if (!src || !src.startsWith("/")) return src;
-  try {
-    return convertFileSrc(src);
-  } catch {
-    return src;
-  }
-}
-
-/** 把正文内 `![...](/abs路径)` 与 `<img src="/abs路径">` 转为可加载的 asset URL。 */
-function hydrateMarkdownImageSrcs(markdown: string): string {
-  let next = markdown;
-  next = next.replace(/!\[([^\]]*)\]\((\/[^)\s]+)\)/g, (_match, alt, path) => {
-    return `![${String(alt ?? "")}](${markdownImageSrc(String(path ?? ""))})`;
-  });
-  next = next.replace(
-    /(<img\b[^>]*?\bsrc=")(\/[^"]+)(")/gi,
-    (_match, prefix, path, suffix) =>
-      `${String(prefix)}${markdownImageSrc(String(path ?? ""))}${String(suffix)}`,
-  );
-  return next;
-}
-
-const popoverMarkdownComponents: Components = {
-  img: ({ node: _node, src, alt }) => (
-    <Image
-      src={src}
-      alt={alt ?? ""}
-      className="app-left-sidebar-requirements-panel__popover-md-img"
-      preview={{ mask: "预览" }}
-    />
-  ),
-};
-
-/** 放行 Tauri asset / data URL 图片 src；其余 URL 沿用 react-markdown 默认规则。 */
-const allowTauriAssetUrlTransform: UrlTransform = (url) => {
-  if (url.startsWith("asset:") || /^https?:\/\/asset\./i.test(url) || url.startsWith("data:")) return url;
-  return defaultUrlTransform(url);
-};
-
 function RequirementsPanelRow({
   item,
   repoLabel,
@@ -149,105 +104,8 @@ function RequirementsPanelRow({
 }) {
   const done = item.status === "done";
   const verifying = item.status === "verifying";
-  const dispatched = item.lastDispatchedAt != null;
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const rawBody = item.bodyMarkdown || item.description || "";
-  const bodyText = stripMarkdownImages(rawBody);
-  const bodyFlat = bodyText.replace(/\s+/g, " ").trim();
-  const hasBodyImages = countMarkdownImages(rawBody) > 0;
-  const desc =
-    rawBody.trim() && (bodyFlat !== item.title || hasBodyImages) ? rawBody : "";
-  const mdSource = desc ? hydrateMarkdownImageSrcs(desc) : "";
-
-  const popoverContent = (
-    <div className="app-left-sidebar-requirements-panel__popover">
-      <div className="app-left-sidebar-requirements-panel__popover-head">
-        <span className="app-left-sidebar-requirements-panel__popover-title">{item.title}</span>
-        {verifying ? (
-          <span
-            className="app-left-sidebar-requirements-panel__row-badge app-left-sidebar-requirements-panel__row-badge--verifying"
-            title="会话执行完成，等待验证"
-          >
-            待验证
-          </span>
-        ) : dispatched && !done ? (
-          <span
-            className="app-left-sidebar-requirements-panel__row-badge app-left-sidebar-requirements-panel__row-badge--dispatched"
-            title="已派发到执行环境"
-          >
-            已派发
-          </span>
-        ) : done ? (
-          <span
-            className="app-left-sidebar-requirements-panel__row-badge app-left-sidebar-requirements-panel__row-badge--verified"
-            title="验证完成"
-          >
-            已验证
-          </span>
-        ) : null}
-      </div>
-      {!repoMissing ? (
-        <div className="app-left-sidebar-requirements-panel__popover-repo">{repoLabel}</div>
-      ) : null}
-      {desc ? (
-        <Image.PreviewGroup>
-          <div className="app-left-sidebar-requirements-panel__popover-md app-markdown">
-            <MarkdownBody
-              source={mdSource}
-              rehypePlugins={[rehypeRaw]}
-              components={popoverMarkdownComponents}
-              urlTransform={allowTauriAssetUrlTransform}
-            />
-          </div>
-        </Image.PreviewGroup>
-      ) : null}
-      <div className="app-left-sidebar-requirements-panel__popover-actions">
-        {verifying ? (
-          <Button
-            type="primary"
-            size="small"
-            icon={<CheckCircleOutlined />}
-            onClick={() => {
-              setPopoverOpen(false);
-              onVerifyDone();
-            }}
-          >
-            验证完成
-          </Button>
-        ) : null}
-        <Button
-          type="text"
-          size="small"
-          onClick={() => {
-            setPopoverOpen(false);
-            onOpenPanel();
-          }}
-        >
-          打开面板
-        </Button>
-        <Button
-          type="text"
-          size="small"
-          onClick={() => {
-            setPopoverOpen(false);
-            onEdit();
-          }}
-        >
-          编辑
-        </Button>
-      </div>
-    </div>
-  );
 
   return (
-    <Popover
-      trigger="click"
-      placement="rightTop"
-      open={popoverOpen}
-      onOpenChange={setPopoverOpen}
-      content={popoverContent}
-      overlayClassName="app-left-sidebar-requirements-panel__popover-overlay"
-    >
       <div
         className={
           "app-left-sidebar-requirements-panel__row" +
@@ -255,12 +113,11 @@ function RequirementsPanelRow({
         }
         role="button"
         tabIndex={0}
-        aria-haspopup="dialog"
-        aria-expanded={popoverOpen}
+        onClick={onOpenPanel}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            setPopoverOpen((prev) => !prev);
+            onOpenPanel();
           }
         }}
         title={item.title}
@@ -277,38 +134,36 @@ function RequirementsPanelRow({
             </button>
           </DeferredHoverTooltip>
         ) : null}
-        {verifying ? (
-          <span
-            className="app-left-sidebar-requirements-panel__row-badge app-left-sidebar-requirements-panel__row-badge--verifying"
-            title="会话执行完成，等待验证"
-          >
-            待验证
-          </span>
-        ) : dispatched && !done ? (
-          <span
-            className="app-left-sidebar-requirements-panel__row-badge app-left-sidebar-requirements-panel__row-badge--dispatched"
-            title="已派发到执行环境"
-          >
-            已派发
-          </span>
-        ) : done ? (
-          <span
-            className="app-left-sidebar-requirements-panel__row-badge app-left-sidebar-requirements-panel__row-badge--verified"
-            title="验证完成"
-          >
-            已验证
-          </span>
-        ) : null}
+        <span
+          className={
+            "app-left-sidebar-requirements-panel__row-badge " +
+            (verifying
+              ? "app-left-sidebar-requirements-panel__row-badge--verifying"
+              : done
+                ? "app-left-sidebar-requirements-panel__row-badge--verified"
+                : "app-left-sidebar-requirements-panel__row-badge--open")
+          }
+          title={verifying ? "会话执行完成，等待验证" : done ? "已完成" : "待办"}
+        >
+          {verifying ? "待验证" : done ? "已完成" : "待办"}
+        </span>
         <span className="app-left-sidebar-requirements-panel__row-title">{item.title}</span>
-        {!repoMissing ? (
-          <span className="app-left-sidebar-requirements-panel__row-repo" title={repoLabel}>
-            {repoLabel}
-          </span>
-        ) : null}
         <div
           className="app-left-sidebar-requirements-panel__row-actions"
           onClick={stopRowAction}
         >
+          {verifying ? (
+            <DeferredHoverTooltip title="标记为验证完成">
+              <button
+                type="button"
+                className="app-left-sidebar-requirements-panel__action-btn"
+                aria-label="验证完成"
+                onClick={onVerifyDone}
+              >
+                <CheckCircleOutlined />
+              </button>
+            </DeferredHoverTooltip>
+          ) : null}
           {!done ? (
             <DeferredHoverTooltip title="派发到当前执行环境（不占主会话）">
               <button
@@ -358,7 +213,6 @@ function RequirementsPanelRow({
           </Popconfirm>
         </div>
       </div>
-    </Popover>
   );
 }
 
@@ -373,6 +227,11 @@ function LeftSidebarRequirementsPanelSlotInner({
   const scrollRootRef = useRef<HTMLDivElement>(null);
   const visibleRows = useRequirementsPanelVisibleRows();
   const memoPanelOpen = useWorkspaceMemoPanelOpen();
+  const [statusFilters, setStatusFilters] = useState<WorkspaceRequirementStatus[]>([
+    "open",
+    "verifying",
+    "done",
+  ]);
   const {
     enabled: autoDispatch,
     setEnabled: setAutoDispatch,
@@ -452,8 +311,10 @@ function LeftSidebarRequirementsPanelSlotInner({
     [items],
   );
   const displayItems = useMemo(
-    () => [...verifyingItems, ...openItems, ...doneItems],
-    [openItems, verifyingItems, doneItems],
+    () => [...verifyingItems, ...openItems, ...doneItems].filter((item) =>
+      statusFilters.includes(item.status),
+    ),
+    [openItems, verifyingItems, doneItems, statusFilters],
   );
 
   const handleCreate = useCallback(() => {
@@ -463,8 +324,8 @@ function LeftSidebarRequirementsPanelSlotInner({
     });
   }, [activeRepositoryId]);
 
-  const handleOpenFull = useCallback(() => {
-    openWorkspaceMemoPanel();
+  const handleOpenFull = useCallback((item: WorkspaceRequirementItem) => {
+    openWorkspaceMemoPanel(item.id);
   }, []);
 
   const handleVerifyDone = useCallback(
@@ -645,20 +506,53 @@ function LeftSidebarRequirementsPanelSlotInner({
       </div>
 
       {!sectionCollapsed ? (
-        <div ref={scrollRootRef} className="app-left-sidebar-requirements-panel__body">
+        <>
+          <div className="app-left-sidebar-requirements-panel__filter-bar">
+            <span className="app-left-sidebar-requirements-panel__filter-label">状态</span>
+            <div className="app-left-sidebar-requirements-panel__status-tags" aria-label="按需求状态过滤">
+              {([
+                ["open", "待办"],
+                ["verifying", "待验证"],
+                ["done", "已完成"],
+              ] as const).map(([value, label]) => {
+                const checked = statusFilters.includes(value);
+                return (
+                  <Tag.CheckableTag
+                    key={value}
+                    checked={checked}
+                    onChange={(nextChecked) => {
+                      setStatusFilters((current) =>
+                        nextChecked
+                          ? [...current, value]
+                          : current.filter((status) => status !== value),
+                      );
+                    }}
+                    className="app-left-sidebar-requirements-panel__status-tag"
+                  >
+                    {label}
+                  </Tag.CheckableTag>
+                );
+              })}
+            </div>
+          </div>
+          <div ref={scrollRootRef} className="app-left-sidebar-requirements-panel__body">
           {loading ? (
             <div className="app-left-sidebar-requirements-panel__empty">加载中…</div>
           ) : displayItems.length === 0 ? (
             <div className="app-left-sidebar-requirements-panel__empty app-left-sidebar-requirements-panel__empty--with-action">
               <span className="app-left-sidebar-requirements-panel__empty-text">
-                暂无需求
+                {items.length === 0 ? "暂无需求" : "当前状态暂无"}
               </span>
               <button
                 type="button"
                 className="app-left-sidebar-requirements-panel__empty-add-btn"
-                onClick={handleCreate}
+                onClick={
+                  items.length === 0
+                    ? handleCreate
+                    : () => setStatusFilters(["open", "verifying", "done"])
+                }
               >
-                新增
+                {items.length === 0 ? "新增" : "查看全部"}
               </button>
             </div>
           ) : (
@@ -672,7 +566,7 @@ function LeftSidebarRequirementsPanelSlotInner({
                       repoLabel={repo.label}
                       repoMissing={repo.missing}
                       dispatching={dispatchingId === item.id}
-                      onOpenPanel={handleOpenFull}
+                      onOpenPanel={() => handleOpenFull(item)}
                       onDispatch={() => void handleDispatch(item)}
                       onEdit={() => handleEdit(item)}
                       onDelete={() => void handleDelete(item)}
@@ -683,7 +577,8 @@ function LeftSidebarRequirementsPanelSlotInner({
               })}
             </ul>
           )}
-        </div>
+          </div>
+        </>
       ) : null}
     </div>
   );

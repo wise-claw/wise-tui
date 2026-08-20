@@ -12,13 +12,16 @@ import {
   Empty,
   InputNumber,
   Modal,
+  Select,
   Spin,
   Switch,
   Tag,
   message,
 } from "antd";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { defaultUrlTransform, type UrlTransform } from "react-markdown";
+import rehypeRaw from "rehype-raw";
 import { dispatchRequirementToExecutionEnvironment } from "../../constants/pendingTaskQueueEvents";
 import { useWorkspaceRequirementAutoDispatchSetting } from "../../hooks/useWorkspaceRequirementAutoDispatch";
 import {
@@ -35,7 +38,13 @@ import {
   closeWorkspaceMemoPanel,
   requestWorkspaceRequirementCreate,
   requestWorkspaceRequirementEdit,
+  useWorkspaceMemoPanelSelectedRequirementId,
 } from "../../stores/workspaceMemoPanelStore";
+import {
+  matchesWorkspaceRequirementStatusFilter,
+  WORKSPACE_REQUIREMENT_STATUS_FILTER_OPTIONS,
+  type WorkspaceRequirementStatusFilter,
+} from "../../constants/workspaceRequirementStatusFilter";
 import { loadRepositories } from "../../services/repository";
 import type { Repository } from "../../types";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
@@ -58,11 +67,30 @@ function thumbSrc(path: string): string {
   }
 }
 
+/** 右栏详情将需求落盘后的绝对图片路径转换为 WebView 可加载地址。 */
+function hydrateRequirementImageSources(markdown: string): string {
+  return markdown
+    .replace(/!\[([^\]]*)\]\((\/[^)\s]+)\)/g, (_match, alt, path) =>
+      `![${String(alt ?? "")}](${thumbSrc(String(path ?? ""))})`,
+    )
+    .replace(/(<img\b[^>]*?\bsrc=")(\/[^"]+)(")/gi, (_match, prefix, path, suffix) =>
+      `${String(prefix)}${thumbSrc(String(path ?? ""))}${String(suffix)}`,
+    );
+}
+
+const allowRequirementImageUrl: UrlTransform = (url) => {
+  if (url.startsWith("asset:") || /^https?:\/\/asset\./i.test(url) || url.startsWith("data:")) {
+    return url;
+  }
+  return defaultUrlTransform(url);
+};
+
 interface RequirementRowProps {
   item: WorkspaceRequirementItem;
   repositoryLabel: string;
   repositoryMissing: boolean;
   dispatchingId: string | null;
+  selected: boolean;
   onToggleDone: (item: WorkspaceRequirementItem) => void;
   onEdit: (item: WorkspaceRequirementItem) => void;
   onDelete: (item: WorkspaceRequirementItem) => void;
@@ -75,6 +103,7 @@ function requirementRowEqual(prev: RequirementRowProps, next: RequirementRowProp
     prev.repositoryLabel === next.repositoryLabel &&
     prev.repositoryMissing === next.repositoryMissing &&
     prev.dispatchingId === next.dispatchingId &&
+    prev.selected === next.selected &&
     prev.onToggleDone === next.onToggleDone &&
     prev.onEdit === next.onEdit &&
     prev.onDelete === next.onDelete &&
@@ -87,6 +116,7 @@ const RequirementRow = memo(function RequirementRow({
   repositoryLabel,
   repositoryMissing,
   dispatchingId,
+  selected,
   onToggleDone,
   onEdit,
   onDelete,
@@ -97,10 +127,25 @@ const RequirementRow = memo(function RequirementRow({
   const thumbs = item.imagePaths.slice(0, 3);
   const moreImages = Math.max(0, item.imagePaths.length - thumbs.length);
   const desc = markdownPreview(item);
+  const rowRef = useRef<HTMLLIElement | null>(null);
+  const detailMarkdown = useMemo(
+    () => hydrateRequirementImageSources(item.bodyMarkdown || item.description || item.title),
+    [item.bodyMarkdown, item.description, item.title],
+  );
+
+  useEffect(() => {
+    if (!selected) return;
+    const frame = window.requestAnimationFrame(() => {
+      rowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selected]);
 
   return (
     <li
-      className={`app-workspace-requirements-panel__row${done ? " app-workspace-requirements-panel__row--done" : ""}`}
+      ref={rowRef}
+      className={`app-workspace-requirements-panel__row${done ? " app-workspace-requirements-panel__row--done" : ""}${selected ? " app-workspace-requirements-panel__row--selected" : ""}`}
+      aria-current={selected ? "true" : undefined}
     >
       <Checkbox
         className="app-workspace-requirements-panel__check"
@@ -143,7 +188,15 @@ const RequirementRow = memo(function RequirementRow({
             </Tag>
           ) : null}
         </div>
-        {desc ? (
+        {selected ? (
+          <div className="app-workspace-requirements-panel__detail app-markdown">
+            <MarkdownBody
+              source={detailMarkdown}
+              rehypePlugins={[rehypeRaw]}
+              urlTransform={allowRequirementImageUrl}
+            />
+          </div>
+        ) : desc ? (
           <div className="app-workspace-requirements-panel__md-desc app-markdown">
             <MarkdownBody source={desc} />
           </div>
@@ -197,6 +250,8 @@ const RequirementRow = memo(function RequirementRow({
  * 中栏需求管理：列表、完成态、派发；新增/编辑走全局独立弹窗，不依赖本面板。
  */
 export function WorkspaceMemoPanel() {
+  const selectedRequirementId = useWorkspaceMemoPanelSelectedRequirementId();
+  const [statusFilter, setStatusFilter] = useState<WorkspaceRequirementStatusFilter>("all");
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<WorkspaceRequirementItem[]>([]);
   const [repositories, setRepositories] = useState<Repository[]>([]);
@@ -276,6 +331,15 @@ export function WorkspaceMemoPanel() {
       window.removeEventListener(WISE_WORKSPACE_REQUIREMENTS_CHANGED, onRequirementsChanged);
     };
   }, []);
+
+  // 左栏点选的需求优先可见：仅在右栏当前筛选会把目标隐藏时，调整右栏自己的筛选。
+  useEffect(() => {
+    if (!selectedRequirementId || statusFilter === "all") return;
+    const selected = items.find((item) => item.id === selectedRequirementId);
+    if (selected && selected.status !== statusFilter) {
+      setStatusFilter(selected.status);
+    }
+  }, [items, selectedRequirementId, statusFilter]);
 
   const openCreate = useCallback(() => {
     requestWorkspaceRequirementCreate();
@@ -383,6 +447,17 @@ export function WorkspaceMemoPanel() {
   const openItems = items.filter((item) => item.status === "open");
   const verifyingItems = items.filter((item) => item.status === "verifying");
   const doneItems = items.filter((item) => item.status === "done");
+  const filteredOpenItems = openItems.filter((item) =>
+    matchesWorkspaceRequirementStatusFilter(item, statusFilter),
+  );
+  const filteredVerifyingItems = verifyingItems.filter((item) =>
+    matchesWorkspaceRequirementStatusFilter(item, statusFilter),
+  );
+  const filteredDoneItems = doneItems.filter((item) =>
+    matchesWorkspaceRequirementStatusFilter(item, statusFilter),
+  );
+  const filteredItemCount =
+    filteredOpenItems.length + filteredVerifyingItems.length + filteredDoneItems.length;
   const isMacShortcut =
     typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform);
   const closeShortcutLabel = isMacShortcut ? "⌘W" : "Ctrl+W";
@@ -405,6 +480,16 @@ export function WorkspaceMemoPanel() {
             </div>
           </div>
           <div className="app-file-editor-tab-bar-actions">
+            <Select<WorkspaceRequirementStatusFilter>
+              size="small"
+              value={statusFilter}
+              options={WORKSPACE_REQUIREMENT_STATUS_FILTER_OPTIONS}
+              onChange={setStatusFilter}
+              className="app-workspace-requirements-panel__status-filter"
+              aria-label="按需求状态过滤"
+              popupMatchSelectWidth={96}
+              getPopupContainer={() => document.body}
+            />
             <span className="app-workspace-memo-panel__save-status">
               {saving ? "保存中…" : `${openItems.length + verifyingItems.length} 项待办`}
             </span>
@@ -464,27 +549,35 @@ export function WorkspaceMemoPanel() {
           </div>
         ) : (
           <div className="app-workspace-requirements-panel__content">
-            {items.length === 0 ? (
+            {filteredItemCount === 0 ? (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={`暂无需求，点击「新增」或按 ${createShortcutLabel} 编写图文需求后再派发`}
+                description={
+                  items.length === 0
+                    ? `暂无需求，点击「新增」或按 ${createShortcutLabel} 编写图文需求后再派发`
+                    : "当前状态下暂无需求"
+                }
               >
                 <Button
                   type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={openCreate}
-                  title={`新增需求（${createShortcutLabel}）`}
-                  aria-label={`新增需求（${createShortcutLabel}）`}
+                  icon={items.length === 0 ? <PlusOutlined /> : undefined}
+                  onClick={
+                    items.length === 0
+                      ? openCreate
+                      : () => setStatusFilter("all")
+                  }
+                  title={items.length === 0 ? `新增需求（${createShortcutLabel}）` : "查看全部需求"}
+                  aria-label={items.length === 0 ? `新增需求（${createShortcutLabel}）` : "查看全部需求"}
                 >
-                  新增需求
+                  {items.length === 0 ? "新增需求" : "查看全部"}
                 </Button>
               </Empty>
             ) : (
               <ul className="app-workspace-requirements-panel__list">
-                {verifyingItems.length > 0 ? (
+                {filteredVerifyingItems.length > 0 ? (
                   <li className="app-workspace-requirements-panel__section-label">待验证</li>
                 ) : null}
-                {verifyingItems.map((item) => {
+                {filteredVerifyingItems.map((item) => {
                   const repo = resolveRepositoryMeta(item.repositoryId);
                   return (
                   <RequirementRow
@@ -493,6 +586,7 @@ export function WorkspaceMemoPanel() {
                     repositoryLabel={repo.label}
                     repositoryMissing={repo.missing}
                     dispatchingId={dispatchingId}
+                    selected={item.id === selectedRequirementId}
                     onToggleDone={(row) => void handleToggleDone(row)}
                     onEdit={openEdit}
                     onDelete={handleDelete}
@@ -500,7 +594,7 @@ export function WorkspaceMemoPanel() {
                   />
                   );
                 })}
-                {openItems.map((item) => {
+                {filteredOpenItems.map((item) => {
                   const repo = resolveRepositoryMeta(item.repositoryId);
                   return (
                   <RequirementRow
@@ -509,6 +603,7 @@ export function WorkspaceMemoPanel() {
                     repositoryLabel={repo.label}
                     repositoryMissing={repo.missing}
                     dispatchingId={dispatchingId}
+                    selected={item.id === selectedRequirementId}
                     onToggleDone={(row) => void handleToggleDone(row)}
                     onEdit={openEdit}
                     onDelete={handleDelete}
@@ -516,10 +611,10 @@ export function WorkspaceMemoPanel() {
                   />
                   );
                 })}
-                {doneItems.length > 0 ? (
+                {filteredDoneItems.length > 0 ? (
                   <li className="app-workspace-requirements-panel__section-label">已完成</li>
                 ) : null}
-                {doneItems.map((item) => {
+                {filteredDoneItems.map((item) => {
                   const repo = resolveRepositoryMeta(item.repositoryId);
                   return (
                   <RequirementRow
@@ -528,6 +623,7 @@ export function WorkspaceMemoPanel() {
                     repositoryLabel={repo.label}
                     repositoryMissing={repo.missing}
                     dispatchingId={dispatchingId}
+                    selected={item.id === selectedRequirementId}
                     onToggleDone={(row) => void handleToggleDone(row)}
                     onEdit={openEdit}
                     onDelete={handleDelete}
