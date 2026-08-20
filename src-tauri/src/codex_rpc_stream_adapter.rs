@@ -230,7 +230,7 @@ fn map_notification_to_stream_lines(
                 match extract_item_text(&item.raw) {
                     Some(text) if !text.trim().is_empty() => CodexRpcAdaptOutput::split(
                         vec![result_full_text_line(&text)],
-                        vec![assistant_text_line(&text)],
+                        vec![assistant_text_line_with_stream_id(&text, item_id)],
                     ),
                     _ => CodexRpcAdaptOutput::default(),
                 }
@@ -255,7 +255,9 @@ fn map_notification_to_stream_lines(
                 if delta.chars().any(|c| !c.is_whitespace()) {
                     state.note_agent_message_delta(item_id);
                 }
-                CodexRpcAdaptOutput::emit_only(vec![assistant_text_line(delta)])
+                CodexRpcAdaptOutput::emit_only(vec![assistant_text_line_with_stream_id(
+                    delta, item_id,
+                )])
             }
         }
 
@@ -393,7 +395,9 @@ fn map_notification_to_stream_lines(
                     state.note_thinking_delta(item_id);
                 }
                 // 推理增量只直播不落盘：completed 时持久化完整内容，避免 JSONL 膨胀。
-                CodexRpcAdaptOutput::emit_only(vec![assistant_thinking_line(delta)])
+                CodexRpcAdaptOutput::emit_only(vec![assistant_thinking_line_with_stream_id(
+                    delta, item_id,
+                )])
             }
         }
 
@@ -404,7 +408,9 @@ fn map_notification_to_stream_lines(
                 if delta.chars().any(|c| !c.is_whitespace()) {
                     state.note_thinking_delta(item_id);
                 }
-                CodexRpcAdaptOutput::emit_only(vec![assistant_thinking_line(delta)])
+                CodexRpcAdaptOutput::emit_only(vec![assistant_thinking_line_with_stream_id(
+                    delta, item_id,
+                )])
             }
         }
 
@@ -1361,18 +1367,24 @@ fn map_item_completed(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> 
         "agentMessage" | "assistantMessage" => {
             // Keep Markdown whitespace intact (do not run strip_benign_noise / lines()).
             match extract_item_text(&item.raw) {
-                Some(text) if !text.trim().is_empty() => vec![assistant_text_line(&text)],
+                Some(text) if !text.trim().is_empty() => {
+                    vec![assistant_text_line_with_stream_id(&text, &item.id)]
+                }
                 _ => vec![],
             }
         }
         "reasoning" => {
             let text = extract_item_text(&item.raw);
-            text.map(|t| assistant_thinking_line(&t)).into_iter().collect()
+            text.map(|t| assistant_thinking_line_with_stream_id(&t, &item.id))
+                .into_iter()
+                .collect()
         }
         "plan" => {
             // 计划文本以 thinking 块展示（前端可折叠查看）。
             let text = extract_item_text(&item.raw);
-            text.map(|t| assistant_thinking_line(&t)).into_iter().collect()
+            text.map(|t| assistant_thinking_line_with_stream_id(&t, &item.id))
+                .into_iter()
+                .collect()
         }
         "hookPrompt" => vec![],
         "commandExecution" => {
@@ -1686,6 +1698,16 @@ fn assistant_text_line(text: &str) -> String {
     assistant_content_line(vec![json!({ "type": "text", "text": text })])
 }
 
+/// 带 Codex item id 的正文流。前端据此将被 reasoning / tool 交错的同一 agentMessage
+/// 合回一个逻辑 part，而不是按到达顺序堆成许多碎片。
+fn assistant_text_line_with_stream_id(text: &str, stream_id: &str) -> String {
+    let mut block = json!({ "type": "text", "text": text });
+    if !stream_id.trim().is_empty() {
+        block["stream_id"] = json!(stream_id);
+    }
+    assistant_content_line(vec![block])
+}
+
 /// Claude stream-json `result` — authoritative full-turn text for frontend reconcile.
 fn result_full_text_line(text: &str) -> String {
     json!({
@@ -1697,6 +1719,15 @@ fn result_full_text_line(text: &str) -> String {
 
 fn assistant_thinking_line(text: &str) -> String {
     assistant_content_line(vec![json!({ "type": "thinking", "thinking": text })])
+}
+
+/// 与正文一致，为 reasoning / plan 流保留稳定 item id。
+fn assistant_thinking_line_with_stream_id(text: &str, stream_id: &str) -> String {
+    let mut block = json!({ "type": "thinking", "thinking": text });
+    if !stream_id.trim().is_empty() {
+        block["stream_id"] = json!(stream_id);
+    }
+    assistant_content_line(vec![block])
 }
 
 fn assistant_tool_use_line(
@@ -1881,6 +1912,7 @@ mod tests {
         let out = adapt(&notif, &mut state);
         assert_eq!(out.emit.len(), 1);
         assert!(out.emit[0].contains(r#""type":"text""#));
+        assert!(out.emit[0].contains(r#""stream_id":"itm_1""#));
         assert!(out.emit[0].contains("Hello world"));
         assert!(
             out.persist.is_empty(),
@@ -2385,6 +2417,7 @@ mod tests {
         let out = adapt(&delta, &mut state);
         assert_eq!(out.emit.len(), 1);
         assert!(out.emit[0].contains(r#""type":"thinking""#));
+        assert!(out.emit[0].contains(r#""stream_id":"itm_r""#));
         assert!(out.emit[0].contains("先分析需求"));
         assert!(out.persist.is_empty(), "reasoning deltas must not persist");
 

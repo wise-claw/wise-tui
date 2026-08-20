@@ -872,6 +872,11 @@ export type MessagePart = TextPart | ToolUsePart | ReasoningPart;
 export interface TextPart {
   type: "text";
   text: string;
+  /**
+   * 流式来源的稳定 item id。Codex 会交错发送 reasoning 与 agentMessage delta，
+   * 依此把同一逻辑消息重新合并，避免按到达顺序拆成许多气泡。
+   */
+  streamId?: string;
 }
 
 export interface ToolUseDiagnostics {
@@ -914,6 +919,8 @@ export interface ToolUsePart {
 export interface ReasoningPart {
   type: "reasoning";
   text: string;
+  /** 与 TextPart.streamId 同义；缺省时沿用传统的相邻 part 合并策略。 */
+  streamId?: string;
 }
 
 export interface ClaudeSessionInfo {

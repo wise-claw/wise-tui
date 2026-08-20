@@ -9,8 +9,14 @@ import {
 } from "../utils/assistantTextParts";
 type ToolUsePart = Extract<MessagePart, { type: "tool_use" }>;
 
-/** 单轮助手消息中 text+reasoning 合计上限，避免流式拼接撑爆主线程内存 */
-export const MAX_ASSISTANT_TEXT_REASONING_CHARS = 36_000;
+/**
+ * 单轮助手消息中 text+reasoning 合计上限，避免异常流无限撑爆主线程内存。
+ *
+ * Codex 的 reasoning 常会超过 36k；那个偏低的阈值会在正常工作时把内容替换成
+ * 「已省略」提示。会话本身另有条数窗口与磁盘 transcript 兜底，因此这里保留仅针对
+ * 病态输出的较高安全阈值，不再截断正常推理回合。
+ */
+export const MAX_ASSISTANT_TEXT_REASONING_CHARS = 512_000;
 
 /** 单条 tool_use 的 output 字符串上限（error 同理），避免巨型工具回包常驻内存 */
 const MAX_TOOL_PART_OUTPUT_CHARS = 18_000;
@@ -80,7 +86,7 @@ function capReasoningPartsByBudget(parts: MessagePart[], budget: number): Messag
     const tail = tailKeep > 0 ? text.slice(-tailKeep) : "";
     const omitted = text.length - head.length - tail.length;
     remaining = 0;
-    out.push({ type: "reasoning", text: head + reasoningOmissionNotice(omitted) + tail });
+    out.push({ ...p, text: head + reasoningOmissionNotice(omitted) + tail });
   }
   return out;
 }
@@ -112,7 +118,7 @@ function capTextPartsByBudget(parts: MessagePart[], budget: number): MessagePart
     remaining = 0;
     if (sliceText.length > 0) {
       out.push({
-        type: "text",
+        ...p,
         text: noticePlaced
           ? sliceText
           : `…[已省略较早前 ${String(remove)} 字以控制内存]\n\n${sliceText}`,
@@ -229,6 +235,25 @@ export function mergeTextPartsByContainment(existing: string, incoming: string):
   return existing + incoming;
 }
 
+/**
+ * 有来源 id 的流式 part 可跨越别的 part 回写。Codex RPC 会交错发送 reasoning 与
+ * agentMessage delta：只看数组末项会把同一个 item 切成一串「思考 / 正文」碎片。
+ */
+function findStreamPartIndex(
+  parts: readonly MessagePart[],
+  incoming: Extract<MessagePart, { type: "text" | "reasoning" }>,
+): number {
+  const streamId = incoming.streamId?.trim();
+  if (!streamId) return -1;
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const candidate = parts[index];
+    if (candidate?.type === incoming.type && candidate.streamId === streamId) {
+      return index;
+    }
+  }
+  return -1;
+}
+
 export type MergeAssistantPartsOptions = {
   /** content_block_start(text) 后首个 delta：另起 text part，对齐 JSONL 多 block。 */
   startNewTextBlock?: boolean;
@@ -275,6 +300,17 @@ export function mergeAssistantParts(
   for (const part of incomingParts) {
     if (part.type === "text") {
       incomingTextOrdinal += 1;
+      const matchingStreamPartIndex = findStreamPartIndex(merged, part);
+      if (matchingStreamPartIndex >= 0) {
+        const existing = merged[matchingStreamPartIndex]!;
+        if (existing.type === "text") {
+          merged[matchingStreamPartIndex] = {
+            ...existing,
+            text: mergeTextPartsByContainment(existing.text, part.text),
+          };
+          continue;
+        }
+      }
       // assistant 快照一次携带多个 text block（常见于 tool 后总结 + 说明点），磁盘 JSONL
       // 会保留为独立 part，渲染层 buildMergedTextGroups 以 \n\n 拼接。流式 merge 若用
       // mergeTextPartsByContainment 直接拼接，会把末段/列表压成一段（刷新后段落才清晰）。
@@ -326,6 +362,18 @@ export function mergeAssistantParts(
         merged.push(part);
       }
       continue;
+    }
+
+    const matchingStreamPartIndex = findStreamPartIndex(merged, part);
+    if (matchingStreamPartIndex >= 0) {
+      const existing = merged[matchingStreamPartIndex]!;
+      if (existing.type === "reasoning") {
+        merged[matchingStreamPartIndex] = {
+          ...existing,
+          text: mergeTextPartsByContainment(existing.text, part.text),
+        };
+        continue;
+      }
     }
 
     const lastReason = merged[merged.length - 1];

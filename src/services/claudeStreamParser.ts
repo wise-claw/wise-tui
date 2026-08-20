@@ -219,6 +219,12 @@ function extractPartsFromStreamDelta(delta: unknown): MessagePart[] {
   return [];
 }
 
+/** Codex RPC 在 block 上附带的稳定 item id；其它引擎未提供时保持 undefined。 */
+function streamPartIdFromBlock(block: Record<string, unknown>): string | undefined {
+  const value = block.stream_id ?? block.streamId ?? block.item_id ?? block.itemId;
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 /**
  * Extract structured parts from a Claude stream-json line。
  * 与 Hub 一致地对 `stream_event` 等外壳解包，避免仅 Hub 能解析 AskUserQuestion 而 UI 气泡已展示、Dock 未写入。
@@ -412,10 +418,13 @@ export function extractPartsFromParsed(obj: unknown): ExtractPartsFromParsedResu
       if (Array.isArray(blocks)) {
         const parts: MessagePart[] = [];
         for (const b of blocks) {
+          const streamId = b && typeof b === "object" && !Array.isArray(b)
+            ? streamPartIdFromBlock(b as Record<string, unknown>)
+            : undefined;
           if (b.type === "text" && b.text) {
             const cleaned = stripClaudeHarnessInjectedStreamText(String(b.text));
             if (cleaned && !isClaudeHarnessInjectedStreamText(cleaned)) {
-              parts.push({ type: "text", text: cleaned });
+              parts.push({ type: "text", text: cleaned, ...(streamId ? { streamId } : {}) });
             }
           } else if (b.type === "tool_use") {
             const name = typeof b.name === "string" ? b.name : "unknown";
@@ -454,7 +463,7 @@ export function extractPartsFromParsed(obj: unknown): ExtractPartsFromParsedResu
               ...(diagnostics ? { diagnostics } : {}),
             } satisfies ToolUsePart);
           } else if (b.type === "thinking" && b.thinking) {
-            parts.push({ type: "reasoning", text: b.thinking });
+            parts.push({ type: "reasoning", text: b.thinking, ...(streamId ? { streamId } : {}) });
           } else {
             parts.push(...toolResultPartsFromContentBlocks([b]));
           }

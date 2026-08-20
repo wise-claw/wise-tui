@@ -5550,6 +5550,9 @@
 
 .app-message-part-reasoning-show__flow {
   position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
   min-width: 0;
   max-width: 100%;
   word-break: break-word;
@@ -5566,12 +5569,12 @@
 }
 
 .app-message-part-reasoning-show__lead {
-  float: left;
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 4px;
-  margin-right: 4px;
-  height: calc(var(--app-reasoning-font-size) * var(--app-reasoning-line-height));
+  margin: 0;
+  min-height: calc(var(--app-reasoning-font-size) * var(--app-reasoning-line-height));
   color: color-mix(in srgb, #7c3aed 72%, var(--ant-color-text-secondary));
   font-size: var(--app-reasoning-font-size);
   font-weight: 600;
@@ -5612,11 +5615,12 @@
   height: 13px;
 }
 
-/* 正文跟在浮动 lead 后绕排，第二行起从左侧铺满，避免图标下方留白 */
+/* 稳定的 flex 行：流式更新不再因 float 重排而显得从右向左滑动。 */
 .app-message-part-reasoning-show__flow .app-markdown-host {
   display: block;
+  flex: 1 1 0;
   min-width: 0;
-  max-width: none;
+  max-width: 100%;
 }
 
 .app-message-part-reasoning-show__flow .app-markdown,

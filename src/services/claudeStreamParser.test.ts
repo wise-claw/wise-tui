@@ -201,6 +201,25 @@ describe("extractPartsFromStreamLine", () => {
     ).toEqual([{ type: "reasoning", text: "planning" }]);
   });
 
+  test("preserves Codex stream_id on assistant text and reasoning blocks", () => {
+    const result = extractPartsFromStreamLine(
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "检查输入", stream_id: "reasoning-1" },
+            { type: "text", text: "准备执行", stream_id: "message-1" },
+          ],
+        },
+      }),
+    );
+    expect(result.parts).toEqual([
+      { type: "reasoning", text: "检查输入", streamId: "reasoning-1" },
+      { type: "text", text: "准备执行", streamId: "message-1" },
+    ]);
+  });
+
   test("content_block_start(text) signals new text block boundary", () => {
     expect(
       extractPartsFromStreamLine(

@@ -395,6 +395,20 @@ describe("mergeAssistantParts reasoning containment", () => {
     );
     expect((merged[0] as { text: string }).text).toBe("先分析，再执行");
   });
+
+  test("merges interleaved Codex reasoning and text deltas by their stable stream ids", () => {
+    // Codex app-server 可在同一 turn 内交错发出 reasoning / agentMessage；若只和数组
+    // 末项合并，界面会变成「思考一小段、正文一小段」的碎片列表。
+    let merged = mergeAssistantParts([], [{ type: "reasoning", text: "先检查", streamId: "r-1" }]);
+    merged = mergeAssistantParts(merged, [{ type: "text", text: "正在读取", streamId: "m-1" }]);
+    merged = mergeAssistantParts(merged, [{ type: "reasoning", text: "调用链。", streamId: "r-1" }]);
+    merged = mergeAssistantParts(merged, [{ type: "text", text: "配置。", streamId: "m-1" }]);
+
+    expect(merged).toEqual([
+      { type: "reasoning", text: "先检查调用链。", streamId: "r-1" },
+      { type: "text", text: "正在读取配置。", streamId: "m-1" },
+    ]);
+  });
 });
 
 describe("mergeAssistantParts tool_use ACP updates", () => {
@@ -520,8 +534,9 @@ describe("assistant message memory limits", () => {
 
   test("reasoning-only overflow keeps head + middle notice + tail (preview stays real thinking)", () => {
     const base = session([]);
+    const reasoning = "思".repeat(MAX_ASSISTANT_TEXT_REASONING_CHARS + 4000);
     const next = appendAssistantStreamParts(base, [
-      { type: "reasoning", text: "思".repeat(40000) },
+      { type: "reasoning", text: reasoning },
     ]);
     const msg = next.messages[0]!;
     const part = msg.parts[0]!;
@@ -538,8 +553,9 @@ describe("assistant message memory limits", () => {
 
   test("text-only overflow still strips from start and prepends notice", () => {
     const base = session([]);
+    const text = "答".repeat(MAX_ASSISTANT_TEXT_REASONING_CHARS + 4000);
     const next = appendAssistantStreamParts(base, [
-      { type: "text", text: "答".repeat(40000) },
+      { type: "text", text },
     ]);
     const msg = next.messages[0]!;
     const part = msg.parts[0]!;
@@ -553,7 +569,7 @@ describe("assistant message memory limits", () => {
 
   test("reasoning + text overflow yields reasoning tail to keep text intact", () => {
     const base = session([]);
-    const reasoning = "思".repeat(30000);
+    const reasoning = "思".repeat(MAX_ASSISTANT_TEXT_REASONING_CHARS);
     const text = "答".repeat(10000);
     const next = appendAssistantStreamParts(base, [
       { type: "reasoning", text: reasoning },
