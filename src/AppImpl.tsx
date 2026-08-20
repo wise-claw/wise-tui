@@ -107,7 +107,9 @@ import { requestPaneCenterView } from "./stores/paneCenterViewControlStore";
 import {
   requestWorkspaceRequirementCreate,
   toggleWorkspaceMemoPanel,
+  WISE_UI_EVENT_OPEN_WORKSPACE_REQUIREMENT_SESSION,
 } from "./stores/workspaceMemoPanelStore";
+import { bindWorkspaceRequirementExecutionSession } from "./services/workspaceRequirementsStore";
 import { toggleWorkspaceQuickActionsPanel } from "./stores/workspaceQuickActionsPanelStore";
 import { reloadAppWindow } from "./services/window";
 import {
@@ -1328,6 +1330,7 @@ export default function App() {
       requirementId?: string;
       requirementRepositoryId?: string | null;
     }) => {
+      const requirementId = input.requirementId?.trim();
       // 需求派发优先发给需求归属仓库：有设置则锚定该仓库主会话，否则回退到当前选中仓库。
       let mainSessionId: string | null = null;
       const requirementRepositoryId =
@@ -1372,6 +1375,13 @@ export default function App() {
             requestPaneCenterView(0, "messages");
             jumpToSessionWithRepository(workerSessionId);
           },
+          onWorkerSessionsStarted: requirementId
+            ? (sessionIds) => {
+                for (const sessionId of sessionIds) {
+                  void bindWorkspaceRequirementExecutionSession(requirementId, sessionId);
+                }
+              }
+            : undefined,
           closeSession,
         },
         {
@@ -2275,6 +2285,30 @@ export default function App() {
     onRestoreHistorySessionAsMainComplete: () => setInspectorHistorySessionId(null),
   });
   ensureRepositoryMainSessionRef.current = ensureRepositoryMainSession;
+
+  // 需求详情中的「打开关联会话」统一由根路由处理，确保无论当前在哪个 Hub 都切回对应仓库的会话窗。
+  useEffect(() => {
+    const openRequirementSession = (event: Event) => {
+      const sessionId = (
+        event as CustomEvent<{ sessionId?: string }>
+      ).detail?.sessionId?.trim();
+      if (!sessionId) return;
+      const exists = sessionsLatestRef.current.some(
+        (session) => session.id === sessionId || session.claudeSessionId === sessionId,
+      );
+      if (!exists) {
+        message.warning("关联的执行会话已不存在");
+        return;
+      }
+      jumpToSessionLeavingMcpHub(sessionId);
+    };
+    window.addEventListener(WISE_UI_EVENT_OPEN_WORKSPACE_REQUIREMENT_SESSION, openRequirementSession);
+    return () =>
+      window.removeEventListener(
+        WISE_UI_EVENT_OPEN_WORKSPACE_REQUIREMENT_SESSION,
+        openRequirementSession,
+      );
+  }, [jumpToSessionLeavingMcpHub, sessionsLatestRef]);
 
   async function handleCreateRepositoryTask(repository: Repository, mode: TaskMode) {
     if (mode === "chat") {

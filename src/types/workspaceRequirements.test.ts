@@ -42,6 +42,7 @@ describe("workspaceRequirements", () => {
     expect(parsed.items).toHaveLength(1);
     expect(parsed.items[0]!.bodyMarkdown).toBe("legacy note");
     expect(parsed.items[0]!.imagePaths).toEqual([]);
+    expect(parsed.items[0]!.executionSessionIds).toEqual([]);
     expect(parsed.items[0]!.repositoryId).toBeNull();
   });
 
@@ -63,6 +64,28 @@ describe("workspaceRequirements", () => {
     });
     const parsed = parseWorkspaceRequirementsPayload(raw);
     expect(parsed.items[0]!.repositoryId).toBe("42");
+  });
+
+  test("parseWorkspaceRequirementsPayload keeps execution session bindings", () => {
+    const raw = JSON.stringify({
+      version: 1,
+      items: [
+        {
+          id: "session-bound",
+          title: "Alpha",
+          bodyMarkdown: "body",
+          status: "open",
+          createdAt: 1,
+          updatedAt: 2,
+          sortOrder: 1,
+          executionSessionIds: [" tab-a ", "tab-a", "tab-b", 1],
+        },
+      ],
+    });
+    expect(parseWorkspaceRequirementsPayload(raw).items[0]?.executionSessionIds).toEqual([
+      "tab-a",
+      "tab-b",
+    ]);
   });
 
   test("parseWorkspaceRequirementsPayload keeps verifying status", () => {

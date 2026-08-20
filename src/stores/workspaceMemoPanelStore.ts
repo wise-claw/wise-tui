@@ -30,6 +30,20 @@ type MemoPanelState = {
 
 const STATE_KEY = "__wise_workspace_memo_panel_state__";
 
+/** 需求详情请求打开其关联执行会话；由 App 根节点统一处理路由。 */
+export const WISE_UI_EVENT_OPEN_WORKSPACE_REQUIREMENT_SESSION =
+  "wise:open-workspace-requirement-session";
+
+export function openWorkspaceRequirementExecutionSession(sessionId: string): void {
+  const id = sessionId.trim();
+  if (!id || typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<{ sessionId: string }>(WISE_UI_EVENT_OPEN_WORKSPACE_REQUIREMENT_SESSION, {
+      detail: { sessionId: id },
+    }),
+  );
+}
+
 function getState(): MemoPanelState {
   const g = globalThis as typeof globalThis & {
     [STATE_KEY]?: MemoPanelState;

@@ -25,9 +25,11 @@ const {
   WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_KEY,
   WORKSPACE_REQUIREMENTS_SETTING_KEY,
   appendWorkspaceRequirement,
+  bindWorkspaceRequirementExecutionSession,
   getWorkspaceRequirementAutoDispatch,
   getWorkspaceRequirementAutoDispatchConcurrency,
   loadWorkspaceRequirements,
+  markWorkspaceRequirementOpen,
   markWorkspaceRequirementVerifying,
   resetWorkspaceRequirementsWriteQueueForTests,
   saveWorkspaceRequirements,
@@ -164,7 +166,35 @@ describe("workspaceRequirementsStore mark verifying", () => {
     expect(loaded.items.find((row) => row.id === a.id)?.status).toBe("done");
   });
 
+  test("returns verifying requirement to open when execution did not complete", async () => {
+    const a = createWorkspaceRequirementItem("需求 A", 1);
+    a.status = "verifying";
+    await saveWorkspaceRequirements([a]);
+    await markWorkspaceRequirementOpen(a.id);
+    const loaded = await loadWorkspaceRequirements();
+    expect(loaded.items.find((row) => row.id === a.id)?.status).toBe("open");
+  });
+
   test("ignores missing requirement", async () => {
     await expect(markWorkspaceRequirementVerifying("missing-id")).resolves.toBeUndefined();
+  });
+});
+
+describe("workspaceRequirementsStore execution session binding", () => {
+  beforeEach(() => {
+    settings.clear();
+    resetWorkspaceRequirementsWriteQueueForTests();
+  });
+
+  test("persists unique session ids without changing the requirement content timestamp", async () => {
+    const requirement = createWorkspaceRequirementItem("需求 A", 123);
+    await saveWorkspaceRequirements([requirement]);
+    await bindWorkspaceRequirementExecutionSession(requirement.id, "session-a");
+    await bindWorkspaceRequirementExecutionSession(requirement.id, "session-a");
+    await bindWorkspaceRequirementExecutionSession(requirement.id, "session-b");
+
+    const saved = (await loadWorkspaceRequirements()).items.find((row) => row.id === requirement.id);
+    expect(saved?.executionSessionIds).toEqual(["session-a", "session-b"]);
+    expect(saved?.updatedAt).toBe(123);
   });
 });

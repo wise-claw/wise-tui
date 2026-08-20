@@ -39,6 +39,7 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
     > = [];
     const executed: string[] = [];
     const activated: string[] = [];
+    const startedBindings: string[][] = [];
     const sessions = [stubSession("main")];
 
     const ok = await dispatchExecutionEnvironmentFromMainSession(
@@ -66,6 +67,9 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
         activateWorkerSession: (sessionId) => {
           activated.push(sessionId);
         },
+        onWorkerSessionsStarted: (sessionIds) => {
+          startedBindings.push(sessionIds);
+        },
       },
       {
         mainSessionId: "main",
@@ -80,6 +84,7 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
     expect(createdOpts.every((opts) => opts?.connectionKind === "streaming")).toBe(true);
     expect(createdOpts.every((opts) => opts?.initialExecutionEngine === "claude")).toBe(true);
     expect(executed).toHaveLength(2);
+    expect(startedBindings).toEqual([["sess-1", "sess-2"]]);
     expect(activated).toEqual(["sess-1"]);
   });
 
@@ -238,6 +243,7 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
     const sessions = [stubSession("main")];
     const closed: string[] = [];
     const activated: string[] = [];
+    const startedBindings: string[][] = [];
     const warning = mock(() => {});
     const messageMod = await import("antd");
     const originalWarning = messageMod.message.warning;
@@ -261,6 +267,9 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
           activateWorkerSession: (sessionId) => {
             activated.push(sessionId);
           },
+          onWorkerSessionsStarted: (sessionIds) => {
+            startedBindings.push(sessionIds);
+          },
           closeSession: (sessionId) => {
             closed.push(sessionId);
           },
@@ -274,6 +283,7 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
       expect(warning).toHaveBeenCalled();
       // 仅第二路被并发挡下：清理 sess-2 空壳，sess-1 保留并激活
       expect(closed).toEqual(["sess-2"]);
+      expect(startedBindings).toEqual([["sess-1"]]);
       expect(activated).toEqual(["sess-1"]);
     } finally {
       messageMod.message.warning = originalWarning;

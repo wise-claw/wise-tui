@@ -23,6 +23,8 @@ export interface WorkspaceRequirementItem {
    * 且最多派发 3 次（见 AUTO_DISPATCH_MAX_RETRY_ATTEMPTS）。
    */
   dispatchAttemptCount: number;
+  /** 此需求派发后创建的执行会话（本地 tab id，按创建时间升序）。 */
+  executionSessionIds: string[];
   /**
    * 归属仓库 id（Wise `Repository.id`）。
    * 旧数据可能为 null；新增时必须指定。
@@ -78,6 +80,7 @@ export function createWorkspaceRequirementItem(
     updatedAt: now,
     lastDispatchedAt: null,
     dispatchAttemptCount: 0,
+    executionSessionIds: [],
     repositoryId: repoId,
   };
 }
@@ -97,6 +100,17 @@ function normalizeImagePaths(raw: unknown): string[] {
     if (p.startsWith("/") && !out.includes(p)) out.push(p);
   }
   return out;
+}
+
+function normalizeExecutionSessionIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const ids: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    const id = entry.trim();
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
 }
 
 function normalizeItem(raw: unknown): WorkspaceRequirementItem | null {
@@ -140,6 +154,7 @@ function normalizeItem(raw: unknown): WorkspaceRequirementItem | null {
     updatedAt,
     lastDispatchedAt,
     dispatchAttemptCount,
+    executionSessionIds: normalizeExecutionSessionIds(row.executionSessionIds),
     repositoryId,
   };
 }

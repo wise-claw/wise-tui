@@ -205,6 +205,41 @@ export async function markWorkspaceRequirementVerifying(id: string): Promise<voi
   }
 }
 
+/** 会话失败或未实际处理需求时保持/恢复为待办；人工已确认完成的需求不回退。 */
+export async function markWorkspaceRequirementOpen(id: string): Promise<void> {
+  try {
+    await updateWorkspaceRequirement(id, (row) =>
+      row.status === "done"
+        ? row
+        // 状态回退不算用户编辑，不能改 updatedAt，否则自动派发会把失败任务当成新需求无限重试。
+        : { ...row, status: "open" },
+    );
+  } catch (err) {
+    // 需求可能在会话运行期间被删除/整表覆盖，忽略即可。
+    console.error("[WorkspaceRequirements] mark open failed", err);
+  }
+}
+
+/** 需求派发创建会话后写入双向关联，供需求详情直接跳转到对应执行窗口。 */
+export async function bindWorkspaceRequirementExecutionSession(
+  requirementId: string,
+  sessionId: string,
+): Promise<void> {
+  const requirement = requirementId.trim();
+  const session = sessionId.trim();
+  if (!requirement || !session) return;
+  try {
+    await updateWorkspaceRequirement(requirement, (row) =>
+      row.executionSessionIds.includes(session)
+        ? row
+        : { ...row, executionSessionIds: [...row.executionSessionIds, session] },
+    );
+  } catch (err) {
+    // 会话可能在需求删除后才创建；不影响执行本身。
+    console.error("[WorkspaceRequirements] bind execution session failed", err);
+  }
+}
+
 /** @internal test helper */
 export function resetWorkspaceRequirementsWriteQueueForTests(): void {
   requirementsWriteChain = Promise.resolve();

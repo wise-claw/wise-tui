@@ -1,8 +1,11 @@
 import {
   DeleteOutlined,
   EditOutlined,
+  LeftOutlined,
+  MessageOutlined,
   PictureOutlined,
   PlusOutlined,
+  RightOutlined,
   SendOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
@@ -26,7 +29,6 @@ import { dispatchRequirementToExecutionEnvironment } from "../../constants/pendi
 import { useWorkspaceRequirementAutoDispatchSetting } from "../../hooks/useWorkspaceRequirementAutoDispatch";
 import {
   buildRequirementDispatchPayload,
-  stripMarkdownImages,
 } from "../../services/workspaceRequirementDispatch";
 import {
   loadWorkspaceRequirements,
@@ -38,6 +40,7 @@ import {
   closeWorkspaceMemoPanel,
   requestWorkspaceRequirementCreate,
   requestWorkspaceRequirementEdit,
+  openWorkspaceRequirementExecutionSession,
   useWorkspaceMemoPanelSelectedRequirementId,
 } from "../../stores/workspaceMemoPanelStore";
 import {
@@ -51,13 +54,6 @@ import { repositoryFolderBasename } from "../../utils/repositoryType";
 import type { WorkspaceRequirementItem, WorkspaceRequirementsPayloadV1 } from "../../types/workspaceRequirements";
 import { MarkdownBody } from "../ClaudeSessions/MarkdownElements";
 import "./index.css";
-
-function markdownPreview(item: WorkspaceRequirementItem): string {
-  const body = stripMarkdownImages(item.bodyMarkdown || item.description || "");
-  const flat = body.replace(/\s+/g, " ").trim();
-  if (!flat || flat === item.title) return "";
-  return body;
-}
 
 function thumbSrc(path: string): string {
   try {
@@ -124,9 +120,10 @@ const RequirementRow = memo(function RequirementRow({
 }: RequirementRowProps) {
   const done = item.status === "done";
   const dispatching = dispatchingId === item.id;
+  const latestExecutionSessionId =
+    item.executionSessionIds[item.executionSessionIds.length - 1] ?? null;
   const thumbs = item.imagePaths.slice(0, 3);
   const moreImages = Math.max(0, item.imagePaths.length - thumbs.length);
-  const desc = markdownPreview(item);
   const rowRef = useRef<HTMLLIElement | null>(null);
   const detailMarkdown = useMemo(
     () => hydrateRequirementImageSources(item.bodyMarkdown || item.description || item.title),
@@ -188,19 +185,13 @@ const RequirementRow = memo(function RequirementRow({
             </Tag>
           ) : null}
         </div>
-        {selected ? (
-          <div className="app-workspace-requirements-panel__detail app-markdown">
-            <MarkdownBody
-              source={detailMarkdown}
-              rehypePlugins={[rehypeRaw]}
-              urlTransform={allowRequirementImageUrl}
-            />
-          </div>
-        ) : desc ? (
-          <div className="app-workspace-requirements-panel__md-desc app-markdown">
-            <MarkdownBody source={desc} />
-          </div>
-        ) : null}
+        <div className="app-workspace-requirements-panel__detail app-markdown">
+          <MarkdownBody
+            source={detailMarkdown}
+            rehypePlugins={[rehypeRaw]}
+            urlTransform={allowRequirementImageUrl}
+          />
+        </div>
         {thumbs.length > 0 ? (
           <div className="app-workspace-requirements-panel__thumbs">
             {thumbs.map((path) => (
@@ -213,6 +204,20 @@ const RequirementRow = memo(function RequirementRow({
         ) : null}
       </div>
       <div className="app-workspace-requirements-panel__row-actions">
+        {latestExecutionSessionId ? (
+          <Button
+            type="text"
+            size="small"
+            icon={<MessageOutlined />}
+            aria-label="打开关联执行会话"
+            title={
+              item.executionSessionIds.length > 1
+                ? `打开最近关联会话（共 ${item.executionSessionIds.length} 个）`
+                : "打开关联执行会话"
+            }
+            onClick={() => openWorkspaceRequirementExecutionSession(latestExecutionSessionId)}
+          />
+        ) : null}
         {!done ? (
           <Button
             type="text"
@@ -254,6 +259,7 @@ export function WorkspaceMemoPanel() {
   const [statusFilter, setStatusFilter] = useState<WorkspaceRequirementStatusFilter>("all");
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<WorkspaceRequirementItem[]>([]);
+  const [currentPage, setCurrentPage] = useState(0);
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [saving, setSaving] = useState(false);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
@@ -446,18 +452,30 @@ export function WorkspaceMemoPanel() {
 
   const openItems = items.filter((item) => item.status === "open");
   const verifyingItems = items.filter((item) => item.status === "verifying");
-  const doneItems = items.filter((item) => item.status === "done");
-  const filteredOpenItems = openItems.filter((item) =>
-    matchesWorkspaceRequirementStatusFilter(item, statusFilter),
-  );
-  const filteredVerifyingItems = verifyingItems.filter((item) =>
-    matchesWorkspaceRequirementStatusFilter(item, statusFilter),
-  );
-  const filteredDoneItems = doneItems.filter((item) =>
-    matchesWorkspaceRequirementStatusFilter(item, statusFilter),
-  );
-  const filteredItemCount =
-    filteredOpenItems.length + filteredVerifyingItems.length + filteredDoneItems.length;
+  const pagedItems = useMemo(() => {
+    const matchesFilter = (item: WorkspaceRequirementItem) =>
+      matchesWorkspaceRequirementStatusFilter(item, statusFilter);
+    return [
+      ...items.filter((item) => item.status === "verifying" && matchesFilter(item)),
+      ...items.filter((item) => item.status === "open" && matchesFilter(item)),
+      ...items.filter((item) => item.status === "done" && matchesFilter(item)),
+    ];
+  }, [items, statusFilter]);
+  const filteredItemCount = pagedItems.length;
+  const currentItem = pagedItems[currentPage] ?? null;
+  const currentRepositoryMeta = currentItem
+    ? resolveRepositoryMeta(currentItem.repositoryId)
+    : null;
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, Math.max(0, pagedItems.length - 1)));
+  }, [pagedItems.length]);
+
+  useEffect(() => {
+    if (!selectedRequirementId) return;
+    const selectedIndex = pagedItems.findIndex((item) => item.id === selectedRequirementId);
+    if (selectedIndex >= 0) setCurrentPage(selectedIndex);
+  }, [pagedItems, selectedRequirementId]);
   const isMacShortcut =
     typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform);
   const closeShortcutLabel = isMacShortcut ? "⌘W" : "Ctrl+W";
@@ -573,65 +591,49 @@ export function WorkspaceMemoPanel() {
                 </Button>
               </Empty>
             ) : (
-              <ul className="app-workspace-requirements-panel__list">
-                {filteredVerifyingItems.length > 0 ? (
-                  <li className="app-workspace-requirements-panel__section-label">待验证</li>
-                ) : null}
-                {filteredVerifyingItems.map((item) => {
-                  const repo = resolveRepositoryMeta(item.repositoryId);
-                  return (
-                  <RequirementRow
-                    key={item.id}
-                    item={item}
-                    repositoryLabel={repo.label}
-                    repositoryMissing={repo.missing}
-                    dispatchingId={dispatchingId}
-                    selected={item.id === selectedRequirementId}
-                    onToggleDone={(row) => void handleToggleDone(row)}
-                    onEdit={openEdit}
-                    onDelete={handleDelete}
-                    onDispatch={(row) => void handleDispatch(row)}
+              <>
+                <nav className="app-workspace-requirements-panel__pager" aria-label="需求翻页">
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<LeftOutlined />}
+                    disabled={currentPage === 0}
+                    onClick={() => setCurrentPage((page) => Math.max(0, page - 1))}
+                    aria-label="上一个需求"
+                    title="上一个需求"
                   />
-                  );
-                })}
-                {filteredOpenItems.map((item) => {
-                  const repo = resolveRepositoryMeta(item.repositoryId);
-                  return (
-                  <RequirementRow
-                    key={item.id}
-                    item={item}
-                    repositoryLabel={repo.label}
-                    repositoryMissing={repo.missing}
-                    dispatchingId={dispatchingId}
-                    selected={item.id === selectedRequirementId}
-                    onToggleDone={(row) => void handleToggleDone(row)}
-                    onEdit={openEdit}
-                    onDelete={handleDelete}
-                    onDispatch={(row) => void handleDispatch(row)}
+                  <span className="app-workspace-requirements-panel__page-indicator">
+                    {currentPage + 1} / {filteredItemCount}
+                  </span>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<RightOutlined />}
+                    disabled={currentPage >= filteredItemCount - 1}
+                    onClick={() =>
+                      setCurrentPage((page) => Math.min(filteredItemCount - 1, page + 1))
+                    }
+                    aria-label="下一个需求"
+                    title="下一个需求"
                   />
-                  );
-                })}
-                {filteredDoneItems.length > 0 ? (
-                  <li className="app-workspace-requirements-panel__section-label">已完成</li>
-                ) : null}
-                {filteredDoneItems.map((item) => {
-                  const repo = resolveRepositoryMeta(item.repositoryId);
-                  return (
-                  <RequirementRow
-                    key={item.id}
-                    item={item}
-                    repositoryLabel={repo.label}
-                    repositoryMissing={repo.missing}
-                    dispatchingId={dispatchingId}
-                    selected={item.id === selectedRequirementId}
-                    onToggleDone={(row) => void handleToggleDone(row)}
-                    onEdit={openEdit}
-                    onDelete={handleDelete}
-                    onDispatch={(row) => void handleDispatch(row)}
-                  />
-                  );
-                })}
-              </ul>
+                </nav>
+                <ul className="app-workspace-requirements-panel__list">
+                  {currentItem && currentRepositoryMeta ? (
+                    <RequirementRow
+                      key={currentItem.id}
+                      item={currentItem}
+                      repositoryLabel={currentRepositoryMeta.label}
+                      repositoryMissing={currentRepositoryMeta.missing}
+                      dispatchingId={dispatchingId}
+                      selected
+                      onToggleDone={(row) => void handleToggleDone(row)}
+                      onEdit={openEdit}
+                      onDelete={handleDelete}
+                      onDispatch={(row) => void handleDispatch(row)}
+                    />
+                  ) : null}
+                </ul>
+              </>
             )}
           </div>
         )}

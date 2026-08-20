@@ -25,6 +25,7 @@ function item(
     updatedAt: 1,
     lastDispatchedAt: null,
     dispatchAttemptCount: 0,
+    executionSessionIds: [],
     repositoryId: null,
     ...partial,
   };

@@ -58,7 +58,10 @@ import {
   shouldApplyClaudeTurnComplete,
 } from "../utils/claudeTurnCompleteGate";
 import { isWiseAppFocused } from "../utils/isWiseAppFocused";
-import { markWorkspaceRequirementVerifying } from "./workspaceRequirementsStore";
+import {
+  markWorkspaceRequirementOpen,
+  markWorkspaceRequirementVerifying,
+} from "./workspaceRequirementsStore";
 import { requirementTurnResultProcessed } from "../utils/requirementTurnResult";
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
@@ -953,13 +956,19 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       messages: sessionAfterFlush?.messages ?? session?.messages ?? [],
       previewRaw,
     });
-    if (uiSuccess && linkedRequirementId && requirementProcessed) {
-      void markWorkspaceRequirementVerifying(linkedRequirementId);
-    } else if (uiSuccess && linkedRequirementId && !requirementProcessed) {
-      console.info(
-        "[WorkspaceRequirements] 会话执行完成但执行结果未表明需求被处理，保持待办：",
-        linkedRequirementId,
-      );
+    if (linkedRequirementId) {
+      if (uiSuccess && requirementProcessed) {
+        void markWorkspaceRequirementVerifying(linkedRequirementId);
+      } else {
+        // 失败、取消或仅文字回复都不应停留在「待验证」；恢复待办以便重新派发。
+        void markWorkspaceRequirementOpen(linkedRequirementId);
+        if (uiSuccess) {
+          console.info(
+            "[WorkspaceRequirements] 会话执行完成但执行结果未表明需求被处理，恢复待办：",
+            linkedRequirementId,
+          );
+        }
+      }
     }
     // 多员工/多会话并行时：仅当「当前仍指向本会话」时才清空，避免误清其它仍在流式中的标签
     const refT = streamingTargetIdRef.current;

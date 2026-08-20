@@ -48,6 +48,8 @@ export type ExecutionEnvironmentDispatchDeps = {
   loadInstructionResolveContext?: typeof loadDefaultInstructionResolveContext;
   /** executeSession 返回 false（并发门闸/未真正 spawn）或创建失败时清理空壳 worker 会话，避免侧栏留 idle 幽灵 tab。 */
   closeSession?: (sessionId: string) => void | Promise<void>;
+  /** worker 实际启动后回传本地 tab id；需求模块用它持久化需求↔会话关联。 */
+  onWorkerSessionsStarted?: (sessionIds: string[]) => void;
 };
 
 function resolveEngineAvailability(deps: ExecutionEnvironmentDispatchDeps) {
@@ -128,6 +130,7 @@ export async function dispatchExecutionEnvironmentFromMainSession(
   let started = 0;
   let blocked = 0;
   let firstStartedSessionId: string | null = null;
+  const startedSessionIds: string[] = [];
 
   const sessionSpecs = Array.from({ length: plan.sessionCount }, (_, i) => {
     const label =
@@ -172,6 +175,7 @@ export async function dispatchExecutionEnvironmentFromMainSession(
       continue;
     }
     if (!firstStartedSessionId) firstStartedSessionId = sessionId;
+    startedSessionIds.push(sessionId);
     started += 1;
   }
 
@@ -181,6 +185,9 @@ export async function dispatchExecutionEnvironmentFromMainSession(
   }
   if (blocked > 0) {
     message.warning(`已新建 ${started} 个会话，${blocked} 路因并发限制未启动。`);
+  }
+  if (startedSessionIds.length > 0) {
+    deps.onWorkerSessionsStarted?.(startedSessionIds);
   }
   if (firstStartedSessionId) {
     deps.activateWorkerSession?.(firstStartedSessionId);
