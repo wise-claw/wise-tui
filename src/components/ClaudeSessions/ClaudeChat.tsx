@@ -26,7 +26,6 @@ import type {
 } from "../../types";
 import type { ControlRequestStatus } from "../../notifications";
 import { useClaudeChatSessionFeaturePanel } from "../../hooks/useClaudeChatSessionFeaturePanel";
-import { resolveSessionOwnerInfo } from "../../hooks/claudeChatSessionFeaturePanelHelpers";
 import { ClaudeChatMessagesLiveHost } from "./ClaudeChatMessagesLiveHost";
 import { claudeChatPropsEqual } from "./claudeChatPropsEqual";
 import { getClaudeChatMessageScrollBridge } from "../../stores/claudeChatMessageScrollBridge";
@@ -89,7 +88,6 @@ import {
   loadSessionOwnerHints,
   parseOwnerHintFromNotificationBody,
   persistSessionOwnerHints,
-  resolveOwnerHintForSession,
   WISE_SESSION_OWNER_HINTS_CHANGED_EVENT,
 } from "../../utils/sessionOwnerHints";
 import { resolveEngineForSession } from "../../utils/sessionExecutionEngine";
@@ -97,7 +95,6 @@ import { normalizeSessionExecutionEngine } from "../../constants/sessionExecutio
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 
 import {
-  repositoryPathsMatch,
   resolveRepositoryMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "../../utils/repositoryMainSessionBinding";
@@ -112,7 +109,7 @@ import {
   notificationRowInSessionInboxScope,
   sessionRepoPathKey,
 } from "./claudeChatHelpers";
-import { getSessionUpdatedAt } from "./sessionGrouping";
+
 import {
   SESSION_NOTIFICATION_UI_EVENT_OPEN_PANEL,
   WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED,
@@ -372,7 +369,6 @@ interface Props {
   ) => void;
 }
 
-const RETURN_MAIN_SESSION_KEY = "wise:return-main-session-id";
 /** 会话内通知收件箱拉取条数（降低常驻内存） */
 const NOTIFICATION_INBOX_FETCH_LIMIT = 24;
 
@@ -1277,7 +1273,6 @@ export function ClaudeChatInner({
     setNotificationBubbleEnterIds(new Set());
     setNotificationBadgePulse(false);
     setNotificationTitleCountPulse(false);
-    setReturnMainSessionId(null);
     sessionNotificationSeenIdsRef.current = new Set();
     prevSessionUnreadCountRef.current = 0;
   }, [session.id]);
@@ -1362,7 +1357,6 @@ export function ClaudeChatInner({
   const [notificationBadgePulse, setNotificationBadgePulse] = useState(false);
   const [notificationTitleCountPulse, setNotificationTitleCountPulse] = useState(false);
   const prevSessionUnreadCountRef = useRef(0);
-  const [returnMainSessionId, setReturnMainSessionId] = useState<string | null>(null);
   const [sessionOwnerHints, setSessionOwnerHints] = useState<Record<string, SessionOwnerHint>>(() => loadSessionOwnerHints());
   const sessionForNotificationPanelRef = useRef(session);
   sessionForNotificationPanelRef.current = session;
@@ -1393,18 +1387,6 @@ export function ClaudeChatInner({
     window.addEventListener(WISE_SESSION_OWNER_HINTS_CHANGED_EVENT, onHintsExternal);
     return () => window.removeEventListener(WISE_SESSION_OWNER_HINTS_CHANGED_EVENT, onHintsExternal);
   }, []);
-
-  const sessionOwnerInfo = useMemo(
-    () =>
-      resolveSessionOwnerInfo({
-        session,
-        workflowTasks,
-        workflowTemplates,
-        taskPendingEmployeesByTaskId,
-        ownerHint: resolveOwnerHintForSession(sessionOwnerHints, session),
-      }),
-    [session, workflowTasks, workflowTemplates, taskPendingEmployeesByTaskId, sessionOwnerHints],
-  );
 
   const questionDockTabs = useQuestionDockTabsForRepository(session, sessions, sessionOwnerHints);
 
@@ -1522,46 +1504,6 @@ export function ClaudeChatInner({
       window.removeEventListener(WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED, onOmcBatchRuntime as EventListener);
     };
   }, [omcBatchAnchorSessionId, session.claudeSessionId, session.id]);
-
-  const inferredMainSessionId = useMemo(() => {
-    if (sessionOwnerInfo.type === "main") {
-      return null;
-    }
-    const candidates = sessions
-      .filter(
-        (item) =>
-          item.id !== session.id && repositoryPathsMatch(item.repositoryPath, session.repositoryPath),
-      )
-      .map((item) => ({
-        session: item,
-        ownerInfo: resolveSessionOwnerInfo({
-          session: item,
-          workflowTasks,
-          workflowTemplates,
-          taskPendingEmployeesByTaskId,
-          ownerHint: resolveOwnerHintForSession(sessionOwnerHints, item),
-        }),
-      }))
-      .filter((item) => item.ownerInfo.type === "main")
-      .sort((a, b) => getSessionUpdatedAt(b.session) - getSessionUpdatedAt(a.session));
-    return candidates[0]?.session.id ?? null;
-  }, [
-    sessionOwnerInfo.type,
-    sessions,
-    session.id,
-    session.repositoryPath,
-    workflowTasks,
-    workflowTemplates,
-    taskPendingEmployeesByTaskId,
-    sessionOwnerHints,
-  ]);
-
-  const effectiveReturnMainSessionId =
-    returnMainSessionId && returnMainSessionId !== session.id
-      ? returnMainSessionId
-      : inferredMainSessionId && inferredMainSessionId !== session.id
-        ? inferredMainSessionId
-        : null;
 
   const publishedTeamMentions = useMemo(
     () =>
@@ -1767,14 +1709,6 @@ export function ClaudeChatInner({
           return next;
         });
       }
-      if (targetSession.id !== session.id) {
-        try {
-          sessionStorage.setItem(RETURN_MAIN_SESSION_KEY, session.id);
-          setReturnMainSessionId(session.id);
-        } catch {
-          /* ignore */
-        }
-      }
       try {
         const taskIdHint = row.body.match(/任务\s+([^\s：\n]+)/)?.[1]?.trim();
         sessionStorage.setItem(
@@ -1829,42 +1763,6 @@ export function ClaudeChatInner({
     void loadNotificationRows();
   }, [loadNotificationRows]);
 
-  const handleReturnMainSession = useCallback(() => {
-    const targetId = effectiveReturnMainSessionId?.trim();
-    if (!targetId) {
-      return;
-    }
-    const targetExists = sessions.some((item) => item.id === targetId);
-    if (!targetExists) {
-      message.warning("主会话不存在或已关闭");
-      try {
-        sessionStorage.removeItem(RETURN_MAIN_SESSION_KEY);
-      } catch {
-        /* ignore */
-      }
-      setReturnMainSessionId(null);
-      return;
-    }
-    const mainSession = sessions.find((item) => item.id === targetId);
-    setSessionOwnerHints((prev) => {
-      const next = { ...prev };
-      delete next[targetId];
-      const claudeId = mainSession?.claudeSessionId?.trim();
-      if (claudeId) {
-        delete next[claudeId];
-      }
-      persistSessionOwnerHints(next);
-      return next;
-    });
-    onSwitchSession?.(targetId, { collapseSessionNotificationPanel: true });
-    try {
-      sessionStorage.removeItem(RETURN_MAIN_SESSION_KEY);
-    } catch {
-      /* ignore */
-    }
-    setReturnMainSessionId(null);
-  }, [effectiveReturnMainSessionId, onSwitchSession, sessions]);
-
 
   useEffect(() => {
     if (!enableSessionNotificationFeedRef.current) {
@@ -1918,15 +1816,6 @@ export function ClaudeChatInner({
 
 
 
-
-  useEffect(() => {
-    try {
-      const stored = sessionStorage.getItem(RETURN_MAIN_SESSION_KEY);
-      setReturnMainSessionId(stored && stored.trim() ? stored : null);
-    } catch {
-      setReturnMainSessionId(null);
-    }
-  }, [session.id]);
 
   // 防御：centerView 指向某 slot 但对应 panel 已卸挂时，不得全隐成白屏
   // （典型：终端被 collapse 后 Segmented 仍停在 terminal）。
