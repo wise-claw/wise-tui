@@ -1679,6 +1679,8 @@ export async function saveWiseDefaultConfig(
   }
   await persistConfig(next);
   await deleteLegacyAppSettings();
+  // 新建会话等热路径同步读取该缓存；保存后立即刷新，避免同一窗口内仍按旧默认执行环境初始化。
+  syncDefaultExecutionEngineCache(next);
 
   if (patch.connectionKind !== undefined && next.connectionKind !== current.connectionKind) {
     dispatchConnectionKindChanged(next.connectionKind);

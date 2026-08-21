@@ -366,6 +366,7 @@ describe("wiseDefaultConfigStore", () => {
     });
     const config = await saveWiseDefaultConfig({ defaultExecutionEngine: "codex" });
     expect(config.defaultExecutionEngine).toBe("codex");
+    expect(getCachedDefaultExecutionEngine()).toBe("codex");
     expect(seen).toEqual(["codex"]);
     const persisted = JSON.parse(String(setAppSetting.mock.calls.at(-1)?.[1]));
     expect(persisted.defaultExecutionEngine).toBe("codex");

@@ -73,6 +73,7 @@ import {
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
 import { useComposerActiveProxyRoute } from "../../hooks/useComposerActiveProxyRoute";
+import { saveExecutionEngineDefaultModel } from "../../services/executionEngineModelDefaults";
 import { ClaudeModelTopbarPanelLazy } from "../ClaudeSessions/ClaudeModelTopbarPanel.lazy";
 import "../ClaudeSessions/ClaudeModelTopbarTrigger.css";
 import "./ComposerModelPicker.css";
@@ -809,6 +810,9 @@ function ComposerModelPickerImpl({
       }
       if (key !== model) {
         onModelChange(key);
+        // 直接在 Composer 选择的模型应成为此执行环境之后新会话的默认值。
+        // 档案模型走上方 applyClaudeModelProfile 路径，自身已有持久化逻辑。
+        void saveExecutionEngineDefaultModel(sessionExecutionEngine, key).catch(() => undefined);
         if (isClaudeEngine) {
           // 与 Codex 一致：直接切换会话模型；派发 settings 事件触发流式会话按新模型重连。
           dispatchClaudeUserSettingsChanged({
@@ -821,7 +825,14 @@ function ComposerModelPickerImpl({
       setSelectOnlyMenuOpen(false);
       setSelectOnlyFilter("");
     },
-    [model, onModelChange, isCodexEngine, isClaudeEngine, selectOnlyModelOptions],
+    [
+      model,
+      onModelChange,
+      isCodexEngine,
+      isClaudeEngine,
+      selectOnlyModelOptions,
+      sessionExecutionEngine,
+    ],
   );
 
   const trigger = (

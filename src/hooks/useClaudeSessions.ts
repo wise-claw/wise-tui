@@ -13,6 +13,10 @@ import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCachedDefaultExecutionEngine } from "../services/wiseDefaultConfigStore";
+import {
+  getCachedExecutionEngineDefaultModel,
+  loadExecutionEngineModelDefaults,
+} from "../services/executionEngineModelDefaults";
 import type {
   ClaudeSession,
   QuestionRequest,
@@ -2979,6 +2983,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       },
     ) => {
       const id = generateId();
+      // 仅显式传入 initialModel 的调用（多窗格继承等）保留调用方语义。
+      // 普通新会话优先采用用户为默认执行环境选择过的模型。
+      const creationEngine = opts?.initialExecutionEngine ?? getCachedDefaultExecutionEngine();
+      if (!opts?.initialModel?.trim()) {
+        await loadExecutionEngineModelDefaults();
+      }
+      const savedDefaultModel = opts?.initialModel?.trim()
+        ? null
+        : getCachedExecutionEngineDefaultModel(creationEngine);
       const newSession: ClaudeSession = {
         id,
         claudeSessionId: null,
@@ -2986,7 +2999,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         repositoryName,
         model:
           opts?.initialModel?.trim() ||
-          (opts?.initialExecutionEngine === "codex" || opts?.initialExecutionEngine === "codex-rpc"
+          savedDefaultModel ||
+          (creationEngine === "codex" || creationEngine === "codex-rpc"
             ? ""
             : "sonnet"),
         status: "idle",
@@ -3031,7 +3045,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
       });
       // 多屏保留窗格模型时传入 initialModel，跳过异步读取全局档案/仓库默认模型，避免覆盖。
-      if (!opts?.initialModel?.trim()) {
+      if (!opts?.initialModel?.trim() && !savedDefaultModel) {
         void (async () => {
           try {
             const engine = opts?.initialExecutionEngine;
