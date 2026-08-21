@@ -200,7 +200,7 @@
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
   flex: 0 0 auto;
   width: 0;
   min-width: 0;
@@ -211,53 +211,51 @@
   opacity: 0;
   pointer-events: none;
   z-index: 3;
-  background: var(--ant-color-bg-container);
-  box-shadow: -8px 0 8px color-mix(in srgb, var(--ant-color-bg-container) 85%, transparent);
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--ant-color-bg-elevated) 0%, transparent),
+    color-mix(in srgb, var(--ant-color-bg-elevated) 94%, transparent) 14px
+  );
+  transition: opacity 0.14s ease, max-width 0.14s ease, padding 0.14s ease;
 }
 
 .app-left-sidebar-requirements-panel__row:hover .app-left-sidebar-requirements-panel__row-actions,
 .app-left-sidebar-requirements-panel__row:focus-within .app-left-sidebar-requirements-panel__row-actions,
 .app-left-sidebar-requirements-panel__row--more-open .app-left-sidebar-requirements-panel__row-actions {
   width: auto;
-  max-width: none;
+  max-width: 104px;
   opacity: 1;
   pointer-events: auto;
-  padding: 1px;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 5px;
-  background: var(--ant-color-bg-elevated);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--ant-color-text) 18%, transparent);
+  padding: 0 0 0 8px;
 }
 
 .app-left-sidebar-requirements-panel__action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 4px;
-  background: var(--ant-color-bg-container);
-  color: var(--ant-color-text);
-  font-size: 11px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
   opacity: 1;
-  transition: color 0.1s ease, background 0.1s ease, box-shadow 0.1s ease;
+  transition: color 0.1s ease, background 0.1s ease;
 }
 
 .app-left-sidebar-requirements-panel__action-btn:hover {
   color: var(--ant-color-primary);
-  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ant-color-primary) 25%, transparent);
+  background: color-mix(in srgb, var(--ant-color-primary) 10%, transparent);
 }
 
 .app-left-sidebar-requirements-panel__action-btn--danger:hover {
   color: var(--ant-color-error);
-  background: color-mix(in srgb, var(--ant-color-error) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ant-color-error) 25%, transparent);
+  background: color-mix(in srgb, var(--ant-color-error) 10%, transparent);
 }
 
 .app-left-sidebar-requirements-panel__action-btn--loading,
