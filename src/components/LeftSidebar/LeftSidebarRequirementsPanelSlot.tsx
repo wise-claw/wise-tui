@@ -426,6 +426,21 @@ function LeftSidebarRequirementsPanelSlotInner({
     });
   }, [persist]);
 
+  const deleteAllRequirements = useCallback(() => {
+    if (itemsRef.current.length === 0) return;
+    Modal.confirm({
+      title: "全部删除？",
+      content: `将删除全部 ${itemsRef.current.length} 条需求，删除后不可恢复。`,
+      okText: "全部删除",
+      okType: "danger",
+      cancelText: "取消",
+      autoFocusButton: "cancel",
+      onOk: async () => {
+        await persist([]);
+      },
+    });
+  }, [persist]);
+
   const handleDispatch = useCallback(
     async (item: WorkspaceRequirementItem) => {
       setDispatchingId(item.id);
@@ -570,9 +585,18 @@ function LeftSidebarRequirementsPanelSlotInner({
                     label: "全部退回初始态",
                     disabled: items.length === 0,
                   },
+                  { type: "divider" },
+                  {
+                    key: "delete-all",
+                    icon: <DeleteOutlined />,
+                    label: "全部删除",
+                    danger: true,
+                    disabled: items.length === 0,
+                  },
                 ],
                 onClick: ({ key }) => {
                   if (key === "reset-all") resetAllRequirements();
+                  if (key === "delete-all") deleteAllRequirements();
                 },
               }}
             >
