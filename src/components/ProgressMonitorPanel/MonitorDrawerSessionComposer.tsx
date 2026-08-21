@@ -1,6 +1,6 @@
-import { SendOutlined } from "@ant-design/icons";
-import { Button, Input, message } from "antd";
-import { useCallback, useState } from "react";
+import { message } from "antd";
+import { ComposerRegion } from "../ClaudeChatInput/composer-region";
+import { useCallback, useEffect } from "react";
 import type { ClaudeSession } from "../../types";
 
 export type MonitorDrawerResumeSessionInput = {
@@ -34,22 +34,26 @@ export function MonitorDrawerSessionComposer({
     sessionId?: string;
   };
 }) {
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
 
   const sessionId = resumeContext?.sessionId?.trim() || session?.id?.trim() || "";
   const blocked = Boolean(disabledReason?.trim());
-  const canSend = Boolean(onResumeSession && sessionId && draft.trim() && !blocked);
-
-  const handleSend = useCallback(async () => {
-    const prompt = draft.trim();
-    if (!prompt || !sessionId || !onResumeSession || blocked) return;
-    setSending(true);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const editor = document.querySelector<HTMLElement>(
+        ".app-monitor-panel__drawer-composer .app-claude-semi-chat-input-wrap .tiptap",
+      );
+      editor?.focus();
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const handleSend = useCallback(async (prompt: string) => {
+    const trimmed = prompt.trim();
+    if (!trimmed || !sessionId || !onResumeSession || blocked) return;
     try {
       const ok = await Promise.resolve(
         onResumeSession({
           sessionId,
-          prompt,
+          prompt: trimmed,
           repositoryPath: resumeContext?.repositoryPath ?? session?.repositoryPath,
           repositoryDisplayName: resumeContext?.repositoryDisplayName ?? session?.repositoryName,
           taskLabel: resumeContext?.taskLabel,
@@ -59,13 +63,11 @@ export function MonitorDrawerSessionComposer({
         message.warning("未能发送，请确认会话仍可用或稍后再试");
         return;
       }
-      setDraft("");
-    } finally {
-      setSending(false);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "发送失败");
     }
   }, [
     blocked,
-    draft,
     onResumeSession,
     resumeContext?.repositoryDisplayName,
     resumeContext?.repositoryPath,
@@ -79,30 +81,26 @@ export function MonitorDrawerSessionComposer({
 
   return (
     <div className="app-monitor-panel__drawer-composer">
-      <Input.TextArea
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        placeholder={disabledReason?.trim() || "输入消息以继续该会话…"}
-        disabled={blocked || sending}
-        autoSize={{ minRows: 2, maxRows: 6 }}
-        onPressEnter={(event) => {
-          if (event.shiftKey) return;
-          event.preventDefault();
-          if (canSend) void handleSend();
-        }}
+      <ComposerRegion
+        session={(session ?? { id: sessionId, claudeSessionId: sessionId, repositoryPath: resumeContext?.repositoryPath ?? "", repositoryName: resumeContext?.repositoryDisplayName ?? "", model: "", status: "idle", messages: [], createdAt: Date.now(), pendingPrompt: "" }) as ClaudeSession}
+        gitRepositoryPath={resumeContext?.repositoryPath}
+        onExecute={(_id, prompt) => void handleSend(prompt)}
+        onSessionModelChange={() => undefined}
+        onCancel={() => undefined}
+        todos={[]}
+        questionRequest={null}
+        permissionRequest={null}
+        followupItems={[]}
+        revertItems={[]}
+        respondQuestionAt={() => undefined}
+        dismissQuestionAt={() => undefined}
+        onRespondToPermission={() => undefined}
+        onSendFollowup={() => undefined}
+        onRestoreRevert={() => undefined}
+        compactFooterChrome
       />
       <div className="app-monitor-panel__drawer-composer-actions">
         <span className="app-monitor-panel__drawer-composer-hint">Enter 发送 · Shift+Enter 换行</span>
-        <Button
-          type="primary"
-          size="small"
-          icon={<SendOutlined />}
-          loading={sending}
-          disabled={!canSend}
-          onClick={() => void handleSend()}
-        >
-          继续会话
-        </Button>
       </div>
     </div>
   );

@@ -572,7 +572,7 @@
 .app-tiptap-image-preview-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 4000;
+  z-index: 12000;
   display: flex;
   align-items: center;
   justify-content: center;

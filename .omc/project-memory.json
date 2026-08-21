@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "npm run build",
-    "testCommand": "npm test",
+    "buildCommand": "bunx tsc --noEmit 2>&1 | head -30",
+    "testCommand": "bun test > /tmp/wise-test-full.log 2>&1; echo \"exit=$?\"; grep -cE \"^\\(fail\\)\" /tmp/wise-test-full.log",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -252,8 +252,8 @@
   "hotPaths": [
     {
       "path": "src/hooks/useClaudeSessions.ts",
-      "accessCount": 81,
-      "lastAccessed": 1785800162760,
+      "accessCount": 82,
+      "lastAccessed": 1787274134303,
       "type": "file"
     },
     {
@@ -264,8 +264,8 @@
     },
     {
       "path": "src/AppImpl.tsx",
-      "accessCount": 49,
-      "lastAccessed": 1785847839065,
+      "accessCount": 50,
+      "lastAccessed": 1787274130339,
       "type": "file"
     },
     {

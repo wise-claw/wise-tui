@@ -1940,8 +1940,27 @@ export function ClaudeChatInner({
   const centerViewControl = useCenterViewControl();
   const workbenchRef = useRef<HTMLDivElement | null>(null);
   const [auxRailWidth, setAuxRailWidth] = useState(SESSION_AUX_RAIL_DEFAULT_WIDTH_PX);
+  const [auxRailFitsWindow, setAuxRailFitsWindow] = useState(false);
   const auxRailResizeActiveRef = useRef(false);
-  const shouldExpandWindowForAuxRail = paneIndex === 0 && hasAnyAuxPanel && !hideMessages;
+  useEffect(() => {
+    const updateFit = () => {
+      // 窗口已经为当前右栏扩展过时，保持扩展锁，避免测量到新宽度后立即收回，
+      // 造成“扩展-收回-再扩展”的闪烁循环。
+      if (auxRailWindowDeltaRef.current > 0) {
+        setAuxRailFitsWindow(false);
+        return;
+      }
+      const width = workbenchRef.current?.getBoundingClientRect().width ?? 0;
+      // 右栏打开时，中栏至少保留 460px，避免消息内容被压缩到不可用。
+      setAuxRailFitsWindow(width >= 460 + SESSION_AUX_RAIL_DEFAULT_WIDTH_PX);
+    };
+    updateFit();
+    window.addEventListener("resize", updateFit);
+    return () => window.removeEventListener("resize", updateFit);
+  }, [hasAnyAuxPanel]);
+
+  const shouldExpandWindowForAuxRail =
+    paneIndex === 0 && hasAnyAuxPanel && !hideMessages && !auxRailFitsWindow;
 
   useEffect(() => {
     if (shouldExpandWindowForAuxRail && auxRailWindowDeltaRef.current === 0) {
@@ -1967,7 +1986,7 @@ export function ClaudeChatInner({
   const resizeAuxRailFromPointer = useCallback((clientX: number) => {
     const bounds = workbenchRef.current?.getBoundingClientRect();
     if (!bounds) return;
-    const maxWidth = Math.max(SESSION_AUX_RAIL_MIN_WIDTH_PX, bounds.width - 320);
+    const maxWidth = Math.max(SESSION_AUX_RAIL_MIN_WIDTH_PX, bounds.width - 460);
     setAuxRailWidth(
       Math.min(maxWidth, Math.max(SESSION_AUX_RAIL_MIN_WIDTH_PX, bounds.right - clientX)),
     );
@@ -2227,6 +2246,7 @@ export function ClaudeChatInner({
             <ClaudeChatComposerTrayLazy
               composerTrayRef={composerTrayRef}
               backgroundInvocationDockEnabled={backgroundInvocationDockEnabled}
+              compactFooterChrome={filesPaneVisible || requirementsPaneVisible}
               session={session}
               gitRepositoryPath={gitRepositoryPath}
               repositoryId={sessionRepository?.id ?? null}

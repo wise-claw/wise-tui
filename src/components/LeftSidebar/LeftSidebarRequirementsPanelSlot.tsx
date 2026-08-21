@@ -3,10 +3,12 @@ import {
   DeleteOutlined,
   EditOutlined,
   LoadingOutlined,
+  MoreOutlined,
   SendOutlined,
+  UndoOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
-import { App as AntdApp, Input, Popconfirm, Switch, Tag } from "antd";
+import { App as AntdApp, Dropdown, Input, Modal, Switch, Tag } from "antd";
 import {
   memo,
   useCallback,
@@ -89,6 +91,7 @@ function RequirementsPanelRow({
   onOpenPanel,
   onDispatch,
   onEdit,
+  onReset,
   onDelete,
   onVerifyDone,
 }: {
@@ -99,17 +102,20 @@ function RequirementsPanelRow({
   onOpenPanel: () => void;
   onDispatch: () => void;
   onEdit: () => void;
+  onReset: () => void;
   onDelete: () => void;
   onVerifyDone: () => void;
 }) {
   const done = item.status === "done";
   const verifying = item.status === "verifying";
+  const [moreOpen, setMoreOpen] = useState(false);
 
   return (
       <div
         className={
           "app-left-sidebar-requirements-panel__row" +
-          (done ? " app-left-sidebar-requirements-panel__row--done" : "")
+          (done ? " app-left-sidebar-requirements-panel__row--done" : "") +
+          (moreOpen ? " app-left-sidebar-requirements-panel__row--more-open" : "")
         }
         role="button"
         tabIndex={0}
@@ -180,37 +186,43 @@ function RequirementsPanelRow({
               </button>
             </DeferredHoverTooltip>
           ) : null}
-          <DeferredHoverTooltip title="编辑">
+          <DeferredHoverTooltip title="退回初始态">
             <button
               type="button"
               className="app-left-sidebar-requirements-panel__action-btn"
-              aria-label="编辑需求"
-              onClick={onEdit}
+              aria-label="退回初始态"
+              onClick={onReset}
             >
-              <EditOutlined />
+              <UndoOutlined />
             </button>
           </DeferredHoverTooltip>
-          <Popconfirm
-            title="删除该需求？"
-            description={item.title}
-            okText="删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true, size: "small" }}
-            cancelButtonProps={{ size: "small" }}
-            placement="bottomLeft"
-            overlayClassName="app-left-sidebar-requirements-panel__delete-popconfirm"
+          <Dropdown
+            trigger={["click"]}
             getPopupContainer={() => document.body}
-            onConfirm={onDelete}
+            open={moreOpen}
+            onOpenChange={setMoreOpen}
+            menu={{
+              className: "app-workspace-requirements-more-menu",
+              items: [
+                { key: "edit", icon: <EditOutlined />, label: "编辑需求" },
+                { type: "divider" },
+                { key: "delete", icon: <DeleteOutlined />, label: "删除需求", danger: true },
+              ],
+              onClick: ({ key }) => {
+                if (key === "edit") onEdit();
+                if (key === "delete") onDelete();
+              },
+            }}
           >
             <button
               type="button"
-              className="app-left-sidebar-requirements-panel__action-btn app-left-sidebar-requirements-panel__action-btn--danger"
-              aria-label="删除需求"
-              title="删除"
+              className="app-left-sidebar-requirements-panel__action-btn"
+              aria-label="更多需求操作"
+              title="更多操作"
             >
-              <DeleteOutlined />
+              <MoreOutlined />
             </button>
-          </Popconfirm>
+          </Dropdown>
         </div>
       </div>
   );
@@ -360,6 +372,60 @@ function LeftSidebarRequirementsPanelSlotInner({
     [message, persist],
   );
 
+  const resetRequirement = useCallback(
+    (item: WorkspaceRequirementItem) => {
+      Modal.confirm({
+        title: "退回初始态？",
+        content: "将恢复为待办，并清空派发记录、重试计数和关联会话。",
+        okText: "退回初始态",
+        cancelText: "取消",
+        autoFocusButton: "cancel",
+        onOk: async () => {
+          const now = Date.now();
+          await persist(
+            itemsRef.current.map((row) =>
+              row.id === item.id
+                ? {
+                    ...row,
+                    status: "open",
+                    lastDispatchedAt: null,
+                    dispatchAttemptCount: 0,
+                    executionSessionIds: [],
+                    updatedAt: now,
+                  }
+                : row,
+            ),
+          );
+        },
+      });
+    },
+    [persist],
+  );
+
+  const resetAllRequirements = useCallback(() => {
+    if (itemsRef.current.length === 0) return;
+    Modal.confirm({
+      title: "全部退回初始态？",
+      content: `将重置全部 ${itemsRef.current.length} 条需求的状态、派发记录、重试计数和关联会话。`,
+      okText: "全部退回初始态",
+      cancelText: "取消",
+      autoFocusButton: "cancel",
+      onOk: async () => {
+        const now = Date.now();
+        await persist(
+          itemsRef.current.map((row) => ({
+            ...row,
+            status: "open",
+            lastDispatchedAt: null,
+            dispatchAttemptCount: 0,
+            executionSessionIds: [],
+            updatedAt: now,
+          })),
+        );
+      },
+    });
+  }, [persist]);
+
   const handleDispatch = useCallback(
     async (item: WorkspaceRequirementItem) => {
       setDispatchingId(item.id);
@@ -491,6 +557,35 @@ function LeftSidebarRequirementsPanelSlotInner({
               <PlusIcon />
             </button>
           </DeferredHoverTooltip>
+          <DeferredHoverTooltip title="更多需求操作">
+            <Dropdown
+              trigger={["click"]}
+              getPopupContainer={() => document.body}
+              menu={{
+                className: "app-workspace-requirements-more-menu",
+                items: [
+                  {
+                    key: "reset-all",
+                    icon: <UndoOutlined />,
+                    label: "全部退回初始态",
+                    disabled: items.length === 0,
+                  },
+                ],
+                onClick: ({ key }) => {
+                  if (key === "reset-all") resetAllRequirements();
+                },
+              }}
+            >
+              <button
+                type="button"
+                className="app-repository-header-btn"
+                aria-label="更多需求管理操作"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <MoreOutlined />
+              </button>
+            </Dropdown>
+          </DeferredHoverTooltip>
           <DeferredHoverTooltip title={sectionCollapsed ? "展开需求列表" : "收起需求列表"}>
             <button
               type="button"
@@ -569,6 +664,7 @@ function LeftSidebarRequirementsPanelSlotInner({
                       onOpenPanel={() => handleOpenFull(item)}
                       onDispatch={() => void handleDispatch(item)}
                       onEdit={() => handleEdit(item)}
+                      onReset={() => resetRequirement(item)}
                       onDelete={() => void handleDelete(item)}
                       onVerifyDone={() => void handleVerifyDone(item)}
                     />

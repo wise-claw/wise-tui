@@ -1,17 +1,20 @@
 import {
+  CheckCircleOutlined,
+  CloseCircleOutlined,
   DeleteOutlined,
   EditOutlined,
   LeftOutlined,
   MessageOutlined,
+  MoreOutlined,
   PictureOutlined,
   PlusOutlined,
   RightOutlined,
   SendOutlined,
-  WarningOutlined,
+  UndoOutlined,
 } from "@ant-design/icons";
 import {
   Button,
-  Checkbox,
+  Dropdown,
   Empty,
   InputNumber,
   Modal,
@@ -41,6 +44,7 @@ import {
   requestWorkspaceRequirementCreate,
   requestWorkspaceRequirementEdit,
   openWorkspaceRequirementExecutionSession,
+  resumeWorkspaceRequirementExecutionSession,
   useWorkspaceMemoPanelSelectedRequirementId,
 } from "../../stores/workspaceMemoPanelStore";
 import {
@@ -48,11 +52,9 @@ import {
   WORKSPACE_REQUIREMENT_STATUS_FILTER_OPTIONS,
   type WorkspaceRequirementStatusFilter,
 } from "../../constants/workspaceRequirementStatusFilter";
-import { loadRepositories } from "../../services/repository";
-import type { Repository } from "../../types";
-import { repositoryFolderBasename } from "../../utils/repositoryType";
 import type { WorkspaceRequirementItem, WorkspaceRequirementsPayloadV1 } from "../../types/workspaceRequirements";
 import { MarkdownBody } from "../ClaudeSessions/MarkdownElements";
+import { MonitorDrawerSessionComposer } from "../ProgressMonitorPanel/MonitorDrawerSessionComposer";
 import "./index.css";
 
 function thumbSrc(path: string): string {
@@ -83,40 +85,37 @@ const allowRequirementImageUrl: UrlTransform = (url) => {
 
 interface RequirementRowProps {
   item: WorkspaceRequirementItem;
-  repositoryLabel: string;
-  repositoryMissing: boolean;
   dispatchingId: string | null;
-  selected: boolean;
   onToggleDone: (item: WorkspaceRequirementItem) => void;
   onEdit: (item: WorkspaceRequirementItem) => void;
+  onReset: (item: WorkspaceRequirementItem) => void;
   onDelete: (item: WorkspaceRequirementItem) => void;
   onDispatch: (item: WorkspaceRequirementItem) => void;
+  onReject: (item: WorkspaceRequirementItem) => void;
 }
 
 function requirementRowEqual(prev: RequirementRowProps, next: RequirementRowProps): boolean {
   return (
     prev.item === next.item &&
-    prev.repositoryLabel === next.repositoryLabel &&
-    prev.repositoryMissing === next.repositoryMissing &&
     prev.dispatchingId === next.dispatchingId &&
-    prev.selected === next.selected &&
     prev.onToggleDone === next.onToggleDone &&
     prev.onEdit === next.onEdit &&
+    prev.onReset === next.onReset &&
     prev.onDelete === next.onDelete &&
     prev.onDispatch === next.onDispatch
+    && prev.onReject === next.onReject
   );
 }
 
 const RequirementRow = memo(function RequirementRow({
   item,
-  repositoryLabel,
-  repositoryMissing,
   dispatchingId,
-  selected,
   onToggleDone,
   onEdit,
+  onReset,
   onDelete,
   onDispatch,
+  onReject,
 }: RequirementRowProps) {
   const done = item.status === "done";
   const dispatching = dispatchingId === item.id;
@@ -124,75 +123,33 @@ const RequirementRow = memo(function RequirementRow({
     item.executionSessionIds[item.executionSessionIds.length - 1] ?? null;
   const thumbs = item.imagePaths.slice(0, 3);
   const moreImages = Math.max(0, item.imagePaths.length - thumbs.length);
-  const rowRef = useRef<HTMLLIElement | null>(null);
   const detailMarkdown = useMemo(
     () => hydrateRequirementImageSources(item.bodyMarkdown || item.description || item.title),
     [item.bodyMarkdown, item.description, item.title],
   );
 
-  useEffect(() => {
-    if (!selected) return;
-    const frame = window.requestAnimationFrame(() => {
-      rowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [selected]);
-
   return (
     <li
-      ref={rowRef}
-      className={`app-workspace-requirements-panel__row${done ? " app-workspace-requirements-panel__row--done" : ""}${selected ? " app-workspace-requirements-panel__row--selected" : ""}`}
-      aria-current={selected ? "true" : undefined}
+      className={`app-workspace-requirements-panel__row${done ? " app-workspace-requirements-panel__row--done" : ""}`}
     >
-      <Checkbox
-        className="app-workspace-requirements-panel__check"
-        checked={done}
-        onChange={() => onToggleDone(item)}
-        aria-label={done ? "标记为未完成" : "标记为已完成"}
-      />
       <div className="app-workspace-requirements-panel__row-main">
-        <div className="app-workspace-requirements-panel__title-line">
-          {repositoryMissing ? (
-            <Tag
-              icon={<WarningOutlined />}
-              color="warning"
-              className="app-workspace-requirements-panel__tag"
-              title={repositoryLabel}
-            >
-              {repositoryLabel}
-            </Tag>
-          ) : null}
-          <span className="app-workspace-requirements-panel__title">{item.title}</span>
-          {!repositoryMissing ? (
-            <Tag className="app-workspace-requirements-panel__tag">{repositoryLabel}</Tag>
-          ) : null}
+        <div className="app-workspace-requirements-panel__title-line" aria-label="需求信息">
           {item.imagePaths.length > 0 ? (
             <Tag icon={<PictureOutlined />} className="app-workspace-requirements-panel__tag">
               {item.imagePaths.length}
             </Tag>
           ) : null}
-          {done ? (
-            <Tag color="success" className="app-workspace-requirements-panel__tag">
-              已验证
-            </Tag>
-          ) : null}
-          {item.lastDispatchedAt != null ? (
-            <Tag className="app-workspace-requirements-panel__tag">已派发</Tag>
-          ) : null}
-          {item.status === "verifying" ? (
-            <Tag color="warning" className="app-workspace-requirements-panel__tag">
-              待验证
-            </Tag>
-          ) : null}
         </div>
-        <div className="app-workspace-requirements-panel__detail app-markdown">
-          <MarkdownBody
-            source={detailMarkdown}
-            rehypePlugins={[rehypeRaw]}
-            urlTransform={allowRequirementImageUrl}
-          />
-        </div>
-        {thumbs.length > 0 ? (
+        {detailMarkdown ? (
+          <div className="app-workspace-requirements-panel__detail app-markdown">
+            <MarkdownBody
+              source={detailMarkdown}
+              rehypePlugins={[rehypeRaw]}
+              urlTransform={allowRequirementImageUrl}
+            />
+          </div>
+        ) : null}
+        {thumbs.length > 0 && !/!\[[^\]]*\]\([^)]*\)|<img\b/i.test(detailMarkdown) ? (
           <div className="app-workspace-requirements-panel__thumbs">
             {thumbs.map((path) => (
               <img key={path} src={thumbSrc(path)} alt="" className="app-workspace-requirements-panel__thumb" />
@@ -204,6 +161,34 @@ const RequirementRow = memo(function RequirementRow({
         ) : null}
       </div>
       <div className="app-workspace-requirements-panel__row-actions">
+        <Button
+          type="text"
+          size="small"
+          icon={<CheckCircleOutlined />}
+          className={`app-workspace-requirements-panel__complete-btn${done ? " app-workspace-requirements-panel__complete-btn--done" : ""}`}
+          onClick={() => onToggleDone(item)}
+          aria-label={done ? "标记为未完成" : "标记为已完成"}
+          title={done ? "标记为未完成" : "标记为已完成"}
+        />
+        <Button
+          type="text"
+          size="small"
+          icon={<UndoOutlined />}
+          className="app-workspace-requirements-panel__reset-btn"
+          onClick={() => onReset(item)}
+          aria-label="退回初始态"
+          title="退回初始态"
+        />
+        {item.status === "verifying" ? (
+          <Button
+            type="text"
+            size="small"
+            icon={<CloseCircleOutlined />}
+            aria-label="验收失败"
+            title="验收失败并继续执行"
+            onClick={() => onReject(item)}
+          />
+        ) : null}
         {latestExecutionSessionId ? (
           <Button
             type="text"
@@ -234,7 +219,7 @@ const RequirementRow = memo(function RequirementRow({
           size="small"
           icon={<EditOutlined />}
           aria-label="编辑需求"
-          title="编辑"
+          title="编辑需求"
           onClick={() => onEdit(item)}
         />
         <Button
@@ -243,7 +228,7 @@ const RequirementRow = memo(function RequirementRow({
           danger
           icon={<DeleteOutlined />}
           aria-label="删除需求"
-          title="删除"
+          title="删除需求"
           onClick={() => onDelete(item)}
         />
       </div>
@@ -260,9 +245,9 @@ export function WorkspaceMemoPanel() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<WorkspaceRequirementItem[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
-  const [repositories, setRepositories] = useState<Repository[]>([]);
   const [saving, setSaving] = useState(false);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+  const [rejectingItem, setRejectingItem] = useState<WorkspaceRequirementItem | null>(null);
   const {
     enabled: autoDispatch,
     setEnabled: setAutoDispatch,
@@ -294,11 +279,10 @@ export function WorkspaceMemoPanel() {
     mountedRef.current = true;
     let cancelled = false;
     setLoading(true);
-    void Promise.all([loadWorkspaceRequirements(), loadRepositories()])
-      .then(([payload, repos]) => {
+    void loadWorkspaceRequirements()
+      .then((payload) => {
         if (cancelled) return;
         setItems(payload.items);
-        setRepositories(repos);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -314,16 +298,6 @@ export function WorkspaceMemoPanel() {
     };
   }, []);
 
-  const resolveRepositoryMeta = useCallback(
-    (repositoryId: string | null): { label: string; missing: boolean } => {
-      if (!repositoryId) return { label: "未指定仓库", missing: true };
-      const repo = repositories.find((item) => String(item.id) === repositoryId);
-      if (!repo) return { label: "未知仓库", missing: true };
-      return { label: repositoryFolderBasename(repo), missing: false };
-    },
-    [repositories],
-  );
-
   // 全局新增/编辑弹窗保存后同步列表。
   useEffect(() => {
     function onRequirementsChanged(event: Event) {
@@ -337,15 +311,6 @@ export function WorkspaceMemoPanel() {
       window.removeEventListener(WISE_WORKSPACE_REQUIREMENTS_CHANGED, onRequirementsChanged);
     };
   }, []);
-
-  // 左栏点选的需求优先可见：仅在右栏当前筛选会把目标隐藏时，调整右栏自己的筛选。
-  useEffect(() => {
-    if (!selectedRequirementId || statusFilter === "all") return;
-    const selected = items.find((item) => item.id === selectedRequirementId);
-    if (selected && selected.status !== statusFilter) {
-      setStatusFilter(selected.status);
-    }
-  }, [items, selectedRequirementId, statusFilter]);
 
   const openCreate = useCallback(() => {
     requestWorkspaceRequirementCreate();
@@ -388,6 +353,62 @@ export function WorkspaceMemoPanel() {
     [persist],
   );
 
+  const resetRequirement = useCallback(
+    (item: WorkspaceRequirementItem) => {
+      Modal.confirm({
+        title: "退回初始态？",
+        content: "将恢复为待办，并清空派发记录、重试计数和关联会话。",
+        okText: "退回初始态",
+        cancelText: "取消",
+        autoFocusButton: "cancel",
+        onOk: async () => {
+          const now = Date.now();
+          await persist(
+            itemsRef.current.map((row) =>
+              row.id === item.id
+                ? {
+                    ...row,
+                    status: "open",
+                    lastDispatchedAt: null,
+                    dispatchAttemptCount: 0,
+                    executionSessionIds: [],
+                    updatedAt: now,
+                  }
+                : row,
+            ),
+          );
+        },
+      });
+    },
+    [persist],
+  );
+
+  const resetAllRequirements = useCallback(() => {
+    if (itemsRef.current.length === 0) return;
+    Modal.confirm({
+      title: "全部退回初始态？",
+      content: `将重置全部 ${itemsRef.current.length} 条需求的状态、派发记录、重试计数和关联会话。`,
+      okText: "全部退回初始态",
+      cancelText: "取消",
+      autoFocusButton: "cancel",
+      onOk: async () => {
+        const now = Date.now();
+        await persist(
+          itemsRef.current.map((row) => ({
+            ...row,
+            status: "open",
+            lastDispatchedAt: null,
+            dispatchAttemptCount: 0,
+            executionSessionIds: [],
+            updatedAt: now,
+          })),
+        );
+        setStatusFilter("all");
+        setCurrentPage(0);
+      },
+    });
+  }, [persist]);
+
   const handleDispatch = useCallback(
     async (item: WorkspaceRequirementItem) => {
       setDispatchingId(item.id);
@@ -428,6 +449,10 @@ export function WorkspaceMemoPanel() {
     [persist],
   );
 
+  const handleReject = useCallback((item: WorkspaceRequirementItem) => {
+    setRejectingItem(item);
+  }, []);
+
   const handleClose = useCallback(() => {
     closeWorkspaceMemoPanel();
   }, []);
@@ -463,9 +488,6 @@ export function WorkspaceMemoPanel() {
   }, [items, statusFilter]);
   const filteredItemCount = pagedItems.length;
   const currentItem = pagedItems[currentPage] ?? null;
-  const currentRepositoryMeta = currentItem
-    ? resolveRepositoryMeta(currentItem.repositoryId)
-    : null;
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, Math.max(0, pagedItems.length - 1)));
@@ -504,6 +526,7 @@ export function WorkspaceMemoPanel() {
               options={WORKSPACE_REQUIREMENT_STATUS_FILTER_OPTIONS}
               onChange={setStatusFilter}
               className="app-workspace-requirements-panel__status-filter"
+              popupClassName="app-workspace-requirements-status-dropdown"
               aria-label="按需求状态过滤"
               popupMatchSelectWidth={96}
               getPopupContainer={() => document.body}
@@ -548,6 +571,31 @@ export function WorkspaceMemoPanel() {
             >
               新增
             </Button>
+            <Dropdown
+              trigger={["click"]}
+              menu={{
+                className: "app-workspace-requirements-more-menu",
+                items: [
+                  {
+                    key: "reset-all",
+                    icon: <UndoOutlined />,
+                    label: "全部退回初始态",
+                    disabled: items.length === 0,
+                  },
+                ],
+                onClick: ({ key }) => {
+                  if (key === "reset-all") resetAllRequirements();
+                },
+              }}
+            >
+              <Button
+                type="text"
+                size="small"
+                icon={<MoreOutlined />}
+                aria-label="更多需求管理操作"
+                title="更多操作"
+              />
+            </Dropdown>
             <Button
               type="text"
               size="small"
@@ -593,6 +641,17 @@ export function WorkspaceMemoPanel() {
             ) : (
               <>
                 <nav className="app-workspace-requirements-panel__pager" aria-label="需求翻页">
+                  <span className="app-workspace-requirements-panel__pager-status">
+                    {currentItem?.status === "done" ? (
+                      <Tag color="success" className="app-workspace-requirements-panel__tag">已完成</Tag>
+                    ) : currentItem?.status === "verifying" ? (
+                      <Tag color="warning" className="app-workspace-requirements-panel__tag">待验证</Tag>
+                    ) : currentItem?.lastDispatchedAt != null ? (
+                      <Tag className="app-workspace-requirements-panel__tag">已派发</Tag>
+                    ) : (
+                      <Tag className="app-workspace-requirements-panel__tag">待办</Tag>
+                    )}
+                  </span>
                   <Button
                     type="text"
                     size="small"
@@ -618,26 +677,44 @@ export function WorkspaceMemoPanel() {
                   />
                 </nav>
                 <ul className="app-workspace-requirements-panel__list">
-                  {currentItem && currentRepositoryMeta ? (
+                  {currentItem ? (
                     <RequirementRow
                       key={currentItem.id}
                       item={currentItem}
-                      repositoryLabel={currentRepositoryMeta.label}
-                      repositoryMissing={currentRepositoryMeta.missing}
                       dispatchingId={dispatchingId}
-                      selected
                       onToggleDone={(row) => void handleToggleDone(row)}
                       onEdit={openEdit}
+                      onReset={resetRequirement}
                       onDelete={handleDelete}
                       onDispatch={(row) => void handleDispatch(row)}
+                      onReject={handleReject}
                     />
-                  ) : null}
+        ) : null}
                 </ul>
               </>
             )}
           </div>
         )}
       </div>
+      <Modal
+        title="验收失败，填写反馈"
+        open={Boolean(rejectingItem)}
+        cancelText="取消"
+        footer={null}
+        onCancel={() => setRejectingItem(null)}
+      >
+        <MonitorDrawerSessionComposer
+          session={null}
+          resumeContext={{ sessionId: rejectingItem?.executionSessionIds[rejectingItem.executionSessionIds.length - 1] }}
+          onResumeSession={async ({ sessionId, prompt }) => {
+            // 发送动作由会话运行时异步接管，先关闭反馈弹窗，避免弹窗阻塞中栏输入与执行状态刷新。
+            setRejectingItem(null);
+            const accepted = await resumeWorkspaceRequirementExecutionSession(sessionId, prompt);
+            if (accepted) message.success("已发送验收反馈，正在继续执行");
+            return accepted;
+          }}
+        />
+      </Modal>
     </div>
   );
 }

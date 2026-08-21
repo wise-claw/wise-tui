@@ -33,6 +33,14 @@ const STATE_KEY = "__wise_workspace_memo_panel_state__";
 /** 需求详情请求打开其关联执行会话；由 App 根节点统一处理路由。 */
 export const WISE_UI_EVENT_OPEN_WORKSPACE_REQUIREMENT_SESSION =
   "wise:open-workspace-requirement-session";
+export const WISE_UI_EVENT_RESUME_WORKSPACE_REQUIREMENT_SESSION =
+  "wise:resume-workspace-requirement-session";
+
+export type ResumeWorkspaceRequirementSessionDetail = {
+  sessionId: string;
+  prompt: string;
+  resolve: (accepted: boolean) => void;
+};
 
 export function openWorkspaceRequirementExecutionSession(sessionId: string): void {
   const id = sessionId.trim();
@@ -42,6 +50,24 @@ export function openWorkspaceRequirementExecutionSession(sessionId: string): voi
       detail: { sessionId: id },
     }),
   );
+}
+
+/** 通过 App 中已注册的会话运行时续接 worker，不能直接把 tab id 当 streaming id 调用。 */
+export function resumeWorkspaceRequirementExecutionSession(
+  sessionId: string,
+  prompt: string,
+): Promise<boolean> {
+  const id = sessionId.trim();
+  const text = prompt.trim();
+  if (!id || !text || typeof window === "undefined") return Promise.resolve(false);
+  return new Promise((resolve) => {
+    window.dispatchEvent(
+      new CustomEvent<ResumeWorkspaceRequirementSessionDetail>(
+        WISE_UI_EVENT_RESUME_WORKSPACE_REQUIREMENT_SESSION,
+        { detail: { sessionId: id, prompt: text, resolve } },
+      ),
+    );
+  });
 }
 
 function getState(): MemoPanelState {

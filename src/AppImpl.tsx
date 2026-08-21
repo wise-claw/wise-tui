@@ -108,6 +108,8 @@ import {
   requestWorkspaceRequirementCreate,
   toggleWorkspaceMemoPanel,
   WISE_UI_EVENT_OPEN_WORKSPACE_REQUIREMENT_SESSION,
+  WISE_UI_EVENT_RESUME_WORKSPACE_REQUIREMENT_SESSION,
+  type ResumeWorkspaceRequirementSessionDetail,
 } from "./stores/workspaceMemoPanelStore";
 import { bindWorkspaceRequirementExecutionSession } from "./services/workspaceRequirementsStore";
 import { toggleWorkspaceQuickActionsPanel } from "./stores/workspaceQuickActionsPanelStore";
@@ -2309,6 +2311,30 @@ export default function App() {
         openRequirementSession,
       );
   }, [jumpToSessionLeavingMcpHub, sessionsLatestRef]);
+
+  // 需求验收失败需要续接“执行标签”本身。通过统一 resume 入口解析 tab id / Claude id，
+  // 不能直接调用 streaming stdin（关联记录保存的是 worker tab id）。
+  useEffect(() => {
+    const resumeRequirementSession = (event: Event) => {
+      const detail = (event as CustomEvent<ResumeWorkspaceRequirementSessionDetail>).detail;
+      if (!detail?.sessionId || !detail.prompt) return;
+      void resumeSessionFromMonitorDrawer({
+        sessionId: detail.sessionId,
+        prompt: detail.prompt,
+      })
+        .then((accepted) => detail.resolve(accepted))
+        .catch((error) => {
+          console.error("[WorkspaceRequirements] resume linked session failed", error);
+          detail.resolve(false);
+        });
+    };
+    window.addEventListener(WISE_UI_EVENT_RESUME_WORKSPACE_REQUIREMENT_SESSION, resumeRequirementSession);
+    return () =>
+      window.removeEventListener(
+        WISE_UI_EVENT_RESUME_WORKSPACE_REQUIREMENT_SESSION,
+        resumeRequirementSession,
+      );
+  }, [resumeSessionFromMonitorDrawer]);
 
   async function handleCreateRepositoryTask(repository: Repository, mode: TaskMode) {
     if (mode === "chat") {

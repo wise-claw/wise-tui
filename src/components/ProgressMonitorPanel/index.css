@@ -2274,12 +2274,30 @@
   background: var(--ant-color-bg-container);
 }
 
+/* 验收反馈复用完整会话 Composer，并默认展开两行编辑高度。 */
+.app-monitor-panel__drawer-composer .app-claude-semi-chat-input-wrap {
+  --app-semi-ai-chat-editor-min-lines: 2;
+}
+
 .app-monitor-panel__drawer-composer-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   margin-top: 8px;
+}
+
+.app-monitor-panel__drawer-composer-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.app-monitor-panel__drawer-composer-tools .ant-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--ant-color-text-secondary);
 }
 
 .app-monitor-panel__drawer-composer-hint {
