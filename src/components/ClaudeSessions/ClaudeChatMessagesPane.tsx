@@ -38,6 +38,7 @@ export interface ClaudeChatMessagesPaneProps {
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
   sessionsForDispatchLookup?: SessionDispatchLookup;
+  onReplayUserMessage?: (prompt: string) => void;
   onMessagesBlur: (event: FocusEvent<HTMLDivElement>) => void;
   onNavigateMessage: () => void;
   onFullTranscriptStart: () => void;
@@ -63,6 +64,7 @@ function chatMessagesPanePropsEqual(
   if (prev.messagesScrollRef !== next.messagesScrollRef) return false;
   if (prev.messageListNavRef !== next.messageListNavRef) return false;
   if (prev.sessionsForDispatchLookup !== next.sessionsForDispatchLookup) return false;
+  if (prev.onReplayUserMessage !== next.onReplayUserMessage) return false;
   if (prev.onMessagesBlur !== next.onMessagesBlur) return false;
   if (prev.onNavigateMessage !== next.onNavigateMessage) return false;
   if (prev.onReloadFullDiskTranscript !== next.onReloadFullDiskTranscript) return false;
@@ -98,6 +100,7 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
   onOpenSessionConversationTaskDetail,
   resolveExecutionEnvironmentDispatchTask,
   sessionsForDispatchLookup,
+  onReplayUserMessage,
   onMessagesBlur,
   onNavigateMessage,
   onFullTranscriptStart,
@@ -186,6 +189,7 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
           onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
           onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
           sessionsForDispatchLookup={sessionsForDispatchLookup}
+          onReplayUserMessage={onReplayUserMessage}
           onNavigate={onNavigateMessage}
           messageListProfile={messageListProfile}
           companionMessageListWindow={companionMessageListWindow}

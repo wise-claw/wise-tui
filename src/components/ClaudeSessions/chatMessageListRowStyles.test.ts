@@ -30,4 +30,20 @@ describe("chatMessageListRowClassName", () => {
       "app-claude-messages-virtual-row--streaming",
     );
   });
+
+  test("仅非工具用户消息组标记为 sticky", () => {
+    const userRow = {
+      ...baseMessageRow,
+      msg: { ...baseMessageRow.msg, role: "user" },
+    } as ChatMessageListRow;
+    expect(chatMessageListRowClassName(userRow, 0)).toContain(
+      "app-claude-messages-virtual-row--user-sticky",
+    );
+    expect(
+      chatMessageListRowClassName({ ...userRow, toolUser: true } as ChatMessageListRow, 1),
+    ).not.toContain("app-claude-messages-virtual-row--user-sticky");
+    expect(
+      chatMessageListRowClassName({ ...userRow, mergedWithPrevious: true } as ChatMessageListRow, 1),
+    ).not.toContain("app-claude-messages-virtual-row--user-sticky");
+  });
 });

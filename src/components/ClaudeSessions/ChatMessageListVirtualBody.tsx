@@ -2,6 +2,7 @@ import {
   forwardRef,
   useCallback,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   type ReactElement,
   type ReactNode,
@@ -39,6 +40,7 @@ interface Props {
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
   sessionsForDispatchLookup?: SessionDispatchLookup;
+  onReplayUserMessage?: (prompt: string) => void;
   /** 自定义行渲染；提供时覆盖 listVariant 默认内容 */
   renderRow?: (row: ChatMessageListRow, index: number) => ReactNode;
   onNavigate?: () => void;
@@ -59,6 +61,7 @@ export interface RowElementCacheContext {
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
   sessionsForDispatchLookup?: SessionDispatchLookup;
+  onReplayUserMessage?: (prompt: string) => void;
   renderRow?: (row: ChatMessageListRow, index: number) => ReactNode;
 }
 
@@ -92,6 +95,7 @@ export function rowElementCacheHit(
     cached.onOpenHistorySessionInInspector === ctx.onOpenHistorySessionInInspector &&
     cached.onOpenSessionConversationTaskDetail === ctx.onOpenSessionConversationTaskDetail &&
     cached.sessionsForDispatchLookup === ctx.sessionsForDispatchLookup &&
+    cached.onReplayUserMessage === ctx.onReplayUserMessage &&
     cached.renderRow === ctx.renderRow
   );
 }
@@ -125,6 +129,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       onOpenHistorySessionInInspector,
       onOpenSessionConversationTaskDetail,
       sessionsForDispatchLookup,
+      onReplayUserMessage,
       renderRow,
       onNavigate,
       messageListProfile = "primary",
@@ -238,6 +243,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       onOpenHistorySessionInInspector,
       onOpenSessionConversationTaskDetail,
       sessionsForDispatchLookup,
+      onReplayUserMessage,
       renderRow,
     };
     // 迁移式缓存：每轮新建 nextCache，命中条目迁移，未命中 createElement 写入；
@@ -267,6 +273,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
               onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
               onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
               sessionsForDispatchLookup={sessionsForDispatchLookup}
+              onReplayUserMessage={onReplayUserMessage}
             />
           )}
         </div>
@@ -275,6 +282,59 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       return element;
     });
     elementCacheRef.current = nextElementCache;
+
+    // 原生 sticky 会让多个用户行同时停在顶部。这里用一帧一帧的推挤距离驱动交接：
+    // 下一条消息接近时，前一条先向上移出，完全离开后才切换 active。
+    useLayoutEffect(() => {
+      const sc = scrollContainerRef.current;
+      if (!sc) return;
+      let frame = 0;
+
+      const syncActiveUserMessage = () => {
+        frame = 0;
+        const rows = Array.from(
+          sc.querySelectorAll<HTMLElement>(".app-claude-messages-virtual-row--user-sticky"),
+        );
+        if (rows.length === 0) return;
+        // 先还原上一帧的推出位移，使用自然布局计算本帧的碰撞距离。
+        for (const row of rows) row.style.transform = "";
+        const scrollTop = sc.scrollTop;
+        let active: HTMLElement | undefined;
+        for (const row of rows) {
+          // offsetTop 取自然文档流位置，不受当前 sticky 行视觉位置影响。
+          if (row.offsetTop <= scrollTop + 1) active = row;
+          else break;
+        }
+        active ??= rows[0];
+
+        const activeIndex = active ? rows.indexOf(active) : -1;
+        const next = activeIndex >= 0 ? rows[activeIndex + 1] : undefined;
+        if (active && next) {
+          const activeRect = active.getBoundingClientRect();
+          const nextRect = next.getBoundingClientRect();
+          const overlap = Math.max(0, activeRect.bottom - nextRect.top);
+          if (overlap >= activeRect.height) {
+            active = next;
+          } else if (overlap > 0) {
+            // 不使用 CSS transition：位移本身跟随滚动帧，避免交接时滞后或二次动画。
+            active.style.transform = `translate3d(0, -${overlap}px, 0)`;
+          }
+        }
+        for (const row of rows) {
+          row.classList.toggle("app-claude-messages-virtual-row--user-sticky-active", row === active);
+        }
+      };
+      const onScroll = () => {
+        if (frame === 0) frame = window.requestAnimationFrame(syncActiveUserMessage);
+      };
+
+      sc.addEventListener("scroll", onScroll, { passive: true });
+      syncActiveUserMessage();
+      return () => {
+        sc.removeEventListener("scroll", onScroll);
+        if (frame !== 0) window.cancelAnimationFrame(frame);
+      };
+    }, [rows, scrollContainerRef, visibleStartIndex, scrollGeneration]);
 
     return (
       <>

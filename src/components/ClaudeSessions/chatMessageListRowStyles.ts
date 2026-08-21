@@ -12,6 +12,14 @@ export function chatMessageListRowClassName(row: ChatMessageListRow, index: numb
   if (row.kind === "message" && row.streamingThisBubble) {
     parts.push("app-claude-messages-virtual-row--streaming");
   }
+  if (
+    row.kind === "message" &&
+    row.msg.role === "user" &&
+    !row.toolUser &&
+    !row.mergedWithPrevious
+  ) {
+    parts.push("app-claude-messages-virtual-row--user-sticky");
+  }
   if (row.kind === "files-changed-summary") {
     parts.push("app-claude-messages-virtual-row--files-changed");
   }

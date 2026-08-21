@@ -583,6 +583,13 @@ export function ClaudeChatInner({
   const onCancelForEscRef = useRef(onCancel);
   onCancelForEscRef.current = onCancel;
 
+  const replayUserMessage = useCallback(
+    (prompt: string) => {
+      void onExecute(session.id, prompt);
+    },
+    [onExecute, session.id],
+  );
+
   /** 点击消息区等非控件时让中栏获得焦点，便于 Esc 终止 Claude Code（否则 activeElement 常在 body） */
   const onChatPointerDownCapture = useCallback((e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
@@ -1980,6 +1987,7 @@ export function ClaudeChatInner({
             onOpenSessionConversationTaskDetail={openSessionConversationTaskDetail}
             resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
             sessionsForDispatchLookup={sessionsForDispatchLookup}
+            onReplayUserMessage={replayUserMessage}
             onFullTranscriptStart={handleFullTranscriptStart}
             onFullTranscriptEnd={handleFullTranscriptEnd}
             messageListProfile={messageListProfile}

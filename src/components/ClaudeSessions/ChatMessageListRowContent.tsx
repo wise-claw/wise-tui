@@ -16,6 +16,7 @@ interface Props {
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
   sessionsForDispatchLookup?: SessionDispatchLookup;
+  onReplayUserMessage?: (prompt: string) => void;
 }
 
 function ChatMessageListRowContentInner({
@@ -27,6 +28,7 @@ function ChatMessageListRowContentInner({
   onOpenHistorySessionInInspector,
   onOpenSessionConversationTaskDetail,
   sessionsForDispatchLookup,
+  onReplayUserMessage,
 }: Props) {
   if (row.kind === "thinking-hint") {
     return (
@@ -51,6 +53,7 @@ function ChatMessageListRowContentInner({
         onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
         onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
         sessionsForDispatchLookup={sessionsForDispatchLookup}
+        onReplayUserMessage={onReplayUserMessage}
       />
     );
   }
@@ -66,6 +69,7 @@ function ChatMessageListRowContentInner({
       onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
       onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
       sessionsForDispatchLookup={sessionsForDispatchLookup}
+      onReplayUserMessage={onReplayUserMessage}
     />
   );
 }
@@ -78,6 +82,7 @@ function rowContentEqual(prev: Readonly<Props>, next: Readonly<Props>): boolean 
   if (prev.onOpenSessionConversationTaskDetail !== next.onOpenSessionConversationTaskDetail) return false;
   if (prev.resolveExecutionEnvironmentDispatchTask !== next.resolveExecutionEnvironmentDispatchTask) return false;
   if (prev.sessionsForDispatchLookup !== next.sessionsForDispatchLookup) return false;
+  if (prev.onReplayUserMessage !== next.onReplayUserMessage) return false;
   if (prev.row === next.row) return true;
   if (prev.row.kind !== next.row.kind) return false;
   if (prev.row.kind === "thinking-hint" || next.row.kind === "thinking-hint") {

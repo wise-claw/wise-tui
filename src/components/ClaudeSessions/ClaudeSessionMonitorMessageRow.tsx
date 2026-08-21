@@ -4,7 +4,6 @@ import type { DispatchRecordMeta, SessionDispatchLookup } from "../../utils/clau
 import { MessagePartsDisplay } from "./MessageParts";
 import { Markdown } from "./Markdown";
 import { SystemMessageContent } from "./SystemMessageContent";
-import { formatChatMessageListTime } from "../../utils/formatChatMessageListTime";
 import {
   hasRenderableChatMessageBody,
   isAssistantDisplayNoiseText,
@@ -28,6 +27,7 @@ interface Props {
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
   sessionsForDispatchLookup?: SessionDispatchLookup;
+  onReplayUserMessage?: (prompt: string) => void;
 }
 
 function ClaudeSessionMonitorMessageRowInner({
@@ -41,6 +41,7 @@ function ClaudeSessionMonitorMessageRowInner({
   onOpenHistorySessionInInspector,
   onOpenSessionConversationTaskDetail,
   sessionsForDispatchLookup,
+  onReplayUserMessage,
 }: Props) {
   const copyText = useChatMessageCopyText(msg, sessionsForDispatchLookup);
   const systemPlainText = useMemo(
@@ -99,26 +100,16 @@ function ClaudeSessionMonitorMessageRowInner({
   return (
     <div
       data-message-id={String(msg.id)}
-      className={`app-claude-message app-claude-message--${msg.role}${toolUser ? " app-claude-message--tool-user" : ""}${mergedWithPrevious ? " app-claude-message--merged" : ""}${streamingThisBubble ? " app-claude-message--streaming" : ""}`}
+      className={`app-claude-message app-claude-message--${msg.role}${toolUser ? " app-claude-message--tool-user" : ""}${!toolUser && msg.role === "user" && !mergedWithPrevious ? " app-claude-message--user-sticky" : ""}${mergedWithPrevious ? " app-claude-message--merged" : ""}${streamingThisBubble ? " app-claude-message--streaming" : ""}`}
     >
-      <div className="app-claude-message-avatar" aria-hidden={mergedWithPrevious ? true : undefined}>
-        {toolUser ? "具" : msg.role === "user" ? "我" : msg.role === "assistant" ? "C" : "S"}
-      </div>
       <div className="app-claude-message-body">
-        {!mergedWithPrevious ? (
-          <span
-            className="app-claude-message-time app-claude-message-time--overlay"
-            title={new Date(msg.timestamp).toLocaleString("zh-CN")}
-          >
-            {formatChatMessageListTime(msg.timestamp)}
-          </span>
-        ) : null}
         <ChatMessageRowActions
           sessionId={sessionId}
           msg={msg}
           copyText={copyText}
           toolUser={toolUser}
           sessionsForDispatchLookup={sessionsForDispatchLookup}
+          onReplayUserMessage={msg.role === "user" && !toolUser ? onReplayUserMessage : undefined}
           floating
         />
         <div className="app-claude-message-content">{visibleBody}</div>

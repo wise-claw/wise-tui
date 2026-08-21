@@ -4047,7 +4047,8 @@
      可能把百分比算成循环依赖 → 可用宽度塌成中文 min-content（一字一行）。 */
   contain: paint;
   overflow-y: auto;
-  padding: 12px 12px 16px;
+  padding: 0 12px 16px;
+  margin-top: 12px;
   /* 滚动容器用块级流式布局：避免 column flex 把视口剩余高度算进 scrollHeight，贴底时顶栏被顶出、底部留白 */
   display: block;
   background: var(--ant-color-bg-container);
@@ -4223,10 +4224,7 @@
 }
 
 .app-claude-message {
-  /* grid + minmax(0,1fr) 比 flex+basis:0% 更能锁住正文列宽，避免中文一字一行 */
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
-  column-gap: 8px;
+  display: block;
   align-items: start;
   width: 100%;
   max-width: 100%;
@@ -4260,40 +4258,29 @@
   margin-top: 3px;
 }
 
-.app-claude-message--merged .app-claude-message-avatar {
-  visibility: hidden;
-  pointer-events: none;
+.app-claude-messages-virtual-row--user-sticky {
+  z-index: 5;
 }
 
-.app-claude-message-avatar {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 600;
-  flex-shrink: 0;
-  align-self: flex-start;
-  background: var(--ant-color-fill);
+.app-claude-messages-virtual-row--user-sticky-active {
+  position: sticky;
+  top: 0;
+  padding-bottom: 6px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-claude-message--user-sticky {
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--ant-color-primary) 26%, var(--ant-color-border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 72%, var(--ant-color-bg-container));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--ant-color-primary) 10%, transparent);
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.app-claude-message--assistant,
+.app-claude-message--system {
   color: var(--ant-color-text);
-  margin-top: 0;
-}
-
-.app-claude-message--user .app-claude-message-avatar {
-  background: var(--ant-color-primary);
-  color: var(--ant-color-text-light-solid);
-}
-
-.app-claude-message--tool-user .app-claude-message-avatar {
-  background: var(--ant-color-info);
-  color: var(--ant-color-text-light-solid);
-}
-
-.app-claude-message--assistant .app-claude-message-avatar {
-  background: var(--ant-color-success);
-  color: var(--ant-color-text-light-solid);
 }
 
 .app-claude-messages .app-claude-message--assistant .app-message-parts > :first-child,
@@ -4315,12 +4302,7 @@
   padding-right: 4px;
 }
 
-.app-claude-message--system .app-claude-message-avatar {
-  background: var(--ant-color-warning);
-  color: var(--ant-color-text-light-solid);
-}
-
-/* 系统消息：首行行盒与 22px 头像上下对齐（与用户/助手同一规则）。 */
+/* 系统消息：首行行盒保持紧凑。 */
 .app-claude-message--system .app-system-message {
   line-height: 22px;
 }
@@ -4332,7 +4314,6 @@
 }
 
 .app-claude-message-body {
-  /* grid 子项默认 stretch 铺满 1fr 列；勿设 max-width:100%（不定宽度下可循环塌成 0） */
   min-width: 0;
   max-width: none;
   width: auto;
@@ -4482,32 +4463,8 @@
   letter-spacing: 0.01em;
 }
 
-.app-claude-message-time {
-  font-size: 11px;
-  color: var(--ant-color-text-tertiary);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-
-/* 叠在正文右上角，不占文档流；高度与头像/首行一致以便上下对齐 */
-.app-claude-message-time--overlay {
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 1;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  line-height: 1;
-  pointer-events: none;
-}
-
-.app-claude-message:not(.app-claude-message--merged) .app-claude-message-content {
-  padding-right: 44px;
-}
-
 .app-claude-message:not(.app-claude-message--merged) .app-claude-message-floating-actions {
-  right: 40px;
+  right: 0;
 }
 
 /* ── System message（裸展示：不加外框 / 工具栏；仅保留错误态文字色） ── */
@@ -10051,8 +10008,7 @@ button.app-message-part-header:disabled:hover {
   border-radius: 6px;
 }
 
-/* 用户消息：与助手同一行宽，时间叠在右侧；不再用左侧色条区分（头像已够）。
-   排除工具结果行（--user + --tool-user）。 */
+/* 用户消息正文铺满消息列，排除工具结果行（--user + --tool-user）。 */
 .app-claude-message--user:not(.app-claude-message--tool-user) .app-claude-message-body {
   min-width: 0;
   max-width: none;
@@ -10067,16 +10023,6 @@ button.app-message-part-header:disabled:hover {
   padding-left: 0;
   background: transparent;
   border-radius: 0;
-}
-
-/* 合并行：保留发送者纵列身份靠 3px margin-top。
-   原先 avatar::after 画一条贯穿线，多 assistant 行堆叠时观感沉重且掩盖对话边界，移除。 */
-.app-claude-message--merged .app-claude-message-avatar {
-  position: relative;
-}
-
-.app-claude-message--merged .app-claude-message-avatar::after {
-  content: none;
 }
 
 /* 思考过程：折叠态字数提示 */

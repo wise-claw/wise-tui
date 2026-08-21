@@ -17,6 +17,7 @@ interface Props {
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
   sessionsForDispatchLookup?: SessionDispatchLookup;
+  onReplayUserMessage?: (prompt: string) => void;
   /** 主会话气泡 vs 监控/只读列（含时间戳头） */
   listVariant?: "chat" | "monitor";
   onNavigate?: () => void;
@@ -38,6 +39,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
       onOpenHistorySessionInInspector,
       onOpenSessionConversationTaskDetail,
       sessionsForDispatchLookup,
+      onReplayUserMessage,
       listVariant = "chat",
       onNavigate,
       messageListProfile = "primary",
@@ -66,6 +68,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
           onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
           onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
           sessionsForDispatchLookup={sessionsForDispatchLookup}
+          onReplayUserMessage={onReplayUserMessage}
           onNavigate={onNavigate}
           messageListProfile={messageListProfile}
           companionMessageListWindow={companionMessageListWindow}
