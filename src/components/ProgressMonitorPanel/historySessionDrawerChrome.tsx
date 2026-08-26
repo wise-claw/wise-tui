@@ -1,27 +1,13 @@
 import { Typography } from "antd";
 import type { ClaudeSession } from "../../types";
-import { resolveSessionListPreviewSource } from "../../utils/sessionListPreview";
-import { stripRedundantRepoBracketPrefix } from "../../utils/sessionRepositoryDisplay";
-import {
-  formatSessionListTitle,
-  SESSION_LIST_TITLE_MAX,
-} from "../ClaudeSessions/claudeChatHelpers";
+import { getSessionPreview } from "../ClaudeSessions/claudeChatHelpers";
 import {
   buildMonitorSessionDrawerContextModel,
   buildMonitorSessionDrawerHeadline,
   formatMonitorSessionDateTime,
 } from "./monitorSessionDisplay";
 
-/** Cursor 风格：单行短标题，不展开完整消息正文。 */
-export function getSessionPreview(session: ClaudeSession): string {
-  const repo = session.repositoryName ?? "";
-  const source = resolveSessionListPreviewSource(session);
-  const fallback = source || "新会话";
-  return formatSessionListTitle(
-    stripRedundantRepoBracketPrefix(fallback, repo),
-    SESSION_LIST_TITLE_MAX,
-  );
-}
+export { getSessionPreview };
 
 export function historySessionStatusLabel(status: ClaudeSession["status"]): string {
   if (status === "running") return "运行中";

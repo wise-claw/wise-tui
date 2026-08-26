@@ -424,15 +424,15 @@ export function getLatestDispatchedTeamName(session: ClaudeSession): string | nu
   return null;
 }
 
-/** 会话列表 / Cursor 风格短标题：单行、折叠空白、超长省略。 */
+/** 会话列表标题：单行折叠空白；超长由 CSS ellipsis 裁切，保留完整原文供 title 悬停。 */
 export const SESSION_LIST_TITLE_MAX = 42;
 
 export function getSessionPreview(session: ClaudeSession): string {
   const repo = session.repositoryName ?? "";
   const source = resolveSessionListPreviewSource(session);
   if (!source) return "新会话";
-  const line = truncateSingleLine(stripRedundantRepoBracketPrefix(source, repo), SESSION_LIST_TITLE_MAX);
-  return line.trim() || "新会话";
+  const line = stripRedundantRepoBracketPrefix(source, repo).replace(/\s+/g, " ").trim();
+  return line || "新会话";
 }
 
 export function buildAiCommitSummary(status: GitStatusResponse): string {

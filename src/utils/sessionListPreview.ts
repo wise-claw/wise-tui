@@ -7,6 +7,7 @@ import {
   CODE_REVIEW_PROMPT_SIGNATURE,
   CODE_REVIEW_SESSION_LABEL,
 } from "./codeReviewPromptSession";
+import { extractImportantUserInputForDisplay } from "./userMessageImportantInput";
 
 function messagesHaveDisplayUser(messages: readonly ClaudeMessage[]): boolean {
   return messages.some((msg) => {
@@ -35,6 +36,18 @@ function normalizeListPreviewText(text: string): string {
     .trim();
 }
 
+/** 列表标题用用户真正输入：去掉附图路径、注入块，保留发送正文。 */
+function normalizeUserPreviewText(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith(CODE_REVIEW_PROMPT_SIGNATURE)) return CODE_REVIEW_SESSION_LABEL;
+  const display = extractImportantUserInputForDisplay(trimmed);
+  const compact = display.compactText.trim();
+  if (compact) return compact;
+  if (display.attachmentPaths.length > 0) return "附图";
+  return trimmed;
+}
+
 /** 从内存消息推导侧栏/列表短标题（优先首条可展示用户正文）。 */
 export function deriveSessionListPreviewFromMessages(
   messages: readonly ClaudeMessage[],
@@ -42,9 +55,10 @@ export function deriveSessionListPreviewFromMessages(
   for (let i = 0; i < messages.length; i += 1) {
     const msg = messages[i]!;
     if (msg.role !== "user") continue;
-    const text = userMessagePlainTextForDisplay(msg).trim();
-    if (!text || isDisplayNoiseUserMessageText(text)) continue;
-    if (text.startsWith(CODE_REVIEW_PROMPT_SIGNATURE)) return CODE_REVIEW_SESSION_LABEL;
+    const raw = userMessagePlainTextForDisplay(msg).trim();
+    if (!raw || isDisplayNoiseUserMessageText(raw)) continue;
+    const text = normalizeUserPreviewText(raw);
+    if (!text) continue;
     return text;
   }
   for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -58,25 +72,24 @@ export function deriveSessionListPreviewFromMessages(
 }
 
 /**
- * 侧栏标题源：有用户气泡时用消息推导；否则优先 diskPreview（避免助手中段污染标题）。
- * 调用方再做截断 / 「新会话」回落。
+ * 侧栏标题源：优先用户真正发出的正文（去掉附图路径 / 注入块）。
+ * 服务端 threadName 是摘要，只在没有用户气泡时作兜底。
  */
 export function resolveSessionListPreviewSource(
   session: Pick<ClaudeSession, "messages" | "diskPreview" | "threadName">,
 ): string {
-  // Codex 线程名（thread/name/updated）是服务端生成的会话摘要，优先作标题。
+  const hasUser = messagesHaveDisplayUser(session.messages);
+  if (hasUser) {
+    const derived = deriveSessionListPreviewFromMessages(session.messages);
+    if (derived) return derived;
+  }
+  const diskPreview = session.diskPreview?.trim() ?? "";
+  if (diskPreview) {
+    return normalizeUserPreviewText(diskPreview) || diskPreview;
+  }
   const threadName = session.threadName?.trim() ?? "";
   if (threadName) return threadName;
-  const diskPreview = session.diskPreview?.trim() ?? "";
-  if (!messagesHaveDisplayUser(session.messages) && diskPreview) {
-    if (diskPreview.startsWith(CODE_REVIEW_PROMPT_SIGNATURE)) return CODE_REVIEW_SESSION_LABEL;
-    return diskPreview;
-  }
-  const derived = deriveSessionListPreviewFromMessages(session.messages);
-  if (derived) return derived;
-  // 消息被淘汰后只剩 diskPreview，仍需避免 harness prompt 上屏。
-  if (diskPreview.startsWith(CODE_REVIEW_PROMPT_SIGNATURE)) return CODE_REVIEW_SESSION_LABEL;
-  return diskPreview;
+  return deriveSessionListPreviewFromMessages(session.messages);
 }
 
 /** 丢弃/截断 messages 前：若尚无 diskPreview，用当前消息锁住列表标题。 */

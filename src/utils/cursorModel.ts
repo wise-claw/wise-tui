@@ -33,6 +33,11 @@ export interface CursorSdkModelRef {
   aliases?: string[];
 }
 
+export function isAutoCursorModelId(raw: string | null | undefined): boolean {
+  const normalized = raw?.trim().toLowerCase() ?? "";
+  return normalized === "auto" || normalized === "default";
+}
+
 /** 判断模型 id 是否可作为 Cursor Local SDK 的 `model.id`。 */
 export function isCursorSdkModelId(
   raw: string | null | undefined,
@@ -41,12 +46,15 @@ export function isCursorSdkModelId(
   const trimmed = raw?.trim() ?? "";
   if (!trimmed) return false;
   const normalized = trimmed.toLowerCase();
-  if (normalized === "auto" || normalized === "default") return true;
+  // Cursor CLI 把 Auto 与 Fast 档位也列为独立 id（展示名可能是 Grok 4.6 Fast）。
+  if (normalized === "auto" || normalized === "default" || normalized === "fast") return true;
 
   if (knownModels && knownModels.length > 0) {
     const listed = knownModels.some(
       (item) =>
-        item.id === trimmed || (item.aliases ?? []).some((alias) => alias === trimmed),
+        item.id === trimmed ||
+        item.id.toLowerCase() === normalized ||
+        (item.aliases ?? []).some((alias) => alias === trimmed || alias.toLowerCase() === normalized),
     );
     if (listed) return true;
   }
@@ -59,31 +67,38 @@ export function isCursorSdkModelId(
   });
 }
 
-function isSpecificCursorModelId(raw: string | null | undefined): boolean {
+function isSpecificCursorModelId(
+  raw: string | null | undefined,
+  knownModels?: readonly CursorSdkModelRef[],
+): boolean {
   const trimmed = raw?.trim() ?? "";
-  if (!trimmed) return false;
-  const normalized = trimmed.toLowerCase();
-  if (normalized === "auto" || normalized === "default") return false;
-  return isCursorSdkModelId(trimmed);
+  if (!trimmed || isAutoCursorModelId(trimmed)) return false;
+  return isCursorSdkModelId(trimmed, knownModels);
 }
 
 /**
- * Composer Cursor 模型：优先保留当前选择，避免 CLI 列表异步到达时把 Grok 等打回 auto。
- * `auto`/`default` 只作为兜底，不覆盖更具体的会话值或已保存默认。
+ * Composer Cursor 模型：菜单刚选的值最高优先，避免列表刷新 / 过期 session.model
+ * 把 Grok 4.6 Fast 等打回 Auto。`auto`/`default` 只作为兜底。
  */
 export function resolveCursorComposerModel(input: {
+  pickedModel?: string | null;
   currentModel?: string | null;
   sessionModel?: string | null;
   savedDefault?: string | null;
+  knownModels?: readonly CursorSdkModelRef[];
 }): string {
+  const known = input.knownModels;
+  const picked = input.pickedModel?.trim() || "";
   const current = input.currentModel?.trim() || "";
   const session = input.sessionModel?.trim() || "";
   const saved = input.savedDefault?.trim() || "";
-  if (isSpecificCursorModelId(current)) return current;
-  if (isSpecificCursorModelId(session)) return session;
-  if (isSpecificCursorModelId(saved)) return saved;
-  if (current && isCursorSdkModelId(current)) return current;
-  if (session && isCursorSdkModelId(session)) return session;
+  if (picked && isCursorSdkModelId(picked, known)) return picked;
+  if (isSpecificCursorModelId(current, known)) return current;
+  if (isSpecificCursorModelId(session, known)) return session;
+  if (isSpecificCursorModelId(saved, known)) return saved;
+  if (current && isCursorSdkModelId(current, known)) return current;
+  if (session && isCursorSdkModelId(session, known)) return session;
+  if (saved && isCursorSdkModelId(saved, known)) return saved;
   return CURSOR_SDK_DEFAULT_MODEL;
 }
 
@@ -102,10 +117,11 @@ export function resolveCursorLocalModelId(
 
 /** Cursor 模型展示名（优先 displayName，否则格式化 id）。 */
 export function formatCursorModelLabel(modelId: string, displayName?: string | null): string {
+  if (isAutoCursorModelId(modelId)) return "Auto";
   const label = displayName?.replace(/\s+/g, " ").trim();
   if (label) return label;
   const v = modelId.trim();
-  if (!v || v === "default") return "Auto";
+  if (!v) return "Auto";
   if (v.startsWith("composer-")) {
     const tail = v.slice("composer-".length);
     return `Composer ${tail}`;
@@ -122,7 +138,7 @@ export interface CursorModelPickerOption {
   label: string;
 }
 
-/** 构建 Cursor 模型下拉：仅 canonical id，按 displayName 去重。 */
+/** 构建 Cursor 模型下拉：仅 canonical id，按 displayName 去重。Auto 固定展示为 Auto。 */
 export function buildCursorModelPickerOptions(
   models: ReadonlyArray<{ id: string; displayName: string; aliases?: string[] }>,
 ): CursorModelPickerOption[] {
@@ -130,15 +146,24 @@ export function buildCursorModelPickerOptions(
   const seenLabels = new Set<string>();
   const opts: CursorModelPickerOption[] = [];
 
-  for (const item of models) {
-    const id = item.id.trim();
-    if (!id || seenIds.has(id)) continue;
-    const label = formatCursorModelLabel(id, item.displayName).trim();
+  const push = (rawId: string, displayName?: string | null) => {
+    const id = rawId.trim();
+    if (!id || seenIds.has(id)) return;
+    const label = formatCursorModelLabel(id, displayName).trim();
+    if (!label) return;
     const labelKey = label.toLowerCase();
-    if (seenLabels.has(labelKey)) continue;
+    // Auto 不占用其它模型的展示名；否则「Grok 4.6 Fast (current)」会被收成 Auto。
+    if (!isAutoCursorModelId(id) && seenLabels.has(labelKey)) return;
     seenIds.add(id);
     seenLabels.add(labelKey);
     opts.push({ value: id, label });
+  };
+
+  for (const item of models) {
+    if (isAutoCursorModelId(item.id)) push(item.id, item.displayName);
+  }
+  for (const item of models) {
+    if (!isAutoCursorModelId(item.id)) push(item.id, item.displayName);
   }
 
   return opts;

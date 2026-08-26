@@ -16,6 +16,7 @@ import { getCachedDefaultExecutionEngine } from "../services/wiseDefaultConfigSt
 import {
   getCachedExecutionEngineDefaultModel,
   loadExecutionEngineModelDefaults,
+  saveExecutionEngineDefaultModel,
 } from "../services/executionEngineModelDefaults";
 import type {
   ClaudeSession,
@@ -52,6 +53,7 @@ import {
 } from "../services/claudeModelProfiles";
 import { buildClaudeModelSwitchReconnectPlan } from "../utils/claudeModelProfileReconnect";
 import { resolveCursorResumeAgentId } from "../utils/cursorAgentId";
+import { resolveNewSessionComposerModel } from "../utils/newSessionComposerDefaults";
 import { CURSOR_SDK_DEFAULT_MODEL } from "../constants/cursorSdk";
 import {
   loadDefaultClaudeConnectionKind,
@@ -3009,19 +3011,25 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const savedDefaultModel = opts?.initialModel?.trim()
         ? null
         : getCachedExecutionEngineDefaultModel(creationEngine);
+      const inheritModel = (() => {
+        if (opts?.initialModel?.trim()) return null;
+        const active = sessionsRef.current.find((item) => item.id === activeSessionIdRef.current);
+        if (!active) return null;
+        if (resolveSessionExecutionEngine(active) !== creationEngine) return null;
+        return active.model?.trim() || null;
+      })();
+      const resolvedModel =
+        opts?.initialModel?.trim() ||
+        resolveNewSessionComposerModel(creationEngine, inheritModel);
+      if (!savedDefaultModel && inheritModel && inheritModel === resolvedModel) {
+        void saveExecutionEngineDefaultModel(creationEngine, inheritModel).catch(() => undefined);
+      }
       const newSession: ClaudeSession = {
         id,
         claudeSessionId: null,
         repositoryPath: normalizeRepositoryPathKey(repositoryPath) || repositoryPath.trim(),
         repositoryName,
-        model:
-          opts?.initialModel?.trim() ||
-          savedDefaultModel ||
-          (creationEngine === "codex" || creationEngine === "codex-rpc"
-            ? ""
-            : creationEngine === "cursor"
-              ? CURSOR_SDK_DEFAULT_MODEL
-              : "sonnet"),
+        model: resolvedModel,
         status: "idle",
         messages: [],
         createdAt: Date.now(),
@@ -3064,7 +3072,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
       });
       // 多屏保留窗格模型时传入 initialModel，跳过异步读取全局档案/仓库默认模型，避免覆盖。
-      if (!opts?.initialModel?.trim() && !savedDefaultModel) {
+      if (!opts?.initialModel?.trim() && !savedDefaultModel && !inheritModel) {
         void (async () => {
           try {
             const engine = creationEngine;

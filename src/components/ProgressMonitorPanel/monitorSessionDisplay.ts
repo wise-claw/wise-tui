@@ -1,7 +1,7 @@
 import type { ClaudeSession } from "../../types";
 import { extractBoundEmployeeNameFromDisplay } from "../../utils/sessionOwnerHints";
+import { getSessionPreview } from "../ClaudeSessions/claudeChatHelpers";
 import {
-  getSessionPreview,
   historySessionStatusLabel,
   historySessionStatusTagColor,
 } from "./historySessionDrawerChrome";

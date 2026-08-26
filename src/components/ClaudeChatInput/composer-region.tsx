@@ -763,8 +763,15 @@ function ComposerInner({
   useEffect(() => {
     const next = session.model?.trim();
     if (!next) return;
-    setModel((prev) => (prev === next ? prev : next));
-  }, [session.id, session.model]);
+    setModel((prev) => {
+      if (prev === next) return prev;
+      if (isCursorEngine && (next === "auto" || next === "default")) {
+        const current = prev.trim();
+        if (current && current !== "auto" && current !== "default") return prev;
+      }
+      return next;
+    });
+  }, [session.id, session.model, isCursorEngine]);
   const [profileStoreRevision, setProfileStoreRevision] = useState(0);
   const profileEngineForPicker: ModelProfileEngine | null = isSelectOnlyEngine
     ? null

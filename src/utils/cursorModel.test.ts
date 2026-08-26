@@ -19,6 +19,9 @@ describe("isCursorSdkModelId", () => {
     expect(isCursorSdkModelId("gpt-5.1")).toBe(true);
     expect(isCursorSdkModelId("gpt-5.5-medium")).toBe(true);
     expect(isCursorSdkModelId("kimi-k2.5")).toBe(true);
+    expect(isCursorSdkModelId("grok-4.6")).toBe(true);
+    expect(isCursorSdkModelId("grok-4.6-fast")).toBe(true);
+    expect(isCursorSdkModelId("fast")).toBe(true);
   });
 
   test("rejects third-party Claude proxy models", () => {
@@ -78,11 +81,38 @@ describe("resolveCursorComposerModel", () => {
       }),
     ).toBe("auto");
   });
+
+  test("menu pick of Grok wins over stale Auto session/current values", () => {
+    expect(
+      resolveCursorComposerModel({
+        pickedModel: "grok-4.6",
+        currentModel: "auto",
+        sessionModel: "auto",
+        savedDefault: "auto",
+      }),
+    ).toBe("grok-4.6");
+  });
+
+  test("keeps CLI Fast alias instead of snapping to Auto", () => {
+    expect(
+      resolveCursorComposerModel({
+        pickedModel: "fast",
+        currentModel: "auto",
+        sessionModel: "auto",
+        savedDefault: "auto",
+        knownModels: [{ id: "fast", aliases: [] }],
+      }),
+    ).toBe("fast");
+  });
 });
 
 describe("formatCursorModelLabel", () => {
   test("prefers displayName", () => {
-    expect(formatCursorModelLabel("default", "Auto")).toBe("Auto");
+    expect(formatCursorModelLabel("grok-4.6-fast", "Grok 4.6 Fast")).toBe("Grok 4.6 Fast");
+  });
+
+  test("always labels auto as Auto even if CLI names the current model", () => {
+    expect(formatCursorModelLabel("auto", "Grok 4.6 Fast (current, default)")).toBe("Auto");
   });
 
   test("formats composer ids", () => {
@@ -100,6 +130,19 @@ describe("buildCursorModelPickerOptions", () => {
     expect(opts).toEqual([
       { value: "composer-2.5", label: "Composer 2.5" },
       { value: "claude-opus-4-8", label: "Opus 4.8" },
+    ]);
+  });
+
+  test("does not let Auto absorb Grok 4.6 Fast", () => {
+    expect(
+      buildCursorModelPickerOptions([
+        { id: "auto", displayName: "Grok 4.6 Fast (current, default)" },
+        { id: "fast", displayName: "Grok 4.6 Fast" },
+        { id: "grok-4.6-fast", displayName: "Grok 4.6 Fast" },
+      ]),
+    ).toEqual([
+      { value: "auto", label: "Auto" },
+      { value: "fast", label: "Grok 4.6 Fast" },
     ]);
   });
 });

@@ -944,6 +944,12 @@ describe("sessionsReactiveStructureKey", () => {
     expect(sessionsReactiveStructureKey([before])).toBe(sessionsReactiveStructureKey([after]));
   });
 
+  test("model change advances structure key so Composer model UI can refresh", () => {
+    const before = session({ id: "main", messages: [], model: "auto" });
+    const after = session({ id: "main", messages: [], model: "grok-4.6" });
+    expect(sessionsReactiveStructureKey([before])).not.toBe(sessionsReactiveStructureKey([after]));
+  });
+
   test("executionEngine change advances structure key so Composer engine UI can refresh", () => {
     const before = session({ id: "main", messages: [] });
     const after = session({ id: "main", messages: [], executionEngine: "codex" });

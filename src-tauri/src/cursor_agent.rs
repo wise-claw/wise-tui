@@ -711,6 +711,7 @@ fn curated_cursor_models() -> Vec<CursorModelListItem> {
         ("composer-1.5", "Composer 1.5"),
         ("composer-1", "Composer 1"),
         ("grok-4.6", "Grok 4.6"),
+        ("grok-4.6-fast", "Grok 4.6 Fast"),
         ("grok-4.5", "Grok 4.5"),
         ("gpt-5.5", "GPT-5.5"),
         ("gpt-5.5-medium", "GPT-5.5 Medium"),
@@ -1374,6 +1375,7 @@ path/with/slash\n";
         let models = curated_cursor_models();
         assert!(models.len() > 10);
         assert_eq!(models[0].id, "auto");
+        assert!(models.iter().any(|m| m.id == "grok-4.6-fast"));
         assert!(models.iter().any(|m| m.id == "gpt-5.5"));
         assert!(models.iter().any(|m| m.id == "claude-opus-4-6"));
         assert!(models.iter().any(|m| m.id == "sonnet-4"));

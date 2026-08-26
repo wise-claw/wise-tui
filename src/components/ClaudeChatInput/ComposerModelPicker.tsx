@@ -2,6 +2,7 @@ import { DeleteOutlined } from "@ant-design/icons";
 import { Dropdown, Input, Modal, Spin, message, type MenuProps } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { flushSync } from "react-dom";
 import { getClaudeModelPickerOptions } from "../../services/claude";
 import { listCodexModels, type CodexModelListItem } from "../../services/codex";
 import { listCursorModels, type CursorModelListItem } from "../../services/cursorAgent";
@@ -44,6 +45,7 @@ import {
   isCursorSdkModelId,
   resolveCursorComposerModel,
 } from "../../utils/cursorModel";
+import { fromComposerModelMenuKey } from "../../utils/composerModelMenuKey";
 import {
   OPENCODE_DEFAULT_MODEL,
   buildOpencodeModelPickerOptions,
@@ -81,6 +83,19 @@ import {
   loadExecutionEngineModelDefaults,
   saveExecutionEngineDefaultModel,
 } from "../../services/executionEngineModelDefaults";
+import {
+  getCachedClaudeModelPickerOptions,
+  getCachedCodexModels,
+  getCachedCursorModels,
+  getCachedOpencodeModels,
+  getCachedQoderModels,
+  loadExecutionEngineModelLists,
+  saveCachedClaudeModelPickerOptions,
+  saveCachedCodexModels,
+  saveCachedCursorModels,
+  saveCachedOpencodeModels,
+  saveCachedQoderModels,
+} from "../../services/executionEngineModelListCache";
 import { ClaudeModelTopbarPanelLazy } from "../ClaudeSessions/ClaudeModelTopbarPanel.lazy";
 import "../ClaudeSessions/ClaudeModelTopbarTrigger.css";
 import "./ComposerModelPicker.css";
@@ -240,11 +255,19 @@ function ComposerModelPickerImpl({
 
   const [claudePicker, setClaudePicker] = useState<
     Awaited<ReturnType<typeof getClaudeModelPickerOptions>> | null
-  >(null);
-  const [codexModels, setCodexModels] = useState<CodexModelListItem[] | null>(null);
-  const [cursorModels, setCursorModels] = useState<CursorModelListItem[] | null>(null);
-  const [opencodeModels, setOpencodeModels] = useState<OpencodeModelListItem[] | null>(null);
-  const [qoderModels, setQoderModels] = useState<QoderModelListItem[] | null>(null);
+  >(() => getCachedClaudeModelPickerOptions());
+  const [codexModels, setCodexModels] = useState<CodexModelListItem[] | null>(
+    () => getCachedCodexModels(),
+  );
+  const [cursorModels, setCursorModels] = useState<CursorModelListItem[] | null>(
+    () => getCachedCursorModels(),
+  );
+  const [opencodeModels, setOpencodeModels] = useState<OpencodeModelListItem[] | null>(
+    () => getCachedOpencodeModels(),
+  );
+  const [qoderModels, setQoderModels] = useState<QoderModelListItem[] | null>(
+    () => getCachedQoderModels(),
+  );
   const [profileStoreRevision, setProfileStoreRevision] = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMounted, setPanelMounted] = useState(false);
@@ -254,6 +277,7 @@ function ComposerModelPickerImpl({
   const selectOnlyFilterInputRef = useRef<HTMLInputElement | null>(null);
   const modelRef = useRef(model);
   modelRef.current = model;
+  const pickedModelRef = useRef<string | null>(null);
 
   const { store, setStore, loading: profileStoreLoading } = useModelProfileSwitcher(panelOpen);
 
@@ -266,29 +290,83 @@ function ComposerModelPickerImpl({
     [onModelChange],
   );
 
-  const refreshClaudeModelPicker = useCallback(() => {
+  const hydrateEngineModelListFromCache = useCallback(() => {
     if (isCodexEngine) {
-      void listCodexModels().then(setCodexModels);
+      const cached = getCachedCodexModels();
+      if (cached) setCodexModels(cached);
       return;
     }
     if (isCursorEngine) {
-      void listCursorModels().then(setCursorModels);
+      const cached = getCachedCursorModels();
+      if (cached) setCursorModels(cached);
       return;
     }
     if (isOpencodeEngine) {
-      void listOpencodeModels().then(setOpencodeModels);
+      const cached = getCachedOpencodeModels();
+      if (cached) setOpencodeModels(cached);
       return;
     }
     if (isQoderEngine) {
-      void listQoderModels().then(setQoderModels);
+      const cached = getCachedQoderModels();
+      if (cached) setQoderModels(cached);
       return;
     }
-    void getClaudeModelPickerOptions(session.repositoryPath).then(setClaudePicker);
+    if (isClaudeEngine) {
+      const cached = getCachedClaudeModelPickerOptions();
+      if (cached) setClaudePicker(cached);
+    }
+  }, [isClaudeEngine, isCodexEngine, isCursorEngine, isOpencodeEngine, isQoderEngine]);
+
+  const refreshClaudeModelPicker = useCallback(() => {
+    if (isCodexEngine) {
+      void listCodexModels().then((items) => {
+        if (items.length === 0) return;
+        void saveCachedCodexModels(items);
+        setCodexModels(items);
+      });
+      return;
+    }
+    if (isCursorEngine) {
+      void listCursorModels().then((items) => {
+        if (items.length === 0) return;
+        void saveCachedCursorModels(items);
+        setCursorModels(items);
+      });
+      return;
+    }
+    if (isOpencodeEngine) {
+      void listOpencodeModels().then((items) => {
+        if (items.length === 0) return;
+        void saveCachedOpencodeModels(items);
+        setOpencodeModels(items);
+      });
+      return;
+    }
+    if (isQoderEngine) {
+      void listQoderModels().then((items) => {
+        if (items.length === 0) return;
+        void saveCachedQoderModels(items);
+        setQoderModels(items);
+      });
+      return;
+    }
+    void getClaudeModelPickerOptions(session.repositoryPath).then((options) => {
+      if (!options.defaultModel && options.availableModels.length === 0) return;
+      void saveCachedClaudeModelPickerOptions(options);
+      setClaudePicker(options);
+    });
   }, [isCodexEngine, isCursorEngine, isOpencodeEngine, isQoderEngine, session.repositoryPath]);
 
   useEffect(() => {
-    refreshClaudeModelPicker();
-  }, [refreshClaudeModelPicker]);
+    let cancelled = false;
+    void loadExecutionEngineModelLists().then(() => {
+      if (cancelled) return;
+      hydrateEngineModelListFromCache();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrateEngineModelListFromCache]);
 
   useEffect(() => {
     void loadExecutionEngineModelDefaults().then(() => {
@@ -297,11 +375,21 @@ function ComposerModelPickerImpl({
   }, []);
 
   useEffect(() => {
+    pickedModelRef.current = null;
+  }, [session.id]);
+
+  useEffect(() => {
     if (!isCursorEngine) return;
+    const picked = pickedModelRef.current?.trim() || "";
+    if (picked) {
+      syncModelIfNeeded(picked);
+      return;
+    }
     const nextModel = resolveCursorComposerModel({
       currentModel: modelRef.current,
       sessionModel: session.model,
       savedDefault: getCachedExecutionEngineDefaultModel("cursor"),
+      knownModels: cursorModels ?? undefined,
     });
     syncModelIfNeeded(nextModel);
   }, [
@@ -401,39 +489,32 @@ function ComposerModelPickerImpl({
         if (fromProfile) {
           syncModelIfNeeded(fromProfile);
         }
-      } else if (!isSelectOnlyEngine) {
+      } else       if (!isSelectOnlyEngine) {
         const fromProfile = detail?.effectiveModel?.trim();
         if (fromProfile) {
           syncModelIfNeeded(fromProfile);
         }
       }
-      if (detail?.skipComposerPickerRefresh !== true) {
-        refreshClaudeModelPicker();
-      }
     };
     window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
     return () => window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
-  }, [
-    isCodexEngine,
-    isClaudeEngine,
-    isSelectOnlyEngine,
-    syncModelIfNeeded,
-    refreshClaudeModelPicker,
-  ]);
+  }, [isCodexEngine, isClaudeEngine, isSelectOnlyEngine, syncModelIfNeeded]);
 
   useEffect(() => {
     const onOpenModelPicker = () => {
       if (isSelectOnlyEngine) {
         setSelectOnlyMenuOpen(true);
+        refreshClaudeModelPicker();
         return;
       }
       setPanelOpen(true);
       setPanelMounted(true);
       void claudeModelTopbarPanelChunk;
+      refreshClaudeModelPicker();
     };
     window.addEventListener(WISE_OPEN_MODEL_PICKER, onOpenModelPicker);
     return () => window.removeEventListener(WISE_OPEN_MODEL_PICKER, onOpenModelPicker);
-  }, [isSelectOnlyEngine]);
+  }, [isSelectOnlyEngine, refreshClaudeModelPicker]);
 
   const claudeSettingsModel = claudePicker?.defaultModel?.trim() || null;
 
@@ -621,8 +702,10 @@ function ComposerModelPickerImpl({
               ),
             },
           ]
-        : filtered.map((option) => ({
-            key: option.value,
+        : filtered.map((option, filteredIndex) => {
+            const optionIndex = selectOnlyModelOptions.indexOf(option);
+            return {
+            key: `opt-${optionIndex >= 0 ? optionIndex : filteredIndex}`,
             label: (
               <ComposerModelPickerMenuLabel
                 company={
@@ -642,7 +725,8 @@ function ComposerModelPickerImpl({
                 }
               />
             ),
-          }));
+            };
+          });
     return items;
   }, [
     selectOnlyModelOptions,
@@ -659,11 +743,12 @@ function ComposerModelPickerImpl({
       setSelectOnlyFilter("");
       return;
     }
+    refreshClaudeModelPicker();
     // 打开后聚焦搜索框，便于立刻过滤长列表。
     window.requestAnimationFrame(() => {
       selectOnlyFilterInputRef.current?.focus({ preventScroll: true });
     });
-  }, []);
+  }, [refreshClaudeModelPicker]);
 
   const modelDisplayLabel = useMemo(() => {
     if (profileEngine) {
@@ -767,8 +852,9 @@ function ComposerModelPickerImpl({
     if (next) {
       setPanelMounted(true);
       void claudeModelTopbarPanelChunk;
+      refreshClaudeModelPicker();
     }
-  }, []);
+  }, [refreshClaudeModelPicker]);
 
   const openManageProfilesPanel = useCallback(() => {
     setSelectOnlyMenuOpen(false);
@@ -798,10 +884,15 @@ function ComposerModelPickerImpl({
   const handleSelectOnlyMenuClick = useCallback(
     ({ key }: { key: string }) => {
       if (typeof key !== "string" || key === "__no_match__") return;
+      const optionIndexMatch = /^opt-(\d+)$/.exec(key);
+      const modelId = optionIndexMatch
+        ? selectOnlyModelOptions[Number(optionIndexMatch[1])]?.value?.trim() || null
+        : fromComposerModelMenuKey(key);
+      if (!modelId) return;
       if (isCodexEngine) {
         // 命中已配置档案：应用档案（写入 codex 配置并广播，Composer 同步会话模型）。
         const option = selectOnlyModelOptions.find(
-          (o) => o.value === key,
+          (o) => o.value === modelId,
         ) as CodexModelPickerOption | undefined;
         if (option?.profileId) {
           const profileId = option.profileId;
@@ -820,7 +911,7 @@ function ComposerModelPickerImpl({
       if (isClaudeEngine) {
         // 命中 Claude 档案：应用档案（写 settings 并广播，触发流式会话按新模型重连）。
         const option = selectOnlyModelOptions.find(
-          (o) => o.value === key,
+          (o) => o.value === modelId,
         ) as { value: string; label: string; company?: string; profileId?: string } | undefined;
         if (option?.profileId) {
           const profileId = option.profileId;
@@ -839,16 +930,20 @@ function ComposerModelPickerImpl({
           return;
         }
       }
-      if (key !== model) {
-        onModelChange(key);
+      pickedModelRef.current = modelId;
+      if (modelId !== model) {
+        // 先提交模型，避免受控 selectedKeys 仍是 Auto 时菜单把选择弹回去。
+        flushSync(() => {
+          onModelChange(modelId);
+        });
         // 直接在 Composer 选择的模型应成为此执行环境之后新会话的默认值。
         // 档案模型走上方 applyClaudeModelProfile 路径，自身已有持久化逻辑。
-        void saveExecutionEngineDefaultModel(sessionExecutionEngine, key).catch(() => undefined);
+        void saveExecutionEngineDefaultModel(sessionExecutionEngine, modelId).catch(() => undefined);
         if (isClaudeEngine) {
           // 与 Codex 一致：直接切换会话模型；派发 settings 事件触发流式会话按新模型重连。
           dispatchClaudeUserSettingsChanged({
             engine: "claude",
-            effectiveModel: key,
+            effectiveModel: modelId,
             sessionReconnect: true,
           });
         }
@@ -992,7 +1087,10 @@ function ComposerModelPickerImpl({
             menu={{
               items: selectOnlyMenuItems,
               selectable: true,
-              selectedKeys: [model],
+              selectedKeys: (() => {
+                const selectedIndex = selectOnlyModelOptions.findIndex((item) => item.value === model);
+                return selectedIndex >= 0 ? [`opt-${selectedIndex}`] : [];
+              })(),
               onClick: handleSelectOnlyMenuClick,
             }}
             trigger={["click"]}

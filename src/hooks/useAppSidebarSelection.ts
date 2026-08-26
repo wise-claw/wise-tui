@@ -48,7 +48,13 @@ import {
   publishClaudeSessions,
 } from "../stores/claudeSessionsLiveStore";
 import type { PaneCount, PaneSlot } from "../constants/mainLayoutWidths";
-import type { UseViewModeApi } from "./useViewMode";
+import { getCachedDefaultExecutionEngine } from "../services/wiseDefaultConfigStore";
+import { loadExecutionEngineModelDefaults } from "../services/executionEngineModelDefaults";
+import { resolveNewSessionComposerModel } from "../utils/newSessionComposerDefaults";
+import {
+  normalizeSessionExecutionEngine,
+  type SessionExecutionEngine,
+} from "../constants/sessionExecutionEngine";
 
 /** 侧栏选中后推迟主会话切换，让工作区/仓库高亮与 Git 面板先绘制。 */
 function scheduleSidebarMainSessionEnsure(work: () => Promise<string | null>): void {
@@ -59,10 +65,11 @@ function scheduleSidebarMainSessionEnsure(work: () => Promise<string | null>): v
   });
 }
 
-/** 复用空白主会话时顶到侧栏：bump createdAt，并同步 sessionsLatestRef。 */
+/** 复用空白主会话时顶到侧栏：bump createdAt，并套用已保存的执行环境 / 模型。 */
 function promoteReusableEmptyMainSession(
   sessionId: string,
   sessionsLatestRef: RefObject<ClaudeSession[]>,
+  patch?: { executionEngine?: SessionExecutionEngine; model?: string },
 ): void {
   const id = sessionId.trim();
   if (!id) return;
@@ -71,13 +78,46 @@ function promoteReusableEmptyMainSession(
   let changed = false;
   const next = prev.map((session) => {
     if (session.id !== id) return session;
-    if (session.createdAt === now) return session;
+    const executionEngine = patch?.executionEngine;
+    const model = patch?.model?.trim() || "";
+    const sameCreated = session.createdAt === now;
+    const sameEngine = !executionEngine || session.executionEngine === executionEngine;
+    const sameModel = !model || (session.model?.trim() || "") === model;
+    if (sameCreated && sameEngine && sameModel) return session;
     changed = true;
-    return { ...session, createdAt: now };
+    return {
+      ...session,
+      createdAt: now,
+      ...(executionEngine ? { executionEngine } : {}),
+      ...(model ? { model } : {}),
+    };
   });
   if (!changed) return;
   sessionsLatestRef.current = next;
   publishClaudeSessions(next);
+}
+
+async function resolveReusableEmptySessionComposerPatch(
+  priorActiveId: string | null | undefined,
+  sessions: readonly ClaudeSession[],
+  repoEngine?: string | null,
+): Promise<{ executionEngine: SessionExecutionEngine; model: string }> {
+  await loadExecutionEngineModelDefaults();
+  const executionEngine = normalizeSessionExecutionEngine(
+    repoEngine?.trim() || getCachedDefaultExecutionEngine(),
+  );
+  const prior = priorActiveId
+    ? sessions.find((item) => item.id === priorActiveId)
+    : undefined;
+  const inheritModel =
+    prior &&
+    normalizeSessionExecutionEngine(prior.executionEngine || executionEngine) === executionEngine
+      ? prior.model
+      : null;
+  return {
+    executionEngine,
+    model: resolveNewSessionComposerModel(executionEngine, inheritModel),
+  };
 }
 
 interface UseAppSidebarSelectionOptions {
@@ -272,8 +312,13 @@ export function useAppSidebarSelection({
       if (carryDraftFromId && carryDraftFromId !== reusable.id) {
         await migratePromptContextSessionKey(carryDraftFromId, reusable.id);
       }
+      const patch = await resolveReusableEmptySessionComposerPatch(
+        priorActiveId,
+        sessionsLatestRef.current,
+        repository.executionEngine,
+      );
       // 复用旧空白标签时仍应顶到侧栏（与真正 createSession 的 Date.now() 一致）。
-      promoteReusableEmptyMainSession(reusable.id, sessionsLatestRef);
+      promoteReusableEmptyMainSession(reusable.id, sessionsLatestRef, patch);
       switchSessionIfNeeded(reusable.id);
       void bindRepositoryMainSession(target.path, reusable.id);
       return reusable.id;
@@ -311,7 +356,12 @@ export function useAppSidebarSelection({
       if (carryDraftFromId && carryDraftFromId !== reusable.id) {
         await migratePromptContextSessionKey(carryDraftFromId, reusable.id);
       }
-      promoteReusableEmptyMainSession(reusable.id, sessionsLatestRef);
+      const patch = await resolveReusableEmptySessionComposerPatch(
+        priorActiveId,
+        sessionsLatestRef.current,
+        null,
+      );
+      promoteReusableEmptyMainSession(reusable.id, sessionsLatestRef, patch);
       switchSessionIfNeeded(reusable.id);
       void bindRepositoryMainSession(projectMainSessionBindingKey(project.id), reusable.id);
       return reusable.id;

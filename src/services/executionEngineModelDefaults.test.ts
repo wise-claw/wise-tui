@@ -8,12 +8,14 @@ mock.module("./appSettingsStore", () => ({ getAppSetting, setAppSetting }));
 import {
   getCachedExecutionEngineDefaultModel,
   loadExecutionEngineModelDefaults,
+  resetExecutionEngineModelDefaultsForTests,
   saveExecutionEngineDefaultModel,
   WISE_EXECUTION_ENGINE_MODEL_DEFAULTS_KEY,
 } from "./executionEngineModelDefaults";
 
 describe("executionEngineModelDefaults", () => {
   beforeEach(() => {
+    resetExecutionEngineModelDefaultsForTests();
     getAppSetting.mockReset();
     setAppSetting.mockReset();
     setAppSetting.mockImplementation(async () => undefined);
@@ -34,5 +36,22 @@ describe("executionEngineModelDefaults", () => {
       WISE_EXECUTION_ENGINE_MODEL_DEFAULTS_KEY,
       JSON.stringify({ opencode: "deepseek-v4-flash" }),
     );
+  });
+
+  test("in-flight load does not clobber a newer Composer save", async () => {
+    let resolveRead: (value: string | null) => void = () => undefined;
+    getAppSetting.mockImplementation(
+      () =>
+        new Promise<string | null>((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+
+    const pendingLoad = loadExecutionEngineModelDefaults();
+    await saveExecutionEngineDefaultModel("cursor", "grok-4.6");
+    resolveRead(null);
+    await pendingLoad;
+
+    expect(getCachedExecutionEngineDefaultModel("cursor")).toBe("grok-4.6");
   });
 });

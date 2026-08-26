@@ -49,6 +49,8 @@ export async function loadExecutionEngineModelDefaults(): Promise<ExecutionEngin
   if (!loadPromise) {
     loadPromise = getAppSetting(WISE_EXECUTION_ENGINE_MODEL_DEFAULTS_KEY)
       .then((raw) => {
+        // 保存可能先于这次读取完成；勿用过期磁盘值覆盖刚选的模型。
+        if (loaded) return { ...cachedDefaults };
         cachedDefaults = parseDefaults(raw);
         loaded = true;
         return { ...cachedDefaults };
@@ -58,6 +60,13 @@ export async function loadExecutionEngineModelDefaults(): Promise<ExecutionEngin
       });
   }
   return loadPromise;
+}
+
+/** 测试用：清空内存缓存，避免用例之间串状态。 */
+export function resetExecutionEngineModelDefaultsForTests(): void {
+  cachedDefaults = {};
+  loaded = false;
+  loadPromise = null;
 }
 
 /** 同步读取已加载的默认模型，适用于渲染热路径。 */

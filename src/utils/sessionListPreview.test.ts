@@ -67,12 +67,20 @@ describe("sessionListPreview", () => {
     ).toBe("磁盘预览标题");
   });
 
-  test("resolveSessionListPreviewSource prefers threadName over messages", () => {
+  test("threadName is only used when there is no user bubble", () => {
     expect(
       resolveSessionListPreviewSource(
-        session({ messages: [userMsg("帮我优化搜索速度")], threadName: "优化搜索速度" }),
+        session({ messages: [], threadName: "优化搜索速度", diskPreview: "" }),
       ),
     ).toBe("优化搜索速度");
+  });
+
+  test("strips 附图 path so workspace title is the sent prompt", () => {
+    expect(
+      deriveSessionListPreviewFromMessages([
+        userMsg("图中有什么\n\n附图：@/Users/sjl/.wise/composer-images/wise/demo.png"),
+      ]),
+    ).toBe("图中有什么");
   });
 
   test("无用户气泡时优先 diskPreview，避免助手中段污染侧栏", () => {

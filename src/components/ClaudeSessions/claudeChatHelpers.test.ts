@@ -105,7 +105,15 @@ describe("claudeChatHelpers", () => {
       unstaged: [],
     };
 
-    expect(getSessionPreview(session)).toBe("Implement a very long feature title for pr...");
+    expect(getSessionPreview(session)).toBe("Implement a very long feature title for preview");
+    session.messages = [
+      {
+        role: "user",
+        content: "图中有什么\n\n附图：@/Users/sjl/.wise/composer-images/wise/demo.png",
+        timestamp: 1,
+      },
+    ];
+    expect(getSessionPreview(session)).toBe("图中有什么");
     session.messages = [];
     expect(getSessionPreview(session)).toBe("disk fallback");
     expect(truncateSingleLine(" a\n b ", 10)).toBe("a b");

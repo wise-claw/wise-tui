@@ -44,6 +44,14 @@ fn should_skip_walk_dir(name: &str) -> bool {
     )
 }
 
+/// Directories omitted from the lazy file-tree listing.
+///
+/// Recursive search / full walks still skip `dist` (it is generated and often huge),
+/// but the explorer must surface the folder so users can browse build output.
+fn should_hide_explorer_dir(name: &str) -> bool {
+    name != "dist" && should_skip_walk_dir(name)
+}
+
 fn project_file_rel_path(root: &Path, path: &Path) -> Option<String> {
     let rel = path.strip_prefix(root).ok()?;
     if rel.as_os_str().is_empty() {
@@ -567,7 +575,7 @@ pub(crate) async fn list_repository_explorer_children(
         if name.is_empty() || name == "." || name == ".." {
             continue;
         }
-        if file_type.is_dir() && should_skip_walk_dir(&name) {
+        if file_type.is_dir() && should_hide_explorer_dir(&name) {
             continue;
         }
         let rel = if relative_dir.trim().trim_matches('/').is_empty() {
@@ -1037,6 +1045,58 @@ mod explorer_children_tests {
             cmd_entries.iter().any(|e| e.path.contains("trellis")),
             "expected files under .cursor/commands: {cmd_entries:?}"
         );
+    }
+
+    #[test]
+    fn explorer_shows_dist_but_still_hides_node_modules() {
+        assert!(!should_hide_explorer_dir("dist"));
+        assert!(should_hide_explorer_dir("node_modules"));
+        assert!(should_hide_explorer_dir(".git"));
+        assert!(should_skip_walk_dir("dist"));
+    }
+
+    #[tokio::test]
+    async fn lists_dist_directory_and_its_children() {
+        let root = std::env::temp_dir().join("wise-explorer-dist-visible-test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("dist/assets")).unwrap();
+        fs::create_dir_all(root.join("node_modules/pkg")).unwrap();
+        fs::write(root.join("dist/index.html"), "<html></html>").unwrap();
+        fs::write(root.join("src.txt"), "ok").unwrap();
+
+        let root_entries = list_repository_explorer_children(
+            root.to_string_lossy().to_string(),
+            String::new(),
+        )
+        .await
+        .expect("list root");
+        assert!(
+            root_entries.iter().any(|e| e.is_dir && e.path == "dist"),
+            "expected dist in explorer root: {root_entries:?}",
+        );
+        assert!(
+            !root_entries.iter().any(|e| e.path == "node_modules"),
+            "node_modules must stay hidden: {root_entries:?}",
+        );
+
+        let dist_entries = list_repository_explorer_children(
+            root.to_string_lossy().to_string(),
+            "dist".to_string(),
+        )
+        .await
+        .expect("list dist");
+        assert!(
+            dist_entries
+                .iter()
+                .any(|e| !e.is_dir && e.path == "dist/index.html"),
+            "expected dist/index.html: {dist_entries:?}",
+        );
+        assert!(
+            dist_entries.iter().any(|e| e.is_dir && e.path == "dist/assets"),
+            "expected dist/assets: {dist_entries:?}",
+        );
+
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
