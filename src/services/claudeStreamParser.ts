@@ -607,6 +607,10 @@ export function extractSystemErrorMessageFromParsed(obj: unknown): string | null
     return null;
   }
 
+  if (subtype === "mcp_status" || subtype === "mcp_oauth_completed") {
+    return null;
+  }
+
   if (subtype === "hook_response") {
     const outcome = typeof json.outcome === "string" ? json.outcome : "";
     if (outcome !== "error") return null;

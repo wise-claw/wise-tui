@@ -16,8 +16,10 @@ use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
 use crate::claude_events::{
     emit_adapted_stream_payload, CLAUDE_STREAM_EVENT_OUTPUT,
 };
+use crate::claude_model_profiles::ensure_codex_profile_applied_for_model;
 use crate::codex_binary::find_codex_binary;
-use crate::codex_commands::load_codex_default_settings;
+use crate::codex_commands::{format_codex_rpc_error_line, load_codex_default_settings};
+use crate::codex_config_dir::ensure_codex_project_trusted;
 use crate::codex_rpc_session::CodexRpcSession;
 use crate::codex_rpc_stream_adapter::{
     adapt_notification_to_stream_lines, emit_approval_request, emit_dynamic_tool_request,
@@ -209,12 +211,19 @@ pub(crate) async fn execute_codex_rpc(
     db: tauri::State<'_, WiseDb>,
     params: ExecuteCodexRpcParams,
 ) -> Result<(), String> {
-    let _ = &db; // DB available for proxy/credential bridging in future phases.
-
     let trimmed_prompt = params.prompt.trim();
     if trimmed_prompt.is_empty() {
         return Err("Codex RPC 执行需要非空提示词".to_string());
     }
+
+    let proxy_model = crate::opencode_go_proxy::apply_codex_bridge_for_spawn(&db)?;
+    if proxy_model.is_none() {
+        ensure_codex_profile_applied_for_model(&db, params.model.as_deref())?;
+    }
+    if let Err(e) = ensure_codex_project_trusted(&params.project_path) {
+        eprintln!("[codex_rpc] failed to mark project trusted: {e}");
+    }
+    let spawn_env_overrides = crate::opencode_go_proxy::codex_spawn_env_overrides(&db);
 
     let codex_path = find_codex_binary().map_err(|e| format!("codex binary: {e}"))?;
 
@@ -261,7 +270,7 @@ pub(crate) async fn execute_codex_rpc(
     persist_codex_rpc_transcript_line(&params.project_path, &session_id, &user_line);
 
     // Bootstrap the session (spawn subprocess + initialize handshake).
-    let mut session = match CodexRpcSession::bootstrap(&codex_path).await {
+    let mut session = match CodexRpcSession::bootstrap(&codex_path, spawn_env_overrides.as_ref()).await {
         Ok(s) => s,
         Err(e) => {
             let msg = format!("Codex app-server 启动失败: {e}");
@@ -467,7 +476,7 @@ pub(crate) async fn execute_codex_rpc(
                                     "role": "assistant",
                                     "content": [{
                                         "type": "text",
-                                        "text": format!("Codex error: {msg}")
+                                        "text": format_codex_rpc_error_line(&msg)
                                     }]
                                 }
                             })

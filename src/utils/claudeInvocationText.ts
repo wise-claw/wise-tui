@@ -94,6 +94,10 @@ function extractStreamSystemErrorPreview(line: string): string | null {
     const subtype = typeof json.subtype === "string" ? json.subtype : "";
     if (type !== "system") return null;
 
+    if (subtype === "hook_started" || subtype === "mcp_status" || subtype === "mcp_oauth_completed") {
+      return null;
+    }
+
     if (subtype === "hook_response") {
       const outcome = typeof json.outcome === "string" ? json.outcome : "";
       if (outcome !== "error") return null;

@@ -51,8 +51,12 @@ impl CodexRpcSession {
     /// 3. Send `initialized` notification.
     /// 4. Start a forwarding task that converts raw `(method, params)` into
     ///    typed [`ServerNotification`] values.
-    pub async fn bootstrap(binary_path: &str) -> Result<Self> {
-        let mut transport = CodexRpcTransport::spawn(binary_path, &["--stdio"]).await?;
+    pub async fn bootstrap(
+        binary_path: &str,
+        spawn_env_overrides: Option<&(String, String)>,
+    ) -> Result<Self> {
+        let mut transport =
+            CodexRpcTransport::spawn(binary_path, &["--stdio"], spawn_env_overrides).await?;
 
         // --- Initialize handshake ---
         let init_params = InitializeParams {

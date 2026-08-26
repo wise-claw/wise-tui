@@ -1,7 +1,9 @@
 /**
  * Parse `wise browse` / `wise-browse` argv into a daemon RPC or browse passthrough.
- * @typedef {{ kind: "help" } | { kind: "daemon" } | { kind: "rpc"; method: string; params: Record<string, unknown>; needsSession: boolean } | { kind: "browse"; args: string[] } | { kind: "error"; error: string }} WiseBrowseParse
+ * @typedef {{ kind: "help" } | { kind: "daemon" } | { kind: "rpc"; method: string; params: Record<string, unknown>; needsSession: boolean } | { kind: "suite"; suiteKind: "test" | "accept"; suite?: Record<string, unknown>; file?: string; url?: string; name?: string; screenshotOnFail?: boolean; stopOnFail?: boolean; retries?: number } | { kind: "report"; action: "latest" | "list" } | { kind: "init"; file: string; force?: boolean } | { kind: "browse"; args: string[] } | { kind: "error"; error: string }} WiseBrowseParse
  */
+
+import { parseAssertSpec, parseAssertPhrase, suiteFromChecks } from "./assert.mjs";
 
 const BROWSE_PASSTHROUGH = new Set([
   "doctor",
@@ -35,10 +37,23 @@ export const WISE_BROWSE_HELP = `Usage: wise browse <command> [args]
   stop
   help
 
+测试 / 验收:
+  assert title contains Google
+  assert visible css=button.submit
+  expect "页面有登录按钮"
+  test --file suite.json [--retries N] [--stop-on-fail]
+  accept --url https://example.com --check "title contains 登录" --check "visible css=button"
+  accept --init [login.accept.json]
+  report [latest|list]
+
 自然语言（会话输入框可直接转发）:
   wise browse 打开谷歌官网
   wise browse open 谷歌
   wise browse do "点击登录"
+  wise browse 断言标题包含 Google
+  wise browse 标题应该包含 Google
+  wise browse 验收登录页有提交按钮
+  wise browse 查看最近验收报告
 
 站点别名: 谷歌 / google / 百度 / 必应 / github / youtube / 知乎 / bilibili
 
@@ -167,6 +182,39 @@ export function summarizeBrowseResult(method, result, page = null) {
         return "浏览器未启动";
       }
       return pageLabel ? `当前页 ${pageLabel}` : "浏览器运行中";
+    case "assert":
+    case "expect": {
+      if (result && typeof result === "object" && result.passed === false) {
+        return result.message || result.reason || result.summary || "断言失败";
+      }
+      if (result && typeof result === "object" && result.passed === true) {
+        return result.message || result.reason || result.summary || "断言通过";
+      }
+      return method === "expect" ? "已执行验收检查" : "已执行断言";
+    }
+    case "test":
+    case "accept":
+      if (result && typeof result === "object" && typeof result.summary === "string") {
+        return result.summary;
+      }
+      return method === "test" ? "已跑完测试套件" : "已完成验收";
+    case "report": {
+      if (result && typeof result === "object" && result.found === false) {
+        return "还没有验收报告";
+      }
+      if (result && typeof result === "object" && result.action === "list") {
+        return `共 ${Number(result.count) || 0} 份报告`;
+      }
+      if (result && typeof result === "object" && typeof result.summary === "string" && result.summary) {
+        return result.summary;
+      }
+      return "最近验收报告";
+    }
+    case "init": {
+      const file =
+        result && typeof result === "object" && typeof result.path === "string" ? result.path : "";
+      return file ? `已写入套件 ${file}` : "已生成验收套件模板";
+    }
     default:
       return pageLabel ? `当前页 ${pageLabel}` : "";
   }
@@ -178,6 +226,18 @@ export function formatCliOutput(method, result, page = null) {
     const base =
       result && typeof result === "object" && !Array.isArray(result) ? { ...result } : { result };
     return summary ? { summary, ...base } : base;
+  }
+  if (
+    method === "assert" ||
+    method === "expect" ||
+    method === "test" ||
+    method === "accept" ||
+    method === "report" ||
+    method === "init"
+  ) {
+    const base =
+      result && typeof result === "object" && !Array.isArray(result) ? { ...result } : { result };
+    return { summary, ...base };
   }
   return {
     summary,
@@ -333,6 +393,28 @@ function parseCommand(argv) {
       if (url) return rpc("open", { url });
       return rpc("act", { instruction });
     }
+    case "assert":
+      return rpc("assert", parseAssertSpec(rest, flags));
+    case "expect":
+    case "check": {
+      const instruction = joinInstruction(rest);
+      if (!instruction) throw new Error("expect 需要检查说明，例如 wise browse expect \"页面有登录按钮\"");
+      const phrase = parseAssertPhrase(instruction);
+      if (phrase) return rpc("assert", phrase);
+      return rpc("expect", { instruction });
+    }
+    case "test":
+    case "accept":
+      return parseSuiteCommand(cmd === "test" ? "test" : "accept", argv.slice(1), flags, rest);
+    case "report":
+    case "reports":
+      return parseReportCommand(rest);
+    case "init":
+      return {
+        kind: "init",
+        file: asString(flags.file || rest[0]) || "login.accept.json",
+        force: flags.force === true,
+      };
     case "reload":
       return rpc("reload", {});
     case "back":
@@ -441,12 +523,85 @@ function parseCommand(argv) {
 
 function parseImplicitCommand(argv) {
   const joined = argv.join(" ").trim();
+  if (/^(查看|看)?(最近)?(的)?(验收|测试)?报告$/u.test(joined) || /^(最近验收|查看报告)$/u.test(joined)) {
+    return { kind: "report", action: "latest" };
+  }
+  if (/^(初始化|生成)(验收)?套件/u.test(joined)) {
+    return { kind: "init", file: "login.accept.json", force: false };
+  }
+  const assertPrefix = joined.match(/^(断言|assert)\s*(.+)$/iu);
+  if (assertPrefix) {
+    const spec = parseAssertPhrase(assertPrefix[2]) ?? parseAssertSpec(assertPrefix[2].split(/\s+/).filter(Boolean), {});
+    return rpc("assert", spec);
+  }
+  const expectPrefix = joined.match(/^(验收|检查|验证|expect|check)\s*(.*)$/iu);
+  if (expectPrefix) {
+    const body = expectPrefix[2].trim() || joined;
+    const phrase = parseAssertPhrase(body);
+    if (phrase) return rpc("assert", phrase);
+    return rpc("expect", { instruction: body });
+  }
   const url = resolveBrowseUrl(joined);
   if (url) return rpc("open", { url });
+  const bareAssert = parseAssertPhrase(joined);
+  if (bareAssert) return rpc("assert", bareAssert);
   if (looksLikeNaturalLanguage(joined)) {
     return rpc("act", { instruction: joined });
   }
   throw new Error(`未知命令：${argv[0] ?? ""}。运行 wise browse help 查看用法。`);
+}
+
+function collectFlagValues(argv, names) {
+  const values = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const part = argv[i];
+    if (!part.startsWith("--")) continue;
+    const key = part.slice(2);
+    if (!names.includes(key)) continue;
+    const next = argv[i + 1];
+    if (next && !next.startsWith("-")) {
+      values.push(next);
+      i += 1;
+    }
+  }
+  return values;
+}
+
+function parseReportCommand(rest) {
+  const action = String(rest[0] ?? "latest").trim().toLowerCase();
+  if (action === "list" || action === "ls") return { kind: "report", action: "list" };
+  return { kind: "report", action: "latest" };
+}
+
+function parseSuiteCommand(suiteKind, argv, flags, rest) {
+  if (flags.init) {
+    const initFile =
+      flags.init === true
+        ? asString(flags.file || rest[0]) || "login.accept.json"
+        : asString(flags.init);
+    return { kind: "init", file: initFile || "login.accept.json", force: flags.force === true };
+  }
+  const checks = collectFlagValues(argv, ["check", "assert", "expect"]);
+  const positional = rest.filter((part) => !String(part).startsWith("-"));
+  const file = asString(flags.file || flags.spec || "")
+    || positional.find((part) => String(part).endsWith(".json") || String(part).includes("/") || String(part).includes("\\"))
+    || "";
+  const url = resolveBrowseUrl(asString(flags.url || flags.open || "")) || asString(flags.url || "");
+  const name = asString(flags.name) || (suiteKind === "test" ? "browser-test" : "browser-accept");
+  const screenshotOnFail = flags["no-screenshot"] === true ? false : true;
+  const stopOnFail = flags["stop-on-fail"] === true;
+  const retries = flags.retries != null && flags.retries !== true ? Math.max(0, Number(flags.retries) || 0) : 0;
+  if (file && checks.length === 0) {
+    return { kind: "suite", suiteKind, file, url, name, screenshotOnFail, stopOnFail, retries };
+  }
+  if (positional[0] && checks.length === 0 && !url && !file) {
+    return { kind: "suite", suiteKind, file: positional[0], url, name, screenshotOnFail, stopOnFail, retries };
+  }
+  return {
+    kind: "suite",
+    suiteKind,
+    suite: suiteFromChecks({ name, url, checks, screenshotOnFail, stopOnFail, retries }),
+  };
 }
 
 function parseMouse(rest, flags) {

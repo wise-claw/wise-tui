@@ -474,6 +474,7 @@ pub fn run() {
             stagehand_browse::stagehand_browse_install_deps,
             stagehand_browse::stagehand_browse_load_config,
             stagehand_browse::stagehand_browse_save_config,
+            stagehand_browse::stagehand_browse_latest_report,
             stagehand_browse::stagehand_browse_daemon_status,
             stagehand_browse::stagehand_browse_daemon_stop,
             stagehand_browse::stagehand_browse_start,

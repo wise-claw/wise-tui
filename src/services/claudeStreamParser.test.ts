@@ -394,6 +394,20 @@ describe("extractSystemErrorMessageFromStreamLine", () => {
       ),
     ).toBe("Claude 系统错误: 请求频率超限，请稍后重试（rate limit exceeded）");
   });
+
+  test("does not treat Codex MCP status as a Claude system error", () => {
+    expect(
+      extractSystemErrorMessageFromStreamLine(
+        JSON.stringify({
+          type: "system",
+          subtype: "mcp_status",
+          server: "codex_apps",
+          status: "error",
+          error: "MCP startup failed: HTTP 451: no_biscuit_no_service",
+        }),
+      ),
+    ).toBeNull();
+  });
 });
 
 describe("codex thread status / name adapters", () => {

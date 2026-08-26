@@ -5,7 +5,7 @@ use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
 use crate::claude_events::{
     emit_adapted_stream_payload, CLAUDE_STREAM_EVENT_COMPLETE, CLAUDE_STREAM_EVENT_OUTPUT,
 };
-use crate::claude_model_profiles::ensure_active_codex_profile_applied;
+use crate::claude_model_profiles::ensure_codex_profile_applied_for_model;
 use crate::codex_binary::{apply_codex_child_env, codex_merged_path_env, find_codex_binary};
 use crate::codex_stream_adapter::{map_codex_exec_stdout_line, CodexStdoutMap};
 use crate::wise_db::WiseDb;
@@ -287,6 +287,45 @@ pub(crate) fn codex_line_is_benign_noise(line: &str) -> bool {
         || lower.contains("defaulting to fallback metadata")
         || lower.contains("is deprecated")
         || lower.contains("deprecated")
+        || is_codex_reconnect_progress(&lower)
+}
+
+fn is_codex_reconnect_progress(lower: &str) -> bool {
+    let trimmed = lower.trim();
+    trimmed.starts_with("reconnecting") && trimmed.contains('/')
+}
+
+/// Codex RPC / exec 展示用错误文案：余额类错误给出可行动说明，其余保持 `Codex error:` 前缀。
+pub(crate) fn format_codex_rpc_error_line(message: &str) -> String {
+    let trimmed = message.trim();
+    if trimmed.is_empty() {
+        return "Codex error: 执行失败".to_string();
+    }
+    if let Some(friendly) = codex_payment_error_display(trimmed) {
+        return friendly;
+    }
+    format!("Codex error: {trimmed}")
+}
+
+fn codex_payment_error_display(message: &str) -> Option<String> {
+    let lower = message.to_lowercase();
+    let payment = lower.contains("402")
+        || lower.contains("payment required")
+        || lower.contains("insufficient balance")
+        || lower.contains("insufficient_quota");
+    if !payment {
+        return None;
+    }
+    let provider = if lower.contains("deepseek") {
+        "DeepSeek "
+    } else if lower.contains("openai.com") || lower.contains("api.openai") {
+        "OpenAI "
+    } else {
+        ""
+    };
+    Some(format!(
+        "{provider}账户额度不足，请充值或更换 Codex 档案后再试。\n{message}"
+    ))
 }
 
 /// Strip benign-noise lines from a multi-line text block.
@@ -608,7 +647,10 @@ pub(crate) async fn execute_codex_code(
     let proxy_model = crate::opencode_go_proxy::apply_codex_bridge_for_spawn(&db)?;
     let use_wise_bridge = proxy_model.is_some();
     if !use_wise_bridge {
-        ensure_active_codex_profile_applied(&db)?;
+        ensure_codex_profile_applied_for_model(&db, model.as_deref())?;
+    }
+    if let Err(e) = crate::codex_config_dir::ensure_codex_project_trusted(&project_path) {
+        eprintln!("[codex] failed to mark project trusted: {e}");
     }
     // 模型白名单护栏：仅透传 codex 已知模型（config.toml 声明或运行态目录）；
     // 未知模型（如 Claude 侧泄漏的 MiniMax-M3）不下发，回退 config.toml 默认模型。
@@ -969,6 +1011,12 @@ mod tests {
         assert!(codex_line_is_benign_noise(
             "Model metadata for minimax-m3 not found. Defaulting to fallback metadata; this can degrade performance and cause issues."
         ));
+        assert!(codex_line_is_benign_noise("Reconnecting... 1/5"));
+        assert!(codex_line_is_benign_noise("Reconnecting... 5/5"));
+        let mixed = "Reconnecting... 1/5\nReconnecting... 2/5\nunexpected status 402 Payment Required: Insufficient Balance, url: https://api.deepseek.com/responses";
+        let cleaned = strip_benign_noise(mixed).expect("402 line must survive reconnect noise");
+        assert!(cleaned.contains("402"));
+        assert!(!cleaned.to_lowercase().contains("reconnecting"));
     }
 
     #[test]
@@ -977,5 +1025,22 @@ mod tests {
         assert!(!codex_line_is_benign_noise("Error: unauthorized 401"));
         assert!(!codex_line_is_benign_noise("session not found"));
         assert!(!codex_line_is_benign_noise("API key invalid"));
+        assert!(!codex_line_is_benign_noise(
+            "unexpected status 402 Payment Required: Insufficient Balance, url: https://api.deepseek.com/responses"
+        ));
+    }
+
+    #[test]
+    fn payment_errors_are_formatted_for_users() {
+        let line = format_codex_rpc_error_line(
+            "unexpected status 402 Payment Required: Insufficient Balance, url: https://api.deepseek.com/responses",
+        );
+        assert!(line.contains("DeepSeek"));
+        assert!(line.contains("账户额度不足"));
+        assert!(line.contains("402"));
+        assert_eq!(
+            format_codex_rpc_error_line("API key invalid"),
+            "Codex error: API key invalid"
+        );
     }
 }

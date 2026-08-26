@@ -18,6 +18,8 @@ import {
   splitBrowseRawArgs,
   unwrapBrowseExecResult,
   buildBrowseReadiness,
+  parseStagehandBrowseLatestReport,
+  formatBrowseInstallSummary,
 } from "./stagehandBrowse";
 
 describe("stagehand browse catalog", () => {
@@ -163,5 +165,37 @@ describe("stagehand browse catalog", () => {
       ["cli", true],
       ["skill", false],
     ]);
+    expect(
+      parseStagehandBrowseLatestReport({
+        found: true,
+        kind: "acceptance",
+        name: "登录页验收",
+        passed: false,
+        summary: "未通过：失败 1，通过 2，共 3",
+        at: "2026-08-26T00:00:00.000Z",
+        counts: { passed: 2, failed: 1, skipped: 0, total: 3 },
+        durationMs: 1200,
+        jsonPath: "/tmp/a.json",
+        markdownPath: "/tmp/a.md",
+      }),
+    ).toMatchObject({
+      found: true,
+      passed: false,
+      name: "登录页验收",
+      durationMs: 1200,
+      markdownPath: "/tmp/a.md",
+    });
+    expect(parseStagehandBrowseLatestReport(null).found).toBe(false);
+    expect(
+      formatBrowseInstallSummary({
+        ok: true,
+        stdout: "已同步脚本 → /tmp\n已写入 CLI → /tmp/wise-browse\n已挂载会话 Skill（Claude / Codex / agents）\n",
+        stderr: "",
+        exitCode: 0,
+        shimPath: "/tmp/wise-browse",
+        skillInstalled: true,
+        pathStatus: "added",
+      }),
+    ).toContain("已写入 CLI");
   });
 });

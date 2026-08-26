@@ -2,8 +2,10 @@ import { message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   formatBrowseProbeHint,
+  formatBrowseInstallSummary,
   installStagehandBrowseDeps,
   loadStagehandBrowseConfig,
+  loadStagehandBrowseLatestReport,
   parseStagehandPageStatus,
   probeStagehandBrowse,
   readStagehandDaemonStatus,
@@ -11,6 +13,7 @@ import {
   stopStagehandDaemon,
   buildBrowseReadiness,
   resolveBrowseUrl,
+  type StagehandBrowseLatestReport,
   type StagehandStartOptions,
 } from "../services/stagehandBrowse";
 import {
@@ -66,6 +69,7 @@ export function useStagehandBrowse(_input?: {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [latestReport, setLatestReport] = useState<StagehandBrowseLatestReport | null>(null);
   const dirtyRef = useRef(false);
   const statusRef = useRef(runtime.status);
   dirtyRef.current = dirty;
@@ -77,13 +81,15 @@ export function useStagehandBrowse(_input?: {
   const refresh = useCallback(async () => {
     if (!sessionId) return;
     try {
-      const [probe, daemon, config] = await Promise.all([
+      const [probe, daemon, config, report] = await Promise.all([
         probeStagehandBrowse(),
         readStagehandDaemonStatus().catch(() => parseStagehandPageStatus({ running: false })),
         loadStagehandBrowseConfig().catch(() => null),
+        loadStagehandBrowseLatestReport().catch(() => null),
       ]);
       setStagehandBrowseProbe(sessionId, probe);
       setStagehandBrowsePage(sessionId, daemon);
+      setLatestReport(report);
       if (daemon.running) {
         setStagehandBrowseStatus(sessionId, "running", daemon.title || daemon.url || "浏览器运行中");
       } else if (statusRef.current === "running") {
@@ -163,7 +169,7 @@ export function useStagehandBrowse(_input?: {
         throw new Error(result.stderr || result.stdout || "安装 CLI 失败");
       }
       await refresh();
-      message.success("已安装 wise browse CLI 与会话 Skill。当前会话即可在输入框操作浏览器。");
+      message.success(formatBrowseInstallSummary(result));
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
       appendStagehandBrowseLog(sessionId, "error", text);
@@ -230,6 +236,7 @@ export function useStagehandBrowse(_input?: {
     setAdvancedOpen,
     probeHint,
     readiness,
+    latestReport,
     busy,
     dirty,
     isActive,

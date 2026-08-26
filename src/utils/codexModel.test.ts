@@ -6,8 +6,11 @@ import {
   isCodexModelId,
   matchesCodexModelPickerFilter,
   resolveCodexContextExecutionEngine,
+  resolveCodexComposerModel,
   resolveCodexExecModelId,
+  resolveCodexOpenAiDefaultProfileId,
   resolveCodexProfileModelFromStore,
+  looksLikeOpenAiCatalogModel,
 } from "./codexModel";
 
 const store = (partial: Partial<ClaudeModelProfileStoreView>): ClaudeModelProfileStoreView =>
@@ -171,6 +174,14 @@ describe("codex picker helpers", () => {
     expect(isCodexModelId("  ")).toBe(false);
   });
 
+  test("isCodexModelId matches catalog display names", () => {
+    expect(
+      isCodexModelId("GPT-5.6-Luna", [
+        { id: "gpt-5.6", displayName: "GPT-5.6-Luna" },
+      ]),
+    ).toBe(true);
+  });
+
   test("formatCodexModelLabel prefers display name", () => {
     expect(formatCodexModelLabel("gpt-5.4", "GPT-5.4")).toBe("GPT-5.4");
     expect(formatCodexModelLabel("gpt-5.4", "gpt-5.4")).toBe("gpt-5.4");
@@ -183,6 +194,44 @@ describe("codex picker helpers", () => {
     expect(matchesCodexModelPickerFilter("火山", option)).toBe(true);
     expect(matchesCodexModelPickerFilter("volc", option)).toBe(true);
     expect(matchesCodexModelPickerFilter("glm", option)).toBe(false);
+  });
+});
+
+describe("resolveCodexComposerModel", () => {
+  const known = [
+    { id: "gpt-5.6", displayName: "GPT-5.6-Luna" },
+    { id: "deepseek-v4-flash", displayName: "deepseek-v4-flash" },
+  ];
+
+  test("keeps explicit picker selection while session still has the local profile", () => {
+    expect(
+      resolveCodexComposerModel({
+        pickedModel: "gpt-5.6",
+        sessionModel: "deepseek-v4-flash",
+        profileModel: "deepseek-v4-flash",
+        knownModels: known,
+      }),
+    ).toBe("gpt-5.6");
+  });
+
+  test("does not let a catalog list refresh overwrite a known session override", () => {
+    expect(
+      resolveCodexComposerModel({
+        sessionModel: "gpt-5.6",
+        profileModel: "deepseek-v4-flash",
+        knownModels: known,
+      }),
+    ).toBe("gpt-5.6");
+  });
+
+  test("falls back to the local profile when session is not a known Codex model", () => {
+    expect(
+      resolveCodexComposerModel({
+        sessionModel: "MiniMax-M3",
+        profileModel: "deepseek-v4-flash",
+        knownModels: known,
+      }),
+    ).toBe("deepseek-v4-flash");
   });
 });
 
@@ -215,5 +264,50 @@ describe("resolveCodexExecModelId session override", () => {
         store: store({ effectiveCodexModel: "Qwen3.5-codex" }),
       }),
     ).toBe("Qwen3.5-codex");
+  });
+});
+
+describe("openai catalog vs custom codex profiles", () => {
+  const profile = (
+    partial: Partial<import("../types/claudeModelProfile").ClaudeModelProfile>,
+  ) =>
+    ({
+      id: "p1",
+      company: "DeepSeek",
+      name: "deepseek v4-flash",
+      modelId: "deepseek-v4-flash",
+      settingsJson: JSON.stringify({
+        auth: { OPENAI_API_KEY: "k", auth_mode: "apikey" },
+        config:
+          'model = "deepseek-v4-flash"\nmodel_provider = "deepseek"\n\n[model_providers.deepseek]\nbase_url = "https://api.deepseek.com/v1"\n',
+      }),
+      engine: "codex",
+      createdAtMs: 0,
+      updatedAtMs: 0,
+      ...partial,
+    }) as import("../types/claudeModelProfile").ClaudeModelProfile;
+
+  test("looksLikeOpenAiCatalogModel", () => {
+    expect(looksLikeOpenAiCatalogModel("gpt-5.6")).toBe(true);
+    expect(looksLikeOpenAiCatalogModel("GPT-5.6-Luna")).toBe(true);
+    expect(looksLikeOpenAiCatalogModel("deepseek-v4-flash")).toBe(false);
+  });
+
+  test("resolves openai default profile over deepseek", () => {
+    expect(
+      resolveCodexOpenAiDefaultProfileId([
+        profile({}),
+        profile({
+          id: "oa",
+          company: "OpenAI",
+          name: "openAI default",
+          modelId: "gpt-5.4",
+          settingsJson: JSON.stringify({
+            auth: { OPENAI_API_KEY: "sk" },
+            config: 'model = "gpt-5.4"\n',
+          }),
+        }),
+      ]),
+    ).toBe("oa");
   });
 });

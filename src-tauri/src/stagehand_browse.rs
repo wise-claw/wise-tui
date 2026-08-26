@@ -98,6 +98,32 @@ pub struct StagehandBrowseExecResult {
     pub exit_code: i32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StagehandBrowseInstallResult {
+    pub ok: bool,
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
+    pub shim_path: Option<String>,
+    pub sidecar_dir: Option<String>,
+    pub skill_installed: bool,
+    pub path_status: Option<String>,
+    pub runtime: Option<String>,
+}
+
+const WISE_PATH_MARKER: &str = "wise-cli PATH (managed by Wise)";
+
+pub(crate) fn rc_has_wise_bin(content: &str) -> bool {
+    content.contains(WISE_PATH_MARKER)
+        || content.contains("$HOME/.wise/bin")
+        || content.contains("%USERPROFILE%\\.wise\\bin")
+}
+
+pub(crate) fn wise_bin_path_export_block() -> String {
+    format!("\n# {WISE_PATH_MARKER}\nexport PATH=\"$HOME/.wise/bin:$PATH\"\n")
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StagehandStartOptions {
@@ -297,21 +323,82 @@ fn write_unix_script(path: &Path, body: &str) -> Result<(), String> {
 fn install_cli_shims(sidecar_dir: &Path, runtime: &Path) -> Result<PathBuf, String> {
     let bin_dir = wise_bin_dir()?;
     let script = sidecar_dir.join("cli.mjs");
-    let wise_browse = bin_dir.join("wise-browse");
-    let wise = bin_dir.join("wise");
-    let browse_body = format!(
-        "#!/bin/sh\nexport PATH=\"{path}\"\nexport STAGEHAND_SCREENSHOT_DIR=\"$HOME/.wise/stagehand-automation/screenshots\"\ncd \"{dir}\" || exit 1\nexec \"{runtime}\" \"{script}\" \"$@\"\n",
-        path = merged_path().replace('"', "\\\""),
-        dir = sidecar_dir.display(),
-        runtime = runtime.display(),
-        script = script.display(),
-    );
-    let wise_body = format!(
-        "#!/bin/sh\nDIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\nsub=\"$1\"\nshift\ncase \"$sub\" in\n  browse|browser)\n    exec \"$DIR/wise-browse\" \"$@\"\n    ;;\n  help|--help|-h|\"\")\n    echo \"Usage: wise browse <command> [args]\"\n    echo \"       wise-browse <command> [args]\"\n    exit 0\n    ;;\n  *)\n    echo \"Unknown command: $sub\" >&2\n    echo \"Usage: wise browse <command> [args]\" >&2\n    exit 1\n    ;;\nesac\n"
-    );
-    write_unix_script(&wise_browse, &browse_body)?;
-    write_unix_script(&wise, &wise_body)?;
-    Ok(wise_browse)
+    #[cfg(windows)]
+    {
+        let wise_browse = bin_dir.join("wise-browse.cmd");
+        let wise = bin_dir.join("wise.cmd");
+        let browse_body = format!(
+            "@echo off\r\nset \"PATH={path};%PATH%\"\r\nset \"STAGEHAND_SCREENSHOT_DIR=%USERPROFILE%\\.wise\\stagehand-automation\\screenshots\"\r\ncd /d \"{dir}\" || exit /b 1\r\n\"{runtime}\" \"{script}\" %*\r\n",
+            path = merged_path().replace('"', ""),
+            dir = sidecar_dir.display(),
+            runtime = runtime.display(),
+            script = script.display(),
+        );
+        let wise_body = "@echo off\r\nset \"DIR=%~dp0\"\r\nif /I \"%1\"==\"browse\" (\r\n  shift\r\n  \"%DIR%wise-browse.cmd\" %*\r\n  exit /b %ERRORLEVEL%\r\n)\r\nif /I \"%1\"==\"browser\" (\r\n  shift\r\n  \"%DIR%wise-browse.cmd\" %*\r\n  exit /b %ERRORLEVEL%\r\n)\r\necho Usage: wise browse ^<command^> [args]\r\nexit /b 0\r\n";
+        std::fs::write(&wise_browse, browse_body)
+            .map_err(|e| format!("写入 {} 失败：{e}", wise_browse.display()))?;
+        std::fs::write(&wise, wise_body).map_err(|e| format!("写入 {} 失败：{e}", wise.display()))?;
+        return Ok(wise_browse);
+    }
+    #[cfg(not(windows))]
+    {
+        let wise_browse = bin_dir.join("wise-browse");
+        let wise = bin_dir.join("wise");
+        let browse_body = format!(
+            "#!/bin/sh\nexport PATH=\"{path}\"\nexport STAGEHAND_SCREENSHOT_DIR=\"$HOME/.wise/stagehand-automation/screenshots\"\ncd \"{dir}\" || exit 1\nexec \"{runtime}\" \"{script}\" \"$@\"\n",
+            path = merged_path().replace('"', "\\\""),
+            dir = sidecar_dir.display(),
+            runtime = runtime.display(),
+            script = script.display(),
+        );
+        let wise_body = "#!/bin/sh\nDIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\nsub=\"$1\"\nshift\ncase \"$sub\" in\n  browse|browser)\n    exec \"$DIR/wise-browse\" \"$@\"\n    ;;\n  help|--help|-h|\"\")\n    echo \"Usage: wise browse <command> [args]\"\n    echo \"       wise-browse <command> [args]\"\n    exit 0\n    ;;\n  *)\n    echo \"Unknown command: $sub\" >&2\n    echo \"Usage: wise browse <command> [args]\" >&2\n    exit 1\n    ;;\nesac\n";
+        write_unix_script(&wise_browse, &browse_body)?;
+        write_unix_script(&wise, wise_body)?;
+        Ok(wise_browse)
+    }
+}
+
+fn ensure_wise_bin_on_user_path() -> Result<&'static str, String> {
+    #[cfg(windows)]
+    {
+        return Ok("skipped");
+    }
+    #[cfg(not(windows))]
+    {
+        let home = dirs::home_dir().ok_or_else(|| "无法解析用户主目录".to_string())?;
+        let names = [".zprofile", ".zshrc", ".bash_profile", ".bashrc", ".profile"];
+        for name in names {
+            let path = home.join(name);
+            if !path.is_file() {
+                continue;
+            }
+            let raw = std::fs::read_to_string(&path)
+                .map_err(|e| format!("读取 {} 失败：{e}", path.display()))?;
+            if rc_has_wise_bin(&raw) {
+                return Ok("already");
+            }
+        }
+        let dest = names
+            .iter()
+            .map(|name| home.join(name))
+            .find(|path| path.is_file())
+            .unwrap_or_else(|| home.join(".zprofile"));
+        let mut raw = if dest.is_file() {
+            std::fs::read_to_string(&dest)
+                .map_err(|e| format!("读取 {} 失败：{e}", dest.display()))?
+        } else {
+            String::new()
+        };
+        if rc_has_wise_bin(&raw) {
+            return Ok("already");
+        }
+        if !raw.is_empty() && !raw.ends_with('\n') {
+            raw.push('\n');
+        }
+        raw.push_str(&wise_bin_path_export_block());
+        std::fs::write(&dest, raw).map_err(|e| format!("写入 {} 失败：{e}", dest.display()))?;
+        Ok("added")
+    }
 }
 
 fn install_user_skill(app: &AppHandle) -> Result<(), String> {
@@ -335,6 +422,7 @@ fn install_user_skill(app: &AppHandle) -> Result<(), String> {
 fn ensure_cli_lightweight(app: &AppHandle) {
     let _ = wise_bin_dir();
     let _ = install_user_skill(app);
+    let _ = sync_user_sidecar(app);
     if find_wise_browse_binary().is_some() {
         return;
     }
@@ -342,7 +430,7 @@ fn ensure_cli_lightweight(app: &AppHandle) {
         return;
     };
     if let Ok(dir) = resolve_sidecar_dir(app) {
-        if sidecar_ready(&dir) && dir.join("cli.mjs").is_file() && dir.join("argv.mjs").is_file() {
+        if sidecar_ready(&dir) && dir.join("cli.mjs").is_file() && dir.join("assert.mjs").is_file() {
             let _ = install_cli_shims(&dir, &runtime);
         }
     }
@@ -369,7 +457,7 @@ fn sync_user_sidecar(app: &AppHandle) -> Result<PathBuf, String> {
     let src = source_sidecar_scripts(app)?;
     let dest = user_sidecar_dir()?;
     std::fs::create_dir_all(&dest).map_err(|e| format!("无法创建 {}：{e}", dest.display()))?;
-    for name in ["cli.mjs", "argv.mjs", "package.json"] {
+    for name in ["cli.mjs", "argv.mjs", "assert.mjs", "package.json"] {
         let from = src.join(name);
         if from.is_file() {
             copy_file(&from, &dest.join(name))?;
@@ -724,38 +812,67 @@ pub async fn stagehand_browse_probe(app: AppHandle) -> Result<StagehandBrowsePro
 }
 
 #[tauri::command]
-pub async fn stagehand_browse_install_deps(app: AppHandle) -> Result<StagehandBrowseExecResult, String> {
+pub async fn stagehand_browse_install_deps(app: AppHandle) -> Result<StagehandBrowseInstallResult, String> {
+    let mut notes: Vec<String> = Vec::new();
     let dir = sync_user_sidecar(&app)?;
+    notes.push(format!("已同步脚本 → {}", dir.display()));
     let (runtime, kind) = find_js_runtime()?;
+    notes.push(format!("使用运行时 {kind} {}", runtime.display()));
+
     let mut cmd = Command::new(&runtime);
     if kind == "bun" {
         cmd.args(["install"]);
+    } else if let Some(npm) = which_in_path("npm") {
+        cmd = Command::new(npm);
+        cmd.args(["install"]);
     } else {
-        // node → npm
-        if let Some(npm) = which_in_path("npm") {
-            cmd = Command::new(npm);
-            cmd.args(["install"]);
-        } else {
-            return Err("未找到 bun 或 npm，无法安装 sidecar 依赖".into());
-        }
+        return Err("未找到 bun 或 npm，无法安装 Stagehand 依赖。请先安装 Bun 或 Node.js。".into());
     }
     cmd.current_dir(&dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     apply_common_env(&mut cmd, None);
-    let result = run_output(cmd, INSTALL_TIMEOUT).await?;
-    if result.ok {
-        install_cli_shims(&dir, &runtime)?;
-        install_user_skill(&app)?;
-        if !config_path()?.is_file() {
-            let _ = save_config_file(&StagehandBrowseConfig {
-                env: Some("local".into()),
-                headed: Some(true),
-                ..StagehandBrowseConfig::default()
-            });
-        }
+    let deps = run_output(cmd, INSTALL_TIMEOUT).await?;
+    if deps.ok {
+        notes.push("已安装 Stagehand 运行时依赖".into());
     }
-    Ok(result)
+
+    let shim_path = install_cli_shims(&dir, &runtime)?;
+    notes.push(format!("已写入 CLI → {}", shim_path.display()));
+    install_user_skill(&app)?;
+    notes.push("已挂载会话 Skill（Claude / Codex / agents）".into());
+    let path_status = ensure_wise_bin_on_user_path().unwrap_or("skipped");
+    match path_status {
+        "added" => notes.push("已把 ~/.wise/bin 写入登录 shell PATH".into()),
+        "already" => notes.push("~/.wise/bin 已在 PATH 中".into()),
+        _ => {}
+    }
+    if !config_path()?.is_file() {
+        let _ = save_config_file(&StagehandBrowseConfig {
+            env: Some("local".into()),
+            headed: Some(true),
+            ..StagehandBrowseConfig::default()
+        });
+        notes.push("已写入默认配置".into());
+    }
+
+    let ready = deps.ok && sidecar_ready(&dir);
+    let mut stdout = notes.join("\n");
+    if !deps.stdout.trim().is_empty() {
+        stdout.push_str("\n\n");
+        stdout.push_str(deps.stdout.trim());
+    }
+    Ok(StagehandBrowseInstallResult {
+        ok: ready,
+        stdout,
+        stderr: deps.stderr,
+        exit_code: if ready { 0 } else { deps.exit_code.max(1) },
+        shim_path: Some(shim_path.display().to_string()),
+        sidecar_dir: Some(dir.display().to_string()),
+        skill_installed: skill_is_installed(),
+        path_status: Some(path_status.to_string()),
+        runtime: Some(format!("{kind} {}", runtime.display())),
+    })
 }
 
 #[tauri::command]
@@ -769,6 +886,22 @@ pub async fn stagehand_browse_save_config(
 ) -> Result<StagehandBrowseConfig, String> {
     save_config_file(&config)?;
     load_config_file()
+}
+
+#[tauri::command]
+pub async fn stagehand_browse_latest_report() -> Result<Value, String> {
+    let pointer = automation_dir()?.join("reports").join("latest.json");
+    if !pointer.is_file() {
+        return Ok(json!({ "found": false }));
+    }
+    let raw = std::fs::read_to_string(&pointer).map_err(|e| format!("无法读取验收报告：{e}"))?;
+    let parsed: Value = serde_json::from_str(&raw).unwrap_or_else(|_| json!({}));
+    let mut out = match parsed {
+        Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    out.insert("found".into(), json!(true));
+    Ok(Value::Object(out))
 }
 
 fn wise_browse_command(args: &[&str]) -> Result<Command, String> {
@@ -931,7 +1064,8 @@ pub async fn stagehand_browse_exec(
 #[cfg(test)]
 mod tests {
     use super::{
-        sanitize_session_id, validate_browse_args, StagehandBrowseConfig, BROWSE_ROOT_COMMANDS,
+        rc_has_wise_bin, sanitize_session_id, validate_browse_args, wise_bin_path_export_block,
+        StagehandBrowseConfig, BROWSE_ROOT_COMMANDS,
     };
 
     #[test]
@@ -963,5 +1097,13 @@ mod tests {
         let parsed: StagehandBrowseConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.env.as_deref(), Some("local"));
         assert_eq!(parsed.headed, Some(true));
+    }
+
+    #[test]
+    fn detects_wise_bin_path_export() {
+        assert!(rc_has_wise_bin("# wise-cli PATH (managed by Wise)\nexport PATH=\"$HOME/.wise/bin:$PATH\"\n"));
+        assert!(rc_has_wise_bin("export PATH=\"$HOME/.wise/bin:$PATH\"\n"));
+        assert!(!rc_has_wise_bin("export PATH=\"/usr/local/bin:$PATH\"\n"));
+        assert!(wise_bin_path_export_block().contains("$HOME/.wise/bin"));
     }
 }

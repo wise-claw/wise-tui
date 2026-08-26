@@ -33,6 +33,14 @@ export type StagehandBrowseExecResult = {
   exitCode: number;
 };
 
+export type StagehandBrowseInstallResult = StagehandBrowseExecResult & {
+  shimPath?: string | null;
+  sidecarDir?: string | null;
+  skillInstalled?: boolean;
+  pathStatus?: string | null;
+  runtime?: string | null;
+};
+
 export type StagehandStartOptions = {
   env?: "local" | "browserbase" | "cdp";
   headed?: boolean;
@@ -172,10 +180,60 @@ export function unwrapBrowseExecResult(result: StagehandBrowseExecResult): unkno
 }
 
 export const WISE_BROWSE_SESSION_EXAMPLES = [
-  { label: "打开谷歌官网", text: "打开谷歌官网" },
+  { label: "打开谷歌", text: "打开谷歌官网" },
+  { label: "断言标题", text: "断言标题包含 Google" },
+  { label: "验收登录", text: "验收当前页有登录按钮" },
   { label: "截一张图", text: "截一张图" },
-  { label: "这一页标题是什么", text: "这一页标题是什么" },
+  { label: "查看报告", text: "查看最近验收报告" },
+  { label: "初始化套件", text: "初始化验收套件" },
 ] as const;
+
+export type StagehandBrowseLatestReport = {
+  found: boolean;
+  kind: string | null;
+  name: string | null;
+  passed: boolean | null;
+  summary: string | null;
+  at: string | null;
+  counts: { passed: number; failed: number; skipped: number; total: number } | null;
+  durationMs: number;
+  jsonPath: string | null;
+  markdownPath: string | null;
+};
+
+export function parseStagehandBrowseLatestReport(value: unknown): StagehandBrowseLatestReport {
+  const obj =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const countsRaw =
+    obj.counts && typeof obj.counts === "object" && !Array.isArray(obj.counts)
+      ? (obj.counts as Record<string, unknown>)
+      : null;
+  const asCount = (key: string) => {
+    const n = countsRaw ? Number(countsRaw[key]) : 0;
+    return Number.isFinite(n) ? n : 0;
+  };
+  return {
+    found: obj.found === true,
+    kind: typeof obj.kind === "string" && obj.kind.trim() ? obj.kind.trim() : null,
+    name: typeof obj.name === "string" && obj.name.trim() ? obj.name.trim() : null,
+    passed: typeof obj.passed === "boolean" ? obj.passed : null,
+    summary: typeof obj.summary === "string" && obj.summary.trim() ? obj.summary.trim() : null,
+    at: typeof obj.at === "string" && obj.at.trim() ? obj.at.trim() : null,
+    counts: countsRaw
+      ? {
+          passed: asCount("passed"),
+          failed: asCount("failed"),
+          skipped: asCount("skipped"),
+          total: asCount("total"),
+        }
+      : null,
+    durationMs: Number.isFinite(Number(obj.durationMs)) ? Number(obj.durationMs) : 0,
+    jsonPath: typeof obj.jsonPath === "string" ? obj.jsonPath : null,
+    markdownPath: typeof obj.markdownPath === "string" ? obj.markdownPath : null,
+  };
+}
 
 export type BrowseReadinessItem = {
   id: "runtime" | "cli" | "skill";
@@ -220,14 +278,24 @@ export function formatBrowseProbeHint(probe: StagehandBrowseProbe | null): strin
   if (!probe) return "正在检测 Stagehand 运行环境…";
   if (!probe.sidecarReady) {
     return probe.error
-      ? `${probe.error}。可点击「安装 CLI」安装运行时、PATH 与会话 Skill。`
-      : "Stagehand 运行时未安装，请先安装 CLI。";
+      ? `${probe.error}。点「一键安装」安装运行时、CLI 与会话 Skill。`
+      : "Stagehand 运行时未安装，请先一键安装。";
   }
   if (!probe.cliAvailable) {
-    return "运行时已就绪，正在写入 wise browse；若仍失败请点「安装 CLI」。";
+    return "运行时已就绪，正在写入 wise browse；若仍失败请点「一键安装」。";
   }
   const skill = probe.skillInstalled ? "Skill 已挂载" : "Skill 未挂载";
   return `会话输入框可直接说「打开谷歌官网」· ${skill}`;
+}
+
+export function formatBrowseInstallSummary(result: StagehandBrowseInstallResult): string {
+  const lines = String(result.stdout ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("已") || line.startsWith("~"));
+  if (lines.length > 0) return lines.join(" · ");
+  if (result.shimPath) return `已安装 wise browse：${result.shimPath}`;
+  return "已安装 wise browse CLI 与会话 Skill";
 }
 
 export function collectStagehandEnvVars(input: {
@@ -254,6 +322,11 @@ export async function loadStagehandBrowseConfig(): Promise<StagehandStartOptions
   return invoke("stagehand_browse_load_config");
 }
 
+export async function loadStagehandBrowseLatestReport(): Promise<StagehandBrowseLatestReport> {
+  const value = await invoke<unknown>("stagehand_browse_latest_report");
+  return parseStagehandBrowseLatestReport(value);
+}
+
 export async function saveStagehandBrowseConfig(
   config: StagehandStartOptions,
 ): Promise<StagehandStartOptions> {
@@ -277,8 +350,8 @@ export async function stopStagehandDaemon(): Promise<void> {
   await invoke("stagehand_browse_daemon_stop");
 }
 
-export async function installStagehandBrowseDeps(): Promise<StagehandBrowseExecResult> {
-  return invoke<StagehandBrowseExecResult>("stagehand_browse_install_deps");
+export async function installStagehandBrowseDeps(): Promise<StagehandBrowseInstallResult> {
+  return invoke<StagehandBrowseInstallResult>("stagehand_browse_install_deps");
 }
 
 export async function startStagehandBrowse(input: {

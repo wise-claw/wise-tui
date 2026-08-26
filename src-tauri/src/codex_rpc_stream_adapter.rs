@@ -9,7 +9,9 @@ use serde_json::{json, Value};
 use crate::claude_events::{
     emit_adapted_stream_payload, CLAUDE_STREAM_EVENT_COMPLETE, CLAUDE_STREAM_EVENT_OUTPUT,
 };
-use crate::codex_commands::{codex_line_is_benign_noise, strip_benign_noise};
+use crate::codex_commands::{
+    codex_line_is_benign_noise, format_codex_rpc_error_line, strip_benign_noise,
+};
 use crate::codex_rpc_types::{ServerNotification, ServerRequest};
 
 /// Per-turn adapt state so token deltas and `item/completed` snapshots do not double-paint.
@@ -189,7 +191,7 @@ fn map_notification_to_stream_lines(
                     .filter(|s| !s.is_empty())
                     .unwrap_or(status.as_str());
                 if let Some(cleaned) = strip_benign_noise(detail) {
-                    let mut lines = vec![assistant_text_line(&format!("Codex error: {cleaned}"))];
+                    let mut lines = vec![assistant_text_line(&format_codex_rpc_error_line(&cleaned))];
                     if let Some(line) = usage_line {
                         lines.push(line);
                     }
@@ -279,8 +281,8 @@ fn map_notification_to_stream_lines(
 
         ServerNotification::Error { message, .. } => {
             if let Some(cleaned) = strip_benign_noise(message) {
-                CodexRpcAdaptOutput::both(vec![assistant_text_line(&format!(
-                    "Codex error: {cleaned}"
+                CodexRpcAdaptOutput::both(vec![assistant_text_line(&format_codex_rpc_error_line(
+                    &cleaned,
                 ))])
             } else {
                 CodexRpcAdaptOutput::default()
@@ -290,14 +292,18 @@ fn map_notification_to_stream_lines(
         ServerNotification::ServerRequestResolved { .. } => CodexRpcAdaptOutput::default(),
 
         ServerNotification::McpServerStatusUpdated { name, status, error } => {
-            CodexRpcAdaptOutput::both(vec![json!({
-                "type": "system",
-                "subtype": "mcp_status",
-                "server": name,
-                "status": status,
-                "error": error,
-            })
-            .to_string()])
+            if is_chatgpt_apps_mcp_noise(name, error.as_deref()) {
+                CodexRpcAdaptOutput::default()
+            } else {
+                CodexRpcAdaptOutput::both(vec![json!({
+                    "type": "system",
+                    "subtype": "mcp_status",
+                    "server": name,
+                    "status": status,
+                    "error": error,
+                })
+                .to_string()])
+            }
         }
 
         ServerNotification::McpOAuthLoginCompleted { name, success, error } => {
@@ -885,6 +891,19 @@ fn hook_event_name(run: &Value) -> String {
         .map(str::trim)
         .unwrap_or("")
         .to_string()
+}
+
+fn is_chatgpt_apps_mcp_noise(name: &str, error: Option<&str>) -> bool {
+    if !name.eq_ignore_ascii_case("codex_apps") {
+        return false;
+    }
+    let Some(error) = error.map(str::trim).filter(|s| !s.is_empty()) else {
+        return false;
+    };
+    let lower = error.to_lowercase();
+    lower.contains("no_biscuit_no_service")
+        || lower.contains("http 451")
+        || lower.contains("handshaking with mcp server failed")
 }
 
 /// 把 Codex `ThreadStatus` 归一化为前端 `ClaudeSession.status`。
@@ -2203,6 +2222,22 @@ mod tests {
     }
 
     #[test]
+    fn chatgpt_apps_mcp_handshake_noise_is_dropped() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let notif = ServerNotification::McpServerStatusUpdated {
+            name: "codex_apps".to_string(),
+            status: "error".to_string(),
+            error: Some(
+                "MCP startup failed: handshaking with MCP server failed: unexpected server response: HTTP 451: {\"message\":\"no_biscuit_no_service\"}"
+                    .to_string(),
+            ),
+        };
+        let out = adapt(&notif, &mut state);
+        assert!(out.emit.is_empty());
+        assert!(out.persist.is_empty());
+    }
+
+    #[test]
     fn hook_without_event_name_is_dropped() {
         let mut state = CodexRpcStreamAdaptState::default();
         let notif = ServerNotification::HookStarted {
@@ -2361,6 +2396,34 @@ mod tests {
         let out = adapt(&notif, &mut state);
         assert_eq!(out.emit.len(), 1);
         assert!(out.emit[0].contains("API key invalid"));
+    }
+
+    #[test]
+    fn reconnect_progress_error_is_not_shown() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let notif = ServerNotification::Error {
+            code: -1,
+            message: "Reconnecting... 3/5".to_string(),
+            data: None,
+        };
+        let out = adapt(&notif, &mut state);
+        assert!(out.emit.is_empty());
+        assert!(out.persist.is_empty());
+    }
+
+    #[test]
+    fn payment_required_error_is_humanized() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let notif = ServerNotification::Error {
+            code: -1,
+            message: "unexpected status 402 Payment Required: Insufficient Balance, url: https://api.deepseek.com/responses".to_string(),
+            data: None,
+        };
+        let out = adapt(&notif, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains("DeepSeek"));
+        assert!(out.emit[0].contains("账户额度不足"));
+        assert!(!out.emit[0].contains("Codex error:"));
     }
 
     #[test]

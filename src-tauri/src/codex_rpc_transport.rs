@@ -100,7 +100,11 @@ impl CodexRpcTransport {
     ///
     /// `binary_path` is the resolved path to the `codex` binary.
     /// Extra `args` are appended after `app-server` (e.g. `&["--stdio"]`).
-    pub async fn spawn(binary_path: &str, args: &[&str]) -> Result<Self> {
+    pub async fn spawn(
+        binary_path: &str,
+        args: &[&str],
+        spawn_env_overrides: Option<&(String, String)>,
+    ) -> Result<Self> {
         let mut cmd = Command::new(binary_path);
         cmd.arg("app-server").args(args);
         cmd.stdin(Stdio::piped());
@@ -112,6 +116,10 @@ impl CodexRpcTransport {
             &mut cmd,
             &crate::codex_binary::codex_merged_path_env(),
         );
+        if let Some((api_key, base_url)) = spawn_env_overrides {
+            cmd.env("OPENAI_API_KEY", api_key);
+            cmd.env("OPENAI_BASE_URL", base_url);
+        }
 
         let mut child = cmd
             .spawn()

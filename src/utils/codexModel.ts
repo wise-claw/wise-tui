@@ -1,5 +1,5 @@
 import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
-import type { ClaudeModelProfileStoreView } from "../types/claudeModelProfile";
+import type { ClaudeModelProfile, ClaudeModelProfileStoreView } from "../types/claudeModelProfile";
 import { resolveEffectiveModelForProfileEngine } from "../types/claudeModelProfile";
 
 /** 从模型切换 Codex 页读取当前默认档案模型（effective → active profile modelId）。 */
@@ -96,9 +96,81 @@ export function isCodexModelId(
   const trimmed = raw?.trim() ?? "";
   if (!trimmed) return false;
   if (knownModels && knownModels.length > 0) {
-    return knownModels.some((item) => item.id === trimmed);
+    return knownModels.some(
+      (item) => item.id === trimmed || item.displayName?.trim() === trimmed,
+    );
   }
   return true;
+}
+
+/**
+ * Composer Codex 模型：菜单刚选的值最高优先，避免列表刷新 / 档案生效模型
+ * 把 GPT-5.6-Luna 等目录模型打回本地档案（如 deepseek v4-flash）。
+ */
+export function resolveCodexComposerModel(input: {
+  pickedModel?: string | null;
+  sessionModel?: string | null;
+  profileModel?: string | null;
+  knownModels?: readonly CodexModelRef[];
+}): string | undefined {
+  const picked = input.pickedModel?.trim() || "";
+  if (picked) return picked;
+  const session = input.sessionModel?.trim() || "";
+  const profile = input.profileModel?.trim() || "";
+  if (session && isCodexModelId(session, input.knownModels) && profile && session !== profile) {
+    return session;
+  }
+  return profile || session || undefined;
+}
+
+/** Codex 官方目录模型应走 OpenAI 默认 provider，不能套用 DeepSeek 等自定义档案。 */
+export function looksLikeOpenAiCatalogModel(model: string | null | undefined): boolean {
+  const m = model?.trim().toLowerCase() ?? "";
+  return (
+    m.startsWith("gpt-") ||
+    m.startsWith("o1") ||
+    m.startsWith("o3") ||
+    m.startsWith("o4") ||
+    m.startsWith("chatgpt") ||
+    m.startsWith("codex-")
+  );
+}
+
+function codexConfigUsesCustomProvider(config: string): boolean {
+  const lower = config.toLowerCase();
+  if (
+    lower.includes("deepseek.com") ||
+    lower.includes("volces.com") ||
+    lower.includes("volcengine.com") ||
+    lower.includes("dashscope.aliyuncs.com")
+  ) {
+    return true;
+  }
+  const match = /^[ \t]*model_provider[ \t]*=[ \t]*"?([^"\n#]+)"?/m.exec(config);
+  const provider = match?.[1]?.trim().toLowerCase() ?? "";
+  return Boolean(provider) && provider !== "openai" && provider !== "chatgpt";
+}
+
+/** 选目录 GPT 时要套用的 OpenAI 默认档案（不含自定义 base_url）。 */
+export function resolveCodexOpenAiDefaultProfileId(
+  profiles: readonly ClaudeModelProfile[],
+): string | undefined {
+  let best: { id: string; score: number } | undefined;
+  for (const profile of profiles) {
+    if (profile.engine !== "codex") continue;
+    let config = "";
+    try {
+      const parsed = JSON.parse(profile.settingsJson) as { config?: unknown };
+      config = typeof parsed.config === "string" ? parsed.config : "";
+    } catch {
+      continue;
+    }
+    if (codexConfigUsesCustomProvider(config)) continue;
+    const blob = `${profile.company} ${profile.name}`.toLowerCase();
+    const score = blob.includes("openai") || blob.includes("chatgpt") ? 2 : 1;
+    if (!best || score > best.score) best = { id: profile.id, score };
+  }
+  return best?.id;
 }
 
 export function formatCodexModelLabel(modelId: string, displayName?: string | null): string {
@@ -129,7 +201,7 @@ export function matchesCodexModelPickerFilter(
  */
 export function buildCodexModelPickerOptions(
   runtimeModels: readonly CodexModelRef[],
-  profiles: readonly import("../types/claudeModelProfile").ClaudeModelProfile[] = [],
+  profiles: readonly ClaudeModelProfile[] = [],
 ): CodexModelPickerOption[] {
   const opts: CodexModelPickerOption[] = [];
   const seen = new Set<string>();

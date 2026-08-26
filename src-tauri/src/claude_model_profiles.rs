@@ -9,9 +9,10 @@ use uuid::Uuid;
 
 use crate::claude_config_dir::user_claude_dir;
 use crate::codex_config_dir::{
-    apply_codex_profile_envelope, codex_profile_envelope_to_json, effective_codex_model_from_disk,
-    clear_codex_user_config, parse_codex_profile_envelope, read_codex_user_settings_pretty,
-    read_effective_codex_model_from_envelope, user_codex_dir,
+    apply_codex_profile_envelope, codex_config_uses_custom_provider, codex_profile_envelope_to_json,
+    effective_codex_model_from_disk, clear_codex_user_config, looks_like_openai_catalog_model,
+    parse_codex_profile_envelope, patch_codex_disk_model, read_codex_user_settings_pretty,
+    read_effective_codex_model_from_envelope, restore_codex_openai_provider_for_model, user_codex_dir,
 };
 use crate::opencode_config_dir::{
     apply_opencode_profile_to_disk, effective_opencode_model_from_disk,
@@ -597,9 +598,31 @@ pub(crate) fn ensure_active_opencode_profile_applied(db: &WiseDb) -> Result<(), 
     apply_profile_to_disk(profile)
 }
 
-/// 在 spawn `codex exec` 前将 Wise 当前激活的 Codex 档案写入 `~/.codex`（auth + config）。
-pub(crate) fn ensure_active_codex_profile_applied(db: &WiseDb) -> Result<(), String> {
+/// spawn 前按本次请求的模型选择写入 `~/.codex`。
+/// 目录 GPT 模型不能沿用当前 DeepSeek 等自定义 provider 档案，否则会打到错误的 base_url。
+pub(crate) fn ensure_codex_profile_applied_for_model(
+    db: &WiseDb,
+    requested_model: Option<&str>,
+) -> Result<(), String> {
     let store = load_store(db);
+    match resolve_codex_runtime_profile(&store, requested_model) {
+        CodexRuntimeProfileChoice::DiskProfile(profile) => apply_profile_to_disk(profile),
+        CodexRuntimeProfileChoice::OpenAiProfile { profile, model } => {
+            apply_profile_to_disk(profile)?;
+            let profile_model = resolve_profile_model_id(profile).unwrap_or_default();
+            if !model.trim().eq_ignore_ascii_case(profile_model.trim()) {
+                patch_codex_disk_model(model)?;
+            }
+            Ok(())
+        }
+        CodexRuntimeProfileChoice::StripCustomProvider { model } => {
+            restore_codex_openai_provider_for_model(model)
+        }
+        CodexRuntimeProfileChoice::Active => apply_active_codex_profile(&store),
+    }
+}
+
+fn apply_active_codex_profile(store: &ClaudeModelProfileStore) -> Result<(), String> {
     let active_id = match store.active_codex_profile_id.as_deref() {
         Some(id) if !id.trim().is_empty() => id.trim().to_string(),
         _ => return Ok(()),
@@ -613,6 +636,99 @@ pub(crate) fn ensure_active_codex_profile_applied(db: &WiseDb) -> Result<(), Str
         return Ok(());
     }
     apply_profile_to_disk(profile)
+}
+
+#[derive(Debug)]
+enum CodexRuntimeProfileChoice<'a> {
+    DiskProfile(&'a ClaudeModelProfile),
+    OpenAiProfile {
+        profile: &'a ClaudeModelProfile,
+        model: &'a str,
+    },
+    StripCustomProvider {
+        model: &'a str,
+    },
+    Active,
+}
+
+fn resolve_codex_runtime_profile<'a>(
+    store: &'a ClaudeModelProfileStore,
+    requested_model: Option<&'a str>,
+) -> CodexRuntimeProfileChoice<'a> {
+    let requested = requested_model.map(str::trim).filter(|s| !s.is_empty());
+    let Some(model) = requested else {
+        return CodexRuntimeProfileChoice::Active;
+    };
+    if let Some(profile) = find_codex_profile_by_model_id(store, model) {
+        return CodexRuntimeProfileChoice::DiskProfile(profile);
+    }
+    if looks_like_openai_catalog_model(model) {
+        if let Some(profile) = find_openai_default_codex_profile(store) {
+            return CodexRuntimeProfileChoice::OpenAiProfile { profile, model };
+        }
+        if active_codex_profile_uses_custom_provider(store) {
+            return CodexRuntimeProfileChoice::StripCustomProvider { model };
+        }
+    }
+    CodexRuntimeProfileChoice::Active
+}
+
+fn find_codex_profile_by_model_id<'a>(
+    store: &'a ClaudeModelProfileStore,
+    model: &str,
+) -> Option<&'a ClaudeModelProfile> {
+    store.profiles.iter().find(|profile| {
+        profile_engine(profile) == "codex" && profile.model_id.trim().eq_ignore_ascii_case(model)
+    })
+}
+
+fn find_openai_default_codex_profile(
+    store: &ClaudeModelProfileStore,
+) -> Option<&ClaudeModelProfile> {
+    let mut best: Option<(&ClaudeModelProfile, i32)> = None;
+    for profile in &store.profiles {
+        if !codex_profile_is_openai_default(profile) {
+            continue;
+        }
+        let score = openai_default_profile_score(profile);
+        match best {
+            Some((_, best_score)) if best_score >= score => {}
+            _ => best = Some((profile, score)),
+        }
+    }
+    best.map(|(profile, _)| profile)
+}
+
+fn codex_profile_is_openai_default(profile: &ClaudeModelProfile) -> bool {
+    if profile_engine(profile) != "codex" {
+        return false;
+    }
+    let Ok(envelope) = parse_codex_profile_envelope(&profile.settings_json) else {
+        return false;
+    };
+    !codex_config_uses_custom_provider(&envelope.config)
+}
+
+fn openai_default_profile_score(profile: &ClaudeModelProfile) -> i32 {
+    let blob = format!("{} {}", profile.company, profile.name).to_lowercase();
+    if blob.contains("openai") || blob.contains("chatgpt") {
+        2
+    } else {
+        1
+    }
+}
+
+fn active_codex_profile_uses_custom_provider(store: &ClaudeModelProfileStore) -> bool {
+    let Some(id) = store.active_codex_profile_id.as_deref() else {
+        return false;
+    };
+    let Some(profile) = store.profiles.iter().find(|p| p.id == id) else {
+        return false;
+    };
+    let Ok(envelope) = parse_codex_profile_envelope(&profile.settings_json) else {
+        return false;
+    };
+    codex_config_uses_custom_provider(&envelope.config)
 }
 
 fn sync_llm_proxy_upstream_for_claude_profile(app: &AppHandle, db: &WiseDb, profile: &ClaudeModelProfile) {
@@ -1528,5 +1644,127 @@ mod tests {
         let out = merge_profile_settings_into_current(serde_json::json!(["not", "an", "object"]), &profile)
             .expect("merge");
         assert_eq!(out["env"]["ANTHROPIC_MODEL"].as_str(), Some("kimi-k2"));
+    }
+
+    fn codex_profile(
+        id: &str,
+        name: &str,
+        company: &str,
+        model_id: &str,
+        config: &str,
+    ) -> ClaudeModelProfile {
+        ClaudeModelProfile {
+            id: id.into(),
+            company: company.into(),
+            name: name.into(),
+            official_website_url: String::new(),
+            model_id: model_id.into(),
+            settings_json: format!(
+                r#"{{"auth":{{"OPENAI_API_KEY":"k","auth_mode":"apikey"}},"config":{}}}"#,
+                serde_json::to_string(config).expect("config json")
+            ),
+            engine: "codex".into(),
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        }
+    }
+
+    fn store_with_codex_profiles(
+        active: &str,
+        profiles: Vec<ClaudeModelProfile>,
+    ) -> ClaudeModelProfileStore {
+        ClaudeModelProfileStore {
+            profiles,
+            active_profile_id: None,
+            active_codex_profile_id: Some(active.into()),
+            active_opencode_profile_id: None,
+            auto_failover_enabled: true,
+        }
+    }
+
+    #[test]
+    fn catalog_gpt_uses_openai_default_instead_of_active_deepseek() {
+        let store = store_with_codex_profiles(
+            "ds",
+            vec![
+                codex_profile(
+                    "ds",
+                    "deepseek v4-flash",
+                    "DeepSeek",
+                    "deepseek-v4-flash",
+                    "model = \"deepseek-v4-flash\"\nmodel_provider = \"deepseek\"\n\n[model_providers.deepseek]\nbase_url = \"https://api.deepseek.com/v1\"\n",
+                ),
+                codex_profile(
+                    "oa",
+                    "openAI default",
+                    "OpenAI",
+                    "gpt-5.4",
+                    "model = \"gpt-5.4\"\n",
+                ),
+            ],
+        );
+        match resolve_codex_runtime_profile(&store, Some("gpt-5.6")) {
+            CodexRuntimeProfileChoice::OpenAiProfile { profile, model } => {
+                assert_eq!(profile.id, "oa");
+                assert_eq!(model, "gpt-5.6");
+            }
+            other => panic!("expected OpenAiProfile, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn matching_local_profile_model_still_wins() {
+        let store = store_with_codex_profiles(
+            "ds",
+            vec![codex_profile(
+                "ds",
+                "deepseek v4-flash",
+                "DeepSeek",
+                "deepseek-v4-flash",
+                "model = \"deepseek-v4-flash\"\nmodel_provider = \"deepseek\"\n",
+            )],
+        );
+        match resolve_codex_runtime_profile(&store, Some("deepseek-v4-flash")) {
+            CodexRuntimeProfileChoice::DiskProfile(profile) => assert_eq!(profile.id, "ds"),
+            other => panic!("expected DiskProfile, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn catalog_gpt_without_openai_profile_strips_custom_provider() {
+        let store = store_with_codex_profiles(
+            "ds",
+            vec![codex_profile(
+                "ds",
+                "deepseek v4-flash",
+                "DeepSeek",
+                "deepseek-v4-flash",
+                "model = \"deepseek-v4-flash\"\nmodel_provider = \"deepseek\"\n\n[model_providers.deepseek]\nbase_url = \"https://api.deepseek.com/v1\"\n",
+            )],
+        );
+        match resolve_codex_runtime_profile(&store, Some("gpt-5.6")) {
+            CodexRuntimeProfileChoice::StripCustomProvider { model } => {
+                assert_eq!(model, "gpt-5.6");
+            }
+            other => panic!("expected StripCustomProvider, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn missing_model_keeps_active_profile() {
+        let store = store_with_codex_profiles(
+            "ds",
+            vec![codex_profile(
+                "ds",
+                "deepseek",
+                "DeepSeek",
+                "deepseek-v4-flash",
+                "model = \"deepseek-v4-flash\"\nmodel_provider = \"deepseek\"\n",
+            )],
+        );
+        match resolve_codex_runtime_profile(&store, None) {
+            CodexRuntimeProfileChoice::Active => {}
+            other => panic!("expected Active, got {other:?}"),
+        }
     }
 }

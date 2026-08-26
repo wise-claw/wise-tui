@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wise 数字员工 · 需求示例</title>
+  <style>
+    :root {
+      --bg-layout: #f5f5f5;
+      --bg: #fff;
+      --bg-elevated: #fafafa;
+      --border: #f0f0f0;
+      --border-strong: #d9d9d9;
+      --text: rgba(0, 0, 0, 0.88);
+      --text-2: rgba(0, 0, 0, 0.65);
+      --text-3: rgba(0, 0, 0, 0.45);
+      --primary: #1677ff;
+      --primary-bg: #e6f4ff;
+      --success: #52c41a;
+      --success-bg: #f6ffed;
+      --warning: #faad14;
+      --warning-bg: #fffbe6;
+      --error: #ff4d4f;
+      --error-bg: #fff2f0;
+      --radius: 6px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; font-family: var(--font); color: var(--text); background: var(--bg-layout); font-size: 13px; }
+    .app { display: flex; flex-direction: column; height: 100vh; }
+    .top {
+      height: 40px; padding: 0 16px; display: flex; align-items: center; gap: 16px;
+      background: var(--bg); border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .top h1 { font-size: 13px; margin: 0; font-weight: 600; }
+    .scenes { display: flex; gap: 4px; flex: 1; }
+    .scene {
+      border: 1px solid transparent; background: none; padding: 4px 10px; border-radius: var(--radius);
+      cursor: pointer; font: inherit; color: var(--text-2);
+    }
+    .scene:hover { background: var(--bg-elevated); }
+    .scene.active { background: var(--primary-bg); color: var(--primary); font-weight: 500; }
+    .req { font-size: 11px; color: var(--text-3); }
+    .body { flex: 1; min-height: 0; display: flex; }
+    .side {
+      width: 220px; background: var(--bg); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+    }
+    .side-h { height: 36px; padding: 0 12px; display: flex; align-items: center; font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--border); }
+    .tree { flex: 1; overflow: auto; padding: 8px 0; }
+    .t { padding: 6px 12px; display: flex; gap: 8px; align-items: center; cursor: pointer; }
+    .t:hover { background: var(--bg-elevated); }
+    .t.active { background: var(--primary-bg); color: var(--primary); }
+    .t .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot.idle { background: var(--success); }
+    .dot.busy { background: var(--primary); }
+    .dot.wait { background: var(--warning); }
+    .dot.off { background: #d9d9d9; }
+    .t small { margin-left: auto; color: var(--text-3); font-size: 11px; }
+    .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .main-h {
+      height: 36px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between;
+      background: var(--bg); border-bottom: 1px solid var(--border);
+    }
+    .tabs { display: flex; gap: 4px; }
+    .tab {
+      border: none; background: none; padding: 4px 10px; cursor: pointer; font: inherit; color: var(--text-2); border-radius: var(--radius);
+    }
+    .tab.active { background: var(--bg-elevated); color: var(--text); font-weight: 500; }
+    .content { flex: 1; overflow: auto; padding: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+    .card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; cursor: pointer; }
+    .card:hover { border-color: #91caff; }
+    .card h3 { margin: 0 0 4px; font-size: 14px; }
+    .meta { font-size: 11px; color: var(--text-3); display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+    .tag { padding: 0 6px; line-height: 18px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-elevated); font-size: 11px; }
+    .tag.s1 { background: var(--primary-bg); border-color: #91caff; color: var(--primary); }
+    .tag.warn { background: var(--warning-bg); border-color: #ffe58f; color: #d48806; }
+    .tag.ok { background: var(--success-bg); border-color: #b7eb8f; color: #389e0d; }
+    .tag.err { background: var(--error-bg); border-color: #ffa39e; color: var(--error); }
+    .table { width: 100%; border-collapse: collapse; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .table th, .table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .table th { background: var(--bg-elevated); color: var(--text-2); font-weight: 500; }
+    .table tr { cursor: pointer; }
+    .table tr:hover td { background: var(--bg-elevated); }
+    .table tr.active td { background: var(--primary-bg); }
+    .board { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; height: 100%; }
+    .col { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; min-height: 280px; }
+    .col h4 { margin: 0 0 8px; font-size: 12px; color: var(--text-2); font-weight: 600; }
+    .item { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; margin-bottom: 8px; background: var(--bg-elevated); }
+    .item p { margin: 4px 0 0; font-size: 11px; color: var(--text-3); }
+    .btn { padding: 4px 12px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--bg); cursor: pointer; font: inherit; font-size: 12px; }
+    .btn:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .btn-danger { color: var(--error); border-color: #ffa39e; }
+    .btn[disabled] { opacity: 0.45; cursor: not-allowed; color: var(--text-3); border-color: var(--border); }
+    .lens {
+      width: 360px; background: var(--bg); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+    }
+    .lens-h { height: 36px; padding: 0 12px; display: flex; align-items: center; font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--border); }
+    .lens-b { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .panel { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; }
+    .panel h4 { margin: 0 0 8px; font-size: 12px; color: var(--text-2); }
+    .kv { display: grid; grid-template-columns: 72px 1fr; gap: 4px 8px; font-size: 12px; }
+    .kv span { color: var(--text-3); }
+    .callout { padding: 8px 10px; border-radius: var(--radius); font-size: 12px; line-height: 1.5; }
+    .callout.warn { background: var(--warning-bg); border: 1px solid #ffe58f; }
+    .callout.err { background: var(--error-bg); border: 1px solid #ffa39e; }
+    .callout.ok { background: var(--success-bg); border: 1px solid #b7eb8f; }
+    .callout.info { background: var(--primary-bg); border: 1px solid #91caff; }
+    pre { margin: 0; font-size: 11px; background: var(--bg-elevated); padding: 8px; border-radius: 4px; overflow: auto; white-space: pre-wrap; }
+    .log { font-size: 11px; color: var(--text-2); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.6; }
+    .log .mute { color: var(--text-3); }
+    .foot {
+      height: 28px; padding: 0 16px; display: flex; align-items: center; gap: 16px;
+      background: var(--bg); border-top: 1px solid var(--border); font-size: 11px; color: var(--text-3);
+    }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="top">
+      <h1>编制台</h1>
+      <div class="scenes" id="scenes"></div>
+      <span class="req" id="reqLabel">P0 · S1 S2 C1 C2</span>
+    </div>
+    <div class="body">
+      <aside class="side">
+        <div class="side-h">工程部</div>
+        <div class="tree" id="tree"></div>
+      </aside>
+      <section class="main">
+        <div class="main-h">
+          <div class="tabs" id="tabs"></div>
+          <span class="req" id="mainTitle">花名册</span>
+        </div>
+        <div class="content" id="content"></div>
+      </section>
+      <aside class="lens">
+        <div class="lens-h" id="lensTitle">席位 Card</div>
+        <div class="lens-b" id="lens"></div>
+      </aside>
+    </div>
+    <div class="foot">
+      <span>时钟在 Rust · 前端只订阅读模型</span>
+      <span>内部信不出 Channel</span>
+      <span>工作流图 = 顺序拓扑</span>
+    </div>
+  </div>
+  <script>
+    const employees = [
+      { id: "front", name: "前台", role: "路由", status: "idle", mode: "delegated", tier: "S0", manager: "人类", skills: "分发 / Card 匹配", hb: "NO_REPLY", inbox: 0 },
+      { id: "impl", name: "实现者", role: "编码", status: "busy", mode: "ambient", tier: "S1", manager: "前台", skills: "实现 / PR", hb: "busy 让路", inbox: 2 },
+      { id: "rev", name: "审查员", role: "质检", status: "idle", mode: "ambient", tier: "S2", manager: "前台", skills: "审查 / 测到绿", hb: "NO_REPLY", inbox: 1 },
+    ];
+
+    const tasks = [
+      {
+        id: "t-handoff",
+        act: "handoff",
+        state: "submitted",
+        from: "实现者",
+        to: "审查员",
+        as: "ambient",
+        topo: "graph",
+        title: "工作流·实现 → 审查",
+        brief: { goal: "审查登录改动", doneWhen: "测绿且无 S2 越权", output: "审查结论 + PR 评论", forbidden: "不改生产密钥", boundary: "仅 auth 模块", budget: "1 人 / 15 次工具" },
+        wf: "wf_login / snapshot dispatch-18",
+      },
+      {
+        id: "t-req",
+        act: "request",
+        state: "working",
+        from: "前台",
+        to: "实现者",
+        as: "obo",
+        topo: "graph",
+        title: "实现「记住登录」",
+        brief: { goal: "会话内记住登录", doneWhen: "单测绿", output: "PR", forbidden: "不改 CI 密钥", boundary: "仅 frontend", budget: "1 人" },
+        wf: null,
+      },
+      {
+        id: "t-bad",
+        act: "request",
+        state: "rejected",
+        from: "人类",
+        to: "前台",
+        as: "obo",
+        topo: "orchestrator_workers",
+        title: "研究一下半导体",
+        brief: null,
+        error: "缺 doneWhen / output / budget.maxEmployees",
+        wf: null,
+      },
+      {
+        id: "t-esc",
+        act: "escalate",
+        state: "input-required",
+        from: "实现者",
+        to: "人类",
+        as: "ambient",
+        topo: "graph",
+        title: "需写仓库根目录",
+        brief: { goal: "越权升级", doneWhen: "人类放行或拒绝", output: "放行记录", forbidden: "未放行不写", boundary: "S1 越权", budget: "0 扩编" },
+        wf: null,
+      },
+    ];
+
+    const board = {
+      pending: [{ id: "b1", title: "补 e2e", dep: "依赖 t-req 未完成", locked: true }],
+      doing: [{ id: "b2", title: "实现记住登录", owner: "实现者", lease: "租约 12m" }],
+      done: [{ id: "b3", title: "拆分说明书", owner: "前台" }],
+    };
+
+    const scenes = [
+      { id: "roster", label: "编制台", req: "P0 · S1 S2 C1", tab: "cards" },
+      { id: "mail", label: "邮箱 Task", req: "P0 · C2 C3 C5", tab: "mail" },
+      { id: "reject", label: "缺说明书拒收", req: "P0 · C4", tab: "mail", select: "t-bad" },
+      { id: "handoff", label: "工作流交接", req: "P0 · C6", tab: "mail", select: "t-handoff" },
+      { id: "board", label: "看板认领", req: "P1 · C8", tab: "board" },
+      { id: "clock", label: "心跳静默", req: "P0 · S3 S4", tab: "clock" },
+    ];
+
+    let scene = "roster";
+    let tab = "cards";
+    let emp = "impl";
+    let taskId = "t-req";
+    let claimed = false;
+    let toast = "";
+
+    const $ = (id) => document.getElementById(id);
+
+    function renderScenes() {
+      $("scenes").innerHTML = scenes.map((s) =>
+        `<button class="scene ${s.id === scene ? "active" : ""}" data-s="${s.id}">${s.label}</button>`
+      ).join("");
+      $("reqLabel").textContent = scenes.find((s) => s.id === scene).req;
+    }
+
+    function renderTree() {
+      $("tree").innerHTML = employees.map((e) => `
+        <div class="t ${e.id === emp ? "active" : ""}" data-e="${e.id}">
+          <span class="dot ${e.status === "busy" ? "busy" : e.status}"></span>
+          ${e.name}
+          <small>${e.inbox}</small>
+        </div>`).join("");
+    }
+
+    function renderTabs() {
+      const items = [
+        ["cards", "花名册"],
+        ["mail", "邮箱"],
+        ["board", "看板"],
+        ["clock", "时钟"],
+      ];
+      $("tabs").innerHTML = items.map(([id, label]) =>
+        `<button class="tab ${tab === id ? "active" : ""}" data-t="${id}">${label}</button>`
+      ).join("");
+    }
+
+    function renderCards() {
+      $("mainTitle").textContent = "花名册 · Agent Card";
+      $("content").innerHTML = `<div class="grid">${employees.map((e) => `
+        <article class="card" data-e="${e.id}">
+          <h3>${e.name}</h3>
+          <div class="meta">
+            <span class="tag">${e.role}</span>
+            <span class="tag s1">${e.mode}</span>
+            <span class="tag">${e.tier}</span>
+            <span class="tag ${e.status === "busy" ? "warn" : "ok"}">${e.status}</span>
+          </div>
+          <div class="meta">${e.skills} · 汇报 ${e.manager}</div>
+        </article>`).join("")}</div>`;
+    }
+
+    function renderMail() {
+      $("mainTitle").textContent = "邮箱 · org_tasks";
+      $("content").innerHTML = `<table class="table"><thead><tr>
+        <th>id</th><th>act</th><th>state</th><th>from → to</th><th>名义</th><th>拓扑</th>
+      </tr></thead><tbody>${tasks.map((t) => `
+        <tr class="${t.id === taskId ? "active" : ""}" data-task="${t.id}">
+          <td>${t.id}</td>
+          <td>${t.act}</td>
+          <td><span class="tag ${t.state === "rejected" ? "err" : t.state === "working" ? "s1" : t.state === "submitted" ? "warn" : "ok"}">${t.state}</span></td>
+          <td>${t.from} → ${t.to}</td>
+          <td>${t.as}</td>
+          <td>${t.topo}</td>
+        </tr>`).join("")}</tbody></table>
+        ${toast ? `<p class="callout ok" style="margin-top:12px">${toast}</p>` : ""}`;
+    }
+
+    function renderBoard() {
+      $("mainTitle").textContent = "看板 · 认领锁";
+      const pendingBtn = claimed
+        ? `<span class="tag err">已被实现者认领</span>`
+        : `<button class="btn btn-primary" id="claimBtn">认领</button>`;
+      $("content").innerHTML = `<div class="board">
+        <div class="col"><h4>pending</h4>
+          <div class="item"><strong>补 e2e</strong><p>依赖 t-req 未完成</p>
+            <p><button class="btn" disabled>认领</button> 依赖未完成</p></div>
+          <div class="item"><strong>审查登录</strong><p>handoff submitted</p>${pendingBtn}</div>
+        </div>
+        <div class="col"><h4>in_progress</h4>
+          <div class="item"><strong>实现记住登录</strong><p>实现者 · 租约 12m</p></div>
+          ${claimed ? `<div class="item"><strong>审查登录</strong><p>实现者刚抢到 · 锁生效</p></div>` : ""}
+        </div>
+        <div class="col"><h4>completed</h4>
+          <div class="item"><strong>拆分说明书</strong><p>前台</p></div>
+        </div>
+      </div>`;
+    }
+
+    function renderClock() {
+      $("mainTitle").textContent = "五档时钟 · 前端只读";
+      $("content").innerHTML = `<div class="panel">
+        <h4>Heartbeat 21:40（实现者 busy → 让路）</h4>
+        <div class="log">
+          <div class="mute">21:10 pulse  ok  lease=alive</div>
+          <div class="mute">21:10 tick   git=0 channel=0 goal=open</div>
+          <div>21:10 heartbeat skip reason=busy_target</div>
+          <div class="mute">21:40 pulse  ok</div>
+          <div>21:40 heartbeat review inbox=2 → no new task</div>
+          <div>21:40 sleeptime idle queue (not this call)</div>
+        </div>
+      </div>
+      <div class="callout ok" style="margin-top:12px">审查员 21:40 Heartbeat 正文：NO_REPLY。无 org_tasks 新行，无 Channel 出站。</div>`;
+    }
+
+    function employeeLens(e) {
+      $("lensTitle").textContent = "席位 Card · " + e.name;
+      $("lens").innerHTML = `
+        <div class="panel"><h4>章程 S1</h4>
+          <div class="kv">
+            <span>职责</span><div>${e.role === "路由" ? "按 Card 技能分发 request" : e.role === "编码" ? "按 brief 实现并开 PR" : "测到绿才 completed"}</div>
+            <span>禁区</span><div>${e.tier === "S2" ? "可审不可改密钥" : "不改 CI / 生产密钥"}</div>
+            <span>I/O</span><div>入：brief　出：PR 或审查结论</div>
+            <span>成功</span><div>${e.role === "质检" ? "测试通过" : "Task completed 且有产物指针"}</div>
+          </div>
+        </div>
+        <div class="panel"><h4>身份 S2</h4>
+          <div class="kv">
+            <span>模式</span><div>${e.mode}</div>
+            <span>安全档</span><div>${e.tier}</div>
+            <span>失败问</span><div>${e.mode === "delegated" ? "授权人" : "章程"}</div>
+            <span>心跳</span><div>${e.hb}</div>
+          </div>
+        </div>
+        <div class="callout info">会话 / 监控 / API 读同一 Card，不另造人。</div>`;
+    }
+
+    function taskLens(t) {
+      $("lensTitle").textContent = "Task · " + t.id;
+      if (!t.brief) {
+        $("lens").innerHTML = `
+          <div class="callout err"><strong>org_task_create 拒绝</strong><br/>${t.error}<br/>库中无行。终态 rejected 仅用于已入队后校验失败的展示；P0 创建路径应直接返回错误。</div>
+          <div class="panel"><h4>说明书 C4</h4>
+            <pre>goal: 研究一下半导体
+doneWhen: （缺）
+output: （缺）
+budget.maxEmployees: 10  ← C13 简单查询禁止扩编</pre>
+          </div>
+          <div class="actions"><button class="btn" disabled>重开旧 id</button><button class="btn btn-primary" id="newId">用新 taskId 重做</button></div>`;
+        return;
+      }
+      const wf = t.wf ? `<div class="callout info">工作流适配 C6 · ${t.wf}。关 org.handoff.enabled 则回旧 dispatch。</div>` : "";
+      const acts = t.state === "submitted"
+        ? `<div class="actions"><button class="btn btn-primary" id="toWork">转入 working</button><button class="btn btn-danger" id="rej">reject</button></div>`
+        : t.state === "working"
+          ? `<div class="actions"><button class="btn" disabled>completed（未测过）</button><button class="btn btn-danger" id="esc">escalate</button></div>`
+          : t.state === "input-required"
+            ? `<div class="callout warn">C15 此 escalate 才允许出 Channel。内部 handoff 不出站。</div>`
+            : "";
+      $("lens").innerHTML = `
+        <div class="kv">
+          <span>act</span><div>${t.act}</div>
+          <span>state</span><div>${t.state}</div>
+          <span>名义</span><div>${t.as}</div>
+          <span>拓扑</span><div>${t.topo}</div>
+        </div>
+        <div class="panel"><h4>说明书</h4>
+          <div class="kv">
+            <span>目标</span><div>${t.brief.goal}</div>
+            <span>完成</span><div>${t.brief.doneWhen}</div>
+            <span>输出</span><div>${t.brief.output}</div>
+            <span>禁区</span><div>${t.brief.forbidden}</div>
+            <span>边界</span><div>${t.brief.boundary}</div>
+            <span>预算</span><div>${t.brief.budget}</div>
+          </div>
+        </div>
+        ${wf}${acts}`;
+    }
+
+    function clockLens() {
+      $("lensTitle").textContent = "时钟契约 S3";
+      $("lens").innerHTML = `
+        <div class="panel"><h4>五档</h4>
+          <div class="kv">
+            <span>Pulse</span><div>进程 / 租约 · 无 LLM</div>
+            <span>Tick</span><div>扫 Git / Channel / 需求</div>
+            <span>Heartbeat</span><div>清 inbox · NO_REPLY</div>
+            <span>Sleeptime</span><div>巩固记忆 · 另一次调用</div>
+            <span>Mission</span><div>有目标才建账本</div>
+          </div>
+        </div>
+        <div class="callout warn">Heartbeat 禁止群发、禁止新建 Mission。</div>`;
+    }
+
+    function renderMain() {
+      if (tab === "cards") renderCards();
+      else if (tab === "mail") renderMail();
+      else if (tab === "board") renderBoard();
+      else renderClock();
+    }
+
+    function renderLens() {
+      if (tab === "clock") return clockLens();
+      if (tab === "mail" || tab === "board") {
+        const t = tasks.find((x) => x.id === taskId) || tasks[0];
+        return taskLens(t);
+      }
+      employeeLens(employees.find((e) => e.id === emp));
+    }
+
+    function render() {
+      renderScenes();
+      renderTree();
+      renderTabs();
+      renderMain();
+      renderLens();
+    }
+
+    function applyScene(id) {
+      const s = scenes.find((x) => x.id === id);
+      scene = id;
+      tab = s.tab;
+      toast = "";
+      if (s.select) taskId = s.select;
+      if (id === "roster") emp = "impl";
+      if (id === "handoff") emp = "rev";
+      render();
+    }
+
+    document.body.addEventListener("click", (ev) => {
+      const sc = ev.target.closest("[data-s]");
+      if (sc) return applyScene(sc.dataset.s);
+      const e = ev.target.closest("[data-e]");
+      if (e) { emp = e.dataset.e; tab = "cards"; scene = "roster"; render(); return; }
+      const tb = ev.target.closest("[data-t]");
+      if (tb) { tab = tb.dataset.t; render(); return; }
+      const tr = ev.target.closest("[data-task]");
+      if (tr) { taskId = tr.dataset.task; render(); return; }
+      if (ev.target.id === "claimBtn") {
+        claimed = true;
+        toast = "认领锁生效：第二人 claim 失败。";
+        render();
+        return;
+      }
+      if (ev.target.id === "rej") {
+        const t = tasks.find((x) => x.id === taskId);
+        t.state = "rejected";
+        toast = "reject 已写 org_task_events，工作流 snapshot 保留。";
+        render();
+        return;
+      }
+      if (ev.target.id === "toWork") {
+        const t = tasks.find((x) => x.id === taskId);
+        t.state = "working";
+        render();
+        return;
+      }
+      if (ev.target.id === "newId") {
+        toast = "重做必须新 taskId，旧终态不复活。";
+        render();
+      }
+    });
+
+    applyScene("roster");
+  </script>
+</body>
+</html>

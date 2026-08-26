@@ -1,4 +1,4 @@
-import { Input, Segmented, Switch, message } from "antd";
+import { Input, Progress, Segmented, Switch, message } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { WISE_BROWSE_SESSION_EXAMPLES, type StagehandStartOptions } from "../../services/stagehandBrowse";
 import type { useStagehandBrowse } from "../../hooks/useStagehandBrowse";
@@ -29,7 +29,8 @@ export function BrowserAutomationPanel({
     automation.status === "starting" ||
     automation.status === "stopping";
   const inputsDisabled = disabled || automation.busy || automation.status === "stopping";
-  const needInstall = !automation.probe?.cliAvailable || !automation.probe?.sidecarReady;
+  const allReady = automation.readiness.length > 0 && automation.readiness.every((item) => item.ok);
+  const latest = automation.latestReport;
 
   return (
     <div className="app-run-command-popover__content app-browser-automation-popover__content">
@@ -67,46 +68,60 @@ export function BrowserAutomationPanel({
         </HoverHint>
       </header>
 
-      <section className="app-run-command-popover__section app-run-command-popover__section--form">
-        <p className="app-page-monitor-popover__attach-hint">
-          操作入口在会话输入框。点下面的示例可复制，发送后助手会调用 <code>wise browse</code>。
-        </p>
-        <div className="app-browser-automation-popover__examples">
-          {WISE_BROWSE_SESSION_EXAMPLES.map((item) => (
-            <button
-              key={item.text}
-              type="button"
-              className="app-browser-automation-popover__chip"
-              onClick={() => void copyExample(item.text)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-        <ul className="app-browser-automation-popover__ready">
-          {automation.readiness.map((item) => (
-            <li key={item.id}>
-              <span
-                className={
-                  item.ok
-                    ? "app-browser-automation-popover__ready-ok"
-                    : "app-browser-automation-popover__ready-miss"
-                }
+      <div className="app-browser-automation-popover__body">
+        {!allReady ? (
+          <section className="app-run-command-popover__section app-browser-automation-popover__install">
+            <div className="app-browser-automation-popover__install-copy">
+              <strong>一键安装 wise browse</strong>
+              <p>安装 Stagehand 运行时、CLI 与会话 Skill，并把 ~/.wise/bin 写入 PATH。</p>
+            </div>
+            {automation.busy ? (
+              <div className="app-browser-automation-popover__install-progress">
+                <Progress size="small" status="active" showInfo={false} />
+                <span>正在安装…</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="app-run-command-popover__btn app-run-command-popover__btn--primary"
+                onClick={() => void automation.installCli()}
+                disabled={disabled}
               >
-                {item.ok ? "就绪" : "待办"}
-              </span>
-              <span className="app-browser-automation-popover__ready-label">{item.label}</span>
-              <span className="app-browser-automation-popover__ready-detail" title={item.detail}>
-                {item.detail}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <div className="app-run-command-popover__row app-page-monitor-popover__mode-row">
-          <span className="app-run-command-popover__field-label">环境</span>
-          <div className="app-run-command-popover__profile-switch">
+                一键安装
+              </button>
+            )}
+          </section>
+        ) : null}
+
+        <section className="app-run-command-popover__section app-browser-automation-popover__section">
+          <div className="app-browser-automation-popover__section-head">
+            <span className="app-browser-automation-popover__section-title">会话示例</span>
+            <span className="app-browser-automation-popover__section-note">点击复制后发到输入框</span>
+          </div>
+          <div className="app-browser-automation-popover__examples">
+            {WISE_BROWSE_SESSION_EXAMPLES.map((item) => (
+              <button
+                key={item.text}
+                type="button"
+                className="app-browser-automation-popover__chip"
+                title={item.text}
+                onClick={() => void copyExample(item.text)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="app-run-command-popover__section app-run-command-popover__section--form">
+          <div className="app-browser-automation-popover__section-head">
+            <span className="app-browser-automation-popover__section-title">运行环境</span>
+          </div>
+          <div className="app-run-command-popover__row">
+            <span className="app-run-command-popover__field-label">环境</span>
             <Segmented
               size="small"
+              block
               value={automation.env ?? "local"}
               disabled={inputsDisabled}
               onChange={(value) => automation.setEnv(String(value) as StagehandStartOptions["env"])}
@@ -116,6 +131,9 @@ export function BrowserAutomationPanel({
                 { label: "调试口", value: "cdp" },
               ]}
             />
+          </div>
+          <div className="app-run-command-popover__row">
+            <span className="app-run-command-popover__field-label">窗口</span>
             <label className="app-browser-automation-popover__headed">
               <Switch
                 size="small"
@@ -123,111 +141,165 @@ export function BrowserAutomationPanel({
                 disabled={inputsDisabled}
                 onChange={automation.setHeaded}
               />
-              显示窗口
+              显示浏览器窗口
             </label>
           </div>
-        </div>
-        <div className="app-run-command-popover__row">
-          <span className="app-run-command-popover__field-label">默认网址</span>
-          <Input
-            size="small"
-            value={automation.urlDraft}
-            onChange={(event) => automation.setUrlDraft(event.target.value)}
-            placeholder="https://www.google.com 或 谷歌"
-            disabled={inputsDisabled}
-          />
-        </div>
-        {automation.env === "cdp" ? (
           <div className="app-run-command-popover__row">
-            <span className="app-run-command-popover__field-label">调试口</span>
+            <span className="app-run-command-popover__field-label">默认网址</span>
             <Input
               size="small"
-              value={automation.cdpUrl}
-              onChange={(event) => automation.setCdpUrl(event.target.value)}
-              placeholder="9222 或 ws://127.0.0.1:9222/..."
+              value={automation.urlDraft}
+              onChange={(event) => automation.setUrlDraft(event.target.value)}
+              placeholder="https://www.google.com 或 谷歌"
               disabled={inputsDisabled}
             />
           </div>
-        ) : null}
-        <button
-          type="button"
-          className="app-browser-automation-popover__advanced-toggle"
-          onClick={() => automation.setAdvancedOpen(!automation.advancedOpen)}
-        >
-          {automation.advancedOpen ? "收起高级设置" : "高级设置（模型 / 密钥）"}
-        </button>
-        {automation.advancedOpen ? (
-          <>
+          {automation.env === "cdp" ? (
             <div className="app-run-command-popover__row">
-              <span className="app-run-command-popover__field-label">模型</span>
+              <span className="app-run-command-popover__field-label">调试口</span>
               <Input
                 size="small"
-                value={automation.model}
-                onChange={(event) => automation.setModel(event.target.value)}
-                placeholder="openai/gpt-4.1 或 anthropic/claude-sonnet-4-5"
+                value={automation.cdpUrl}
+                onChange={(event) => automation.setCdpUrl(event.target.value)}
+                placeholder="9222 或 ws://127.0.0.1:9222/..."
                 disabled={inputsDisabled}
               />
             </div>
-            <div className="app-run-command-popover__row">
-              <span className="app-run-command-popover__field-label">模型密钥</span>
-              <Input.Password
-                size="small"
-                value={automation.modelApiKey}
-                onChange={(event) => automation.setModelApiKey(event.target.value)}
-                placeholder="用于 Act / Extract / Observe"
-                disabled={inputsDisabled}
-              />
-            </div>
-            {automation.env === "browserbase" || !automation.probe?.hasBrowserbaseKey ? (
+          ) : null}
+          <button
+            type="button"
+            className="app-browser-automation-popover__advanced-row"
+            onClick={() => automation.setAdvancedOpen(!automation.advancedOpen)}
+          >
+            <span className="app-run-command-popover__field-label">高级</span>
+            <span className="app-browser-automation-popover__advanced-copy">
+              模型 / 密钥
+              <span className="app-browser-automation-popover__advanced-action">
+                {automation.advancedOpen ? "收起" : "展开"}
+              </span>
+            </span>
+          </button>
+          {automation.advancedOpen ? (
+            <>
               <div className="app-run-command-popover__row">
-                <span className="app-run-command-popover__field-label">云密钥</span>
-                <Input.Password
+                <span className="app-run-command-popover__field-label">模型</span>
+                <Input
                   size="small"
-                  value={automation.browserbaseApiKey}
-                  onChange={(event) => automation.setBrowserbaseApiKey(event.target.value)}
-                  placeholder="BROWSERBASE_API_KEY"
+                  value={automation.model}
+                  onChange={(event) => automation.setModel(event.target.value)}
+                  placeholder="openai/gpt-4.1 或 anthropic/claude-sonnet-4-5"
                   disabled={inputsDisabled}
                 />
               </div>
-            ) : null}
-          </>
-        ) : null}
-        <p className="app-page-monitor-popover__attach-hint">{automation.probeHint}</p>
-      </section>
-
-      <section className="app-run-command-popover__section app-run-command-popover__section--dock">
-        <div className="app-run-command-popover__dock">
-          <div className="app-run-command-popover__dock-row">
-            <span className="app-run-command-popover__dock-label">后台浏览器</span>
-            <span className="app-browser-automation-popover__page" title={automation.pageUrl ?? ""}>
-              {running
-                ? automation.pageTitle || automation.pageUrl || automation.statusHint
-                : "未启动（会话里第一次操作时会自动打开）"}
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {automation.logs.length > 0 ? (
-        <section className="app-run-command-popover__section app-run-command-popover__section--logs">
-          <div className="app-run-command-popover__logs">
-            {automation.logs.slice(-4).map((line) => (
-              <div
-                key={`${line.at}-${line.kind}`}
-                className={`app-run-command-popover__log-line${
-                  line.kind === "error"
-                    ? " app-run-command-popover__log-line--error"
-                    : line.kind === "info"
-                      ? " app-run-command-popover__log-line--info"
-                      : ""
-                }`}
-              >
-                <pre className="app-browser-automation-popover__log">{line.text}</pre>
+              <div className="app-run-command-popover__row">
+                <span className="app-run-command-popover__field-label">模型密钥</span>
+                <Input.Password
+                  size="small"
+                  value={automation.modelApiKey}
+                  onChange={(event) => automation.setModelApiKey(event.target.value)}
+                  placeholder="用于 Act / Extract / Observe"
+                  disabled={inputsDisabled}
+                />
               </div>
-            ))}
-          </div>
+              {automation.env === "browserbase" || !automation.probe?.hasBrowserbaseKey ? (
+                <div className="app-run-command-popover__row">
+                  <span className="app-run-command-popover__field-label">云密钥</span>
+                  <Input.Password
+                    size="small"
+                    value={automation.browserbaseApiKey}
+                    onChange={(event) => automation.setBrowserbaseApiKey(event.target.value)}
+                    placeholder="BROWSERBASE_API_KEY"
+                    disabled={inputsDisabled}
+                  />
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </section>
-      ) : null}
+
+        <section className="app-run-command-popover__section app-browser-automation-popover__section--status">
+          <div className="app-browser-automation-popover__section-head">
+            <span className="app-browser-automation-popover__section-title">状态</span>
+          </div>
+          <div className="app-run-command-popover__dock">
+            <div className="app-run-command-popover__dock-row">
+              <span className="app-run-command-popover__dock-label">就绪</span>
+              <div className="app-browser-automation-popover__ready-strip">
+                {automation.readiness.map((item) => (
+                  <span
+                    key={item.id}
+                    className={
+                      "app-browser-automation-popover__ready-pill" +
+                      (item.ok ? " is-ok" : " is-miss")
+                    }
+                    title={item.detail}
+                  >
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="app-run-command-popover__dock-row">
+              <span className="app-run-command-popover__dock-label">验收</span>
+              {latest?.found ? (
+                <div className="app-browser-automation-popover__report-body">
+                  <span
+                    className={
+                      latest.passed
+                        ? "app-browser-automation-popover__ready-ok"
+                        : "app-browser-automation-popover__ready-miss"
+                    }
+                  >
+                    {latest.passed ? "通过" : "未通过"}
+                  </span>
+                  <span
+                    className="app-browser-automation-popover__report-summary"
+                    title={latest.summary ?? ""}
+                  >
+                    {latest.name || "browser-accept"}
+                    {latest.summary ? ` · ${latest.summary}` : ""}
+                    {latest.durationMs ? ` · ${latest.durationMs}ms` : ""}
+                  </span>
+                </div>
+              ) : (
+                <span className="app-browser-automation-popover__page">还没有报告</span>
+              )}
+            </div>
+            <div className="app-run-command-popover__dock-row">
+              <span className="app-run-command-popover__dock-label">浏览器</span>
+              <span className="app-browser-automation-popover__page" title={automation.pageUrl ?? ""}>
+                {running
+                  ? automation.pageTitle || automation.pageUrl || automation.statusHint
+                  : "未启动，首次操作时自动打开"}
+              </span>
+            </div>
+          </div>
+          {!allReady ? (
+            <p className="app-browser-automation-popover__status-hint">{automation.probeHint}</p>
+          ) : null}
+        </section>
+
+        {automation.logs.length > 0 ? (
+          <section className="app-run-command-popover__section app-run-command-popover__section--logs">
+            <div className="app-run-command-popover__logs">
+              {automation.logs.slice(-4).map((line) => (
+                <div
+                  key={`${line.at}-${line.kind}`}
+                  className={`app-run-command-popover__log-line${
+                    line.kind === "error"
+                      ? " app-run-command-popover__log-line--error"
+                      : line.kind === "info"
+                        ? " app-run-command-popover__log-line--info"
+                        : ""
+                  }`}
+                >
+                  <pre className="app-browser-automation-popover__log">{line.text}</pre>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+      </div>
 
       <footer className="app-run-command-popover__footer">
         <button
@@ -244,7 +316,7 @@ export function BrowserAutomationPanel({
             onClick={() => void automation.installCli()}
             disabled={disabled || automation.busy}
           >
-            {automation.busy ? "安装中…" : needInstall ? "安装 CLI" : "重新安装"}
+            {automation.busy ? "安装中…" : allReady ? "重新安装" : "一键安装"}
           </button>
           {running ? (
             <button
@@ -258,11 +330,14 @@ export function BrowserAutomationPanel({
           ) : null}
           <button
             type="button"
-            className="app-run-command-popover__btn app-run-command-popover__btn--primary app-run-command-popover__btn--footer-main"
+            className={
+              "app-run-command-popover__btn app-run-command-popover__btn--footer-main" +
+              (allReady ? " app-run-command-popover__btn--primary" : "")
+            }
             onClick={() => void automation.saveConfig()}
             disabled={disabled || automation.busy}
           >
-            {automation.busy ? "保存中…" : automation.dirty ? "保存配置" : "保存配置"}
+            {automation.busy ? "保存中…" : "保存配置"}
           </button>
         </div>
       </footer>

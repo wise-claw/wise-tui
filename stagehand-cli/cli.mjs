@@ -6,7 +6,7 @@
  * - `--daemon`: unix-socket JSON-lines server sharing one browser session.
  */
 import { createInterface } from "node:readline";
-import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
+import { mkdir, readFile, writeFile, unlink, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -15,6 +15,17 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { parseWiseBrowseArgv, WISE_BROWSE_HELP, formatCliOutput, resolveBrowseUrl } from "./argv.mjs";
+import {
+  evaluateCompare,
+  evaluateState,
+  interpretExpectPayload,
+  parseSuiteDocument,
+  buildSuiteReport,
+  isAssertionFailure,
+  formatMarkdownReport,
+  summarizeLatestPointer,
+  DEFAULT_ACCEPT_SUITE,
+} from "./assert.mjs";
 
 /** @type {null | { kind: "v3" | "v4"; stagehand: any; browser?: any; pageIndex: number; model?: string }} */
 let session = null;
@@ -243,6 +254,49 @@ async function getField(params) {
   throw new Error(`不支持的 get 字段：${field}`);
 }
 
+async function runAssert(params = {}) {
+  const spec = params.spec && typeof params.spec === "object" ? params.spec : params;
+  const kind = spec.kind || (spec.state && spec.target && !spec.field ? "state" : "compare");
+  if (kind === "state") {
+    const state = String(spec.state ?? "visible");
+    const probeState = state === "checked" ? "checked" : "visible";
+    const result = await dispatch("is", { state: probeState, target: spec.target });
+    const actual = Boolean(result?.value);
+    return { ...evaluateState({ state, actual }), spec: { kind: "state", state, target: spec.target } };
+  }
+  const field = String(spec.field ?? "text");
+  const got = await getField({ field, target: spec.target });
+  return {
+    ...evaluateCompare(got?.value, spec.op || "contains", spec.value),
+    spec: { kind: "compare", field, op: spec.op || "contains", value: spec.value, target: spec.target },
+    field,
+  };
+}
+
+async function runExpect(params = {}) {
+  const instruction = String(params.instruction ?? "").trim();
+  if (!instruction) throw new Error("expect 指令不能为空");
+  const extracted = await extractData({
+    instruction: `判断当前页面是否满足以下验收条件，只根据页面可见内容回答：${instruction}`,
+    schema: {
+      type: "object",
+      properties: {
+        passed: { type: "boolean", description: "是否满足条件" },
+        reason: { type: "string", description: "判断理由" },
+      },
+      required: ["passed", "reason"],
+    },
+  });
+  const judged = interpretExpectPayload(extracted);
+  return {
+    passed: judged.passed,
+    reason: judged.reason,
+    message: judged.passed ? `通过：${instruction}` : `失败：${instruction}${judged.reason ? `。${judged.reason}` : ""}`,
+    instruction,
+    actual: judged.actual,
+  };
+}
+
 async function dispatch(method, params = {}) {
   switch (method) {
     case "ping":
@@ -357,6 +411,10 @@ async function dispatch(method, params = {}) {
       if (params.state === "checked") return { value: await callFirst(loc, ["isChecked"], []) };
       return { value: await callFirst(loc, ["isVisible", "visible"], []) };
     }
+    case "assert":
+      return await runAssert(params);
+    case "expect":
+      return await runExpect(params);
     case "evaluate": {
       const page = await activePage();
       const expression = String(params.expression ?? "");
@@ -759,6 +817,229 @@ async function ensureSession(parsed) {
   }
 }
 
+async function loadSuiteFromParsed(parsed) {
+  if (parsed.suite) return parsed.suite;
+  const file = String(parsed.file ?? "").trim();
+  if (!file) {
+    throw new Error("accept / test 需要 --file 套件或 --check 列表");
+  }
+  const raw = await readFile(file, "utf8");
+  const suite = parseSuiteDocument(JSON.parse(raw));
+  if (parsed.url && suite.steps[0]?.action !== "open") {
+    suite.steps.unshift({
+      id: "open-cli",
+      action: "open",
+      url: parsed.url,
+      label: `打开 ${parsed.url}`,
+    });
+  }
+  if (parsed.screenshotOnFail === false) suite.screenshotOnFail = false;
+  if (parsed.stopOnFail === true) suite.stopOnFail = true;
+  if (parsed.name) suite.name = parsed.name;
+  if (Number.isFinite(Number(parsed.retries))) suite.retries = Math.max(0, Number(parsed.retries));
+  return suite;
+}
+
+async function executeSuiteStep(step) {
+  const item = {
+    id: step.id,
+    action: step.action,
+    label: step.label,
+    passed: true,
+    message: "",
+    soft: step.soft === true,
+  };
+  if (step.action === "open") {
+    const url = resolveBrowseUrl(step.url) || step.url;
+    await callDaemon("open", { url });
+    item.message = `已打开 ${url}`;
+    return item;
+  }
+  if (step.action === "wait") {
+    if (step.target) {
+      await callDaemon("waitSelector", {
+        target: step.target,
+        state: step.state || "visible",
+        timeout: step.ms || undefined,
+      });
+      item.message = `已等待 ${step.target}`;
+    } else {
+      const ms = Number(step.ms) || 1000;
+      await callDaemon("waitTimeout", { ms });
+      item.message = `已等待 ${ms}ms`;
+    }
+    return item;
+  }
+  if (step.action === "screenshot") {
+    const shot = await callDaemon("screenshot", {
+      fullPage: step.fullPage !== false,
+      path: step.path,
+    });
+    item.message = shot?.path ? `截图 ${shot.path}` : "已截图";
+    item.screenshot = shot?.path ?? shot;
+    return item;
+  }
+  if (step.action === "act") {
+    await callDaemon("act", { instruction: step.instruction });
+    item.message = `已操作：${step.instruction}`;
+    return item;
+  }
+  if (step.action === "expect") {
+    const result = await callDaemon("expect", { instruction: step.instruction });
+    return { ...item, ...result, passed: result.passed !== false, soft: step.soft === true };
+  }
+  if (step.action === "assert") {
+    const result = await callDaemon("assert", step.spec);
+    return { ...item, ...result, passed: result.passed !== false, soft: step.soft === true };
+  }
+  throw new Error(`未知步骤：${step.action}`);
+}
+
+async function runSuiteStep(step, suiteRetries) {
+  const retries = Number.isFinite(Number(step.retries))
+    ? Math.max(0, Number(step.retries))
+    : Math.max(0, Number(suiteRetries) || 0);
+  let last = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const started = Date.now();
+    try {
+      last = await executeSuiteStep(step);
+    } catch (error) {
+      last = {
+        id: step.id,
+        action: step.action,
+        label: step.label,
+        passed: false,
+        message: String(error?.message ?? error),
+        soft: step.soft === true,
+      };
+    }
+    last.durationMs = Date.now() - started;
+    last.attempt = attempt + 1;
+    if (last.passed !== false) return last;
+    if (attempt < retries) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  }
+  return last;
+}
+
+async function writeSuiteArtifacts(report) {
+  const dir = path.join(automationDir(), "reports");
+  await mkdir(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const jsonPath = path.join(dir, `${stamp}-${report.kind}.json`);
+  const mdPath = path.join(dir, `${stamp}-${report.kind}.md`);
+  report.reportPath = jsonPath;
+  report.markdownPath = mdPath;
+  await writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  await writeFile(mdPath, formatMarkdownReport(report), "utf8");
+  await writeFile(
+    path.join(dir, "latest.json"),
+    `${JSON.stringify(summarizeLatestPointer(report), null, 2)}\n`,
+    "utf8",
+  );
+  return report;
+}
+
+async function runSuiteCli(parsed) {
+  const suite = await loadSuiteFromParsed(parsed);
+  await ensureDaemon();
+  await ensureSession({
+    needsSession: true,
+    method: suite.steps[0]?.action === "open" ? "open" : "assert",
+  });
+  const results = [];
+  for (const step of suite.steps) {
+    const item = await runSuiteStep(step, suite.retries);
+    if (item.passed === false && suite.screenshotOnFail && !item.screenshot) {
+      try {
+        const shot = await callDaemon("screenshot", { fullPage: true });
+        item.screenshot = shot?.path ?? shot;
+      } catch {
+        // evidence is best-effort
+      }
+    }
+    results.push(item);
+    const hardFail = item.passed === false && item.soft !== true;
+    if (hardFail && suite.stopOnFail) break;
+  }
+  const report = buildSuiteReport({
+    kind: parsed.suiteKind,
+    name: suite.name,
+    results,
+    screenshotOnFail: suite.screenshotOnFail,
+  });
+  try {
+    await writeSuiteArtifacts(report);
+  } catch {
+    // report file is optional if home is not writable
+  }
+  process.stdout.write(`${JSON.stringify(formatCliOutput(parsed.suiteKind, report), null, 2)}\n`);
+  if (!report.passed) process.exitCode = 1;
+}
+
+async function runReportCli(parsed) {
+  const dir = path.join(automationDir(), "reports");
+  if (parsed.action === "list") {
+    const names = await readdir(dir).catch(() => []);
+    const jsons = names
+      .filter((name) => name.endsWith(".json") && name !== "latest.json")
+      .sort()
+      .reverse()
+      .slice(0, 20);
+    const items = [];
+    for (const name of jsons) {
+      try {
+        const report = JSON.parse(await readFile(path.join(dir, name), "utf8"));
+        items.push({
+          name: report.name,
+          passed: report.passed,
+          summary: report.summary,
+          at: report.at,
+          path: path.join(dir, name),
+        });
+      } catch {
+        // skip unreadable reports
+      }
+    }
+    process.stdout.write(
+      `${JSON.stringify(formatCliOutput("report", { action: "list", count: items.length, items }), null, 2)}\n`,
+    );
+    return;
+  }
+  const pointerPath = path.join(dir, "latest.json");
+  try {
+    const pointer = JSON.parse(await readFile(pointerPath, "utf8"));
+    let report = pointer;
+    if (pointer.jsonPath) {
+      try {
+        report = { ...JSON.parse(await readFile(pointer.jsonPath, "utf8")), ...pointer };
+      } catch {
+        // pointer is enough for the summary
+      }
+    }
+    process.stdout.write(`${JSON.stringify(formatCliOutput("report", { found: true, ...report }), null, 2)}\n`);
+    if (report.passed === false) process.exitCode = 1;
+  } catch {
+    process.stdout.write(
+      `${JSON.stringify(formatCliOutput("report", { found: false, summary: "还没有验收报告" }), null, 2)}\n`,
+    );
+  }
+}
+
+async function runInitCli(parsed) {
+  const file = path.resolve(String(parsed.file || "login.accept.json"));
+  if (existsSync(file) && parsed.force !== true) {
+    throw new Error(`套件已存在：${file}。加 --force 覆盖`);
+  }
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify(DEFAULT_ACCEPT_SUITE, null, 2)}\n`, "utf8");
+  process.stdout.write(
+    `${JSON.stringify(formatCliOutput("init", { path: file, name: DEFAULT_ACCEPT_SUITE.name }), null, 2)}\n`,
+  );
+}
+
 async function runCli(argv) {
   const parsed = parseWiseBrowseArgv(argv);
   if (parsed.kind === "help") {
@@ -774,6 +1055,18 @@ async function runCli(argv) {
   }
   if (parsed.kind === "browse") {
     await runBrowsePassthrough(parsed.args);
+    return;
+  }
+  if (parsed.kind === "suite") {
+    await runSuiteCli(parsed);
+    return;
+  }
+  if (parsed.kind === "report") {
+    await runReportCli(parsed);
+    return;
+  }
+  if (parsed.kind === "init") {
+    await runInitCli(parsed);
     return;
   }
   const skipDaemon = parsed.method === "status" || parsed.method === "stop" || parsed.method === "ping";
@@ -801,6 +1094,9 @@ async function runCli(argv) {
     page = await callDaemon("status", {}).catch(() => null);
   }
   process.stdout.write(`${JSON.stringify(formatCliOutput(parsed.method, result, page), null, 2)}\n`);
+  if ((parsed.method === "assert" || parsed.method === "expect") && isAssertionFailure(result)) {
+    process.exitCode = 1;
+  }
   if (parsed.method === "stop") {
     const pid = await readDaemonPid();
     if (isPidAlive(pid)) {

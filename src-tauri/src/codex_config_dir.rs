@@ -238,6 +238,130 @@ fn is_top_level_model_assignment(trimmed: &str) -> bool {
     }
 }
 
+/// Codex 官方目录模型（GPT / o 系列），应走 OpenAI 默认 provider，不能套用 DeepSeek 等自定义档案。
+pub(crate) fn looks_like_openai_catalog_model(model: &str) -> bool {
+    let m = model.trim().to_lowercase();
+    !m.is_empty()
+        && (m.starts_with("gpt-")
+            || m.starts_with("o1")
+            || m.starts_with("o3")
+            || m.starts_with("o4")
+            || m.starts_with("chatgpt")
+            || m.starts_with("codex-"))
+}
+
+fn read_top_level_toml_string(config: &str, key: &str) -> Option<String> {
+    for line in config.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if trimmed.starts_with('[') {
+            break;
+        }
+        let Some((k, v)) = trimmed.split_once('=') else {
+            continue;
+        };
+        if k.trim() != key {
+            continue;
+        }
+        let unquoted = v
+            .trim()
+            .trim_end_matches(|c| c == ',' || c == '#')
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .trim();
+        if unquoted.is_empty() {
+            return None;
+        }
+        return Some(unquoted.to_string());
+    }
+    None
+}
+
+/// 档案是否把请求打到非 OpenAI 的自定义 provider（DeepSeek / 火山等）。
+pub(crate) fn codex_config_uses_custom_provider(config: &str) -> bool {
+    let lower = config.to_lowercase();
+    const MARKERS: &[&str] = &[
+        "deepseek.com",
+        "volces.com",
+        "volcengine.com",
+        "dashscope.aliyuncs.com",
+        "api.minimax.chat",
+        "api.moonshot.cn",
+        "openrouter.ai",
+        "api.together.xyz",
+        "siliconflow.cn",
+        "bigmodel.cn",
+    ];
+    if MARKERS.iter().any(|marker| lower.contains(marker)) {
+        return true;
+    }
+    match read_top_level_toml_string(config, "model_provider") {
+        Some(provider) => {
+            let p = provider.trim().to_lowercase();
+            !p.is_empty() && p != "openai" && p != "chatgpt"
+        }
+        None => false,
+    }
+}
+
+/// 去掉顶层 `model_provider = ...`，让 Codex 回退 OpenAI 默认 provider。
+pub(crate) fn strip_top_level_model_provider(config: &str) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    let mut in_table = false;
+    for line in config.lines() {
+        let trimmed = line.trim();
+        if !in_table && trimmed.starts_with('[') {
+            in_table = true;
+        }
+        if !in_table {
+            if let Some((k, _)) = trimmed.split_once('=') {
+                if k.trim() == "model_provider" {
+                    continue;
+                }
+            }
+        }
+        lines.push(line.to_string());
+    }
+    let mut out = lines.join("\n");
+    if config.ends_with('\n') && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out
+}
+
+/// 只改磁盘 `config.toml` 的顶层 `model`，保留当前 provider / 其它配置。
+pub(crate) fn patch_codex_disk_model(model: &str) -> Result<(), String> {
+    let trimmed = model.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    let current = read_codex_profile_envelope();
+    let patched = patch_codex_config_model(&current.config, trimmed);
+    if patched == current.config {
+        return Ok(());
+    }
+    write_config_toml(&patched)?;
+    warm_codex_disk_cache(&CodexProfileEnvelope {
+        auth: current.auth,
+        config: patched,
+    })
+}
+
+/// 去掉自定义 `model_provider` 并把模型改成目录模型，避免 GPT 请求打到 DeepSeek。
+pub(crate) fn restore_codex_openai_provider_for_model(model: &str) -> Result<(), String> {
+    let current = read_codex_profile_envelope();
+    let stripped = strip_top_level_model_provider(&current.config);
+    let patched = patch_codex_config_model(&stripped, model.trim());
+    write_config_toml(&patched)?;
+    warm_codex_disk_cache(&CodexProfileEnvelope {
+        auth: current.auth,
+        config: patched,
+    })
+}
+
 /// 解析顶层（首个 `[section]` 之前）所有 `model =` 行：保留最后一行的值，删除其它重复。
 /// 返回去重后的文本以及最终保留的 model 值（若存在）。
 pub fn dedupe_top_level_model_lines(config: &str) -> (String, Option<String>) {
@@ -291,13 +415,166 @@ fn extract_model_value(line: &str) -> Option<String> {
     }
 }
 
+/// ChatGPT 登录态字段。API key 档案若残留这些键，Codex 会优先刷新 ChatGPT token，
+/// 失败后报 `logged out` / `no_biscuit_no_service`，并拉起 `codex_apps` MCP。
+const CHATGPT_SESSION_AUTH_KEYS: &[&str] = &[
+    "tokens",
+    "last_refresh",
+    "lastRefresh",
+    "account_id",
+    "chatgpt_account_id",
+];
+
+fn overlay_is_apikey_auth(overlay: &Map<String, Value>) -> bool {
+    overlay
+        .get("auth_mode")
+        .and_then(Value::as_str)
+        .map(|s| s.eq_ignore_ascii_case("apikey"))
+        .unwrap_or(false)
+}
+
 /// 仅按 envelope 中存在的 key 覆盖 current.auth；其他键（用户自定）保留。
+/// API key 档案会清掉 ChatGPT session，避免 RPC 继续走过期 OAuth。
 fn merge_auth_maps(current: &Map<String, Value>, overlay: &Map<String, Value>) -> Map<String, Value> {
     let mut out = current.clone();
     for (k, v) in overlay {
         out.insert(k.clone(), v.clone());
     }
+    if overlay_is_apikey_auth(overlay) {
+        for key in CHATGPT_SESSION_AUTH_KEYS {
+            out.remove(*key);
+        }
+    }
     out
+}
+
+fn is_projects_table_header(trimmed: &str) -> bool {
+    let name = trimmed
+        .trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim();
+    name == "projects" || name.starts_with("projects.")
+}
+
+fn extract_projects_tables(config: &str) -> String {
+    let mut out = String::new();
+    let mut capturing = false;
+    for line in config.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            capturing = is_projects_table_header(trimmed);
+        }
+        if capturing {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// 完整替换 provider 档案时保留 `[projects.*]`，否则每次切档案都会丢掉 trust_level。
+fn preserve_projects_tables(new_config: &str, current_config: &str) -> String {
+    if new_config.lines().any(|line| is_projects_table_header(line.trim())) {
+        return new_config.to_string();
+    }
+    let projects = extract_projects_tables(current_config);
+    if projects.trim().is_empty() {
+        return new_config.to_string();
+    }
+    let mut out = new_config.trim_end().to_string();
+    if !out.is_empty() {
+        out.push_str("\n\n");
+    }
+    out.push_str(projects.trim_end());
+    out.push('\n');
+    out
+}
+
+fn normalize_codex_project_trust_path(path: &str) -> String {
+    path.trim().trim_end_matches(['/', '\\']).to_string()
+}
+
+fn projects_table_header_for_path(path: &str) -> String {
+    let escaped = path.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("[projects.\"{escaped}\"]")
+}
+
+fn table_body_range(config: &str, header: &str) -> Option<(usize, usize)> {
+    let header_pos = config.find(header)?;
+    let after_header = header_pos + header.len();
+    let body_start = match config[after_header..].find('\n') {
+        Some(n) => after_header + n + 1,
+        None => return Some((after_header, config.len())),
+    };
+    let rest = &config[body_start..];
+    let body_end = rest
+        .find("\n[")
+        .map(|i| body_start + i)
+        .unwrap_or(config.len());
+    Some((body_start, body_end))
+}
+
+fn table_trusts_project(body: &str) -> bool {
+    body.lines().any(|line| {
+        let trimmed = line.trim();
+        trimmed.starts_with("trust_level")
+            && trimmed.contains("trusted")
+            && !trimmed.starts_with('#')
+    })
+}
+
+fn upsert_trusted_project_table(config: &str, project_path: &str) -> String {
+    let path = normalize_codex_project_trust_path(project_path);
+    if path.is_empty() {
+        return config.to_string();
+    }
+    let header = projects_table_header_for_path(&path);
+    if let Some((body_start, body_end)) = table_body_range(config, &header) {
+        let body = &config[body_start..body_end];
+        if table_trusts_project(body) {
+            return config.to_string();
+        }
+        let mut next = String::new();
+        next.push_str(&config[..body_start]);
+        next.push_str("trust_level = \"trusted\"\n");
+        let rest = body.trim_start_matches('\n');
+        if !rest.is_empty() {
+            next.push_str(rest);
+            if !rest.ends_with('\n') && body_end < config.len() {
+                next.push('\n');
+            }
+        }
+        next.push_str(&config[body_end..]);
+        return next;
+    }
+    let mut next = config.trim_end().to_string();
+    if !next.is_empty() {
+        next.push_str("\n\n");
+    }
+    next.push_str(&header);
+    next.push('\n');
+    next.push_str("trust_level = \"trusted\"\n");
+    next
+}
+
+/// 把仓库标为 Codex trusted project，使 `.codex/` 项目配置 / hooks 生效。
+pub fn ensure_codex_project_trusted(project_path: &str) -> Result<(), String> {
+    let path = normalize_codex_project_trust_path(project_path);
+    if path.is_empty() {
+        return Ok(());
+    }
+    let current = read_codex_profile_envelope();
+    let next_config = upsert_trusted_project_table(&current.config, &path);
+    if next_config == current.config {
+        return Ok(());
+    }
+    write_config_toml(&next_config)?;
+    let envelope = CodexProfileEnvelope {
+        auth: current.auth,
+        config: next_config,
+    };
+    warm_codex_disk_cache(&envelope)
 }
 
 fn apply_codex_profile_envelope_inner(envelope: &CodexProfileEnvelope) -> Result<(), String> {
@@ -313,14 +590,15 @@ fn apply_codex_profile_envelope_inner(envelope: &CodexProfileEnvelope) -> Result
     // 整体替换 config.toml，使新档案的 base_url / env_key 等真正生效；
     // 同时合并 auth.json，保留 current 中档案未提供的自定 key。
     if !is_model_only_codex_config(&envelope.config) {
-        write_config_toml(&envelope.config)?;
+        let merged_config = preserve_projects_tables(&envelope.config, &current.config);
+        write_config_toml(&merged_config)?;
         let merged_auth = merge_auth_maps(&current.auth, &envelope.auth);
         if !auth_maps_equal(&current.auth, &merged_auth) {
             write_auth_json(&merged_auth)?;
         }
         let merged = CodexProfileEnvelope {
             auth: merged_auth,
-            config: envelope.config.clone(),
+            config: merged_config,
         };
         return warm_codex_disk_cache(&merged);
     }
@@ -467,6 +745,33 @@ model_reasoning_effort = "medium"
     }
 
     #[test]
+    fn openai_catalog_model_heuristic() {
+        assert!(looks_like_openai_catalog_model("gpt-5.6"));
+        assert!(looks_like_openai_catalog_model("GPT-5.6-Luna"));
+        assert!(looks_like_openai_catalog_model("o3-mini"));
+        assert!(!looks_like_openai_catalog_model("deepseek-v4-flash"));
+        assert!(!looks_like_openai_catalog_model("minimax-m2.5"));
+    }
+
+    #[test]
+    fn custom_provider_detection_and_strip() {
+        let deepseek = r#"model = "deepseek-v4-flash"
+model_provider = "deepseek"
+
+[model_providers.deepseek]
+base_url = "https://api.deepseek.com/v1"
+"#;
+        assert!(codex_config_uses_custom_provider(deepseek));
+        let stripped = strip_top_level_model_provider(deepseek);
+        assert!(!stripped.contains("model_provider ="));
+        assert!(stripped.contains("[model_providers.deepseek]"));
+        assert!(!codex_config_uses_custom_provider("model = \"gpt-5.6\"\n"));
+        assert!(!codex_config_uses_custom_provider(
+            "model = \"gpt-5.6\"\nmodel_provider = \"openai\"\n"
+        ));
+    }
+
+    #[test]
     fn merge_auth_maps_preserves_user_keys() {
         let current: Map<String, Value> = serde_json::from_value(serde_json::json!({
             "OPENAI_API_KEY": "old-key",
@@ -484,6 +789,51 @@ model_reasoning_effort = "medium"
         // current 自定的 key 必须保留
         assert_eq!(merged["MY_TOKEN"].as_str(), Some("keep-me"));
         assert_eq!(merged["OPENAI_ORG_ID"].as_str(), Some("org-1"));
+    }
+
+    #[test]
+    fn merge_auth_maps_strips_chatgpt_session_when_applying_apikey_profile() {
+        let current: Map<String, Value> = serde_json::from_value(serde_json::json!({
+            "tokens": { "access_token": "expired", "refresh_token": "old" },
+            "last_refresh": "2024-01-01",
+            "OPENAI_API_KEY": "old-key"
+        }))
+        .expect("parse current");
+        let overlay: Map<String, Value> = serde_json::from_value(serde_json::json!({
+            "OPENAI_API_KEY": "sk-local",
+            "auth_mode": "apikey",
+            "tokens": { "access_token": "stale-clone" }
+        }))
+        .expect("parse overlay");
+        let merged = merge_auth_maps(&current, &overlay);
+        assert_eq!(merged["OPENAI_API_KEY"].as_str(), Some("sk-local"));
+        assert_eq!(merged["auth_mode"].as_str(), Some("apikey"));
+        assert!(merged.get("tokens").is_none());
+        assert!(merged.get("last_refresh").is_none());
+    }
+
+    #[test]
+    fn upsert_trusted_project_table_appends_and_is_idempotent() {
+        let config = "model = \"deepseek-v4-flash\"\n";
+        let once = upsert_trusted_project_table(config, "/Users/sjl/repo/");
+        assert!(once.contains("[projects.\"/Users/sjl/repo\"]"));
+        assert!(once.contains("trust_level = \"trusted\""));
+        let twice = upsert_trusted_project_table(&once, "/Users/sjl/repo");
+        assert_eq!(once.matches("trust_level = \"trusted\"").count(), 1);
+        assert_eq!(twice, once);
+    }
+
+    #[test]
+    fn preserve_projects_tables_keeps_trust_when_replacing_provider() {
+        let current = r#"model = "old"
+[projects."/Users/sjl/repo"]
+trust_level = "trusted"
+"#;
+        let incoming = "model = \"new\"\nmodel_provider = \"volc\"\n";
+        let merged = preserve_projects_tables(incoming, current);
+        assert!(merged.contains("model = \"new\""));
+        assert!(merged.contains("[projects.\"/Users/sjl/repo\"]"));
+        assert!(merged.contains("trust_level = \"trusted\""));
     }
 
     #[test]

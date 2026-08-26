@@ -58,6 +58,7 @@
       "resources/skills/officecli-pptx/SKILL.md",
       "resources/skills/wise-browse/SKILL.md",
       "../stagehand-cli/argv.mjs",
+      "../stagehand-cli/assert.mjs",
       "../examples/wise-extensions/hello-world",
       "../browser-extensions/wise-page-monitor",
       "../stagehand-cli/cli.mjs",
