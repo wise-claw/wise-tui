@@ -39,8 +39,10 @@ import { useCenterViewControl } from "./claudeChatHelpers";
 const SESSION_AUX_RAIL_DEFAULT_WIDTH_PX = 640;
 /** 与 index.css 的 `.app-claude-chat-aux-rail` min-width 保持一致。 */
 const SESSION_AUX_RAIL_MIN_WIDTH_PX = 480;
-/** 打开功能栏时仅补偿部分宽度，避免窗口变宽后消息区仍显得过宽。 */
-const SESSION_AUX_RAIL_WINDOW_DELTA_PX = 480;
+/** 右栏打开时中栏适度让出的宽度（避免消息区几乎不变、仍显得过宽）。 */
+const SESSION_AUX_RAIL_MIDDLE_SHRINK_PX = 320;
+/** 中栏最小可用宽度，与右栏拖拽 resize 的 460 下限保持一致。 */
+const SESSION_AUX_RAIL_MIDDLE_MIN_PX = 460;
 
 const ClaudeChatComposerTrayLazy = lazy(() =>
   import("./ClaudeChatComposerTray").then((module) => ({ default: module.ClaudeChatComposerTray })),
@@ -1860,8 +1862,27 @@ export function ClaudeChatInner({
 
   useEffect(() => {
     if (shouldExpandWindowForAuxRail && auxRailWindowDeltaRef.current === 0) {
-      auxRailWindowDeltaRef.current = SESSION_AUX_RAIL_WINDOW_DELTA_PX;
-      void adjustMainWindowLogicalWidthByDelta(SESSION_AUX_RAIL_WINDOW_DELTA_PX);
+      // 右栏打开时中栏适度收窄（默认让出 320px，但保留 460px 下限），
+      // 窗口只扩展补足差额；避免固定补 480px 时中栏几乎不变、消息区仍显得过宽。
+      const workbenchWidth = workbenchRef.current?.getBoundingClientRect().width ?? 0;
+      if (workbenchWidth <= 0) {
+        // 布局尚未测量：按旧固定扩展量兜底，避免算出过大的差额。
+        auxRailWindowDeltaRef.current = 480;
+        void adjustMainWindowLogicalWidthByDelta(480);
+        return;
+      }
+      const targetMiddleWidth = Math.max(
+        SESSION_AUX_RAIL_MIDDLE_MIN_PX,
+        workbenchWidth - SESSION_AUX_RAIL_MIDDLE_SHRINK_PX,
+      );
+      const delta = Math.max(
+        0,
+        targetMiddleWidth + SESSION_AUX_RAIL_DEFAULT_WIDTH_PX + 9 - workbenchWidth,
+      );
+      auxRailWindowDeltaRef.current = delta;
+      if (delta > 0) {
+        void adjustMainWindowLogicalWidthByDelta(delta);
+      }
       return;
     }
     if (!shouldExpandWindowForAuxRail && auxRailWindowDeltaRef.current > 0) {

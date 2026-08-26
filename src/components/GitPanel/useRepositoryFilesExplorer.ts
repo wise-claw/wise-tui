@@ -957,6 +957,17 @@ export function useRepositoryFilesExplorer({
           void copyText("绝对路径", abs);
         },
       },
+      {
+        key: "open-directory",
+        label: "打开目录",
+        disabled: !snap.isDir,
+        onClick: () => {
+          close();
+          void openInFinder(abs).catch((e) => {
+            message.error(`打开目录失败：${e instanceof Error ? e.message : String(e)}`);
+          });
+        },
+      },
       { type: "divider" },
       {
         key: "search-file",

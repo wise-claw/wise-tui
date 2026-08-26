@@ -20,8 +20,30 @@ mock.module("./claude", () => ({
   listClaudePluginCacheSkills: mock(async () => []),
   listClaudeProjectSkills: mock(async () => []),
   listClaudeSubagents: mock(async () => []),
-  listClaudeUserSkills: mock(async () => []),
+  listClaudeUserSkills: mock(async () => [
+    {
+      name: "claude-global-skill",
+      hasSkillMd: true,
+      description: "Claude user skill",
+      fileCount: 1,
+      skillScope: "user",
+      skillRootPath: "/Users/me/.claude/skills/claude-global-skill",
+    },
+  ]),
   runClaudeCliCommand: mock(async () => "ok"),
+}));
+
+mock.module("./codex", () => ({
+  listCodexUserSkills: mock(async () => [
+    {
+      name: "find-skills",
+      hasSkillMd: true,
+      description: "Discover installable agent skills",
+      fileCount: 2,
+      skillScope: "user",
+      skillRootPath: "/Users/me/.agents/skills/find-skills",
+    },
+  ]),
 }));
 
 mock.module("./claudePluginMarket", () => ({
@@ -97,6 +119,29 @@ describe("executeComposerLocalSlashCommand", () => {
     expect(bootstrap).not.toHaveBeenCalled();
     expect(install).toHaveBeenCalledWith("oh-my-claudecode@omc", "user", "/repo");
     expect(result).toContain("## ✅ 插件安装完成");
+  });
+
+  test("skills command lists codex user skills under codex engine", async () => {
+    const result = await executeComposerLocalSlashCommand(
+      { kind: "skills", raw: "/skills" },
+      {
+        sessionId: "s1",
+        repositoryPath: "/repo",
+        session: { executionEngine: "codex-rpc" } as never,
+      },
+    );
+    expect(result).toContain("【用户级 Codex Skills（~/.codex/skills 等）】");
+    expect(result).toContain("find-skills");
+    expect(result).not.toContain("【项目级 .claude/skills】");
+  });
+
+  test("skills command keeps claude user skills under claude engine", async () => {
+    const result = await executeComposerLocalSlashCommand(
+      { kind: "skills", raw: "/skills" },
+      { sessionId: "s1", repositoryPath: "/repo" },
+    );
+    expect(result).toContain("【用户级 ~/.claude/skills】");
+    expect(result).toContain("claude-global-skill");
   });
 
   test("formats session status", async () => {

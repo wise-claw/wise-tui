@@ -16,6 +16,7 @@ pub enum SkillSource {
 pub const DEFAULT_EXTERNAL_REL_PATHS: &[&str] = &[
     ".claude/skills",
     ".codex/skills",
+    ".agents/skills",
     ".gemini/skills",
     ".opencode/skills",
     ".goose/skills",
@@ -57,7 +58,8 @@ pub fn default_external_paths() -> Vec<PathBuf> {
 /// 2. Located under `<plugins>/cache/<plugin>/skills/` (Claude plugin
 ///    cache) → `Builtin`.
 /// 3. Located under `<repo>/.claude/skills/` (project skill) → `Custom`.
-/// 4. Located under `~/.claude/skills/` (user skill) → `Custom`.
+/// 4. Located under `~/.claude/skills/`、`~/.codex/skills/` 或 `~/.agents/skills/`
+///    (user skill) → `Custom`.
 /// 5. Anything else → `Custom` with `classified` = false (callers can
 ///    surface a diagnostic).
 ///
@@ -78,8 +80,17 @@ pub fn classify(path: &Path) -> (SkillSource, bool) {
         if normalized.starts_with(claude_user.join("plugins").join("cache")) {
             return (SkillSource::Builtin, true);
         }
+        if normalized.starts_with(home.join(".codex").join("skills")) {
+            return (SkillSource::Custom, true);
+        }
+        if normalized.starts_with(home.join(".agents").join("skills")) {
+            return (SkillSource::Custom, true);
+        }
     }
-    if path_contains_segment_pair(&normalized, ".claude", "skills") {
+    if path_contains_segment_pair(&normalized, ".claude", "skills")
+        || path_contains_segment_pair(&normalized, ".codex", "skills")
+        || path_contains_segment_pair(&normalized, ".agents", "skills")
+    {
         return (SkillSource::Custom, true);
     }
     (SkillSource::Custom, false)
@@ -201,6 +212,18 @@ mod tests {
         let (s, classified) = classify(&p);
         assert_eq!(s, SkillSource::Custom);
         assert!(classified);
+    }
+
+    #[test]
+    fn classify_path_under_codex_or_agents_user_skills_is_custom() {
+        let dir = tempdir().unwrap();
+        let codex = dir.path().join(".codex").join("skills").join("foo");
+        let agents = dir.path().join(".agents").join("skills").join("bar");
+        for p in [codex, agents] {
+            let (s, classified) = classify(&p);
+            assert_eq!(s, SkillSource::Custom);
+            assert!(classified);
+        }
     }
 
     #[test]

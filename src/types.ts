@@ -1088,7 +1088,11 @@ export interface ClaudeHookUpsertPayload {
   targetHandlerId?: string | null;
 }
 
-/** One skill folder under `{project}/.claude/skills/{name}/`，或来自 `~/.claude/plugins/cache` 下插件包。 */
+/**
+ * One skill folder under `{project}/.claude/skills/{name}/`、`~/.claude/skills`，
+ * 或来自 `~/.claude/plugins/cache` 下插件包；Codex 用户级全局技能
+ * （`~/.codex/skills`、`~/.agents/skills`、`$CODEX_HOME/skills`）复用同一行格式。
+ */
 export interface ClaudeProjectSkill {
   name: string;
   /** `skill` = 仓库 `.claude/skills/{name}/`；`command` = 仓库 `.claude/commands/` 下 Markdown 命令文件。 */

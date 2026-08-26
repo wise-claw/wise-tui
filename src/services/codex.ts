@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ClaudeProjectSkill } from "../types";
 
 export async function executeCodexCode(
   repositoryPath: string,
@@ -19,6 +20,11 @@ export async function executeCodexCode(
     codexResumeSessionId: normalizedResumeId,
     forceNewSession: forceNewSession === true,
   });
+}
+
+/** 枚举 Codex 用户级全局技能（`~/.codex/skills`、`~/.agents/skills`、`$CODEX_HOME/skills`）。 */
+export async function listCodexUserSkills(): Promise<ClaudeProjectSkill[]> {
+  return invoke<ClaudeProjectSkill[]>("list_codex_user_skills");
 }
 
 export async function executeCodexRpcCode(

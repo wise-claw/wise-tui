@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::claude_config_dir::user_claude_dir;
 use crate::codex_config_dir::{
     apply_codex_profile_envelope, codex_profile_envelope_to_json, effective_codex_model_from_disk,
-    parse_codex_profile_envelope, read_codex_user_settings_pretty,
+    clear_codex_user_config, parse_codex_profile_envelope, read_codex_user_settings_pretty,
     read_effective_codex_model_from_envelope, user_codex_dir,
 };
 use crate::opencode_config_dir::{
@@ -1063,6 +1063,15 @@ pub(crate) fn get_opencode_user_settings_json() -> Result<String, String> {
 
 #[tauri::command]
 pub(crate) fn get_codex_user_settings_json() -> Result<String, String> {
+    Ok(read_codex_user_settings_pretty())
+}
+
+/// 一键清空 Codex 用户级配置（auth.json / config.toml），返回清空后的 envelope JSON。
+/// `target` 为 "auth" / "config" 时只清空对应文件，其它值同时清空两者。
+#[tauri::command]
+pub(crate) fn clear_codex_user_settings(target: Option<String>) -> Result<String, String> {
+    let target = target.unwrap_or_default();
+    clear_codex_user_config(&target)?;
     Ok(read_codex_user_settings_pretty())
 }
 

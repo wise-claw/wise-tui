@@ -195,8 +195,10 @@ export function ComposerPlainEditSurface({
   }, []);
 
   useEffect(() => {
-    void loadSlashCatalog(repositoryPath?.trim() || null);
-  }, [repositoryPath]);
+    void loadSlashCatalog(repositoryPath?.trim() || null, {
+      executionEngine: sessionExecutionEngine,
+    });
+  }, [repositoryPath, sessionExecutionEngine]);
 
   const scheduleComposerSetContent = useCallback((plain: string, onAfterSet?: () => void) => {
     const normalized = normalizeComposerEditorPlain(plain);

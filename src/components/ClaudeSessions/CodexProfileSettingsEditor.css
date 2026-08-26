@@ -20,14 +20,33 @@
 
 .app-codex-profile-settings-editor__section-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.app-codex-profile-settings-editor__section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .app-codex-profile-settings-editor__section-hint {
   color: var(--ant-color-text-secondary);
   font-size: 11px;
+}
+
+.app-codex-profile-settings-editor__clear-btn {
+  height: 20px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 20px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-codex-profile-settings-editor__clear-btn:hover {
+  color: var(--ant-color-error);
 }
 
 .app-codex-profile-settings-editor__pane {

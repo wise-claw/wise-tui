@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, type MouseEvent } from "react";
+import { memo, useCallback, useMemo, useState, type MouseEvent } from "react";
 import { dispatchOpenRepositoryFile } from "../../constants/workflowUiEvents";
 import {
   getClaudeChatMessageScrollBridge,
@@ -8,6 +8,9 @@ import type { TurnFileChangeEntry } from "../../utils/turnFileChangeSummary";
 import { relativePathInRepository } from "../../utils/toolFileEditPreview";
 import { ExplorerTreeFileIcon } from "../GitPanel/explorerTreeChrome";
 import { useChatRepositoryPath } from "./chatRepositoryContext";
+
+/** 文件变更总结卡折叠展示上限：超过后默认只展示前 N 个，点击展开全部。 */
+const FILES_CHANGED_COLLAPSED_LIMIT = 8;
 
 function fileChangeStatsLabel(file: TurnFileChangeEntry): string {
   const parts: string[] = [];
@@ -25,6 +28,16 @@ function filesFingerprint(files: readonly TurnFileChangeEntry[]): string {
 export const TurnFilesChangedSummaryCard = memo(
   function TurnFilesChangedSummaryCard({ files }: { files: readonly TurnFileChangeEntry[] }) {
     const repositoryPath = useChatRepositoryPath();
+    const [expanded, setExpanded] = useState(false);
+
+    const hasMore = files.length > FILES_CHANGED_COLLAPSED_LIMIT;
+    const visibleFiles =
+      expanded || !hasMore ? files : files.slice(0, FILES_CHANGED_COLLAPSED_LIMIT);
+    const hiddenCount = files.length - FILES_CHANGED_COLLAPSED_LIMIT;
+
+    const toggleExpanded = useCallback(() => {
+      setExpanded((prev) => !prev);
+    }, []);
 
     const handleOpenFile = useCallback(
       (event: MouseEvent<HTMLButtonElement>, file: TurnFileChangeEntry) => {
@@ -52,12 +65,12 @@ export const TurnFilesChangedSummaryCard = memo(
     if (files.length === 0) return null;
 
     return (
-      <div className="app-turn-files-changed">
+      <div className={`app-turn-files-changed${hasMore ? " app-turn-files-changed--has-more" : ""}`}>
         <div className="app-turn-files-changed__head">
           <span className="app-turn-files-changed__title">{title}</span>
         </div>
         <ul className="app-turn-files-changed__list">
-          {files.map((file) => {
+          {visibleFiles.map((file) => {
             const canOpen =
               Boolean(repositoryPath) &&
               relativePathInRepository(repositoryPath ?? "", file.filePath) != null;
@@ -98,6 +111,26 @@ export const TurnFilesChangedSummaryCard = memo(
             );
           })}
         </ul>
+        {hasMore ? (
+          <div className="app-turn-files-changed__footer">
+            <button
+              type="button"
+              className="app-turn-files-changed__toggle"
+              onClick={toggleExpanded}
+              aria-expanded={expanded}
+            >
+              <span>{expanded ? "收起" : `展开全部（共 ${files.length} 个文件）`}</span>
+              <span className="app-turn-files-changed__chevron" aria-hidden>
+                {expanded ? "▴" : "▾"}
+              </span>
+            </button>
+            {!expanded && hiddenCount > 0 ? (
+              <span className="app-turn-files-changed__hidden-count">
+                另有 {hiddenCount} 个文件未展示
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     );
   },

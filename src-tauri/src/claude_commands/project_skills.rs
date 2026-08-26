@@ -262,7 +262,8 @@ fn resolve_skill_markdown_path(skill_dir: &Path) -> Option<PathBuf> {
     None
 }
 
-fn read_claude_skill_entry(skill_dir: &Path) -> (bool, Option<String>) {
+/// 读取技能目录的 `SKILL.md`（不区分大小写）与描述；Codex 用户级技能复用同一解析。
+pub(crate) fn read_claude_skill_entry(skill_dir: &Path) -> (bool, Option<String>) {
     let Some(md) = resolve_skill_markdown_path(skill_dir) else {
         return (false, None);
     };
@@ -274,7 +275,7 @@ fn read_claude_skill_entry(skill_dir: &Path) -> (bool, Option<String>) {
     (true, desc)
 }
 
-fn count_skill_files_recursive(dir: &Path) -> usize {
+pub(crate) fn count_skill_files_recursive(dir: &Path) -> usize {
     let mut total = 0usize;
     let Ok(entries) = fs::read_dir(dir) else {
         return 0;
@@ -382,33 +383,33 @@ fn list_claude_command_skills_under_dir(commands_dir: &Path) -> Result<Vec<Claud
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ClaudeProjectSkill {
-    name: String,
+    pub(crate) name: String,
     /// `skill` = 仓库 `.claude/skills/{name}/`；`command` = 仓库 `.claude/commands/` 下 Markdown 命令文件。
     #[serde(skip_serializing_if = "Option::is_none")]
-    entry_kind: Option<String>,
+    pub(crate) entry_kind: Option<String>,
     /// `entry_kind == command` 时：相对 `.claude/commands/` 的路径（含 `.md`）。
     #[serde(skip_serializing_if = "Option::is_none")]
-    command_rel_path: Option<String>,
-    has_skill_md: bool,
-    description: Option<String>,
-    file_count: usize,
+    pub(crate) command_rel_path: Option<String>,
+    pub(crate) has_skill_md: bool,
+    pub(crate) description: Option<String>,
+    pub(crate) file_count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
-    plugin_cache_rel_path: Option<String>,
+    pub(crate) plugin_cache_rel_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    plugin_cache_root: Option<String>,
+    pub(crate) plugin_cache_root: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    source: Option<crate::skills::source::SkillSource>,
+    pub(crate) source: Option<crate::skills::source::SkillSource>,
     #[serde(skip_serializing_if = "std::ops::Not::not", default)]
-    is_symlink: bool,
+    pub(crate) is_symlink: bool,
     /// `project` = 仓库 `.claude/skills`；`user` = 用户级 `~/.claude/skills`（或自定义配置目录下 `skills`）。
     #[serde(skip_serializing_if = "Option::is_none")]
-    skill_scope: Option<String>,
+    pub(crate) skill_scope: Option<String>,
     /// 技能目录绝对路径，便于前端打开文件夹与展示路径。
     #[serde(skip_serializing_if = "Option::is_none")]
-    skill_root_path: Option<String>,
+    pub(crate) skill_root_path: Option<String>,
 }
 
-fn skill_dir_root_path(path: &Path) -> String {
+pub(crate) fn skill_dir_root_path(path: &Path) -> String {
     fs::canonicalize(path)
         .unwrap_or_else(|_| path.to_path_buf())
         .to_string_lossy()

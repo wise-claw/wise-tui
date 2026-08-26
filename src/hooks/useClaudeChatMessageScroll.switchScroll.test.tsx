@@ -390,4 +390,145 @@ describe("会话切换后消息列表贴底", () => {
     expect(getClaudeChatUserPausedFollow()).toBe(false);
     expectAtBottom(sc, 24);
   });
+
+  test("同会话新一轮执行：上翻暂停贴底后新用户消息到达 → 自动恢复贴底跟随", async () => {
+    rowHeightBySessionId = { R: ROW_H };
+    await act(async () => {
+      root!.render(<Host session={makeSession("R", 10, "completed")} />);
+    });
+    const sc = getScrollEl();
+    installBrowserLikeScroll(sc);
+    await tick(200);
+    expectAtBottom(sc, 10);
+
+    // 用户上翻阅读历史 → 暂停贴底。
+    act(() => {
+      sc.scrollTop = 0;
+    });
+    await tick(50);
+    for (let i = 0; i < 4; i++) act(() => flushRaf());
+    expect(getClaudeChatUserPausedFollow()).toBe(true);
+
+    // 新一轮开始：用户消息追加 + status 转 running 在同一次 flush 内到达。
+    // 末条 id 变为新的用户消息（13），必须重新贴底，而不是继续停在暂停态。
+    await act(async () => {
+      root!.render(<Host session={makeSession("R", 13, "running")} />);
+    });
+    await tick(200);
+    for (let i = 0; i < 8; i++) act(() => flushRaf());
+
+    expect(getClaudeChatUserPausedFollow()).toBe(false);
+    expectAtBottom(sc, 13);
+
+    // 重新贴底后流式继续增长（助手消息变长 + 追加行）：跟随环必须保持，末条仍在视口。
+    const growing = makeSession("R", 16, "running");
+    const last = growing.messages[growing.messages.length - 1]!;
+    growing.messages[growing.messages.length - 1] = {
+      ...last,
+      content: last.content + "z".repeat(400),
+    };
+    await act(async () => {
+      root!.render(<Host session={growing} />);
+    });
+    await tick(300);
+    for (let i = 0; i < 8; i++) act(() => flushRaf());
+    expect(getClaudeChatUserPausedFollow()).toBe(false);
+    expectAtBottom(sc, 16);
+  });
+
+  test("流式中上翻暂停后滚回底部 → 自动恢复跟随，后续增长继续贴底", async () => {
+    rowHeightBySessionId = { R: ROW_H };
+    await act(async () => {
+      root!.render(<Host session={makeSession("R", 20, "running")} />);
+    });
+    const sc = getScrollEl();
+    installBrowserLikeScroll(sc);
+    await tick(200);
+    expectAtBottom(sc, 20);
+    expect(getClaudeChatUserPausedFollow()).toBe(false);
+
+    // 上翻阅读（wheel 向上）→ 暂停贴底。
+    act(() => {
+      const event = new Event("wheel", { cancelable: true, bubbles: true });
+      Object.defineProperty(event, "deltaY", { value: -120 });
+      sc.dispatchEvent(event);
+    });
+    await tick(50);
+    for (let i = 0; i < 4; i++) act(() => flushRaf());
+    expect(getClaudeChatUserPausedFollow()).toBe(true);
+
+    // 用户先向上移动一段，再滚回底部（scrollTop 变化派发 scroll）→ 必须恢复跟随。
+    act(() => {
+      sc.scrollTop = 0;
+    });
+    await tick(30);
+    act(() => {
+      sc.scrollTop = 99999;
+    });
+    await tick(50);
+    for (let i = 0; i < 4; i++) act(() => flushRaf());
+    expect(getClaudeChatUserPausedFollow()).toBe(false);
+    expectAtBottom(sc, 20);
+
+    // 恢复后流式增长：末条仍在视口。
+    const growing = makeSession("R", 24, "running");
+    const last = growing.messages[growing.messages.length - 1]!;
+    growing.messages[growing.messages.length - 1] = {
+      ...last,
+      content: last.content + "w".repeat(400),
+    };
+    await act(async () => {
+      root!.render(<Host session={growing} />);
+    });
+    await tick(300);
+    for (let i = 0; i < 8; i++) act(() => flushRaf());
+    expect(getClaudeChatUserPausedFollow()).toBe(false);
+    expectAtBottom(sc, 24);
+  });
+
+  test("流式中 wheel 向下不暂停、向上暂停；滚回底部恢复跟随", async () => {
+    rowHeightBySessionId = { R: ROW_H };
+    await act(async () => {
+      root!.render(<Host session={makeSession("R", 20, "running")} />);
+    });
+    const sc = getScrollEl();
+    installBrowserLikeScroll(sc);
+    await tick(200);
+    expectAtBottom(sc, 20);
+    expect(getClaudeChatUserPausedFollow()).toBe(false);
+
+    const wheelWith = (deltaY: number) => {
+      const event = new Event("wheel", { cancelable: true, bubbles: true });
+      Object.defineProperty(event, "deltaY", { value: deltaY });
+      sc.dispatchEvent(event);
+    };
+
+    // 向下滚动（deltaY > 0）：不暂停跟随。
+    act(() => {
+      wheelWith(120);
+    });
+    await tick(30);
+    expect(getClaudeChatUserPausedFollow()).toBe(false);
+
+    // 向上滚动（deltaY < 0，读更早内容）：暂停跟随。
+    act(() => {
+      wheelWith(-120);
+    });
+    await tick(30);
+    for (let i = 0; i < 4; i++) act(() => flushRaf());
+    expect(getClaudeChatUserPausedFollow()).toBe(true);
+
+    // 先向上移动一段，再滚回底部（scrollTop 变化派发 scroll）→ 恢复跟随。
+    act(() => {
+      sc.scrollTop = 0;
+    });
+    await tick(30);
+    act(() => {
+      sc.scrollTop = 99999;
+    });
+    await tick(50);
+    for (let i = 0; i < 4; i++) act(() => flushRaf());
+    expect(getClaudeChatUserPausedFollow()).toBe(false);
+    expectAtBottom(sc, 20);
+  });
 });

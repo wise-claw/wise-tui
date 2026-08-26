@@ -4164,10 +4164,14 @@
 /* 组间距：wrapper 不命中 .app-claude-message 相邻选择器 */
 .app-claude-messages-virtual-row--group-start {
   padding-top: 14px;
+  padding-left: 12px;
+  padding-right: 12px;
 }
 
 .app-claude-messages-end-thinking {
-  padding-left: 30px;
+  /* 消息行已无头像列（旧 grid 22px 头像 + 8px 间距 = 30px），
+     提示行与消息正文同从容器 padding 起左对齐。 */
+  padding-left: 0;
 }
 
 /* 消息行不做入场动画。
@@ -5530,6 +5534,9 @@
   gap: 4px;
   min-width: 0;
   max-width: 100%;
+  /* 流式每 tick 重建时，正文 min-content 偶发超宽会让整行先撑宽再回缩（从右向左滑动）。
+     在 flow 与正文宿主两侧同时隔离溢出，任何瞬时超宽都被裁掉，不参与行宽协商。 */
+  overflow: hidden;
   word-break: break-word;
   font-size: var(--app-reasoning-font-size);
   line-height: var(--app-reasoning-line-height);
@@ -5596,6 +5603,7 @@
   flex: 1 1 0;
   min-width: 0;
   max-width: 100%;
+  overflow: hidden;
 }
 
 .app-message-part-reasoning-show__flow .app-markdown,
@@ -5619,6 +5627,31 @@
   font: inherit;
   line-height: inherit;
   color: inherit;
+  /* anywhere 而非 break-word：断词机会计入 min-content，流式长 token 不会把
+     正文宿主的固有宽度撑到容器之外，也就不会出现「先超宽、再回缩」的右向左滑动。 */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.app-message-part-reasoning-show__flow .app-markdown li,
+.app-message-part-reasoning-show__flow .app-markdown blockquote,
+.app-message-part-reasoning-show__flow .app-markdown h1,
+.app-message-part-reasoning-show__flow .app-markdown h2,
+.app-message-part-reasoning-show__flow .app-markdown h3,
+.app-message-part-reasoning-show__flow .app-markdown h4,
+.app-message-part-reasoning-show__flow .app-markdown h5,
+.app-message-part-reasoning-show__flow .app-markdown h6 {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 行内 code 与链接：长 token 也参与折行，避免内联代码撑宽行盒 */
+.app-message-part-reasoning-show__flow .app-markdown p code,
+.app-message-part-reasoning-show__flow .app-markdown li code,
+.app-message-part-reasoning-show__flow .app-markdown p a,
+.app-message-part-reasoning-show__flow .app-markdown li a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .app-message-part-reasoning-show__flow:not(.app-message-part-reasoning-show__flow--clamped)
@@ -10066,6 +10099,11 @@ button.app-message-part-header:disabled:hover {
   border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 68%, transparent);
 }
 
+/* 存在折叠 footer 时，列表底部留白交给 footer，避免与分隔线之间出现空档 */
+.app-turn-files-changed--has-more .app-turn-files-changed__list {
+  padding-bottom: 0;
+}
+
 .app-turn-files-changed__row {
   display: flex;
   align-items: center;
@@ -10133,4 +10171,45 @@ button.app-message-part-header:disabled:hover {
 
 .app-turn-files-changed__remove {
   color: var(--ant-color-error);
+}
+
+/* 超量折叠：列表末尾的展开/收起行 */
+.app-turn-files-changed__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 12px 8px;
+  border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 68%, transparent);
+}
+
+.app-turn-files-changed__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--ant-color-primary);
+  font-size: 12px;
+  line-height: 20px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.app-turn-files-changed__toggle:hover {
+  text-decoration: underline;
+}
+
+.app-turn-files-changed__chevron {
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.75;
+}
+
+.app-turn-files-changed__hidden-count {
+  font-size: 12px;
+  color: var(--ant-color-text-tertiary);
+  font-variant-numeric: tabular-nums;
 }

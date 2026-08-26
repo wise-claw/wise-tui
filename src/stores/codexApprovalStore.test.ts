@@ -4,6 +4,7 @@ import {
   __setCodexApprovalPendingForTests,
   dismissCodexApprovalPending,
   getCodexApprovalPending,
+  shouldAutoApproveFullAccessCodexRequest,
   subscribeCodexApproval,
 } from "./codexApprovalStore";
 import type { CodexApprovalRequestPayload } from "../services/codexRpc";
@@ -47,5 +48,26 @@ describe("codexApprovalStore", () => {
     dismissCodexApprovalPending("sess-1", 2);
     unsub();
     expect(ticks).toBe(3);
+  });
+
+  test("完全访问设置下自动批准命令执行/文件变更审批", () => {
+    const full = JSON.stringify({
+      sandboxMode: "danger-full-access",
+      approvalPolicy: "never",
+    });
+    expect(shouldAutoApproveFullAccessCodexRequest(full, "commandExecution")).toBe(true);
+    expect(shouldAutoApproveFullAccessCodexRequest(full, "fileChange")).toBe(true);
+  });
+
+  test("非完全访问 / 未知类型不自动批准", () => {
+    const full = JSON.stringify({
+      sandboxMode: "danger-full-access",
+      approvalPolicy: "never",
+    });
+    const ask = JSON.stringify({ sandboxMode: "workspace-write", approvalPolicy: "untrusted" });
+    expect(shouldAutoApproveFullAccessCodexRequest(full, "unknown")).toBe(false);
+    expect(shouldAutoApproveFullAccessCodexRequest(ask, "commandExecution")).toBe(false);
+    expect(shouldAutoApproveFullAccessCodexRequest("", "commandExecution")).toBe(false);
+    expect(shouldAutoApproveFullAccessCodexRequest("not-json", "commandExecution")).toBe(false);
   });
 });

@@ -749,8 +749,10 @@ function ComposerInner({
     save: saveComposerDefaultInstruction,
   } = useComposerDefaultInstruction();
   useEffect(() => {
-    void loadSlashCatalog(session.repositoryPath?.trim() || null);
-  }, [session.repositoryPath, composerDefaultInstruction]);
+    void loadSlashCatalog(session.repositoryPath?.trim() || null, {
+      executionEngine: sessionExecutionEngine,
+    });
+  }, [session.repositoryPath, composerDefaultInstruction, sessionExecutionEngine]);
   const [trigger, setTrigger] = useState<TriggerInfo>({ mode: null, query: "", rect: null });
   const [dragOverNativeFiles, setDragOverNativeFiles] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);

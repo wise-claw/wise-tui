@@ -382,6 +382,21 @@ fn warm_codex_disk_cache(envelope: &CodexProfileEnvelope) -> Result<(), String> 
     Ok(())
 }
 
+/// 一键清空 Codex 用户级配置：`auth.json` 写回 `{}`，`config.toml` 写为空。
+/// `target` 为 "auth" / "config" 时只清空对应文件，其它值同时清空两者。
+pub fn clear_codex_user_config(target: &str) -> Result<(), String> {
+    match target {
+        "auth" => write_auth_json(&Map::new())?,
+        "config" => write_config_toml("")?,
+        _ => {
+            write_auth_json(&Map::new())?;
+            write_config_toml("")?;
+        }
+    }
+    let envelope = read_codex_profile_envelope_fresh();
+    warm_codex_disk_cache(&envelope)
+}
+
 pub fn effective_codex_model_from_disk() -> Option<String> {
     read_effective_codex_model_from_envelope(&read_codex_profile_envelope())
 }

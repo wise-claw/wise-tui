@@ -7,6 +7,7 @@ import {
   listClaudeUserSkills,
   runClaudeCliCommand,
 } from "./claude";
+import { listCodexUserSkills } from "./codex";
 import {
   buildContextBreakdownSnapshot,
   formatContextTokenCount,
@@ -23,6 +24,8 @@ import {
   claudePluginUninstall,
 } from "./claudePluginMarket";
 import { invalidateSlashCatalogCache } from "./slashCatalogCache";
+import { resolveEngineSlashCatalogGroup } from "../constants/engineSlashCommands";
+import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import type { ClaudeHookScopeData, ClaudeMcpItem, ClaudeSession } from "../types";
 import { formatClaudeModelLabel } from "../utils/claudeModel";
 import {
@@ -216,20 +219,29 @@ async function formatMcpList(repositoryPath: string): Promise<string> {
   return lines.join("\n");
 }
 
-async function formatSkillsList(repositoryPath: string): Promise<string> {
+async function formatSkillsList(
+  repositoryPath: string,
+  executionEngine: SessionExecutionEngine = "claude",
+): Promise<string> {
+  // Codex 执行环境识别用户级 `~/.codex/skills` / `~/.agents/skills` 等全局技能；
+  // 其余引擎维持现状展示 Claude 用户级技能。
+  const isCodexEngine = resolveEngineSlashCatalogGroup(executionEngine) === "codex";
   const [userSkills, projectSkills] = await Promise.all([
-    listClaudeUserSkills(),
+    isCodexEngine ? listCodexUserSkills() : listClaudeUserSkills(),
     listClaudeProjectSkills(repositoryPath),
   ]);
   const lines: string[] = ["Skills 列表："];
   if (userSkills.length > 0) {
-    lines.push("", "【用户级 ~/.claude/skills】");
+    lines.push(
+      "",
+      isCodexEngine ? "【用户级 Codex Skills（~/.codex/skills 等）】" : "【用户级 ~/.claude/skills】",
+    );
     for (const skill of userSkills) {
       const desc = skill.description?.trim();
       lines.push(`• ${skill.name}${desc ? ` — ${desc}` : ""}`);
     }
   }
-  if (projectSkills.length > 0) {
+  if (!isCodexEngine && projectSkills.length > 0) {
     lines.push("", "【项目级 .claude/skills】");
     for (const skill of projectSkills) {
       const desc = skill.description?.trim();
@@ -501,7 +513,7 @@ export async function executeComposerLocalSlashCommand(
       return formatMcpList(repositoryPath);
 
     case "skills":
-      return formatSkillsList(repositoryPath);
+      return formatSkillsList(repositoryPath, deps.session?.executionEngine);
 
     case "hooks":
       return formatHooksList(repositoryPath);

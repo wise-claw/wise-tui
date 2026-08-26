@@ -1,4 +1,5 @@
-import { Dropdown, Input, Spin, type MenuProps } from "antd";
+import { DeleteOutlined } from "@ant-design/icons";
+import { Dropdown, Input, Modal, Spin, message, type MenuProps } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { getClaudeModelPickerOptions } from "../../services/claude";
@@ -8,6 +9,7 @@ import { listOpencodeModels, type OpencodeModelListItem } from "../../services/o
 import { listQoderModels, type QoderModelListItem } from "../../services/qoder";
 import {
   applyClaudeModelProfile,
+  clearCodexUserSettings,
   dispatchClaudeUserSettingsChanged,
   dispatchModelProfileStoreChanged,
   getClaudeModelProfileStore,
@@ -622,13 +624,6 @@ function ComposerModelPickerImpl({
               />
             ),
           }));
-    if (isCodexEngine || isClaudeEngine) {
-      items.push({ type: "divider" });
-      items.push({
-        key: isCodexEngine ? "__manage_codex_profiles__" : "__manage_claude_profiles__",
-        label: isCodexEngine ? "管理 Codex 档案…" : "管理 Claude 档案…",
-      });
-    }
     return items;
   }, [
     selectOnlyModelOptions,
@@ -756,17 +751,34 @@ function ComposerModelPickerImpl({
     }
   }, []);
 
+  const openManageProfilesPanel = useCallback(() => {
+    setSelectOnlyMenuOpen(false);
+    setSelectOnlyFilter("");
+    setPanelOpen(true);
+    setPanelMounted(true);
+    void claudeModelTopbarPanelChunk;
+  }, []);
+
+
+  const confirmClearCodexSettings = useCallback(() => {
+    setSelectOnlyMenuOpen(false);
+    Modal.confirm({
+      title: "清空 Codex 配置？",
+      content: "将同时清空当前用户的 auth.json 与 config.toml，此操作不可恢复。",
+      okText: "一键清空",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      onOk: async () => {
+        await clearCodexUserSettings("all");
+        dispatchClaudeUserSettingsChanged({ engine: "codex", effectiveModel: null });
+        message.success("auth.json 与 config.toml 已清空");
+      },
+    });
+  }, []);
+
   const handleSelectOnlyMenuClick = useCallback(
     ({ key }: { key: string }) => {
       if (typeof key !== "string" || key === "__no_match__") return;
-      if (key === "__manage_codex_profiles__" || key === "__manage_claude_profiles__") {
-        setSelectOnlyMenuOpen(false);
-        setSelectOnlyFilter("");
-        setPanelOpen(true);
-        setPanelMounted(true);
-        void claudeModelTopbarPanelChunk;
-        return;
-      }
       if (isCodexEngine) {
         // 命中已配置档案：应用档案（写入 codex 配置并广播，Composer 同步会话模型）。
         const option = selectOnlyModelOptions.find(
@@ -930,6 +942,32 @@ function ComposerModelPickerImpl({
                   />
                 </div>
                 <div className="app-composer-model-picker-dropdown-menu-scroll">{menu}</div>
+                {isCodexEngine || isClaudeEngine ? (
+                  <div
+                    className="app-composer-model-picker-dropdown-footer"
+                    onMouseDown={stopSemiComposerPointerBubble}
+                    onClick={stopSemiComposerPointerBubble}
+                  >
+                    <button
+                      type="button"
+                      className="app-composer-model-picker-dropdown-footer__btn"
+                      onClick={openManageProfilesPanel}
+                    >
+                      {isCodexEngine ? "管理 Codex 档案…" : "管理 Claude 档案…"}
+                    </button>
+                    {isCodexEngine ? (
+                      <button
+                        type="button"
+                        className="app-composer-model-picker-dropdown-footer__clear-btn"
+                        aria-label="一键清空 Codex 配置"
+                        title="一键清空 auth.json 与 config.toml"
+                        onClick={confirmClearCodexSettings}
+                      >
+                        <DeleteOutlined />
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             )}
             menu={{

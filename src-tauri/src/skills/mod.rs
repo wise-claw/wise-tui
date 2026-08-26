@@ -10,3 +10,4 @@ pub mod source;
 pub mod external_paths;
 pub mod import;
 pub mod commands;
+pub mod codex_user_skills;

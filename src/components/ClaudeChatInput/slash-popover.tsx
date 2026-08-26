@@ -197,7 +197,9 @@ export function SlashPopover({
 
     void (async () => {
       try {
-        const snapshot = await loadSlashCatalog(repositoryPath?.trim() || null);
+        const snapshot = await loadSlashCatalog(repositoryPath?.trim() || null, {
+          executionEngine: sessionExecutionEngine,
+        });
         if (cancelled) return;
 
         const detectedLabels = new Set(

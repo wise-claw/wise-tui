@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import type { ClaudeSession } from "../../types";
 import { CHAT_MESSAGES_SCROLLING_CLASS } from "../../constants/chatScrollPerformance";
 import {
@@ -38,6 +38,39 @@ export function ClaudeSessionMessagesColumn({
     deferLiveSessionUpdates: true,
   });
   useChatMessagesPointerBusy(scrollRef, streamingActive);
+
+  // 流式执行中自动贴底（监控列）：仅运行/连接中跟随，历史/空闲会话不打扰；
+  // 用户在流式期间上翻阅读时暂停，回到底部阈值内后继续跟随。
+  useEffect(() => {
+    const sc = scrollRef.current;
+    if (!sc || !streamingActive) return;
+    let pinned = true;
+    let raf = 0;
+    const maxScrollTop = () => Math.max(0, sc.scrollHeight - sc.clientHeight);
+    const followTick = () => {
+      raf = 0;
+      const max = maxScrollTop();
+      if (pinned && sc.scrollTop < max - 2) {
+        sc.scrollTop = max;
+      }
+    };
+    const onScroll = () => {
+      pinned = maxScrollTop() - sc.scrollTop <= 24;
+      if (raf === 0) raf = window.requestAnimationFrame(followTick);
+    };
+    sc.addEventListener("scroll", onScroll, { passive: true });
+    // 虚拟窗口行替换/追加不一定触发 scroll：用 MutationObserver 补拍。
+    const mo = new MutationObserver(() => {
+      if (raf === 0) raf = window.requestAnimationFrame(followTick);
+    });
+    mo.observe(sc, { childList: true, subtree: true });
+    raf = window.requestAnimationFrame(followTick);
+    return () => {
+      sc.removeEventListener("scroll", onScroll);
+      mo.disconnect();
+      if (raf !== 0) window.cancelAnimationFrame(raf);
+    };
+  }, [scrollRef, streamingActive]);
 
   return (
     <div className="app-claude-chat app-claude-session-messages-column">

@@ -145,6 +145,18 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     setClaudeChatUserPausedFollow(true);
   }, [cancelScrollFollowLoop]);
 
+  /** 从暂停态恢复贴底跟随：滚回底部 / 文件锚点原本在底部 / 新一轮开始。 */
+  const resumeAutoFollowAfterPause = useCallback(() => {
+    userPausedFollowRef.current = false;
+    pinToBottomRef.current = true;
+    awaitNewMessageBeforeFollowRef.current = false;
+    followFingerprintAtBlurRef.current = "";
+    setClaudeChatUserPausedFollow(false);
+    if (isSessionStreaming()) {
+      ensureScrollFollowLoop();
+    }
+  }, [ensureScrollFollowLoop, isSessionStreaming]);
+
   const handleMessagesBlur = useCallback(
     (event: FocusEvent<HTMLDivElement>) => {
       const sc = messagesScrollRef.current;
@@ -314,7 +326,14 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
           clearChatScrollFileOpenLock();
           return;
         }
-        pauseFollowForMessageNavigation();
+        const maxTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
+        const anchorNearBottom = maxTop - anchor.scrollTop <= STILL_PINNED_TO_BOTTOM_PX;
+        if (anchorNearBottom) {
+          // 打开文件前处于底部跟随：关闭后恢复跟随，避免长执行中停在中间。
+          resumeAutoFollowAfterPause();
+        } else {
+          pauseFollowForMessageNavigation();
+        }
         programmaticScrollRef.current = true;
         sc.scrollTop = anchor.scrollTop;
         lastScrollTopRef.current = anchor.scrollTop;
@@ -333,31 +352,27 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     return () => {
       window.removeEventListener(WORKFLOW_UI_EVENT_REPOSITORY_FILE_EDITOR_CLOSED, onFileEditorClosed);
     };
-  }, [pauseFollowForMessageNavigation]);
+  }, [pauseFollowForMessageNavigation, resumeAutoFollowAfterPause]);
 
   useEffect(() => {
-    if (isSessionStreaming()) return;
     if (session.messages.length === 0) return;
     const last = session.messages[session.messages.length - 1]!;
     if (last.role !== "user" && last.role !== "system") return;
     if (lastUserMessagePinIdRef.current === last.id) return;
     lastUserMessagePinIdRef.current = last.id;
-    pinToBottomRef.current = true;
-    userPausedFollowRef.current = false;
-    awaitNewMessageBeforeFollowRef.current = false;
-    setClaudeChatUserPausedFollow(false);
-    cancelScrollFollowLoop();
+    resumeAutoFollowAfterPause();
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
+        if (!shouldAutoFollow()) return;
         snapScrollToBottom();
       });
     });
   }, [
     session.messages,
     session.status,
-    cancelScrollFollowLoop,
+    resumeAutoFollowAfterPause,
     snapScrollToBottom,
-    isSessionStreaming,
+    shouldAutoFollow,
   ]);
 
   useLayoutEffect(() => {
@@ -387,7 +402,10 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
       if (Math.abs(event.deltaY) <= 2) return;
       markClaudeScrollInteraction();
       ensureScrollContainerFocus();
-      pauseAutoFollowForUserScroll();
+      // 仅向上滚动（读更早内容）暂停贴底；向下滚动由 scroll 事件在回到底部时恢复跟随。
+      if (event.deltaY < 0) {
+        pauseAutoFollowForUserScroll();
+      }
     };
 
     const onScroll = () => {
@@ -402,8 +420,12 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
         const maxScrollTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
         const distanceToBottom = maxScrollTop - currentScrollTop;
         // 贴底回收卸载顶部行、流式增高后的 clamp 都会改 scrollTop；只要仍在底部阈值内
-        // 就保持跟随。任意 delta 都 pause 会在「执行中等一下」后丢掉末条自动展示。
+        // 就保持跟随；若之前暂停（上翻阅读 / 文件锚点恢复等），滚回底部时恢复贴底跟随，
+        // 否则长执行中末条始终是 assistant、没有新用户消息可触发重贴，最新内容会一直停在视口下方。
         if (distanceToBottom <= STILL_PINNED_TO_BOTTOM_PX) {
+          if (!pinToBottomRef.current) {
+            resumeAutoFollowAfterPause();
+          }
           lastScrollTopRef.current = currentScrollTop;
           return;
         }
@@ -427,7 +449,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
       sc.removeEventListener("scroll", onScroll);
       if (pinRaf !== 0) window.cancelAnimationFrame(pinRaf);
     };
-  }, [session.id, hideMessages, pauseAutoFollowForUserScroll]);
+  }, [session.id, hideMessages, pauseAutoFollowForUserScroll, resumeAutoFollowAfterPause]);
 
   useLayoutEffect(() => {
     if (hideMessages) return;

@@ -1859,11 +1859,6 @@
 }
 
 .app-monitor-panel__subagent-detail-session:not(.app-monitor-panel__subagent-detail-session--chat-layout)
-  .app-claude-messages-end-thinking {
-  padding-left: 22px;
-}
-
-.app-monitor-panel__subagent-detail-session:not(.app-monitor-panel__subagent-detail-session--chat-layout)
   .app-message-part-reasoning-shell {
   padding: 3px 5px;
   border-radius: 5px;

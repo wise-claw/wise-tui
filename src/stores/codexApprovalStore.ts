@@ -8,8 +8,14 @@
 import {
   onCodexApprovalRequest,
   onCodexApprovalResolved,
+  respondCodexApproval,
   type CodexApprovalRequestPayload,
 } from "../services/codexRpc";
+import {
+  getAppSetting,
+  WISE_CODEX_DEFAULT_SETTINGS_KEY,
+} from "../services/appSettingsStore";
+import { isFullAccessInCodexSettings } from "../components/DefaultConfigPanel/codexDefaultSettings";
 import { isTauriIpcAlive } from "../utils/tauriEnv";
 
 type Listener = () => void;
@@ -21,6 +27,56 @@ let listening = false;
 let listenPromise: Promise<void> | null = null;
 let unlistenRequest: (() => void) | undefined;
 let unlistenResolved: (() => void) | undefined;
+
+/**
+ * 完全访问（danger-full-access + never）下仍需 Wise 自动应答的审批类型。
+ *
+ * codex app-server 0.149 对 `thread/start.config` 的 `sandbox_mode` / `approval_policy`
+ * 并不总是生效（实测 workspace-write + on-request 下越界写命令仍直接执行、不发审批），
+ * 因此即使选择了「完全访问」，命令执行/文件变更审批请求仍可能到达 Wise。
+ * 这里在 Wise 侧直接回 `acceptForSession`，与用户显式选择保持一致，不再弹审批坞栏。
+ *
+ * 仅自动应答 commandExecution / fileChange；unknown 等未知类型保留人工 dock 兜底。
+ */
+const FULL_ACCESS_AUTO_APPROVE_TYPES: ReadonlySet<string> = new Set([
+  "commandExecution",
+  "fileChange",
+]);
+
+/**
+ * 纯决策：给定全局 codex 默认设置文本与审批类型，是否应自动批准。
+ * 供 store 监听与单元测试复用。
+ */
+export function shouldAutoApproveFullAccessCodexRequest(
+  settingsText: string,
+  type: CodexApprovalRequestPayload["type"],
+): boolean {
+  if (!FULL_ACCESS_AUTO_APPROVE_TYPES.has(type)) return false;
+  return isFullAccessInCodexSettings(settingsText);
+}
+
+/**
+ * 完全访问开启时，对 codex 审批请求直接回 acceptForSession（不落 pending、不弹 dock）。
+ * 返回是否已自动处理；读取失败 / 非完全访问时返回 false，走原有人工审批。
+ */
+async function autoApproveFullAccessIfNeeded(
+  payload: CodexApprovalRequestPayload,
+): Promise<boolean> {
+  if (!FULL_ACCESS_AUTO_APPROVE_TYPES.has(payload.type)) return false;
+  if (!isTauriIpcAlive()) return false;
+  try {
+    const stored = await getAppSetting(WISE_CODEX_DEFAULT_SETTINGS_KEY);
+    if (!isFullAccessInCodexSettings(stored ?? "")) return false;
+  } catch {
+    return false;
+  }
+  void respondCodexApproval(payload.session_id, payload.request_id, "acceptForSession").catch(
+    (err) => {
+      console.warn("[wise:codex-approval] 完全访问自动批准失败", err);
+    },
+  );
+  return true;
+}
 
 function notify(): void {
   for (const listener of listeners) {
@@ -53,7 +109,8 @@ async function startListening(): Promise<void> {
   if (!isTauriIpcAlive()) return;
   listening = true;
   try {
-    unlistenRequest = await onCodexApprovalRequest((payload) => {
+    unlistenRequest = await onCodexApprovalRequest(async (payload) => {
+      if (await autoApproveFullAccessIfNeeded(payload)) return;
       setPending(payload);
     });
     unlistenResolved = await onCodexApprovalResolved((payload) => {

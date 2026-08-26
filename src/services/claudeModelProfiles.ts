@@ -170,6 +170,15 @@ export async function getCodexUserSettingsJson(): Promise<string> {
   return invoke<string>("get_codex_user_settings_json");
 }
 
+export type CodexClearTarget = "auth" | "config" | "all";
+
+/** 一键清空 Codex 用户级配置，返回清空后的 envelope JSON。 */
+export async function clearCodexUserSettings(
+  target: CodexClearTarget = "all",
+): Promise<string> {
+  return invoke<string>("clear_codex_user_settings", { target });
+}
+
 export async function getOpencodeUserSettingsJson(): Promise<string> {
   return invoke<string>("get_opencode_user_settings_json");
 }

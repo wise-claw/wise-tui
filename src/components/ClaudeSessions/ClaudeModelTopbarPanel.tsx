@@ -3,6 +3,7 @@ import { Button, Collapse, Empty, Input, Modal, Space, Switch, Typography, messa
 import { useCallback, useMemo, useState } from "react";
 import {
   applyClaudeModelProfile,
+  clearCodexUserSettings,
   createClaudeModelProfile,
   deleteClaudeModelProfile,
   getClaudeUserSettingsJson,
@@ -534,6 +535,21 @@ export function ClaudeModelTopbarPanel({
     }
   }, [configProfile, configCompany, configName, configOfficialWebsite, settingsDraft, configCodexAuthJson, configCodexConfigToml, onApplied]);
 
+  const handleClearCodexFile = useCallback(async (target: "auth" | "config") => {
+    try {
+      const text = await clearCodexUserSettings(target);
+      const draft = parseCodexProfileEnvelopeJson(text);
+      if (target === "auth") {
+        setConfigCodexAuthJson(draft.authJson);
+      } else {
+        setConfigCodexConfigToml(draft.configToml);
+      }
+      message.success(target === "auth" ? "auth.json 已清空" : "config.toml 已清空", 1.2);
+    } catch (e) {
+      message.error(typeof e === "string" ? e : "清空配置文件失败");
+    }
+  }, []);
+
   const handleSyncFromCcSwitch = useCallback(async () => {
     setSyncingCcSwitch(true);
     try {
@@ -825,6 +841,8 @@ export function ClaudeModelTopbarPanel({
                       configToml={addCodexConfigToml}
                       onAuthJsonChange={setAddCodexAuthJson}
                       onConfigTomlChange={setAddCodexConfigToml}
+                      onClearAuthJson={() => setAddCodexAuthJson(EMPTY_CODEX_AUTH_JSON)}
+                      onClearConfigToml={() => setAddCodexConfigToml(EMPTY_CODEX_CONFIG_TOML)}
                     />
                   ),
                 },
@@ -984,6 +1002,9 @@ export function ClaudeModelTopbarPanel({
                       configToml={configCodexConfigToml}
                       onAuthJsonChange={setConfigCodexAuthJson}
                       onConfigTomlChange={setConfigCodexConfigToml}
+                      confirmClear
+                      onClearAuthJson={() => void handleClearCodexFile("auth")}
+                      onClearConfigToml={() => void handleClearCodexFile("config")}
                     />
                   ),
                 },

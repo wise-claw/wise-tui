@@ -4,8 +4,11 @@ import {
   listClaudeProjectSkills,
   listClaudeUserSkills,
 } from "./claude";
+import { listCodexUserSkills } from "./codex";
 import { claudePluginListInstalled } from "./claudePluginMarket";
 import type { ClaudeProjectSkill } from "../types";
+import { resolveEngineSlashCatalogGroup } from "../constants/engineSlashCommands";
+import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import { CLAUDE_BUILTIN_SLASH_COMMANDS } from "../constants/claudeCodeSlashCommands";
 import {
   buildComposerPluginInstallSlashCommands,
@@ -48,8 +51,12 @@ interface CacheEntry {
 let cacheEntry: CacheEntry | null = null;
 const inflightByKey = new Map<string, Promise<SlashCatalogSnapshot>>();
 
-function cacheKey(repositoryPath: string | null): string {
-  return repositoryPath?.trim() || "__global__";
+function cacheKey(
+  repositoryPath: string | null,
+  executionEngine: SessionExecutionEngine,
+): string {
+  const repo = repositoryPath?.trim() || "__global__";
+  return `${resolveEngineSlashCatalogGroup(executionEngine)}:${repo}`;
 }
 
 function isFresh(entry: CacheEntry, key: string): boolean {
@@ -66,14 +73,21 @@ function staleSnapshotForKey(key: string): SlashCatalogSnapshot | null {
   return cacheEntry.snapshot;
 }
 
-async function fetchSlashCatalog(repositoryPath: string | null): Promise<SlashCatalogSnapshot> {
+async function fetchSlashCatalog(
+  repositoryPath: string | null,
+  executionEngine: SessionExecutionEngine,
+): Promise<SlashCatalogSnapshot> {
   const repo = repositoryPath?.trim() || null;
+  // 全局技能按执行环境识别：Codex（CLI/RPC）展示 `~/.codex/skills` 等用户级技能，
+  // 其余引擎维持现状展示 Claude 用户级技能，避免跨引擎误用。
+  const isCodexEngine = resolveEngineSlashCatalogGroup(executionEngine) === "codex";
+  const userSkillsLoader = isCodexEngine ? listCodexUserSkills : listClaudeUserSkills;
   const [omcInstalled, cacheSkills, installedRows, projectSkills, userSkills] = await Promise.all([
     isOmcPluginInstalled().catch(() => false),
     listClaudePluginCacheSkills(repo).catch(() => []),
     claudePluginListInstalled(repo).catch(() => []),
     repo ? listClaudeProjectSkills(repo).catch(() => []) : Promise.resolve([]),
-    listClaudeUserSkills().catch(() => []),
+    userSkillsLoader().catch(() => []),
   ]);
 
   const detectedPluginCommands = buildInstalledPluginSlashOptionsFromSkills(
@@ -98,9 +112,10 @@ async function fetchSlashCatalog(repositoryPath: string | null): Promise<SlashCa
 
 export async function loadSlashCatalog(
   repositoryPath?: string | null,
-  options?: { force?: boolean },
+  options?: { force?: boolean; executionEngine?: SessionExecutionEngine },
 ): Promise<SlashCatalogSnapshot> {
-  const key = cacheKey(repositoryPath ?? null);
+  const executionEngine = options?.executionEngine ?? "claude";
+  const key = cacheKey(repositoryPath ?? null, executionEngine);
   if (!options?.force && cacheEntry && isFresh(cacheEntry, key)) {
     return cacheEntry.snapshot;
   }
@@ -110,7 +125,7 @@ export async function loadSlashCatalog(
     return existingInflight;
   }
 
-  const pending = fetchSlashCatalog(repositoryPath ?? null)
+  const pending = fetchSlashCatalog(repositoryPath ?? null, executionEngine)
     .then((snapshot) => {
       cacheEntry = { key, snapshot };
       inflightByKey.delete(key);
