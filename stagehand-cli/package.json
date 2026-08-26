@@ -1,0 +1,17 @@
+{
+  "name": "wise-stagehand-cli",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Wise CLI wrapping Stagehand SDK primitives (`wise browse` / `wise-browse`)",
+  "bin": {
+    "wise-browse": "./cli.mjs"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@browserbasehq/stagehand": "^4",
+    "zod": "^4.2.1"
+  }
+}

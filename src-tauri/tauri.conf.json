@@ -56,8 +56,12 @@
     "resources": [
       "resources/skills/officecli-docx/SKILL.md",
       "resources/skills/officecli-pptx/SKILL.md",
+      "resources/skills/wise-browse/SKILL.md",
+      "../stagehand-cli/argv.mjs",
       "../examples/wise-extensions/hello-world",
-      "../browser-extensions/wise-page-monitor"
+      "../browser-extensions/wise-page-monitor",
+      "../stagehand-cli/cli.mjs",
+      "../stagehand-cli/package.json"
     ],
     "macOS": {
       "entitlements": "./Entitlements.plist",

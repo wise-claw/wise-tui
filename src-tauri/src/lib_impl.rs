@@ -1,6 +1,6 @@
 use crate::{
     agent_registry, agents_explorer, app_state_commands, assistants, at_mention_shortcuts, cc_switch_import,
-    chrome_devtools_monitor, in_app_shortcuts,
+    chrome_devtools_monitor, stagehand_browse, in_app_shortcuts,
     claude_code_line_edits, claude_code_usage, claude_commands, codex_commands, codex_models, codex_rpc_commands, codex_rpc_disk, opencode_commands, opencode_acp_commands,
     qoder_commands, claude_config_dir,
     claude_llm_proxy, claude_model_profiles,
@@ -245,7 +245,8 @@ pub fn run() {
         .manage(codex_rpc_commands::CodexRpcSessionStore::default())
         .manage(cursor_acp_commands::CursorAcpSessionStore::default())
         .manage(opencode_acp_commands::OpencodeAcpSessionStore::default())
-        .manage(chrome_devtools_monitor::ChromeDevtoolsMonitorState::default());
+        .manage(chrome_devtools_monitor::ChromeDevtoolsMonitorState::default())
+        .manage(stagehand_browse::StagehandBrowseState::default());
     #[cfg(target_os = "macos")]
     let builder = builder.manage(crate::macos_speech_stream::MacosStreamingSpeechState::default());
     let builder = builder.manage(crate::sherpa_sensevoice::SherpaSenseVoiceState::default());
@@ -469,6 +470,16 @@ pub fn run() {
             chrome_devtools_monitor::chrome_page_monitor_extension_dir,
             chrome_devtools_monitor::chrome_page_monitor_download_extension,
             chrome_devtools_monitor::chrome_page_monitor_open_extension_dir,
+            stagehand_browse::stagehand_browse_probe,
+            stagehand_browse::stagehand_browse_install_deps,
+            stagehand_browse::stagehand_browse_load_config,
+            stagehand_browse::stagehand_browse_save_config,
+            stagehand_browse::stagehand_browse_daemon_status,
+            stagehand_browse::stagehand_browse_daemon_stop,
+            stagehand_browse::stagehand_browse_start,
+            stagehand_browse::stagehand_browse_stop,
+            stagehand_browse::stagehand_browse_call,
+            stagehand_browse::stagehand_browse_exec,
             code_review_commands::code_review_collect_diff,
             code_review_commands::code_review_save_run,
             code_review_commands::code_review_list_runs,

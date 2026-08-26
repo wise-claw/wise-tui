@@ -97,6 +97,7 @@ mod terminal_quick_commands_commands;
 mod terminal_quick_commands_db;
 mod chrome_devtools_monitor;
 mod chrome_page_monitor_bridge;
+mod stagehand_browse;
 
 pub(crate) use claude_commands::validate_claude_skill_name;
 pub use lib_impl::run;

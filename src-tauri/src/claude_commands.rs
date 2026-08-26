@@ -465,6 +465,9 @@ fn claude_path_search_prefixes_uncached() -> Vec<PathBuf> {
         v.push(PathBuf::from(r"C:\Program Files (x86)\nodejs"));
     }
     if let Some(home) = dirs::home_dir() {
+        let wise_bin = home.join(".wise/bin");
+        let _ = fs::create_dir_all(&wise_bin);
+        v.push(wise_bin);
         v.push(home.join("bin"));
         v.push(home.join(".local/bin"));
         v.push(home.join(".opencode/bin"));

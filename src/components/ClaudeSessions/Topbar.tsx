@@ -24,6 +24,7 @@ import { DEFAULT_OPEN_APP_ID } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
 import { useRepositoryRunCommand } from "../../hooks/useRepositoryRunCommand";
 import { PageMonitorTopbarTrigger } from "../ChromeDevtoolsMonitor";
+import { BrowserAutomationTopbarTrigger } from "../BrowserAutomation";
 import { resolveChatTopbarContext } from "../../utils/workspaceSelectionState";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import type { PaneCount } from "../../constants/mainLayoutWidths";
@@ -497,6 +498,12 @@ export const Topbar = memo(function Topbar({
         )}
         {topbarToolsReady ? (
           <PageMonitorTopbarTrigger
+            repositoryId={contextRepository?.id}
+            repositoryPath={topbarOpenPath}
+          />
+        ) : null}
+        {topbarToolsReady ? (
+          <BrowserAutomationTopbarTrigger
             repositoryId={contextRepository?.id}
             repositoryPath={topbarOpenPath}
           />
