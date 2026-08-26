@@ -6,7 +6,7 @@
  * - `--daemon`: unix-socket JSON-lines server sharing one browser session.
  */
 import { createInterface } from "node:readline";
-import { mkdir, readFile, writeFile, unlink, readdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile, unlink, readdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -26,6 +26,11 @@ import {
   summarizeLatestPointer,
   DEFAULT_ACCEPT_SUITE,
 } from "./assert.mjs";
+import {
+  sanitizeAuthProfileName,
+  looksLoggedIn,
+  summarizeAuthState,
+} from "./auth.mjs";
 
 /** @type {null | { kind: "v3" | "v4"; stagehand: any; browser?: any; pageIndex: number; model?: string }} */
 let session = null;
@@ -101,9 +106,16 @@ async function startSession(params = {}) {
   const mod = await importStagehand();
   const env = String(params.env ?? "local").toLowerCase();
   const headed = params.headed !== false;
+  const persistAuth = params.persistAuth !== false && env !== "cdp";
+  const authProfile = sanitizeAuthProfileName(params.authProfile || "default");
   const model = params.model ? String(params.model) : undefined;
   const apiKey = params.browserbaseApiKey || process.env.BROWSERBASE_API_KEY;
   const modelApiKey = params.modelApiKey || process.env.STAGEHAND_MODEL_API_KEY;
+  let userDataDir = params.userDataDir ? String(params.userDataDir) : "";
+  if (persistAuth && env === "local" && !userDataDir) {
+    userDataDir = authProfileDir(authProfile);
+    await mkdir(userDataDir, { recursive: true });
+  }
 
   if (typeof mod.Stagehand?.create === "function") {
     let browser;
@@ -124,18 +136,18 @@ async function startSession(params = {}) {
       }
     } else {
       if (!mod.localBrowser?.launch) throw new Error("当前 SDK 不支持 localBrowser.launch");
-      browser = await mod.localBrowser.launch({
-        headless: !headed,
-        userDataDir: params.userDataDir,
-      });
+      const launchOpts = { headless: !headed };
+      if (userDataDir) launchOpts.userDataDir = userDataDir;
+      browser = await mod.localBrowser.launch(launchOpts);
     }
     const createOpts = { browser };
     if (model) {
       createOpts.model = modelApiKey ? { modelName: model, apiKey: modelApiKey } : model;
     }
     const stagehand = await mod.Stagehand.create(createOpts);
-    session = { kind: "v4", stagehand, browser, pageIndex: 0, model };
-    return { kind: "v4", env };
+    session = { kind: "v4", stagehand, browser, pageIndex: 0, model, env, persistAuth, authProfile, userDataDir };
+    await hydrateAuthIfNeeded(env, authProfile);
+    return { kind: "v4", env, persistAuth, authProfile, userDataDir: userDataDir || null };
   }
 
   const Stagehand = mod.Stagehand;
@@ -153,13 +165,14 @@ async function startSession(params = {}) {
   if (env !== "browserbase" && env !== "remote") {
     ctor.localBrowserLaunchOptions = {
       headless: !headed,
-      userDataDir: params.userDataDir,
     };
+    if (userDataDir) ctor.localBrowserLaunchOptions.userDataDir = userDataDir;
   }
   const stagehand = new Stagehand(ctor);
   await stagehand.init();
-  session = { kind: "v3", stagehand, pageIndex: 0, model };
-  return { kind: "v3", env: ctor.env };
+  session = { kind: "v3", stagehand, pageIndex: 0, model, env, persistAuth, authProfile, userDataDir };
+  await hydrateAuthIfNeeded(env, authProfile);
+  return { kind: "v3", env: ctor.env, persistAuth, authProfile, userDataDir: userDataDir || null };
 }
 
 async function stopSession() {
@@ -315,6 +328,7 @@ async function dispatch(method, params = {}) {
         pageCount: pages.length,
         url: page?.url?.() ?? page?.url ?? null,
         title: page ? await callFirst(page, ["title"], []).catch(() => null) : null,
+        auth: await collectAuthStatus(session?.authProfile).catch(() => null),
       };
     }
     case "metrics":
@@ -525,6 +539,31 @@ async function dispatch(method, params = {}) {
       const invocation = await tool.invoke({ input: params.input ?? {} });
       return await invocation.result({ timeout: Number(params.timeout ?? 30_000) });
     }
+    case "authStatus":
+      return await collectAuthStatus(params.profile);
+    case "authSave":
+      return await saveAuthSnapshot(params.profile);
+    case "authLoad":
+      return await loadAuthSnapshot(params.profile);
+    case "authWait":
+      return await waitForLogin(params);
+    case "authClear":
+      return await clearAuthSnapshot(params.profile, params.purge === true);
+    case "authList":
+      return await listAuthSnapshots();
+    case "authCookies": {
+      const cookies = await readCookies();
+      return {
+        count: cookies.length,
+        cookies: cookies.map((item) => ({
+          name: item.name,
+          domain: item.domain,
+          path: item.path,
+          httpOnly: item.httpOnly,
+          secure: item.secure,
+        })),
+      };
+    }
     default:
       throw new Error(`未知方法：${method}`);
   }
@@ -565,6 +604,196 @@ function handleStdinLine(line, writeFn) {
 
 function automationDir() {
   return path.join(os.homedir(), ".wise", "stagehand-automation");
+}
+
+function authProfileDir(profile) {
+  return path.join(automationDir(), "profiles", sanitizeAuthProfileName(profile));
+}
+
+function authStateFile(profile) {
+  return path.join(automationDir(), "auth", `${sanitizeAuthProfileName(profile)}.json`);
+}
+
+async function activeContext() {
+  if (!session) throw new Error("浏览器会话未启动");
+  if (session.kind === "v4") {
+    return session.browser?.context ?? session.stagehand?.browser?.context ?? session.stagehand?.context;
+  }
+  return session.stagehand?.context ?? session.stagehand?.browser?.context;
+}
+
+async function readCookies() {
+  const context = await activeContext();
+  if (typeof context?.cookies === "function") return await context.cookies();
+  return [];
+}
+
+async function readStorageState() {
+  const context = await activeContext();
+  if (typeof context?.storageState === "function") return await context.storageState();
+  return { cookies: await readCookies(), origins: [] };
+}
+
+async function applyStorageState(state) {
+  const context = await activeContext();
+  const cookies = Array.isArray(state?.cookies) ? state.cookies : [];
+  if (cookies.length && typeof context?.addCookies === "function") {
+    await context.addCookies(cookies);
+  }
+  const origins = Array.isArray(state?.origins) ? state.origins : [];
+  const page = await activePage().catch(() => null);
+  if (!page?.evaluate) return { cookies: cookies.length, origins: origins.length };
+  for (const origin of origins) {
+    const items = Array.isArray(origin?.localStorage) ? origin.localStorage : [];
+    if (!origin?.origin || items.length === 0) continue;
+    try {
+      await callFirst(page, ["goto", "open"], [origin.origin, { waitUntil: "domcontentloaded" }]);
+      await page.evaluate((entries) => {
+        for (const item of entries) {
+          if (item?.name != null) localStorage.setItem(String(item.name), String(item.value ?? ""));
+        }
+      }, items);
+    } catch {
+      // origin restore is best-effort
+    }
+  }
+  return { cookies: cookies.length, origins: origins.length };
+}
+
+async function snapshotExists(profile) {
+  return existsSync(authStateFile(profile));
+}
+
+async function hydrateAuthIfNeeded(env, profile) {
+  if (env === "cdp") return;
+  const file = authStateFile(profile);
+  if (!existsSync(file)) return;
+  try {
+    const cookies = await readCookies().catch(() => []);
+    if (cookies.length > 0) return;
+    const state = JSON.parse(await readFile(file, "utf8"));
+    await applyStorageState(state);
+  } catch {
+    // snapshot hydrate is optional
+  }
+}
+
+async function collectAuthStatus(profileName) {
+  const profile = sanitizeAuthProfileName(profileName || session?.authProfile || "default");
+  const persist = session ? session.persistAuth !== false : true;
+  const env = session?.env || "local";
+  let cookies = [];
+  if (session) {
+    cookies = await readCookies().catch(() => []);
+  }
+  const snapshot = await snapshotExists(profile);
+  let snapshotCookies = 0;
+  if (snapshot) {
+    try {
+      const state = JSON.parse(await readFile(authStateFile(profile), "utf8"));
+      snapshotCookies = Array.isArray(state.cookies) ? state.cookies.length : 0;
+    } catch {
+      snapshotCookies = 0;
+    }
+  }
+  const cookieCount = cookies.length || snapshotCookies;
+  const domains = [...new Set(cookies.map((item) => item.domain).filter(Boolean))].slice(0, 8);
+  const payload = {
+    persist,
+    profile,
+    env,
+    running: Boolean(session),
+    snapshot,
+    snapshotPath: snapshot ? authStateFile(profile) : null,
+    userDataDir: session?.userDataDir || (persist && env === "local" ? authProfileDir(profile) : null),
+    cookieCount,
+    domains,
+  };
+  payload.summary = summarizeAuthState(payload);
+  return payload;
+}
+
+async function saveAuthSnapshot(profileName) {
+  const profile = sanitizeAuthProfileName(profileName || session?.authProfile || "default");
+  const state = await readStorageState();
+  const file = authStateFile(profile);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  const cookieCount = Array.isArray(state.cookies) ? state.cookies.length : 0;
+  return { path: file, profile, cookieCount };
+}
+
+async function loadAuthSnapshot(profileName) {
+  const profile = sanitizeAuthProfileName(profileName || session?.authProfile || "default");
+  const file = authStateFile(profile);
+  if (!existsSync(file)) throw new Error(`没有登录态快照：${file}。先在有窗口时登录并执行 wise browse auth save`);
+  const state = JSON.parse(await readFile(file, "utf8"));
+  const applied = await applyStorageState(state);
+  return { path: file, profile, ...applied };
+}
+
+async function clearAuthSnapshot(profileName, purge) {
+  const profile = sanitizeAuthProfileName(profileName || "default");
+  const file = authStateFile(profile);
+  if (existsSync(file)) await unlink(file);
+  if (purge) {
+    if (session) throw new Error("请先 wise browse stop，再清除持久档案目录");
+    const dir = authProfileDir(profile);
+    if (existsSync(dir)) await rm(dir, { recursive: true, force: true });
+  }
+  return { profile, cleared: true, purge: Boolean(purge) };
+}
+
+async function listAuthSnapshots() {
+  const dir = path.join(automationDir(), "auth");
+  const names = await readdir(dir).catch(() => []);
+  const items = [];
+  for (const name of names.filter((item) => item.endsWith(".json"))) {
+    const file = path.join(dir, name);
+    try {
+      const state = JSON.parse(await readFile(file, "utf8"));
+      items.push({
+        profile: name.replace(/\.json$/, ""),
+        path: file,
+        cookieCount: Array.isArray(state.cookies) ? state.cookies.length : 0,
+      });
+    } catch {
+      items.push({ profile: name.replace(/\.json$/, ""), path: file, cookieCount: 0 });
+    }
+  }
+  return { count: items.length, items };
+}
+
+async function waitForLogin(params = {}) {
+  const profile = sanitizeAuthProfileName(params.profile || session?.authProfile || "default");
+  const timeout = Number(params.timeout ?? 180_000);
+  const target = params.target || params.selector;
+  const page = await activePage();
+  const startUrl = page?.url?.() ?? page?.url ?? "";
+  const startCookies = await readCookies().catch(() => []);
+  const deadline = Date.now() + Math.max(5_000, timeout);
+  let last = looksLoggedIn({ url: startUrl, cookies: startCookies, startUrl, startCookieCount: startCookies.length });
+  while (Date.now() < deadline) {
+    if (target) {
+      try {
+        const probe = await dispatch("is", { state: "visible", target });
+        if (probe?.value) {
+          last = { ok: true, reason: `已出现 ${target}` };
+          break;
+        }
+      } catch {
+        // keep waiting
+      }
+    }
+    const url = page?.url?.() ?? page?.url ?? "";
+    const cookies = await readCookies().catch(() => []);
+    last = looksLoggedIn({ url, cookies, startUrl, startCookieCount: startCookies.length });
+    if (last.ok) break;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  if (!last.ok) throw new Error(`等待登录超时：${last.reason}`);
+  const saved = await saveAuthSnapshot(profile);
+  return { ...last, ...saved };
 }
 
 function socketPath() {
@@ -805,6 +1034,8 @@ async function ensureSession(parsed) {
   await callDaemon("start", {
     env: config.env ?? "local",
     headed: config.headed !== false,
+    persistAuth: config.persistAuth !== false,
+    authProfile: config.authProfile || "default",
     model: config.model || undefined,
     modelApiKey: config.modelApiKey || undefined,
     browserbaseApiKey: config.browserbaseApiKey || undefined,
@@ -1069,7 +1300,13 @@ async function runCli(argv) {
     await runInitCli(parsed);
     return;
   }
-  const skipDaemon = parsed.method === "status" || parsed.method === "stop" || parsed.method === "ping";
+  const skipDaemon =
+    parsed.method === "status" ||
+    parsed.method === "stop" ||
+    parsed.method === "ping" ||
+    parsed.method === "authStatus" ||
+    parsed.method === "authList" ||
+    parsed.method === "authClear";
   if (skipDaemon && !(await daemonReachable())) {
     if (parsed.method === "status") {
       process.stdout.write(
@@ -1081,12 +1318,31 @@ async function runCli(argv) {
       process.stdout.write(`${JSON.stringify(formatCliOutput("stop", { stopped: false }), null, 2)}\n`);
       return;
     }
+    if (parsed.method === "authStatus") {
+      const result = await collectAuthStatus(parsed.params?.profile);
+      process.stdout.write(`${JSON.stringify(formatCliOutput("authStatus", result), null, 2)}\n`);
+      return;
+    }
+    if (parsed.method === "authList") {
+      const result = await listAuthSnapshots();
+      process.stdout.write(`${JSON.stringify(formatCliOutput("authList", result), null, 2)}\n`);
+      return;
+    }
+    if (parsed.method === "authClear") {
+      const result = await clearAuthSnapshot(parsed.params?.profile, parsed.params?.purge === true);
+      process.stdout.write(`${JSON.stringify(formatCliOutput("authClear", result), null, 2)}\n`);
+      return;
+    }
     process.stdout.write(`${JSON.stringify({ pong: true, hasSession: false }, null, 2)}\n`);
     return;
   }
   await ensureDaemon();
   await ensureSession(parsed);
-  const result = await callDaemon(parsed.method, parsed.params);
+  const waitMs =
+    parsed.method === "authWait"
+      ? Math.max(180_000, Number(parsed.params?.timeout ?? 180_000) + 15_000)
+      : 180_000;
+  const result = await callDaemon(parsed.method, parsed.params, waitMs);
   let page = null;
   if (parsed.method === "status" && result && typeof result === "object") {
     page = result;

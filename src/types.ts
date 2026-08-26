@@ -839,12 +839,12 @@ export interface ClaudeSession {
   ultracodeEnabled?: boolean;
   /**
    * Codex RPC 推理强度（`turn/start.effort`）：minimal/low/medium/high/xhigh/ultra。
-   * 仅 `executionEngine === "codex-rpc"` 时有意义；落盘到 tabs.json，按会话恢复。
+   * 仅 `executionEngine === "codex-rpc"` 时有意义；落盘到 tabs.json，并作为该执行环境新建会话默认值。
    */
   codexReasoningEffort?: string;
   /**
    * Claude Code 推理强度（CLI `--effort`）：low/medium/high/xhigh/max/ultracode。
-   * 仅 Claude 引擎有意义；OMC UltracodeChip 开启时 spawn 仍强制 max。落盘到 tabs.json。
+   * 仅 Claude 引擎有意义；OMC UltracodeChip 开启时 spawn 仍强制 max。落盘到 tabs.json，并作为该执行环境新建会话默认值。
    */
   claudeReasoningEffort?: string;
 }

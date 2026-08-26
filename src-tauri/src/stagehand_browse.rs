@@ -56,6 +56,19 @@ const BROWSE_ROOT_COMMANDS: &[&str] = &[
     "start",
     "help",
     "version",
+    "auth",
+    "cookies",
+    "do",
+    "act",
+    "extract",
+    "observe",
+    "agent",
+    "assert",
+    "expect",
+    "test",
+    "accept",
+    "report",
+    "init",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +100,8 @@ pub struct StagehandBrowseConfig {
     pub browserbase_project_id: Option<String>,
     pub cdp_url: Option<String>,
     pub url: Option<String>,
+    pub persist_auth: Option<bool>,
+    pub auth_profile: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,6 +149,8 @@ pub struct StagehandStartOptions {
     pub browserbase_api_key: Option<String>,
     pub browserbase_project_id: Option<String>,
     pub cdp_url: Option<String>,
+    pub persist_auth: Option<bool>,
+    pub auth_profile: Option<String>,
 }
 
 struct SidecarSession {
@@ -457,7 +474,7 @@ fn sync_user_sidecar(app: &AppHandle) -> Result<PathBuf, String> {
     let src = source_sidecar_scripts(app)?;
     let dest = user_sidecar_dir()?;
     std::fs::create_dir_all(&dest).map_err(|e| format!("无法创建 {}：{e}", dest.display()))?;
-    for name in ["cli.mjs", "argv.mjs", "assert.mjs", "package.json"] {
+    for name in ["cli.mjs", "argv.mjs", "assert.mjs", "auth.mjs", "package.json"] {
         let from = src.join(name);
         if from.is_file() {
             copy_file(&from, &dest.join(name))?;
@@ -976,6 +993,7 @@ pub async fn stagehand_browse_start(
 ) -> Result<Value, String> {
     let session_id = sanitize_session_id(&session_id)?;
     spawn_sidecar(&app, &state, &session_id, env_vars.as_ref()).await?;
+    let config = load_config_file().unwrap_or_default();
     let opts = options.unwrap_or(StagehandStartOptions {
         env: Some("local".into()),
         headed: Some(true),
@@ -984,6 +1002,8 @@ pub async fn stagehand_browse_start(
         browserbase_api_key: None,
         browserbase_project_id: None,
         cdp_url: None,
+        persist_auth: None,
+        auth_profile: None,
     });
     let params = json!({
         "env": opts.env.unwrap_or_else(|| "local".into()),
@@ -993,6 +1013,8 @@ pub async fn stagehand_browse_start(
         "browserbaseApiKey": opts.browserbase_api_key,
         "browserbaseProjectId": opts.browserbase_project_id,
         "cdpUrl": opts.cdp_url,
+        "persistAuth": opts.persist_auth.or(config.persist_auth).unwrap_or(true),
+        "authProfile": opts.auth_profile.or(config.auth_profile).unwrap_or_else(|| "default".into()),
     });
     match sidecar_rpc(&state, &session_id, "start", params).await {
         Ok(result) => Ok(result),
@@ -1065,7 +1087,7 @@ pub async fn stagehand_browse_exec(
 mod tests {
     use super::{
         rc_has_wise_bin, sanitize_session_id, validate_browse_args, wise_bin_path_export_block,
-        StagehandBrowseConfig, BROWSE_ROOT_COMMANDS,
+        StagehandBrowseConfig,
     };
 
     #[test]
@@ -1081,7 +1103,8 @@ mod tests {
     #[test]
     fn allows_known_browse_commands() {
         assert!(validate_browse_args(&["open".into(), "https://example.com".into()]).is_ok());
-        assert!(!BROWSE_ROOT_COMMANDS.contains(&"act"));
+        assert!(validate_browse_args(&["auth".into(), "status".into()]).is_ok());
+        assert!(validate_browse_args(&["act".into(), "click Search".into()]).is_ok());
         assert!(validate_browse_args(&["rm".into(), "-rf".into()]).is_err());
     }
 
@@ -1097,6 +1120,12 @@ mod tests {
         let parsed: StagehandBrowseConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.env.as_deref(), Some("local"));
         assert_eq!(parsed.headed, Some(true));
+        let with_auth: StagehandBrowseConfig = serde_json::from_str(
+            r#"{"env":"local","headed":true,"persistAuth":true,"authProfile":"work"}"#,
+        )
+        .unwrap();
+        assert_eq!(with_auth.persist_auth, Some(true));
+        assert_eq!(with_auth.auth_profile.as_deref(), Some("work"));
     }
 
     #[test]

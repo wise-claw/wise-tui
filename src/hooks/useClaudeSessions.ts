@@ -18,6 +18,10 @@ import {
   loadExecutionEngineModelDefaults,
   saveExecutionEngineDefaultModel,
 } from "../services/executionEngineModelDefaults";
+import {
+  loadExecutionEngineReasoningDefaults,
+  saveExecutionEngineDefaultReasoning,
+} from "../services/executionEngineReasoningDefaults";
 import type {
   ClaudeSession,
   QuestionRequest,
@@ -53,7 +57,10 @@ import {
 } from "../services/claudeModelProfiles";
 import { buildClaudeModelSwitchReconnectPlan } from "../utils/claudeModelProfileReconnect";
 import { resolveCursorResumeAgentId } from "../utils/cursorAgentId";
-import { resolveNewSessionComposerModel } from "../utils/newSessionComposerDefaults";
+import {
+  resolveNewSessionComposerModel,
+  resolveNewSessionComposerReasoning,
+} from "../utils/newSessionComposerDefaults";
 import { CURSOR_SDK_DEFAULT_MODEL } from "../constants/cursorSdk";
 import {
   loadDefaultClaudeConnectionKind,
@@ -1538,7 +1545,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
         const codexResumeSessionId = params.forceNewClaudeConversation
           ? null
-          : resolveCodexResumeSessionId(session, tabSessionId, sessionIdMapRef.current);
+          : resolveCodexResumeSessionId(session, tabSessionId, sessionIdMapRef.current, {
+              requireUuid: resolvedEngine === "codex-rpc",
+            });
         if (resolvedEngine === "codex-rpc") {
           // 主发送路径此前误走 Codex CLI，导致不写 ~/.wise/codex-runs，刷新后无法 hydrate。
           await runCodexRpcOneshotWithInvocation({
@@ -2790,6 +2799,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   const updateSessionModel = useCallback((sessionId: string, model: string) => {
     const trimmed = model.trim();
+    const session = sessionsRef.current.find((item) => item.id === sessionId);
+    if (trimmed && session) {
+      void saveExecutionEngineDefaultModel(
+        resolveSessionExecutionEngine(session),
+        trimmed,
+      ).catch(() => undefined);
+    }
     setSessions((prev) => {
       let changed = false;
       const next = prev.map((s) => {
@@ -2800,7 +2816,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       });
       return changed ? next : prev;
     });
-  }, []);
+  }, [resolveSessionExecutionEngine]);
 
   const updateSessionConnectionKind = useCallback(
     async (sessionId: string, kind: ClaudeSessionConnectionKind) => {
@@ -2877,6 +2893,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const updateSessionCodexReasoningEffort = useCallback((sessionId: string, effort: string) => {
     const next = normalizeCodexReasoningEffort(effort);
     setCodexRpcReasoningEffort(sessionId, next);
+    const session = sessionsRef.current.find((item) => item.id === sessionId);
+    if (session) {
+      void saveExecutionEngineDefaultReasoning(
+        resolveSessionExecutionEngine(session),
+        next,
+      ).catch(() => undefined);
+    }
     setSessions((prev) => {
       let changed = false;
       const nextSessions = prev.map((s) => {
@@ -2889,10 +2912,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       sessionsRef.current = nextSessions;
       return nextSessions;
     });
-  }, []);
+  }, [resolveSessionExecutionEngine]);
 
   const updateSessionClaudeReasoningEffort = useCallback((sessionId: string, effort: string) => {
     const next = normalizeClaudeReasoningEffort(effort);
+    const session = sessionsRef.current.find((item) => item.id === sessionId);
+    if (session) {
+      void saveExecutionEngineDefaultReasoning(
+        resolveSessionExecutionEngine(session),
+        next,
+      ).catch(() => undefined);
+    }
     setSessions((prev) => {
       let changed = false;
       const nextSessions = prev.map((s) => {
@@ -2905,7 +2935,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       sessionsRef.current = nextSessions;
       return nextSessions;
     });
-  }, []);
+  }, [resolveSessionExecutionEngine]);
 
   /**
    * Composer 切换执行环境：写入标签级 `executionEngine`，使当前会话下一回合立即生效
@@ -2938,6 +2968,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const nextModel =
         savedModel ||
         (nextEngine === "cursor" ? CURSOR_SDK_DEFAULT_MODEL : session.model);
+      await loadExecutionEngineReasoningDefaults();
+      const reasoning = resolveNewSessionComposerReasoning(nextEngine);
+      if (reasoning.codexReasoningEffort) {
+        setCodexRpcReasoningEffort(sessionId, reasoning.codexReasoningEffort);
+      }
       setSessions((prev) => {
         const nextSessions = prev.map((s) => {
           if (s.id !== sessionId) return s;
@@ -2946,6 +2981,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             executionEngine: nextEngine,
             claudeSessionId: null,
             ...(nextModel.trim() ? { model: nextModel } : {}),
+            ...reasoning,
           };
           return applyTabConnectionKindOverride(withEngine, nextConnectionKind, globalDefault);
         });
@@ -3008,21 +3044,26 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (!opts?.initialModel?.trim()) {
         await loadExecutionEngineModelDefaults();
       }
+      await loadExecutionEngineReasoningDefaults();
       const savedDefaultModel = opts?.initialModel?.trim()
         ? null
         : getCachedExecutionEngineDefaultModel(creationEngine);
+      const active = sessionsRef.current.find((item) => item.id === activeSessionIdRef.current);
+      const inheritFromActive =
+        active && resolveSessionExecutionEngine(active) === creationEngine ? active : null;
       const inheritModel = (() => {
         if (opts?.initialModel?.trim()) return null;
-        const active = sessionsRef.current.find((item) => item.id === activeSessionIdRef.current);
-        if (!active) return null;
-        if (resolveSessionExecutionEngine(active) !== creationEngine) return null;
-        return active.model?.trim() || null;
+        return inheritFromActive?.model?.trim() || null;
       })();
       const resolvedModel =
         opts?.initialModel?.trim() ||
         resolveNewSessionComposerModel(creationEngine, inheritModel);
       if (!savedDefaultModel && inheritModel && inheritModel === resolvedModel) {
         void saveExecutionEngineDefaultModel(creationEngine, inheritModel).catch(() => undefined);
+      }
+      const reasoning = resolveNewSessionComposerReasoning(creationEngine, inheritFromActive);
+      if (reasoning.codexReasoningEffort) {
+        setCodexRpcReasoningEffort(id, reasoning.codexReasoningEffort);
       }
       const newSession: ClaudeSession = {
         id,
@@ -3036,6 +3077,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         pendingPrompt: "",
         ...(opts?.connectionKind ? { connectionKind: opts.connectionKind } : {}),
         executionEngine: creationEngine,
+        ...reasoning,
         ...(opts?.requirementId ? { requirementId: opts.requirementId } : {}),
         ...(opts?.isSide ? { isSide: true } : {}),
       };

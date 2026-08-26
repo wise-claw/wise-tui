@@ -104,23 +104,52 @@ export function isCodexModelId(
 }
 
 /**
- * Composer Codex 模型：菜单刚选的值最高优先，避免列表刷新 / 档案生效模型
- * 把 GPT-5.6-Luna 等目录模型打回本地档案（如 deepseek v4-flash）。
+ * Composer Codex 模型：
+ * - 菜单刚选的目录模型最高优先，避免列表刷新把 GPT-5.6-Luna 打回本地档案；
+ * - 用户刚应用本地档案时，档案模型覆盖之前的目录选择。
  */
 export function resolveCodexComposerModel(input: {
   pickedModel?: string | null;
   sessionModel?: string | null;
   profileModel?: string | null;
   knownModels?: readonly CodexModelRef[];
+  /** 用户刚点选并应用了本地档案。 */
+  profileApplied?: boolean;
 }): string | undefined {
   const picked = input.pickedModel?.trim() || "";
   if (picked) return picked;
   const session = input.sessionModel?.trim() || "";
   const profile = input.profileModel?.trim() || "";
+  if (input.profileApplied) {
+    return profile || session || undefined;
+  }
   if (session && isCodexModelId(session, input.knownModels) && profile && session !== profile) {
     return session;
   }
   return profile || session || undefined;
+}
+
+/** 运行态目录 + 本地档案 modelId，供 Composer 判断「已知 Codex 模型」。 */
+export function mergeCodexKnownModels(
+  runtimeModels: readonly CodexModelRef[] | null | undefined,
+  profiles: readonly ClaudeModelProfile[] = [],
+): CodexModelRef[] {
+  const out: CodexModelRef[] = [];
+  const seen = new Set<string>();
+  const push = (id: string, displayName?: string | null) => {
+    const v = id.trim();
+    if (!v || seen.has(v)) return;
+    seen.add(v);
+    out.push(displayName?.trim() ? { id: v, displayName: displayName.trim() } : { id: v });
+  };
+  for (const item of runtimeModels ?? []) {
+    push(item.id, item.displayName);
+  }
+  for (const profile of profiles) {
+    if (profile.engine !== "codex") continue;
+    push(profile.modelId, profile.name);
+  }
+  return out;
 }
 
 /** Codex 官方目录模型应走 OpenAI 默认 provider，不能套用 DeepSeek 等自定义档案。 */

@@ -152,11 +152,10 @@ pub(crate) struct RespondCodexRpcMcpElicitationParams {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn codex_rpc_init_stream_line(session_id: &str) -> String {
+fn codex_rpc_init_stream_line() -> String {
     json!({
         "type": "system",
         "subtype": "init",
-        "session_id": session_id,
     })
     .to_string()
 }
@@ -179,6 +178,32 @@ fn persist_codex_rpc_transcript_line(project_path: &str, tab_session_id: &str, l
             "[codex_rpc] transcript append failed (tab={tab_session_id}): {e}"
         );
     }
+}
+
+/// 续接旧 thread 失败时应改为新建 thread：
+/// - 切 provider 后旧配置里的 model_provider 已不存在；
+/// - 误把 Wise 标签 id（`session_…`）当成 Codex UUID。
+fn codex_rpc_resume_should_start_fresh(err: &str) -> bool {
+    let lower = err.to_lowercase();
+    (lower.contains("provider") && lower.contains("not found"))
+        || lower.contains("failed to load configuration")
+        || lower.contains("invalid session id")
+        || lower.contains("invalid character")
+        || ((lower.contains("session") || lower.contains("thread"))
+            && (lower.contains("not found")
+                || lower.contains("no such")
+                || lower.contains("does not exist")))
+}
+
+fn is_codex_rpc_thread_id(id: &str) -> bool {
+    let trimmed = id.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let uuid = trimmed
+        .strip_prefix("urn:uuid:")
+        .unwrap_or(trimmed);
+    Uuid::parse_str(uuid).is_ok()
 }
 
 fn emit_and_persist_rpc_output_line(
@@ -261,7 +286,7 @@ pub(crate) async fn execute_codex_rpc(
         &app,
         &params.project_path,
         &session_id,
-        &codex_rpc_init_stream_line(&session_id),
+        &codex_rpc_init_stream_line(),
         invocation_key.as_deref(),
     );
 
@@ -293,11 +318,13 @@ pub(crate) async fn execute_codex_rpc(
     };
 
     // Start or resume a thread.
+    // Wise 标签 id（`session_…`）不能传给 thread/resume，Codex 只接受 UUID。
     let resume_id = params
         .codex_resume_session_id
         .as_deref()
         .map(str::trim)
-        .filter(|s| !s.is_empty());
+        .filter(|s| !s.is_empty())
+        .filter(|s| is_codex_rpc_thread_id(s));
 
     let default_settings = load_codex_default_settings(&db);
     let thread_config = build_codex_rpc_thread_config(default_settings.as_ref());
@@ -324,7 +351,23 @@ pub(crate) async fn execute_codex_rpc(
     session.set_active_model(effective_model.as_deref());
 
     let thread_result = if let Some(thread_id) = resume_id {
-        session.resume_thread(thread_id).await
+        match session.resume_thread(thread_id).await {
+            Ok(()) => Ok(()),
+            Err(e) if codex_rpc_resume_should_start_fresh(&e.to_string()) => {
+                eprintln!(
+                    "[codex_rpc] resume incompatible with current provider, starting new thread: {e}"
+                );
+                session
+                    .start_thread(
+                        Some(params.project_path.as_str()),
+                        effective_model.as_deref(),
+                        thread_config.clone(),
+                    )
+                    .await
+                    .map(|_| ())
+            }
+            Err(e) => Err(e),
+        }
     } else {
         session
             .start_thread(
@@ -1539,4 +1582,45 @@ pub(crate) async fn respond_codex_rpc_dynamic_tool(
         .respond_to_dynamic_tool(params.request_id, params.result)
         .await
         .map_err(|e| format!("dynamic tool response failed: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{codex_rpc_resume_should_start_fresh, is_codex_rpc_thread_id};
+
+    #[test]
+    fn missing_deepseek_provider_starts_fresh() {
+        assert!(codex_rpc_resume_should_start_fresh(
+            "thread/resume failed: [-32600] failed to load configuration: Model provider deepseek not found"
+        ));
+        assert!(codex_rpc_resume_should_start_fresh(
+            "failed to load configuration: Model provider volc-ark-coding not found"
+        ));
+    }
+
+    #[test]
+    fn invalid_session_id_starts_fresh() {
+        assert!(codex_rpc_resume_should_start_fresh(
+            "thread/resume failed: [-32600] invalid session id: invalid character: expected an optional prefix of urn:uuid: followed by [0-9a-fA-F-], found s at 1"
+        ));
+        assert!(!is_codex_rpc_thread_id("session_1772170000_ab12cd"));
+        assert!(!is_codex_rpc_thread_id("codex-rpc-abc"));
+        assert!(is_codex_rpc_thread_id("0199a213-81c0-7800-8aa1-bbab2a035a53"));
+        assert!(is_codex_rpc_thread_id("urn:uuid:0199a213-81c0-7800-8aa1-bbab2a035a53"));
+    }
+
+    #[test]
+    fn missing_session_starts_fresh() {
+        assert!(codex_rpc_resume_should_start_fresh("session not found"));
+        assert!(codex_rpc_resume_should_start_fresh("thread does not exist"));
+    }
+
+    #[test]
+    fn unrelated_resume_errors_are_not_swallowed() {
+        assert!(!codex_rpc_resume_should_start_fresh("thread/resume failed: [-32600] unauthorized"));
+        assert!(!codex_rpc_resume_should_start_fresh("API key invalid"));
+        assert!(!codex_rpc_resume_should_start_fresh(
+            "unexpected status 402 Payment Required: Insufficient Balance"
+        ));
+    }
 }

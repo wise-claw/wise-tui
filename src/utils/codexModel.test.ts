@@ -11,6 +11,7 @@ import {
   resolveCodexOpenAiDefaultProfileId,
   resolveCodexProfileModelFromStore,
   looksLikeOpenAiCatalogModel,
+  mergeCodexKnownModels,
 } from "./codexModel";
 
 const store = (partial: Partial<ClaudeModelProfileStoreView>): ClaudeModelProfileStoreView =>
@@ -230,6 +231,57 @@ describe("resolveCodexComposerModel", () => {
         sessionModel: "MiniMax-M3",
         profileModel: "deepseek-v4-flash",
         knownModels: known,
+      }),
+    ).toBe("deepseek-v4-flash");
+  });
+
+  test("applying a local profile overrides a leftover catalog session model", () => {
+    expect(
+      resolveCodexComposerModel({
+        sessionModel: "gpt-5.6",
+        profileModel: "deepseek-v4-flash",
+        knownModels: known,
+        profileApplied: true,
+      }),
+    ).toBe("deepseek-v4-flash");
+  });
+
+  test("picked catalog model still wins while applying openai default as provider", () => {
+    expect(
+      resolveCodexComposerModel({
+        pickedModel: "gpt-5.6",
+        sessionModel: "gpt-5.6",
+        profileModel: "gpt-5.4",
+        knownModels: known,
+        profileApplied: true,
+      }),
+    ).toBe("gpt-5.6");
+  });
+});
+
+describe("mergeCodexKnownModels", () => {
+  test("includes local profile model ids missing from the runtime catalog", () => {
+    const merged = mergeCodexKnownModels(
+      [{ id: "gpt-5.6", displayName: "GPT-5.6-Luna" }],
+      [
+        {
+          id: "ds",
+          company: "DeepSeek",
+          name: "deepseek v4-flash",
+          modelId: "deepseek-v4-flash",
+          settingsJson: "{}",
+          engine: "codex",
+          createdAtMs: 0,
+          updatedAtMs: 0,
+        } as import("../types/claudeModelProfile").ClaudeModelProfile,
+      ],
+    );
+    expect(merged.map((item) => item.id)).toEqual(["gpt-5.6", "deepseek-v4-flash"]);
+    expect(
+      resolveCodexComposerModel({
+        sessionModel: "deepseek-v4-flash",
+        profileModel: "gpt-5.4",
+        knownModels: merged,
       }),
     ).toBe("deepseek-v4-flash");
   });

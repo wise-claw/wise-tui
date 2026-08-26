@@ -27,13 +27,35 @@ wise browse accept --url https://www.google.com --check "title contains Google" 
 wise browse accept --init login.accept.json
 wise browse test --file ./login.accept.json
 wise browse report
+wise browse auth wait
+wise browse auth save
+wise browse auth status
 wise browse snapshot
 wise browse screenshot --full
 wise browse status
 wise browse help
 ```
 
-The first command that needs a page auto-starts the shared browser using `~/.wise/stagehand-automation/config.json`. Later commands reuse the same window.
+The first command that needs a page auto-starts the shared browser using `~/.wise/stagehand-automation/config.json`. Later commands reuse the same window. Local mode **persists login state** in `~/.wise/stagehand-automation/profiles/<档案>` (default `default`). Turn this off in the top-right config if you need a clean session.
+
+## Login state
+
+Sites that need a logged-in user:
+
+1. Keep「显示窗口」on. Open the login page (`wise browse open …`).
+2. Ask the user to sign in in that window, then run `wise browse auth wait` (or `wise browse 等待登录`). It waits until the URL leaves `/login` or a session cookie appears, then saves a snapshot.
+3. If the user already finished login, `wise browse auth save` (or「保存登录态」).
+4. Later sessions reuse the Chromium profile automatically. Cloud / headless-without-profile can `wise browse auth load`.
+
+```bash
+wise browse auth status
+wise browse auth save [档案名]
+wise browse auth load [档案名]
+wise browse auth wait [--timeout 180000]
+wise browse auth clear [档案名]
+```
+
+Do not paste passwords into the CLI. Prefer the headed window or CDP attach to an already-logged-in Chrome.
 
 Site aliases work without a full URL: `wise browse open 谷歌`, `open 百度`, `open github`. You can also forward the user's sentence: `wise browse 打开谷歌官网`, `wise browse 断言标题包含 Google`, `wise browse 验收当前页有登录按钮`.
 
@@ -85,6 +107,8 @@ Natural-language checks need a model key (top-right config). Mix them with asser
 - 「查看最近验收报告」→ `wise browse report`
 - 「点一下登录」→ `wise browse act "click the login button"`
 - 「截一张图」→ `wise browse screenshot`
+- 「等待登录」→ `wise browse auth wait`
+- 「保存登录态」→ `wise browse auth save`
 
 If the URL is ambiguous, pick the official homepage and say which URL you opened.
 

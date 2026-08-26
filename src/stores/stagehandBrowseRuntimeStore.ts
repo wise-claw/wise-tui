@@ -22,6 +22,9 @@ export type StagehandBrowseRuntimeState = {
   screenshotPath: string | null;
   pageUrl: string | null;
   pageTitle: string | null;
+  pageCount: number;
+  authSummary: string | null;
+  cookieCount: number;
   observeActions: StagehandObserveAction[];
   logs: StagehandBrowseLogLine[];
 };
@@ -33,6 +36,9 @@ const DEFAULT_STATE: StagehandBrowseRuntimeState = {
   screenshotPath: null,
   pageUrl: null,
   pageTitle: null,
+  pageCount: 0,
+  authSummary: null,
+  cookieCount: 0,
   observeActions: [],
   logs: [],
 };
@@ -95,6 +101,9 @@ export function setStagehandBrowseStatus(
   if (status === "idle") {
     state.pageUrl = null;
     state.pageTitle = null;
+    state.pageCount = 0;
+    state.authSummary = null;
+    state.cookieCount = 0;
     state.observeActions = [];
   }
   emit(sessionId);
@@ -104,6 +113,9 @@ export function setStagehandBrowsePage(sessionId: string, page: StagehandPageSta
   const state = getOrCreate(sessionId);
   state.pageUrl = page.url;
   state.pageTitle = page.title;
+  state.pageCount = page.pageCount;
+  state.authSummary = page.authSummary;
+  state.cookieCount = page.cookieCount;
   if (page.running && state.status === "idle") {
     state.status = "running";
     state.statusHint = page.title || page.url || "运行中";

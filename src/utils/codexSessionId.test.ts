@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   isLikelyCodexResumeId,
+  isLikelyCodexRpcResumeId,
   resolveCodexResumeSessionId,
   sessionHasPriorCodexTurn,
 } from "./codexSessionId";
@@ -11,6 +12,10 @@ describe("codexSessionId helpers", () => {
     expect(isLikelyCodexResumeId("my-thread")).toBe(true);
     expect(isLikelyCodexResumeId("agent-abc")).toBe(false);
     expect(isLikelyCodexResumeId("bc-123")).toBe(false);
+    expect(isLikelyCodexResumeId("session_1772170000_ab12cd")).toBe(false);
+    expect(isLikelyCodexRpcResumeId("0199a213-81c0-7800-8aa1-bbab2a035a53")).toBe(true);
+    expect(isLikelyCodexRpcResumeId("my-thread")).toBe(false);
+    expect(isLikelyCodexRpcResumeId("session_1772170000_ab12cd")).toBe(false);
   });
 
   test("does not resume before first codex turn", () => {
@@ -87,5 +92,26 @@ describe("codexSessionId helpers", () => {
         "tab-1",
       ),
     ).toBe("019ff120-f166-72c3-9e1b-a7971b93dc39");
+  });
+
+  test("does not resume with wise tab session ids", () => {
+    expect(
+      resolveCodexResumeSessionId(
+        {
+          claudeSessionId: "session_1772170000_ab12cd",
+          messages: [
+            {
+              role: "system",
+              content: "Codex RPC 执行中（续接会话，模型：GPT-5.6-Luna）…",
+              timestamp: 1,
+              parts: [],
+            },
+          ],
+        },
+        "session_1772170000_ab12cd",
+        undefined,
+        { requireUuid: true },
+      ),
+    ).toBeNull();
   });
 });

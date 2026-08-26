@@ -60,6 +60,7 @@ import {
   isCodexModelId,
   looksLikeOpenAiCatalogModel,
   matchesCodexModelPickerFilter,
+  mergeCodexKnownModels,
   resolveCodexComposerModel,
   resolveCodexOpenAiDefaultProfileId,
   type CodexModelPickerOption,
@@ -426,14 +427,14 @@ function ComposerModelPickerImpl({
 
   useEffect(() => {
     if (!isCodexEngine) return;
+    const store = getCachedModelProfileStore();
     const fromProfile =
-      resolveEffectiveModelForProfileEngine("codex", getCachedModelProfileStore())?.trim() || null;
-    // 菜单刚选的目录模型最高优先，避免 listCodexModels / 档案缓存刷新把选择打回本地档案。
+      resolveEffectiveModelForProfileEngine("codex", store)?.trim() || null;
     const nextModel = resolveCodexComposerModel({
       pickedModel: pickedModelRef.current,
       sessionModel: session.model,
       profileModel: fromProfile,
-      knownModels: codexModels ?? undefined,
+      knownModels: mergeCodexKnownModels(codexModels, store?.profiles ?? []),
     });
     if (nextModel) syncModelIfNeeded(nextModel);
   }, [isCodexEngine, session.id, session.model, codexModels, profileStoreRevision, syncModelIfNeeded]);
@@ -476,17 +477,26 @@ function ComposerModelPickerImpl({
       if (isCodexEngine) {
         const isCodexProfileApply =
           Boolean(detail?.storeSnapshot) && (detail.engine === "codex" || !detail.engine);
-        if (isCodexProfileApply) {
+        const picked = pickedModelRef.current?.trim() || "";
+        const storeSnapshot = detail?.storeSnapshot ?? getCachedModelProfileStore();
+        const fromProfile = resolveEffectiveModelForProfileEngine("codex", storeSnapshot);
+        // 点选本地档案时不要保留之前的 GPT 目录选择；目录模型套用 OpenAI 档案时 picked 仍在，保持目录模型。
+        if (isCodexProfileApply && !picked) {
           pickedModelRef.current = null;
+          if (fromProfile?.trim()) {
+            syncModelIfNeeded(fromProfile.trim());
+            return;
+          }
         }
         const nextModel = resolveCodexComposerModel({
-          pickedModel: pickedModelRef.current,
+          pickedModel: picked || null,
           sessionModel: modelRef.current,
-          profileModel: resolveEffectiveModelForProfileEngine(
-            "codex",
-            detail?.storeSnapshot ?? getCachedModelProfileStore(),
+          profileModel: fromProfile,
+          knownModels: mergeCodexKnownModels(
+            getCachedCodexModels(),
+            storeSnapshot?.profiles ?? [],
           ),
-          knownModels: getCachedCodexModels() ?? undefined,
+          profileApplied: isCodexProfileApply && !picked,
         });
         if (nextModel) {
           syncModelIfNeeded(nextModel);
@@ -908,11 +918,17 @@ function ComposerModelPickerImpl({
           pickedModelRef.current = null;
           setSelectOnlyMenuOpen(false);
           setSelectOnlyFilter("");
+          flushSync(() => {
+            onModelChange(modelId);
+          });
+          void saveExecutionEngineDefaultModel(sessionExecutionEngine, modelId).catch(() => undefined);
           void applyClaudeModelProfile(profileId)
             .then((next) => {
               seedModelProfileStoreCache(next);
               setProfileStoreRevision((n) => n + 1);
+              pickedModelRef.current = null;
               dispatchModelProfileStoreChanged(next, { engine: "codex" });
+              onModelChange(modelId);
             })
             .catch(() => undefined);
           return;
@@ -928,6 +944,10 @@ function ComposerModelPickerImpl({
           pickedModelRef.current = null;
           setSelectOnlyMenuOpen(false);
           setSelectOnlyFilter("");
+          flushSync(() => {
+            onModelChange(modelId);
+          });
+          void saveExecutionEngineDefaultModel(sessionExecutionEngine, modelId).catch(() => undefined);
           void applyClaudeModelProfile(profileId)
             .then((next) => {
               seedModelProfileStoreCache(next);

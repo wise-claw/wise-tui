@@ -73,7 +73,11 @@ export function resetExecutionEngineModelDefaultsForTests(): void {
 export function getCachedExecutionEngineDefaultModel(
   engine: SessionExecutionEngine,
 ): string | null {
-  return cachedDefaults[engine]?.trim() || null;
+  const direct = cachedDefaults[engine]?.trim() || "";
+  if (direct) return direct;
+  if (engine === "codex-rpc") return cachedDefaults.codex?.trim() || null;
+  if (engine === "codex") return cachedDefaults["codex-rpc"]?.trim() || null;
+  return null;
 }
 
 /** 保存用户刚在 Composer 中显式选择的模型。空值会清除该环境的覆盖。 */

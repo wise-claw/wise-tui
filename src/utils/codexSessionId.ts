@@ -4,14 +4,27 @@ import { isLikelyCursorSdkAgentId } from "./cursorAgentId";
 const CODEX_RESUME_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function isWiseTabSessionId(id: string): boolean {
+  return id.startsWith("session_") || id.startsWith("codex-rpc-");
+}
+
 /** Codex `exec resume` 接受的 thread / session id（复用 `claudeSessionId` 字段）。 */
 export function isLikelyCodexResumeId(id: string | null | undefined): boolean {
   const trimmed = id?.trim() ?? "";
   if (!trimmed) return false;
+  // Wise 标签 id（`session_${Date.now()}_…`）不能当 Codex thread id；RPC 会报 invalid UUID。
+  if (isWiseTabSessionId(trimmed)) return false;
   // 仅排除旧 Cursor SDK / Cloud id；CLI UUID 与 Codex UUID 同形，由执行引擎上下文区分。
   if (isLikelyCursorSdkAgentId(trimmed)) return false;
   if (CODEX_RESUME_UUID_RE.test(trimmed)) return true;
   return /^[a-zA-Z][a-zA-Z0-9._-]{2,127}$/.test(trimmed);
+}
+
+/** Codex app-server `thread/resume` 只接受 UUID。 */
+export function isLikelyCodexRpcResumeId(id: string | null | undefined): boolean {
+  const trimmed = id?.trim() ?? "";
+  if (!trimmed || isWiseTabSessionId(trimmed)) return false;
+  return CODEX_RESUME_UUID_RE.test(trimmed);
 }
 
 export function sessionHasPriorCodexTurn(
@@ -31,13 +44,15 @@ export function resolveCodexResumeSessionId(
   session: { claudeSessionId?: string | null; messages: ClaudeSession["messages"] },
   tabSessionId: string,
   sessionIdMap?: ReadonlyMap<string, string>,
+  options?: { requireUuid?: boolean },
 ): string | null {
   if (!sessionHasPriorCodexTurn(session.messages)) {
     return null;
   }
   const candidates = [session.claudeSessionId, sessionIdMap?.get(tabSessionId)];
+  const accept = options?.requireUuid ? isLikelyCodexRpcResumeId : isLikelyCodexResumeId;
   for (const raw of candidates) {
-    if (isLikelyCodexResumeId(raw)) return raw!.trim();
+    if (accept(raw)) return raw!.trim();
   }
   return null;
 }

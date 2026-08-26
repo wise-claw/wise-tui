@@ -345,10 +345,13 @@ export function extractPartsFromParsed(obj: unknown): ExtractPartsFromParsedResu
 
     if (json.type === "system" && json.subtype === "init") {
       const sidRaw = json.session_id ?? json.sessionId;
+      const sid = typeof sidRaw === "string" ? sidRaw.trim() : "";
+      // Wise 标签 id 不能当成 Claude/Codex 续接 id，否则 RPC thread/resume 会报 invalid UUID。
+      const isWiseTabId = sid.startsWith("session_") || sid.startsWith("codex-rpc-");
       return {
         parts: [],
         isInit: true,
-        sessionId: typeof sidRaw === "string" && sidRaw.trim().length > 0 ? sidRaw.trim() : null,
+        sessionId: sid.length > 0 && !isWiseTabId ? sid : null,
       };
     }
 

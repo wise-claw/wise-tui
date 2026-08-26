@@ -89,6 +89,16 @@ describe("extractPartsFromStreamLine", () => {
     expect(result.parts).toEqual([]);
   });
 
+  test("does not treat wise tab ids as init session ids", () => {
+    const result = extractPartsFromStreamLine(JSON.stringify({
+      type: "system",
+      subtype: "init",
+      session_id: "session_1772170000_ab12cd",
+    }));
+    expect(result.isInit).toBe(true);
+    expect(result.sessionId).toBeNull();
+  });
+
   test("unwraps stream_event envelopes before parsing assistant parts", () => {
     const result = extractPartsFromStreamLine(JSON.stringify({
       type: "stream_event",

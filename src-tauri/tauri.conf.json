@@ -59,6 +59,7 @@
       "resources/skills/wise-browse/SKILL.md",
       "../stagehand-cli/argv.mjs",
       "../stagehand-cli/assert.mjs",
+      "../stagehand-cli/auth.mjs",
       "../examples/wise-extensions/hello-world",
       "../browser-extensions/wise-page-monitor",
       "../stagehand-cli/cli.mjs",

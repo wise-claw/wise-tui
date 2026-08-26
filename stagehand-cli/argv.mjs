@@ -4,6 +4,7 @@
  */
 
 import { parseAssertSpec, parseAssertPhrase, suiteFromChecks } from "./assert.mjs";
+import { parseAuthPhrase, sanitizeAuthProfileName } from "./auth.mjs";
 
 const BROWSE_PASSTHROUGH = new Set([
   "doctor",
@@ -45,6 +46,12 @@ export const WISE_BROWSE_HELP = `Usage: wise browse <command> [args]
   accept --url https://example.com --check "title contains 登录" --check "visible css=button"
   accept --init [login.accept.json]
   report [latest|list]
+  auth status | save | load | wait | clear [档案名]
+
+登录态:
+  本地默认记住 Chromium 用户目录（~/.wise/stagehand-automation/profiles/<档案>）。
+  有窗口时先手动登录，再 wise browse auth save；之后会话会复用 Cookie。
+  wise browse auth wait 会等到离开登录页或出现会话 Cookie，然后自动保存。
 
 自然语言（会话输入框可直接转发）:
   wise browse 打开谷歌官网
@@ -54,6 +61,8 @@ export const WISE_BROWSE_HELP = `Usage: wise browse <command> [args]
   wise browse 标题应该包含 Google
   wise browse 验收登录页有提交按钮
   wise browse 查看最近验收报告
+  wise browse 保存登录态
+  wise browse 等待登录
 
 站点别名: 谷歌 / google / 百度 / 必应 / github / youtube / 知乎 / bilibili
 
@@ -215,6 +224,26 @@ export function summarizeBrowseResult(method, result, page = null) {
         result && typeof result === "object" && typeof result.path === "string" ? result.path : "";
       return file ? `已写入套件 ${file}` : "已生成验收套件模板";
     }
+    case "authStatus":
+      return result && typeof result === "object" && typeof result.summary === "string"
+        ? result.summary
+        : "登录态";
+    case "authSave":
+      return result && typeof result === "object" && typeof result.path === "string"
+        ? `已保存登录态 ${result.path}`
+        : "已保存登录态";
+    case "authLoad":
+      return "已加载登录态";
+    case "authWait":
+      return result && typeof result === "object" && typeof result.reason === "string"
+        ? `登录完成：${result.reason}`
+        : "登录完成";
+    case "authClear":
+      return "已清除登录态快照";
+    case "authList":
+      return `共 ${Number(result?.count) || 0} 个登录档案`;
+    case "authCookies":
+      return `当前 ${Number(result?.count) || 0} 个 Cookie`;
     default:
       return pageLabel ? `当前页 ${pageLabel}` : "";
   }
@@ -233,7 +262,8 @@ export function formatCliOutput(method, result, page = null) {
     method === "test" ||
     method === "accept" ||
     method === "report" ||
-    method === "init"
+    method === "init" ||
+    String(method).startsWith("auth")
   ) {
     const base =
       result && typeof result === "object" && !Array.isArray(result) ? { ...result } : { result };
@@ -415,6 +445,10 @@ function parseCommand(argv) {
         file: asString(flags.file || rest[0]) || "login.accept.json",
         force: flags.force === true,
       };
+    case "auth":
+      return parseAuthCommand(rest, flags);
+    case "cookies":
+      return rpc("authCookies", { profile: sanitizeAuthProfileName(asString(flags.profile)) });
     case "reload":
       return rpc("reload", {});
     case "back":
@@ -529,6 +563,10 @@ function parseImplicitCommand(argv) {
   if (/^(初始化|生成)(验收)?套件/u.test(joined)) {
     return { kind: "init", file: "login.accept.json", force: false };
   }
+  const authPhrase = parseAuthPhrase(joined);
+  if (authPhrase) {
+    return parseAuthCommand([authPhrase.action], {});
+  }
   const assertPrefix = joined.match(/^(断言|assert)\s*(.+)$/iu);
   if (assertPrefix) {
     const spec = parseAssertPhrase(assertPrefix[2]) ?? parseAssertSpec(assertPrefix[2].split(/\s+/).filter(Boolean), {});
@@ -602,6 +640,35 @@ function parseSuiteCommand(suiteKind, argv, flags, rest) {
     suiteKind,
     suite: suiteFromChecks({ name, url, checks, screenshotOnFail, stopOnFail, retries }),
   };
+}
+
+function parseAuthCommand(rest, flags) {
+  const action = String(rest[0] ?? "status").trim().toLowerCase();
+  const profile = sanitizeAuthProfileName(asString(flags.profile || rest[1] || "default"));
+  const timeout = flags.timeout != null && flags.timeout !== true ? asNumber(flags.timeout) : undefined;
+  if (action === "status" || action === "show") {
+    return rpc("authStatus", { profile }, false);
+  }
+  if (action === "list" || action === "ls") {
+    return rpc("authList", {}, false);
+  }
+  if (action === "save") {
+    return rpc("authSave", { profile });
+  }
+  if (action === "load") {
+    return rpc("authLoad", { profile });
+  }
+  if (action === "wait") {
+    return rpc("authWait", {
+      profile,
+      timeout,
+      target: asString(flags.selector || flags.target) || undefined,
+    });
+  }
+  if (action === "clear" || action === "reset") {
+    return rpc("authClear", { profile, purge: flags.purge === true }, false);
+  }
+  throw new Error("auth 子命令：status | save | load | wait | clear | list");
 }
 
 function parseMouse(rest, flags) {

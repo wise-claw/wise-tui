@@ -802,7 +802,9 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       const codexResumeSessionId =
         params.forceNewClaudeConversation || !session
           ? null
-          : resolveCodexResumeSessionId(session, params.tabSessionId, sessionIdMapRef.current);
+          : resolveCodexResumeSessionId(session, params.tabSessionId, sessionIdMapRef.current, {
+              requireUuid: true,
+            });
       await runCodexRpcOneshotWithInvocation({
         tabSessionId: params.tabSessionId,
         turnNonce: params.turnNonce,

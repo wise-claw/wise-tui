@@ -15,6 +15,12 @@ import {
   interpretExpectPayload,
   DEFAULT_ACCEPT_SUITE,
 } from "../../stagehand-cli/assert.mjs";
+import {
+  looksLoggedIn,
+  parseAuthPhrase,
+  sanitizeAuthProfileName,
+  summarizeAuthState,
+} from "../../stagehand-cli/auth.mjs";
 
 describe("wise browse argv", () => {
   test("maps natural-language CLI to sidecar RPC", () => {
@@ -105,6 +111,8 @@ describe("wise browse argv", () => {
     expect(skill).toContain("Automated testing");
     expect(skill).toContain("Automated acceptance");
     expect(skill).toContain("一键安装");
+    expect(skill).toContain("wise browse auth wait");
+    expect(skill).toContain("Login state");
   });
 });
 
@@ -186,6 +194,17 @@ describe("wise browse assert and acceptance", () => {
       kind: "init",
       file: "login.accept.json",
     });
+    expect(parseWiseBrowseArgv(["auth", "save"])).toMatchObject({
+      method: "authSave",
+      params: { profile: "default" },
+    });
+    expect(parseWiseBrowseArgv(["保存登录态"])).toMatchObject({ method: "authSave" });
+    expect(parseWiseBrowseArgv(["等待登录"])).toMatchObject({ method: "authWait" });
+    expect(parseWiseBrowseArgv(["auth", "wait", "--timeout", "5000"])).toMatchObject({
+      method: "authWait",
+      params: { timeout: 5000 },
+    });
+    expect(parseWiseBrowseArgv(["auth", "status"]).needsSession).toBe(false);
     const suite = parseWiseBrowseArgv([
       "accept",
       "--url",
@@ -235,6 +254,7 @@ describe("wise browse assert and acceptance", () => {
     expect(WISE_BROWSE_HELP).toContain("assert title contains");
     expect(WISE_BROWSE_HELP).toContain("accept --init");
     expect(WISE_BROWSE_HELP).toContain("report [latest|list]");
+    expect(WISE_BROWSE_HELP).toContain("auth status");
     expect(summarizeBrowseResult("assert", { passed: false, message: "失败：contains" })).toContain("失败");
     expect(summarizeBrowseResult("report", { found: false })).toBe("还没有验收报告");
     expect(formatCliOutput("accept", report).passed).toBe(false);
@@ -274,5 +294,35 @@ describe("wise browse assert and acceptance", () => {
     expect(pointer.jsonPath).toBe("/tmp/a.json");
     expect(pointer.markdownPath).toBe("/tmp/a.md");
     expect(pointer.passed).toBe(false);
+  });
+
+  test("detects login-state phrases and session cookies", () => {
+    expect(sanitizeAuthProfileName("Work Login!")).toBe("Work_Login_");
+    expect(parseAuthPhrase("保存登录态")).toEqual({ action: "save" });
+    expect(parseAuthPhrase("等待登录")).toEqual({ action: "wait" });
+    expect(
+      looksLoggedIn({
+        url: "https://example.com/app",
+        startUrl: "https://example.com/login",
+        cookies: [],
+        startCookieCount: 0,
+      }).ok,
+    ).toBe(true);
+    expect(
+      looksLoggedIn({
+        url: "https://example.com/login",
+        cookies: [{ name: "sessionid" }],
+        startCookieCount: 1,
+      }).ok,
+    ).toBe(true);
+    expect(
+      looksLoggedIn({
+        url: "https://example.com/login",
+        cookies: [{ name: "csrf" }, { name: "XSRF-TOKEN" }],
+        startCookieCount: 2,
+      }).ok,
+    ).toBe(false);
+    expect(summarizeAuthState({ persist: true, profile: "default", cookieCount: 3 })).toContain("3 个 Cookie");
+    expect(summarizeBrowseResult("authSave", { path: "/tmp/a.json" })).toContain("已保存登录态");
   });
 });

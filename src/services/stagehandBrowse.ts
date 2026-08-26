@@ -50,6 +50,8 @@ export type StagehandStartOptions = {
   browserbaseProjectId?: string;
   cdpUrl?: string;
   url?: string;
+  persistAuth?: boolean;
+  authProfile?: string;
 };
 
 export type StagehandEnvVars = Record<string, string>;
@@ -69,6 +71,8 @@ export type StagehandPageStatus = {
   url: string | null;
   title: string | null;
   pageCount: number;
+  authSummary: string | null;
+  cookieCount: number;
 };
 
 export function parseStagehandPageStatus(value: unknown): StagehandPageStatus {
@@ -80,11 +84,24 @@ export function parseStagehandPageStatus(value: unknown): StagehandPageStatus {
   const pageCount = typeof obj.pageCount === "number" && Number.isFinite(obj.pageCount)
     ? obj.pageCount
     : 0;
+  const auth =
+    obj.auth && typeof obj.auth === "object" && !Array.isArray(obj.auth)
+      ? (obj.auth as Record<string, unknown>)
+      : {};
+  const authSummary =
+    typeof auth.summary === "string" && auth.summary.trim()
+      ? auth.summary.trim()
+      : typeof obj.authSummary === "string"
+        ? obj.authSummary
+        : null;
+  const cookieCount = Number.isFinite(Number(auth.cookieCount)) ? Number(auth.cookieCount) : 0;
   return {
     running: obj.running === true,
     url,
     title,
     pageCount,
+    authSummary,
+    cookieCount,
   };
 }
 
@@ -185,7 +202,8 @@ export const WISE_BROWSE_SESSION_EXAMPLES = [
   { label: "验收登录", text: "验收当前页有登录按钮" },
   { label: "截一张图", text: "截一张图" },
   { label: "查看报告", text: "查看最近验收报告" },
-  { label: "初始化套件", text: "初始化验收套件" },
+  { label: "等待登录", text: "等待登录" },
+  { label: "保存登录态", text: "保存登录态" },
 ] as const;
 
 export type StagehandBrowseLatestReport = {

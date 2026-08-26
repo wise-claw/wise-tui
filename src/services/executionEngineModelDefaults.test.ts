@@ -38,6 +38,11 @@ describe("executionEngineModelDefaults", () => {
     );
   });
 
+  test("Codex RPC can reuse a Codex CLI saved model", async () => {
+    await saveExecutionEngineDefaultModel("codex", "gpt-5.6-luna");
+    expect(getCachedExecutionEngineDefaultModel("codex-rpc")).toBe("gpt-5.6-luna");
+  });
+
   test("in-flight load does not clobber a newer Composer save", async () => {
     let resolveRead: (value: string | null) => void = () => undefined;
     getAppSetting.mockImplementation(

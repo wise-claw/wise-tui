@@ -66,6 +66,8 @@ export function useStagehandBrowse(_input?: {
   const [modelApiKey, setModelApiKey] = useState("");
   const [browserbaseApiKey, setBrowserbaseApiKey] = useState("");
   const [cdpUrl, setCdpUrl] = useState("");
+  const [persistAuth, setPersistAuth] = useState(true);
+  const [authProfile, setAuthProfile] = useState("default");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -102,6 +104,10 @@ export function useStagehandBrowse(_input?: {
         if (typeof config.modelApiKey === "string") setModelApiKey(config.modelApiKey);
         if (typeof config.browserbaseApiKey === "string") setBrowserbaseApiKey(config.browserbaseApiKey);
         if (typeof config.cdpUrl === "string") setCdpUrl(config.cdpUrl);
+        if (typeof config.persistAuth === "boolean") setPersistAuth(config.persistAuth);
+        if (typeof config.authProfile === "string" && config.authProfile.trim()) {
+          setAuthProfile(config.authProfile.trim());
+        }
         if (typeof config.url === "string" && config.url.trim()) setUrlDraft(config.url);
       }
     } catch (error) {
@@ -135,6 +141,8 @@ export function useStagehandBrowse(_input?: {
         modelApiKey: modelApiKey.trim() || undefined,
         browserbaseApiKey: browserbaseApiKey.trim() || undefined,
         cdpUrl: env === "cdp" ? cdpUrl.trim() || undefined : undefined,
+        persistAuth,
+        authProfile: authProfile.trim() || "default",
         url: normalized || undefined,
       });
       if (normalized) setUrlDraft(normalized);
@@ -154,6 +162,8 @@ export function useStagehandBrowse(_input?: {
     cdpUrl,
     env,
     headed,
+    persistAuth,
+    authProfile,
     model,
     modelApiKey,
     refresh,
@@ -231,6 +241,16 @@ export function useStagehandBrowse(_input?: {
     setCdpUrl: (value: string) => {
       markDirty();
       setCdpUrl(value);
+    },
+    persistAuth,
+    setPersistAuth: (value: boolean) => {
+      markDirty();
+      setPersistAuth(value);
+    },
+    authProfile,
+    setAuthProfile: (value: string) => {
+      markDirty();
+      setAuthProfile(value);
     },
     advancedOpen,
     setAdvancedOpen,

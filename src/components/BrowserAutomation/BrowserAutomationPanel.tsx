@@ -144,6 +144,32 @@ export function BrowserAutomationPanel({
               显示浏览器窗口
             </label>
           </div>
+          {automation.env !== "cdp" ? (
+            <div className="app-run-command-popover__row">
+              <span className="app-run-command-popover__field-label">登录态</span>
+              <label className="app-browser-automation-popover__headed">
+                <Switch
+                  size="small"
+                  checked={automation.persistAuth}
+                  disabled={inputsDisabled}
+                  onChange={automation.setPersistAuth}
+                />
+                记住 Cookie / 会话
+              </label>
+            </div>
+          ) : null}
+          {automation.env !== "cdp" && automation.persistAuth ? (
+            <div className="app-run-command-popover__row">
+              <span className="app-run-command-popover__field-label">档案</span>
+              <Input
+                size="small"
+                value={automation.authProfile}
+                onChange={(event) => automation.setAuthProfile(event.target.value)}
+                placeholder="default"
+                disabled={inputsDisabled}
+              />
+            </div>
+          ) : null}
           <div className="app-run-command-popover__row">
             <span className="app-run-command-popover__field-label">默认网址</span>
             <Input
@@ -264,6 +290,18 @@ export function BrowserAutomationPanel({
               ) : (
                 <span className="app-browser-automation-popover__page">还没有报告</span>
               )}
+            </div>
+            <div className="app-run-command-popover__dock-row">
+              <span className="app-run-command-popover__dock-label">登录态</span>
+              <span className="app-browser-automation-popover__page">
+                {automation.env === "cdp"
+                  ? "使用调试口当前 Chrome"
+                  : running && automation.authSummary
+                    ? automation.authSummary
+                    : automation.persistAuth
+                      ? `已启用 · ${automation.authProfile || "default"}（首次登录后自动保留）`
+                      : "关闭，每次都是干净会话"}
+              </span>
             </div>
             <div className="app-run-command-popover__dock-row">
               <span className="app-run-command-popover__dock-label">浏览器</span>

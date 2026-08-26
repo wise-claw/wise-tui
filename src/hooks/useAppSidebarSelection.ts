@@ -48,13 +48,15 @@ import {
   publishClaudeSessions,
 } from "../stores/claudeSessionsLiveStore";
 import type { PaneCount, PaneSlot } from "../constants/mainLayoutWidths";
-import { getCachedDefaultExecutionEngine } from "../services/wiseDefaultConfigStore";
 import { loadExecutionEngineModelDefaults } from "../services/executionEngineModelDefaults";
-import { resolveNewSessionComposerModel } from "../utils/newSessionComposerDefaults";
+import { loadExecutionEngineReasoningDefaults } from "../services/executionEngineReasoningDefaults";
+import { setCodexRpcReasoningEffort } from "../stores/codexRpcReasoningEffortStore";
 import {
-  normalizeSessionExecutionEngine,
-  type SessionExecutionEngine,
-} from "../constants/sessionExecutionEngine";
+  persistNewSessionComposerDefaults,
+  resolveNewSessionComposerDefaults,
+  type NewSessionComposerPatch,
+} from "../utils/newSessionComposerDefaults";
+import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 
 /** 侧栏选中后推迟主会话切换，让工作区/仓库高亮与 Git 面板先绘制。 */
 function scheduleSidebarMainSessionEnsure(work: () => Promise<string | null>): void {
@@ -65,11 +67,11 @@ function scheduleSidebarMainSessionEnsure(work: () => Promise<string | null>): v
   });
 }
 
-/** 复用空白主会话时顶到侧栏：bump createdAt，并套用已保存的执行环境 / 模型。 */
+/** 复用空白主会话时顶到侧栏：bump createdAt，并套用已保存的执行环境 / 模型 / 推理强度。 */
 function promoteReusableEmptyMainSession(
   sessionId: string,
   sessionsLatestRef: RefObject<ClaudeSession[]>,
-  patch?: { executionEngine?: SessionExecutionEngine; model?: string },
+  patch?: NewSessionComposerPatch,
 ): void {
   const id = sessionId.trim();
   if (!id) return;
@@ -80,16 +82,27 @@ function promoteReusableEmptyMainSession(
     if (session.id !== id) return session;
     const executionEngine = patch?.executionEngine;
     const model = patch?.model?.trim() || "";
+    const codexReasoningEffort = patch?.codexReasoningEffort?.trim() || "";
+    const claudeReasoningEffort = patch?.claudeReasoningEffort?.trim() || "";
     const sameCreated = session.createdAt === now;
     const sameEngine = !executionEngine || session.executionEngine === executionEngine;
     const sameModel = !model || (session.model?.trim() || "") === model;
-    if (sameCreated && sameEngine && sameModel) return session;
+    const sameCodexEffort =
+      !codexReasoningEffort || (session.codexReasoningEffort ?? "") === codexReasoningEffort;
+    const sameClaudeEffort =
+      !claudeReasoningEffort || (session.claudeReasoningEffort ?? "") === claudeReasoningEffort;
+    if (sameCreated && sameEngine && sameModel && sameCodexEffort && sameClaudeEffort) return session;
     changed = true;
+    if (codexReasoningEffort) {
+      setCodexRpcReasoningEffort(id, codexReasoningEffort);
+    }
     return {
       ...session,
       createdAt: now,
       ...(executionEngine ? { executionEngine } : {}),
       ...(model ? { model } : {}),
+      ...(codexReasoningEffort ? { codexReasoningEffort } : {}),
+      ...(claudeReasoningEffort ? { claudeReasoningEffort } : {}),
     };
   });
   if (!changed) return;
@@ -101,23 +114,21 @@ async function resolveReusableEmptySessionComposerPatch(
   priorActiveId: string | null | undefined,
   sessions: readonly ClaudeSession[],
   repoEngine?: string | null,
-): Promise<{ executionEngine: SessionExecutionEngine; model: string }> {
-  await loadExecutionEngineModelDefaults();
-  const executionEngine = normalizeSessionExecutionEngine(
-    repoEngine?.trim() || getCachedDefaultExecutionEngine(),
-  );
+  options?: { inheritEngine?: boolean; persist?: boolean },
+): Promise<NewSessionComposerPatch> {
+  await Promise.all([loadExecutionEngineModelDefaults(), loadExecutionEngineReasoningDefaults()]);
   const prior = priorActiveId
     ? sessions.find((item) => item.id === priorActiveId)
     : undefined;
-  const inheritModel =
-    prior &&
-    normalizeSessionExecutionEngine(prior.executionEngine || executionEngine) === executionEngine
-      ? prior.model
-      : null;
-  return {
-    executionEngine,
-    model: resolveNewSessionComposerModel(executionEngine, inheritModel),
-  };
+  const patch = resolveNewSessionComposerDefaults({
+    repoEngine,
+    prior,
+    inheritEngine: options?.inheritEngine,
+  });
+  if (options?.persist !== false) {
+    persistNewSessionComposerDefaults(patch);
+  }
+  return patch;
 }
 
 interface UseAppSidebarSelectionOptions {
@@ -160,6 +171,7 @@ interface UseAppSidebarSelectionOptions {
     opts?: {
       skipActivate?: boolean;
       initialModel?: string;
+      initialExecutionEngine?: SessionExecutionEngine;
       immediateActivate?: boolean;
       onBeforeActivate?: (newId: string) => void;
     },
@@ -298,10 +310,13 @@ export function useAppSidebarSelection({
   async function createAndBindRepositoryMainSession(
     repository: Repository,
     priorActiveId: string | null | undefined,
-    opts?: { carryDraft?: boolean },
+    opts?: { carryDraft?: boolean; reuseComposer?: boolean },
   ): Promise<string> {
     const target = resolveSidebarSelectionTarget({ repository });
     const ownerName = resolveMainOwnerAgentNameForRepositoryPath(repositories, target.path);
+    const composerOpts = opts?.reuseComposer
+      ? { inheritEngine: true, persist: true }
+      : { inheritEngine: false, persist: false };
     const reusable = findReusableEmptyMainSession(
       sessionsLatestRef.current,
       target.path,
@@ -316,6 +331,7 @@ export function useAppSidebarSelection({
         priorActiveId,
         sessionsLatestRef.current,
         repository.executionEngine,
+        composerOpts,
       );
       // 复用旧空白标签时仍应顶到侧栏（与真正 createSession 的 Date.now() 一致）。
       promoteReusableEmptyMainSession(reusable.id, sessionsLatestRef, patch);
@@ -324,8 +340,16 @@ export function useAppSidebarSelection({
       return reusable.id;
     }
     const carryDraftFromId = opts?.carryDraft ? priorActiveId ?? undefined : undefined;
+    const patch = await resolveReusableEmptySessionComposerPatch(
+      priorActiveId,
+      sessionsLatestRef.current,
+      repository.executionEngine,
+      composerOpts,
+    );
     const id = await createSession(target.path, target.displayName, {
       immediateActivate: true,
+      initialExecutionEngine: patch.executionEngine,
+      ...(patch.model.trim() ? { initialModel: patch.model } : {}),
       onBeforeActivate: carryDraftFromId
         ? (newId) => migratePromptContextSessionKey(carryDraftFromId, newId)
         : undefined,
@@ -343,13 +367,16 @@ export function useAppSidebarSelection({
   async function createAndBindProjectMainSession(
     project: ProjectItem,
     priorActiveId: string | null | undefined,
-    opts?: { carryDraft?: boolean },
+    opts?: { carryDraft?: boolean; reuseComposer?: boolean },
   ): Promise<string | null> {
     const anchor = resolveProjectMainSessionAnchor(project, repositories);
     if (!anchor.path) {
       message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
       return null;
     }
+    const composerOpts = opts?.reuseComposer
+      ? { inheritEngine: true, persist: true }
+      : { inheritEngine: false, persist: false };
     const reusable = findReusableEmptyMainSession(sessionsLatestRef.current, anchor.path, null);
     if (reusable) {
       const carryDraftFromId = opts?.carryDraft ? priorActiveId ?? undefined : undefined;
@@ -360,6 +387,7 @@ export function useAppSidebarSelection({
         priorActiveId,
         sessionsLatestRef.current,
         null,
+        composerOpts,
       );
       promoteReusableEmptyMainSession(reusable.id, sessionsLatestRef, patch);
       switchSessionIfNeeded(reusable.id);
@@ -367,8 +395,16 @@ export function useAppSidebarSelection({
       return reusable.id;
     }
     const carryDraftFromId = opts?.carryDraft ? priorActiveId ?? undefined : undefined;
+    const patch = await resolveReusableEmptySessionComposerPatch(
+      priorActiveId,
+      sessionsLatestRef.current,
+      null,
+      composerOpts,
+    );
     const id = await createSession(anchor.path, anchor.displayName, {
       immediateActivate: true,
+      initialExecutionEngine: patch.executionEngine,
+      ...(patch.model.trim() ? { initialModel: patch.model } : {}),
       onBeforeActivate: carryDraftFromId
         ? (newId) => migratePromptContextSessionKey(carryDraftFromId, newId)
         : undefined,
@@ -582,7 +618,7 @@ export function useAppSidebarSelection({
       const id = await createAndBindRepositoryMainSession(
         repository,
         activeSessionIdLatestRef.current,
-        { carryDraft: true },
+        { carryDraft: true, reuseComposer: true },
       );
       jumpToSessionWithRepository(id);
     } finally {
@@ -624,6 +660,7 @@ export function useAppSidebarSelection({
       });
       const id = await createAndBindProjectMainSession(project, activeSessionIdLatestRef.current, {
         carryDraft: true,
+        reuseComposer: true,
       });
       if (id) {
         jumpToSessionWithRepository(id);

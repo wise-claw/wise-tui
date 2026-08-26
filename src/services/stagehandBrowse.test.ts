@@ -117,6 +117,20 @@ describe("stagehand browse catalog", () => {
       url: "https://a.dev",
       title: "A",
       pageCount: 2,
+      authSummary: null,
+      cookieCount: 0,
+    });
+    expect(
+      parseStagehandPageStatus({
+        running: true,
+        url: "https://a.dev",
+        title: "A",
+        pageCount: 1,
+        auth: { summary: "已记住登录态 · default · 3 个 Cookie", cookieCount: 3 },
+      }),
+    ).toMatchObject({
+      authSummary: "已记住登录态 · default · 3 个 Cookie",
+      cookieCount: 3,
     });
     const actions = parseObserveActions({
       data: [{ description: "click login", selector: "#login", method: "click" }],
