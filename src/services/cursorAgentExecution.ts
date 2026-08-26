@@ -14,7 +14,7 @@ export async function executeCursorCode(
   tabSessionId?: string,
   cursorAgentId?: string,
   _mcpServers?: Record<string, CursorMcpServerConfig>,
-  _cursorAttachments?: CursorSdkAttachment[],
+  cursorAttachments?: CursorSdkAttachment[],
   options?: {
     mode?: string;
     /** When omitted, Rust defaults to true (legacy --force parity). */
@@ -31,5 +31,6 @@ export async function executeCursorCode(
     cursorAgentId: normalizedCursorAgentId,
     mode: options?.mode,
     autoApprovePermissions: options?.autoApprovePermissions,
+    cursorAttachments,
   });
 }

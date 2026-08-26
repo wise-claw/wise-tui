@@ -44,10 +44,11 @@ export function isCursorSdkModelId(
   if (normalized === "auto" || normalized === "default") return true;
 
   if (knownModels && knownModels.length > 0) {
-    return knownModels.some(
+    const listed = knownModels.some(
       (item) =>
         item.id === trimmed || (item.aliases ?? []).some((alias) => alias === trimmed),
     );
+    if (listed) return true;
   }
 
   if (NON_CURSOR_SDK_PROVIDER_RE.test(trimmed)) return false;
@@ -56,6 +57,34 @@ export function isCursorSdkModelId(
     // o1 / o3 / o4：精确前缀或后接 `-`
     return normalized === prefix || normalized.startsWith(`${prefix}-`);
   });
+}
+
+function isSpecificCursorModelId(raw: string | null | undefined): boolean {
+  const trimmed = raw?.trim() ?? "";
+  if (!trimmed) return false;
+  const normalized = trimmed.toLowerCase();
+  if (normalized === "auto" || normalized === "default") return false;
+  return isCursorSdkModelId(trimmed);
+}
+
+/**
+ * Composer Cursor 模型：优先保留当前选择，避免 CLI 列表异步到达时把 Grok 等打回 auto。
+ * `auto`/`default` 只作为兜底，不覆盖更具体的会话值或已保存默认。
+ */
+export function resolveCursorComposerModel(input: {
+  currentModel?: string | null;
+  sessionModel?: string | null;
+  savedDefault?: string | null;
+}): string {
+  const current = input.currentModel?.trim() || "";
+  const session = input.sessionModel?.trim() || "";
+  const saved = input.savedDefault?.trim() || "";
+  if (isSpecificCursorModelId(current)) return current;
+  if (isSpecificCursorModelId(session)) return session;
+  if (isSpecificCursorModelId(saved)) return saved;
+  if (current && isCursorSdkModelId(current)) return current;
+  if (session && isCursorSdkModelId(session)) return session;
+  return CURSOR_SDK_DEFAULT_MODEL;
 }
 
 /** 将 Composer / session.model 解析为 Cursor Local Agent 可用的 model id。 */

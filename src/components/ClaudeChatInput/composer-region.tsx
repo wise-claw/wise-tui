@@ -760,6 +760,11 @@ function ComposerInner({
   const isOpencodeEngine = sessionExecutionEngine === "opencode";
   const isSelectOnlyEngine = isCursorEngine || isOpencodeEngine;
   const [model, setModel] = useState(() => session.model?.trim() || "sonnet");
+  useEffect(() => {
+    const next = session.model?.trim();
+    if (!next) return;
+    setModel((prev) => (prev === next ? prev : next));
+  }, [session.id, session.model]);
   const [profileStoreRevision, setProfileStoreRevision] = useState(0);
   const profileEngineForPicker: ModelProfileEngine | null = isSelectOnlyEngine
     ? null

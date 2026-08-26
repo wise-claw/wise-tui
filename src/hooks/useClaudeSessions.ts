@@ -52,6 +52,7 @@ import {
 } from "../services/claudeModelProfiles";
 import { buildClaudeModelSwitchReconnectPlan } from "../utils/claudeModelProfileReconnect";
 import { resolveCursorResumeAgentId } from "../utils/cursorAgentId";
+import { CURSOR_SDK_DEFAULT_MODEL } from "../constants/cursorSdk";
 import {
   loadDefaultClaudeConnectionKind,
   applyTabConnectionKindOverride,
@@ -2931,6 +2932,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const nextConnectionKind: ClaudeSessionConnectionKind =
         nextEngine === "claude" ? "streaming" : "oneshot";
       const globalDefault = defaultConnectionKindRef.current;
+      const savedModel = getCachedExecutionEngineDefaultModel(nextEngine)?.trim() || "";
+      const nextModel =
+        savedModel ||
+        (nextEngine === "cursor" ? CURSOR_SDK_DEFAULT_MODEL : session.model);
       setSessions((prev) => {
         const nextSessions = prev.map((s) => {
           if (s.id !== sessionId) return s;
@@ -2938,6 +2943,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             ...s,
             executionEngine: nextEngine,
             claudeSessionId: null,
+            ...(nextModel.trim() ? { model: nextModel } : {}),
           };
           return applyTabConnectionKindOverride(withEngine, nextConnectionKind, globalDefault);
         });
@@ -2984,8 +2990,19 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     ) => {
       const id = generateId();
       // 仅显式传入 initialModel 的调用（多窗格继承等）保留调用方语义。
-      // 普通新会话优先采用用户为默认执行环境选择过的模型。
-      const creationEngine = opts?.initialExecutionEngine ?? getCachedDefaultExecutionEngine();
+      // 普通新会话采用仓库/全局默认执行环境，以及用户为该环境保存过的模型。
+      const stubSession: ClaudeSession = {
+        id: "",
+        claudeSessionId: null,
+        repositoryPath: normalizeRepositoryPathKey(repositoryPath) || repositoryPath.trim(),
+        repositoryName,
+        model: "",
+        status: "idle",
+        messages: [],
+        createdAt: 0,
+        pendingPrompt: "",
+      };
+      const creationEngine = opts?.initialExecutionEngine ?? resolveSessionExecutionEngine(stubSession);
       if (!opts?.initialModel?.trim()) {
         await loadExecutionEngineModelDefaults();
       }
@@ -3002,13 +3019,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           savedDefaultModel ||
           (creationEngine === "codex" || creationEngine === "codex-rpc"
             ? ""
-            : "sonnet"),
+            : creationEngine === "cursor"
+              ? CURSOR_SDK_DEFAULT_MODEL
+              : "sonnet"),
         status: "idle",
         messages: [],
         createdAt: Date.now(),
         pendingPrompt: "",
         ...(opts?.connectionKind ? { connectionKind: opts.connectionKind } : {}),
-        ...(opts?.initialExecutionEngine ? { executionEngine: opts.initialExecutionEngine } : {}),
+        executionEngine: creationEngine,
         ...(opts?.requirementId ? { requirementId: opts.requirementId } : {}),
         ...(opts?.isSide ? { isSide: true } : {}),
       };
@@ -3048,7 +3067,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (!opts?.initialModel?.trim() && !savedDefaultModel) {
         void (async () => {
           try {
-            const engine = opts?.initialExecutionEngine;
+            const engine = creationEngine;
             // Codex 标签页不继承 Claude 侧默认模型（避免 MiniMax-M3 等泄漏到 codex provider）；
             // 仅应用「模型切换 → Codex」档案模型，缺省时由 codex 使用 config.toml 默认模型。
             if (engine === "codex" || engine === "codex-rpc") {
@@ -3063,6 +3082,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
               });
               return;
             }
+            if (engine !== "claude") return;
             const profileModel = resolveClaudeExecModelId({ store: getCachedModelProfileStore() });
             const configModel = profileModel ?? (await getCachedClaudeConfigModel(repositoryPath));
             if (!configModel?.trim()) return;
@@ -3090,7 +3110,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       return id;
     },
-    [getCachedClaudeConfigModel],
+    [getCachedClaudeConfigModel, resolveSessionExecutionEngine],
   );
 
   const ensureWorkflowRunId = useCallback(async (session: ClaudeSession): Promise<string | null> => {

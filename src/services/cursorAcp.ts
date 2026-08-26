@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { CursorSdkAttachment } from "./cursorComposerPrompt";
 
 export interface CursorAcpPermissionRequestPayload {
   sessionId: string;
@@ -44,6 +45,7 @@ export async function executeCursorAcp(input: {
   mode?: string;
   /** Defaults to true on the Rust side (legacy --force parity). */
   autoApprovePermissions?: boolean;
+  cursorAttachments?: CursorSdkAttachment[];
 }): Promise<void> {
   // Tauri 2 matches invoke keys to Rust arg names: `params: ExecuteCursorAcpParams`.
   await invoke("execute_cursor_acp", {
@@ -56,6 +58,7 @@ export async function executeCursorAcp(input: {
       cursorAgentId: input.cursorAgentId?.trim() || null,
       mode: input.mode,
       autoApprovePermissions: input.autoApprovePermissions,
+      cursorAttachments: input.cursorAttachments,
     },
   });
 }

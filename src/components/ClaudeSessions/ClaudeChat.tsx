@@ -94,6 +94,7 @@ import {
 } from "../../utils/sessionOwnerHints";
 import { resolveEngineForSession } from "../../utils/sessionExecutionEngine";
 import { normalizeSessionExecutionEngine } from "../../constants/sessionExecutionEngine";
+import { saveDefaultExecutionEngineToStore } from "../../services/wiseDefaultConfigStore";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 
 import {
@@ -1444,6 +1445,7 @@ export function ClaudeChatInner({
     (engine: SessionExecutionEngine) => {
       // 先写标签级引擎：当前会话下一回合立即按新引擎 spawn（此前只改仓库默认，须新建会话才生效）。
       void onUpdateSessionExecutionEngine?.(session.id, engine);
+      void saveDefaultExecutionEngineToStore(engine).catch(() => undefined);
       if (paneCount > 1 && onUpdatePaneRuntimeOverride) {
         onUpdatePaneRuntimeOverride(paneIndex, {
           executionEngine: engine,

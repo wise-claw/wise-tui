@@ -124,6 +124,15 @@ pub struct SessionPromptParams {
 pub enum PromptContent {
     #[serde(rename = "text")]
     Text { text: String },
+    /// ACP image content block (`session/prompt`).
+    #[serde(rename = "image")]
+    Image {
+        data: String,
+        #[serde(rename = "mimeType")]
+        mime_type: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        uri: Option<String>,
+    },
     #[serde(other)]
     Other,
 }
@@ -232,5 +241,19 @@ mod tests {
         let v = permission_selected_result("allow-once");
         assert_eq!(v["outcome"]["outcome"], "selected");
         assert_eq!(v["outcome"]["optionId"], "allow-once");
+    }
+
+    #[test]
+    fn prompt_image_serializes_acp_shape() {
+        let block = PromptContent::Image {
+            data: "aaaa".to_string(),
+            mime_type: "image/png".to_string(),
+            uri: Some("file:///tmp/a.png".to_string()),
+        };
+        let value = serde_json::to_value(&block).unwrap();
+        assert_eq!(value["type"], "image");
+        assert_eq!(value["data"], "aaaa");
+        assert_eq!(value["mimeType"], "image/png");
+        assert_eq!(value["uri"], "file:///tmp/a.png");
     }
 }

@@ -710,6 +710,7 @@ fn curated_cursor_models() -> Vec<CursorModelListItem> {
         ("composer-2", "Composer 2"),
         ("composer-1.5", "Composer 1.5"),
         ("composer-1", "Composer 1"),
+        ("grok-4.6", "Grok 4.6"),
         ("grok-4.5", "Grok 4.5"),
         ("gpt-5.5", "GPT-5.5"),
         ("gpt-5.5-medium", "GPT-5.5 Medium"),

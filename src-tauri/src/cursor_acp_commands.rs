@@ -56,6 +56,16 @@ pub(crate) struct ExecuteCursorAcpParams {
     /// When true (default), auto-allow tool permissions like former `--force`.
     #[serde(default = "default_true")]
     auto_approve_permissions: bool,
+    #[serde(default)]
+    cursor_attachments: Option<Vec<CursorAcpAttachmentInput>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CursorAcpAttachmentInput {
+    path: String,
+    #[serde(default)]
+    mime_type: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -309,12 +319,40 @@ pub(crate) async fn execute_cursor_acp(
         invocation_key.as_deref(),
     );
 
-    let user_line = build_cursor_user_turn_line(trimmed_prompt, None);
+    let attachment_pairs: Vec<(String, String)> = params
+        .cursor_attachments
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|item| {
+            let path = item.path.trim();
+            if path.is_empty() {
+                return None;
+            }
+            Some((
+                path.to_string(),
+                item.mime_type
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or("image/png")
+                    .to_string(),
+            ))
+        })
+        .collect();
+
+    let user_line = build_cursor_user_turn_line(
+        trimmed_prompt,
+        if attachment_pairs.is_empty() {
+            None
+        } else {
+            Some(attachment_pairs.as_slice())
+        },
+    );
     persist_line(&params.project_path, &session_id, &user_line);
 
     let prompt_rx = {
         let mut guard = session_arc.lock().await;
-        match guard.begin_prompt(trimmed_prompt).await {
+        match guard.begin_prompt(trimmed_prompt, &attachment_pairs).await {
             Ok((_id, rx)) => rx,
             Err(e) => {
                 store.busy.lock().await.remove(&session_id);

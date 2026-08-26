@@ -1,6 +1,9 @@
 //! High-level Cursor ACP session: bootstrap, session/new|load, prompt, cancel.
 
+use std::path::Path;
+
 use anyhow::{anyhow, Context, Result};
+use base64::Engine;
 use serde_json::Value;
 use tokio::sync::oneshot;
 
@@ -172,6 +175,7 @@ impl CursorAcpSession {
     pub async fn begin_prompt(
         &mut self,
         prompt: &str,
+        attachments: &[(String, String)],
     ) -> Result<(JsonRpcId, oneshot::Receiver<JsonRpcMessage>)> {
         let sid = self
             .acp_session_id
@@ -179,9 +183,7 @@ impl CursorAcpSession {
             .ok_or_else(|| anyhow!("No ACP session id for prompt"))?;
         let params = SessionPromptParams {
             session_id: sid,
-            prompt: vec![PromptContent::Text {
-                text: prompt.to_string(),
-            }],
+            prompt: build_cursor_acp_prompt(prompt, attachments),
         };
         let (id, rx) = self
             .transport
@@ -231,5 +233,131 @@ impl CursorAcpSession {
 
     pub fn is_dead(&mut self) -> bool {
         self.transport.is_child_exited()
+    }
+}
+
+const MAX_ACP_IMAGE_BYTES: u64 = 12 * 1024 * 1024;
+
+fn path_to_file_uri(path: &str) -> String {
+    let trimmed = path.trim();
+    if trimmed.starts_with("file:") {
+        return trimmed.to_string();
+    }
+    let display = Path::new(trimmed).to_string_lossy();
+    if cfg!(windows) {
+        let normalized = display.replace('\\', "/");
+        if normalized.starts_with('/') {
+            format!("file://{normalized}")
+        } else {
+            format!("file:///{normalized}")
+        }
+    } else {
+        format!("file://{display}")
+    }
+}
+
+fn load_image_prompt_block(path: &str, mime: &str) -> Option<PromptContent> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let meta = std::fs::metadata(trimmed).ok()?;
+    if !meta.is_file() || meta.len() == 0 || meta.len() > MAX_ACP_IMAGE_BYTES {
+        return None;
+    }
+    let bytes = std::fs::read(trimmed).ok()?;
+    let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+    let mime_type = mime.trim();
+    Some(PromptContent::Image {
+        data,
+        mime_type: if mime_type.is_empty() {
+            "image/png".to_string()
+        } else {
+            mime_type.to_string()
+        },
+        uri: Some(path_to_file_uri(trimmed)),
+    })
+}
+
+/// Build ACP `session/prompt` content: text first, then inline images (base64).
+pub(crate) fn build_cursor_acp_prompt(
+    prompt: &str,
+    attachments: &[(String, String)],
+) -> Vec<PromptContent> {
+    let mut blocks = vec![PromptContent::Text {
+        text: prompt.to_string(),
+    }];
+    for (path, mime) in attachments {
+        match load_image_prompt_block(path, mime) {
+            Some(block) => blocks.push(block),
+            None => blocks.push(PromptContent::Text {
+                text: format!("[附件] {path} ({mime})"),
+            }),
+        }
+    }
+    blocks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn write_temp_png() -> std::path::PathBuf {
+        // 1x1 transparent PNG
+        const PNG: &[u8] = &[
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+            0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00,
+            0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78,
+            0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        ];
+        let mut path = std::env::temp_dir();
+        path.push(format!("wise-acp-img-{}.png", uuid::Uuid::new_v4().simple()));
+        let mut file = std::fs::File::create(&path).unwrap();
+        file.write_all(PNG).unwrap();
+        path
+    }
+
+    #[test]
+    fn build_cursor_acp_prompt_inlines_readable_images() {
+        let path = write_temp_png();
+        let blocks = build_cursor_acp_prompt(
+            "图中有什么",
+            &[(path.to_string_lossy().to_string(), "image/png".to_string())],
+        );
+        assert_eq!(blocks.len(), 2);
+        match &blocks[0] {
+            PromptContent::Text { text } => assert_eq!(text, "图中有什么"),
+            other => panic!("expected text, got {other:?}"),
+        }
+        match &blocks[1] {
+            PromptContent::Image {
+                data,
+                mime_type,
+                uri,
+            } => {
+                assert!(!data.is_empty());
+                assert_eq!(mime_type, "image/png");
+                assert!(uri.as_ref().unwrap().starts_with("file://"));
+            }
+            other => panic!("expected image, got {other:?}"),
+        }
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn build_cursor_acp_prompt_falls_back_to_path_hint() {
+        let blocks = build_cursor_acp_prompt(
+            "hello",
+            &[("/definitely/missing/wise-acp.png".to_string(), "image/png".to_string())],
+        );
+        assert_eq!(blocks.len(), 2);
+        match &blocks[1] {
+            PromptContent::Text { text } => {
+                assert!(text.contains("/definitely/missing/wise-acp.png"));
+            }
+            other => panic!("expected text fallback, got {other:?}"),
+        }
     }
 }

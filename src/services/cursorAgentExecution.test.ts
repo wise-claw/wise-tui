@@ -41,6 +41,7 @@ describe("cursorAgentExecution service", () => {
         cursorAgentId: "agent-1",
         mode: undefined,
         autoApprovePermissions: undefined,
+        cursorAttachments: [{ path: "/tmp/a.png", mimeType: "image/png" }],
       },
     });
   });

@@ -42,6 +42,7 @@ import {
   buildCursorModelPickerOptions,
   formatCursorModelLabel,
   isCursorSdkModelId,
+  resolveCursorComposerModel,
 } from "../../utils/cursorModel";
 import {
   OPENCODE_DEFAULT_MODEL,
@@ -75,7 +76,11 @@ import {
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
 import { useComposerActiveProxyRoute } from "../../hooks/useComposerActiveProxyRoute";
-import { saveExecutionEngineDefaultModel } from "../../services/executionEngineModelDefaults";
+import {
+  getCachedExecutionEngineDefaultModel,
+  loadExecutionEngineModelDefaults,
+  saveExecutionEngineDefaultModel,
+} from "../../services/executionEngineModelDefaults";
 import { ClaudeModelTopbarPanelLazy } from "../ClaudeSessions/ClaudeModelTopbarPanel.lazy";
 import "../ClaudeSessions/ClaudeModelTopbarTrigger.css";
 import "./ComposerModelPicker.css";
@@ -245,6 +250,7 @@ function ComposerModelPickerImpl({
   const [panelMounted, setPanelMounted] = useState(false);
   const [selectOnlyMenuOpen, setSelectOnlyMenuOpen] = useState(false);
   const [selectOnlyFilter, setSelectOnlyFilter] = useState("");
+  const [modelDefaultsRevision, setModelDefaultsRevision] = useState(0);
   const selectOnlyFilterInputRef = useRef<HTMLInputElement | null>(null);
   const modelRef = useRef(model);
   modelRef.current = model;
@@ -285,14 +291,27 @@ function ComposerModelPickerImpl({
   }, [refreshClaudeModelPicker]);
 
   useEffect(() => {
+    void loadExecutionEngineModelDefaults().then(() => {
+      setModelDefaultsRevision((n) => n + 1);
+    });
+  }, []);
+
+  useEffect(() => {
     if (!isCursorEngine) return;
-    const fromSession = session.model?.trim();
-    const nextModel =
-      fromSession && isCursorSdkModelId(fromSession, cursorModels ?? undefined)
-        ? fromSession
-        : CURSOR_SDK_DEFAULT_MODEL;
+    const nextModel = resolveCursorComposerModel({
+      currentModel: modelRef.current,
+      sessionModel: session.model,
+      savedDefault: getCachedExecutionEngineDefaultModel("cursor"),
+    });
     syncModelIfNeeded(nextModel);
-  }, [isCursorEngine, session.id, session.model, cursorModels, syncModelIfNeeded]);
+  }, [
+    isCursorEngine,
+    session.id,
+    session.model,
+    cursorModels,
+    modelDefaultsRevision,
+    syncModelIfNeeded,
+  ]);
 
   useEffect(() => {
     if (!isOpencodeEngine) return;

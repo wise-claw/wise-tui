@@ -4,6 +4,7 @@ import {
   buildCursorModelPickerOptions,
   formatCursorModelLabel,
   isCursorSdkModelId,
+  resolveCursorComposerModel,
   resolveCursorLocalModelId,
 } from "./cursorModel";
 
@@ -30,6 +31,7 @@ describe("isCursorSdkModelId", () => {
     const known = [{ id: "composer-2.5", aliases: ["composer-2.5-fast"] }];
     expect(isCursorSdkModelId("composer-2.5-fast", known)).toBe(true);
     expect(isCursorSdkModelId("glm-5.1", known)).toBe(false);
+    expect(isCursorSdkModelId("grok-4.6", known)).toBe(true);
   });
 });
 
@@ -43,6 +45,38 @@ describe("resolveCursorLocalModelId", () => {
   test("falls back to auto for invalid proxy models", () => {
     expect(resolveCursorLocalModelId("glm-5.1")).toBe(CURSOR_SDK_DEFAULT_MODEL);
     expect(resolveCursorLocalModelId("qwen3-max")).toBe(CURSOR_SDK_DEFAULT_MODEL);
+  });
+});
+
+describe("resolveCursorComposerModel", () => {
+  test("keeps the in-composer Grok selection even if session still says auto", () => {
+    expect(
+      resolveCursorComposerModel({
+        currentModel: "grok-4.6",
+        sessionModel: "auto",
+        savedDefault: "composer-2.5",
+      }),
+    ).toBe("grok-4.6");
+  });
+
+  test("restores saved default when composer still has leftover Claude model", () => {
+    expect(
+      resolveCursorComposerModel({
+        currentModel: "sonnet",
+        sessionModel: "sonnet",
+        savedDefault: "grok-4.6",
+      }),
+    ).toBe("grok-4.6");
+  });
+
+  test("keeps explicit Auto when that is the saved preference", () => {
+    expect(
+      resolveCursorComposerModel({
+        currentModel: "auto",
+        sessionModel: "auto",
+        savedDefault: "auto",
+      }),
+    ).toBe("auto");
   });
 });
 
