@@ -5,10 +5,15 @@ const POLL_ALARM = "wise-page-monitor-poll";
 const WISE_BINDING_NAME = "__wiseMonitorReport";
 const SLOW_REQUEST_REPORT_MS = 3000;
 const LONG_TASK_REPORT_MS = 500;
+const TRAIL_MAX = 10;
 
 /** @type {Map<number, { sessionId: string, url: string }>} */
 const attachedTabs = new Map();
-/** @type {{ sessionId: string, url: string, port: number } | null} */
+/** @type {Map<number, Array<{ metric: string, message: string }>>} */
+const trailByTab = new Map();
+/** @type {Map<number, Set<string>>} */
+const alertedVitalsByTab = new Map();
+/** @type {{ sessionId: string, url: string, port: number, vitals: { lcpMs: number, cls: number, inpMs: number } } | null} */
 let activeMonitor = null;
 let bridgePort = 17321;
 let lastReloadToken = 0;
@@ -75,6 +80,11 @@ async function fetchActiveMonitor() {
       url: String(data.url),
       port: bridgePort,
       reloadToken: Number(data.reloadToken || 0),
+      vitals: {
+        lcpMs: Number(data.vitals?.lcpMs) > 0 ? Number(data.vitals.lcpMs) : 4000,
+        cls: Number(data.vitals?.cls) > 0 ? Number(data.vitals.cls) : 0.25,
+        inpMs: Number(data.vitals?.inpMs) > 0 ? Number(data.vitals.inpMs) : 500,
+      },
     };
   } catch {
     return null;
@@ -127,6 +137,8 @@ async function attachTab(tabId, sessionId, monitorUrl) {
 async function detachTab(tabId) {
   if (!attachedTabs.has(tabId)) return;
   attachedTabs.delete(tabId);
+  trailByTab.delete(tabId);
+  alertedVitalsByTab.delete(tabId);
   try {
     await chrome.debugger.detach({ tabId });
   } catch {
@@ -225,17 +237,127 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   attachedTabs.delete(tabId);
+  trailByTab.delete(tabId);
+  alertedVitalsByTab.delete(tabId);
 });
 
 chrome.debugger.onDetach.addListener((source) => {
-  if (source.tabId != null) attachedTabs.delete(source.tabId);
+  if (source.tabId != null) {
+    attachedTabs.delete(source.tabId);
+    trailByTab.delete(source.tabId);
+    alertedVitalsByTab.delete(source.tabId);
+  }
 });
 
 /** @type {Map<string, { method: string, url: string, timestamp: number }>} */
 const requestMetaById = new Map();
 
+function pushTrail(tabId, metric, message) {
+  const m = String(metric || "").trim();
+  const msg = String(message || "")
+    .replace(/\n/g, " ")
+    .trim();
+  if (!m && !msg) return;
+  const list = trailByTab.get(tabId) || [];
+  list.push({ metric: m, message: msg.slice(0, 120) });
+  while (list.length > TRAIL_MAX) list.shift();
+  trailByTab.set(tabId, list);
+}
+
+function trailSuffix(tabId) {
+  const list = trailByTab.get(tabId);
+  if (!list || list.length === 0) return "";
+  const body = list
+    .map((item) => {
+      if (!item.message) return item.metric;
+      if (!item.metric) return item.message;
+      return `${item.metric} ${item.message}`;
+    })
+    .join(" > ");
+  return ` | trail: ${body}`;
+}
+
+function withTrail(tabId, message, attach) {
+  const text = String(message || "").trim();
+  if (!attach) return text;
+  return `${text}${trailSuffix(tabId)}`;
+}
+
+function vitalsPoorAlert(metric, value, thresholds) {
+  const t = thresholds || activeMonitor?.vitals || { lcpMs: 4000, cls: 0.25, inpMs: 500 };
+  if (!Number.isFinite(value) || value < 0) return null;
+  if (metric === "lcp" && value >= t.lcpMs) return `LCP ${Math.round(value)}ms exceeds ${t.lcpMs}ms`;
+  if (metric === "cls" && value >= t.cls) return `CLS ${value} exceeds ${t.cls}`;
+  if (metric === "inp" && value >= t.inpMs) return `INP ${Math.round(value)}ms exceeds ${t.inpMs}ms`;
+  return null;
+}
+
+function noteVitalsAlert(tabId, metric) {
+  const set = alertedVitalsByTab.get(tabId) || new Set();
+  if (set.has(metric)) return false;
+  set.add(metric);
+  alertedVitalsByTab.set(tabId, set);
+  return true;
+}
+
+async function resolveOrigLocation(sessionId, url, line, column) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${bridgePort}/v1/source-location`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        url,
+        line: Number(line) || 0,
+        column: Number(column) || 0,
+      }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return typeof json?.orig === "string" && json.orig ? json.orig : null;
+  } catch {
+    return null;
+  }
+}
+
+async function captureBlankScreenEvidence(tabId, sessionId) {
+  try {
+    const shot = await chrome.debugger.sendCommand({ tabId }, "Page.captureScreenshot", {
+      format: "jpeg",
+      quality: 50,
+    });
+    const data = shot?.data;
+    if (!data) return null;
+    const res = await fetch(`http://127.0.0.1:${bridgePort}/v1/evidence`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, imageJpeg: data }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return typeof json?.path === "string" && json.path ? json.path : null;
+  } catch {
+    return null;
+  }
+}
+
+function compactStackSuffix(details) {
+  const frames = details?.stackTrace?.callFrames;
+  if (!Array.isArray(frames) || frames.length === 0) return "";
+  const parts = [];
+  for (const frame of frames.slice(0, 4)) {
+    const fn = String(frame?.functionName || "").trim() || "(anonymous)";
+    const url = String(frame?.url || "").trim();
+    const line = Number(frame?.lineNumber || 0);
+    if (!url && fn === "(anonymous)") continue;
+    parts.push(`${fn}@${url}:${line}`);
+  }
+  return parts.length ? ` | ${parts.join(" ")}` : "";
+}
+
 chrome.debugger.onEvent.addListener((source, method, params) => {
-  const meta = source.tabId != null ? attachedTabs.get(source.tabId) : null;
+  const tabId = source.tabId;
+  const meta = tabId != null ? attachedTabs.get(tabId) : null;
   if (!meta) return;
   const sessionId = meta.sessionId;
 
@@ -248,16 +370,26 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
       "";
     const url = details.url || "";
     const line = details.lineNumber ?? 0;
-    let message = desc ? `${text}: ${desc}` : String(text);
-    if (url) message += ` at ${url}:${line}`;
-    message = String(message).replace(/\n/g, " ").trim();
-    if (!message) return;
-    void postIssue({
-      sessionId,
-      kind: "page-error",
-      message,
-      url: url || null,
-    });
+    const column = details.columnNumber ?? 0;
+    void (async () => {
+      let message = desc ? `${text}: ${desc}` : String(text);
+      if (url) message += ` at ${url}:${line}`;
+      const hasInlineStack = String(desc).includes("\n") || String(desc).includes(" at ");
+      const stack = compactStackSuffix(details);
+      if (stack && !hasInlineStack) message += stack;
+      message = String(message).replace(/\n/g, " ").trim();
+      if (!message) return;
+      if (url) {
+        const orig = await resolveOrigLocation(sessionId, url, line, column);
+        if (orig && !message.includes("| orig ")) message += ` | orig ${orig}`;
+      }
+      void postIssue({
+        sessionId,
+        kind: "page-error",
+        message: withTrail(tabId, message, true),
+        url: url || null,
+      });
+    })();
     return;
   }
 
@@ -272,10 +404,11 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
     });
     const message = parts.join(" ").replace(/\n/g, " ").trim();
     if (!message) return;
+    const kind = level === "warning" ? "console-warning" : "console-error";
     void postIssue({
       sessionId,
-      kind: level === "warning" ? "console-warning" : "console-error",
-      message,
+      kind,
+      message: withTrail(tabId, message, kind === "console-error"),
     });
     return;
   }
@@ -313,6 +446,17 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
         metric,
         value,
       });
+      const alert = vitalsPoorAlert(metric, value, activeMonitor?.vitals);
+      if (alert && noteVitalsAlert(tabId, metric)) {
+        void postIssue({
+          sessionId,
+          kind: "vitals-alert",
+          message: withTrail(tabId, alert, true),
+          url: payload.url ? String(payload.url) : null,
+          metric,
+          value,
+        });
+      }
     } else if (payload.kind === "long-task") {
       const value = Number(payload.value);
       if (!Number.isFinite(value)) return;
@@ -325,6 +469,55 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
         value,
         durationMs: Math.round(value),
       });
+    } else if (payload.kind === "breadcrumb") {
+      const metric = String(payload.metric || "")
+        .trim()
+        .toLowerCase();
+      if (!["click", "input", "submit", "navigate"].includes(metric)) return;
+      const message =
+        String(payload.message || "")
+          .replace(/\n/g, " ")
+          .trim() || metric;
+      pushTrail(tabId, metric, message);
+      void postIssue({
+        sessionId,
+        kind: "breadcrumb",
+        message,
+        url: payload.url ? String(payload.url) : null,
+        metric,
+      });
+    } else if (payload.kind === "timing") {
+      const metric = String(payload.metric || "")
+        .trim()
+        .toLowerCase();
+      const value = Number(payload.value);
+      if (!["dcl", "load"].includes(metric) || !Number.isFinite(value) || value < 0) return;
+      void postIssue({
+        sessionId,
+        kind: "page-timing",
+        message: `${metric.toUpperCase()} ${Math.round(value)}ms`,
+        url: payload.url ? String(payload.url) : null,
+        metric,
+        value,
+        durationMs: Math.round(value),
+      });
+    } else if (payload.kind === "blank-screen") {
+      const message =
+        String(payload.message || "")
+          .replace(/\n/g, " ")
+          .trim() || "blank screen";
+      void (async () => {
+        const evidencePath = await captureBlankScreenEvidence(tabId, sessionId);
+        const text = withTrail(tabId, message, true);
+        void postIssue({
+          sessionId,
+          kind: "blank-screen",
+          message: evidencePath ? `${text} evidence: ${evidencePath}` : text,
+          url: payload.url ? String(payload.url) : null,
+          value: Number.isFinite(Number(payload.value)) ? Number(payload.value) : null,
+          evidencePath,
+        });
+      })();
     }
     return;
   }
@@ -333,7 +526,7 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
     void postIssue({
       sessionId,
       kind: "page-crash",
-      message: "main frame crashed",
+      message: withTrail(tabId, "main frame crashed", true),
     });
     return;
   }

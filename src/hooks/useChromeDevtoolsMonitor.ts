@@ -2,10 +2,15 @@ import { message } from "antd";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   DEFAULT_PAGE_MONITOR_DEBUG_PORT,
+  DEFAULT_PAGE_MONITOR_SYNTHETIC_INTERVAL_SECS,
+  DEFAULT_PAGE_MONITOR_VITALS_THRESHOLDS,
   normalizePageMonitorChromeMode,
   normalizePageMonitorDebugPort,
+  normalizePageMonitorSyntheticIntervalSecs,
+  normalizePageMonitorVitalsThresholds,
   downloadChromePageMonitorExtension,
   type PageMonitorChromeMode,
+  type PageMonitorVitalsThresholds,
 } from "../services/chromeDevtoolsMonitor";
 import {
   getPageMonitorRuntimeSnapshot,
@@ -39,6 +44,18 @@ function pageMonitorDebugPortStorageKey(cwd: string): string | null {
   return `wise.topbar.page-monitor-debug-port:${trimmed}`;
 }
 
+function pageMonitorVitalsStorageKey(cwd: string): string | null {
+  const trimmed = cwd.trim();
+  if (!trimmed) return null;
+  return `wise.topbar.page-monitor-vitals:${trimmed}`;
+}
+
+function pageMonitorSyntheticStorageKey(cwd: string): string | null {
+  const trimmed = cwd.trim();
+  if (!trimmed) return null;
+  return `wise.topbar.page-monitor-synthetic-secs:${trimmed}`;
+}
+
 function readAutoFixEnabled(storageKey: string | null): boolean {
   if (!storageKey) return true;
   const raw = window.localStorage.getItem(storageKey);
@@ -62,12 +79,29 @@ function readDebugPort(storageKey: string | null): number {
   return normalizePageMonitorDebugPort(window.localStorage.getItem(storageKey));
 }
 
+function readVitals(storageKey: string | null): PageMonitorVitalsThresholds {
+  if (!storageKey) return DEFAULT_PAGE_MONITOR_VITALS_THRESHOLDS;
+  const raw = window.localStorage.getItem(storageKey);
+  if (!raw) return DEFAULT_PAGE_MONITOR_VITALS_THRESHOLDS;
+  try {
+    return normalizePageMonitorVitalsThresholds(JSON.parse(raw) as unknown);
+  } catch {
+    return DEFAULT_PAGE_MONITOR_VITALS_THRESHOLDS;
+  }
+}
+
+function readSyntheticSecs(storageKey: string | null): number {
+  if (!storageKey) return DEFAULT_PAGE_MONITOR_SYNTHETIC_INTERVAL_SECS;
+  return normalizePageMonitorSyntheticIntervalSecs(window.localStorage.getItem(storageKey));
+}
+
 const IDLE_SNAPSHOT: PageMonitorRuntimeState = {
   status: "idle",
   statusHint: "未监控",
   url: "",
   autoFixEnabled: true,
   issuePreview: [],
+  timeline: [],
 };
 
 export function useChromeDevtoolsMonitor(input: {
@@ -82,6 +116,8 @@ export function useChromeDevtoolsMonitor(input: {
   const autoFixKey = pageMonitorAutoFixStorageKey(trimmedPath);
   const modeKey = pageMonitorModeStorageKey(trimmedPath);
   const debugPortKey = pageMonitorDebugPortStorageKey(trimmedPath);
+  const vitalsKey = pageMonitorVitalsStorageKey(trimmedPath);
+  const syntheticKey = pageMonitorSyntheticStorageKey(trimmedPath);
 
   const [urlDraft, setUrlDraft] = useState(() => readPreferredUrl(trimmedPath));
   const [autoFixEnabled, setAutoFixEnabledState] = useState(() => readAutoFixEnabled(autoFixKey));
@@ -89,13 +125,19 @@ export function useChromeDevtoolsMonitor(input: {
     readChromeMode(modeKey),
   );
   const [debugPortDraft, setDebugPortDraft] = useState(() => String(readDebugPort(debugPortKey)));
+  const [vitalsDraft, setVitalsDraft] = useState(() => readVitals(vitalsKey));
+  const [syntheticEnabled, setSyntheticEnabledState] = useState(
+    () => readSyntheticSecs(syntheticKey) > 0,
+  );
 
   useEffect(() => {
     setUrlDraft(readPreferredUrl(trimmedPath));
     setAutoFixEnabledState(readAutoFixEnabled(autoFixKey));
     setChromeModeState(readChromeMode(modeKey));
     setDebugPortDraft(String(readDebugPort(debugPortKey)));
-  }, [autoFixKey, debugPortKey, modeKey, trimmedPath]);
+    setVitalsDraft(readVitals(vitalsKey));
+    setSyntheticEnabledState(readSyntheticSecs(syntheticKey) > 0);
+  }, [autoFixKey, debugPortKey, modeKey, syntheticKey, trimmedPath, vitalsKey]);
 
   const runtime = useSyncExternalStore(
     useCallback(
@@ -166,19 +208,65 @@ export function useChromeDevtoolsMonitor(input: {
     return port;
   }, [debugPortDraft, debugPortKey]);
 
+  const resolveVitals = useCallback((): PageMonitorVitalsThresholds => {
+    const next = normalizePageMonitorVitalsThresholds(vitalsDraft);
+    setVitalsDraft(next);
+    if (vitalsKey) {
+      window.localStorage.setItem(vitalsKey, JSON.stringify(next));
+    }
+    return next;
+  }, [vitalsDraft, vitalsKey]);
+
+  const setVitalsThresholds = useCallback((next: PageMonitorVitalsThresholds) => {
+    setVitalsDraft(normalizePageMonitorVitalsThresholds(next));
+  }, []);
+
+  const setSyntheticEnabled = useCallback(
+    (enabled: boolean) => {
+      setSyntheticEnabledState(enabled);
+      if (syntheticKey) {
+        window.localStorage.setItem(
+          syntheticKey,
+          String(enabled ? DEFAULT_PAGE_MONITOR_SYNTHETIC_INTERVAL_SECS : 0),
+        );
+      }
+    },
+    [syntheticKey],
+  );
+
+  const resolveSyntheticSecs = useCallback((): number => {
+    const secs = syntheticEnabled ? DEFAULT_PAGE_MONITOR_SYNTHETIC_INTERVAL_SECS : 0;
+    if (syntheticKey) {
+      window.localStorage.setItem(syntheticKey, String(secs));
+    }
+    return secs;
+  }, [syntheticEnabled, syntheticKey]);
+
   const start = useCallback(async () => {
     if (!sessionId) return;
     const url = resolveUrl();
     setUrlDraft(url);
     const debugPort = resolveDebugPort();
+    const vitals = resolveVitals();
+    const syntheticIntervalSecs = resolveSyntheticSecs();
     await startPageMonitor({
       sessionId,
       url,
       autoFixEnabled,
       mode: chromeMode,
       debugPort,
+      vitals,
+      syntheticIntervalSecs,
     });
-  }, [autoFixEnabled, chromeMode, resolveDebugPort, resolveUrl, sessionId]);
+  }, [
+    autoFixEnabled,
+    chromeMode,
+    resolveDebugPort,
+    resolveSyntheticSecs,
+    resolveUrl,
+    resolveVitals,
+    sessionId,
+  ]);
 
   const stop = useCallback(async () => {
     if (!sessionId) return;
@@ -193,8 +281,18 @@ export function useChromeDevtoolsMonitor(input: {
       autoFixEnabled,
       mode: chromeMode,
       debugPort: resolveDebugPort(),
+      vitals: resolveVitals(),
+      syntheticIntervalSecs: resolveSyntheticSecs(),
     });
-  }, [autoFixEnabled, chromeMode, resolveDebugPort, resolveUrl, sessionId]);
+  }, [
+    autoFixEnabled,
+    chromeMode,
+    resolveDebugPort,
+    resolveSyntheticSecs,
+    resolveUrl,
+    resolveVitals,
+    sessionId,
+  ]);
 
   const downloadExtension = useCallback(async () => {
     try {
@@ -224,11 +322,16 @@ export function useChromeDevtoolsMonitor(input: {
     setChromeMode,
     debugPortDraft,
     setDebugPortDraft: setDebugPortDraftSafe,
+    vitalsThresholds: vitalsDraft,
+    setVitalsThresholds,
+    syntheticEnabled,
+    setSyntheticEnabled,
     saveUrl,
     resolveUrl,
     status: runtime.status,
     statusHint: runtime.statusHint,
     issuePreview: runtime.issuePreview,
+    timeline: runtime.timeline ?? [],
     isActive,
     start,
     stop,

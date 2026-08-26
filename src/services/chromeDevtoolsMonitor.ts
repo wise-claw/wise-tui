@@ -14,7 +14,12 @@ export type ChromeDevtoolsIssueKind =
   | "page-crash"
   | "page-vitals"
   | "long-task"
-  | "slow-request";
+  | "slow-request"
+  | "breadcrumb"
+  | "page-timing"
+  | "blank-screen"
+  | "vitals-alert"
+  | "synthetic-check";
 
 export type ChromeDevtoolsIssue = {
   sessionId: string;
@@ -23,7 +28,7 @@ export type ChromeDevtoolsIssue = {
   url?: string | null;
   method?: string | null;
   status?: number | null;
-  /** Web Vitals 指标名：lcp | cls | inp | fcp | ttfb */
+  /** Web Vitals：lcp/cls/inp/fcp/ttfb；轨迹：click/input/submit/navigate；时序：dcl/load */
   metric?: string | null;
   /** Web Vitals / 长任务数值（CLS 为比值，其余为毫秒） */
   value?: number | null;
@@ -31,13 +36,44 @@ export type ChromeDevtoolsIssue = {
   durationMs?: number | null;
   /** CDP 资源类型：XHR / Fetch / Image / Script / Stylesheet / Font 等 */
   resourceType?: string | null;
+  /** 白屏证据图本机路径（`~/.wise/page-monitor-evidence/*.jpg`） */
+  evidencePath?: string | null;
 };
 
-/** 诊断类问题：仅展示，不触发 AI 自动修复（性能 / 耗时类指标）。 */
-const PAGE_MONITOR_DIAGNOSTIC_KINDS = new Set(["page-vitals", "long-task", "slow-request"]);
+/** 诊断类问题：仅展示，不触发 AI 自动修复（性能 / 耗时 / 用户轨迹）。 */
+const PAGE_MONITOR_DIAGNOSTIC_KINDS = new Set([
+  "page-vitals",
+  "long-task",
+  "slow-request",
+  "breadcrumb",
+  "page-timing",
+]);
 
 export function isPageMonitorDiagnosticKind(kind: string | null | undefined): boolean {
   return PAGE_MONITOR_DIAGNOSTIC_KINDS.has(String(kind ?? "").trim().toLowerCase());
+}
+
+/** 用户操作轨迹：可进预览但需限条，避免挤掉真实错误。 */
+export function isPageMonitorTimelineKind(kind: string | null | undefined): boolean {
+  return String(kind ?? "").trim().toLowerCase() === "breadcrumb";
+}
+
+/** Core Web Vitals "poor"：缺省 LCP≥4000ms / CLS≥0.25 / INP≥500ms。 */
+export function pageMonitorVitalsPoorAlert(
+  metric: string | null | undefined,
+  value: number | null | undefined,
+  thresholds?: PageMonitorVitalsThresholds | null,
+): string | null {
+  const name = String(metric ?? "").trim().toLowerCase();
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n < 0) return null;
+  const t = normalizePageMonitorVitalsThresholds(
+    thresholds ?? DEFAULT_PAGE_MONITOR_VITALS_THRESHOLDS,
+  );
+  if (name === "lcp" && n >= t.lcpMs) return `LCP ${Math.round(n)}ms exceeds ${t.lcpMs}ms`;
+  if (name === "cls" && n >= t.cls) return `CLS ${n} exceeds ${t.cls}`;
+  if (name === "inp" && n >= t.inpMs) return `INP ${Math.round(n)}ms exceeds ${t.inpMs}ms`;
+  return null;
 }
 
 /** XHR/fetch 之外的资源类型前缀（静态资源失败更醒目）。 */
@@ -54,6 +90,63 @@ export type PageMonitorChromeMode = "launch" | "attach" | "extension";
 
 export const DEFAULT_PAGE_MONITOR_DEBUG_PORT = 9222;
 export const DEFAULT_PAGE_MONITOR_BRIDGE_PORT = 17321;
+export const DEFAULT_PAGE_MONITOR_SYNTHETIC_INTERVAL_SECS = 30;
+
+export type PageMonitorVitalsThresholds = {
+  lcpMs: number;
+  cls: number;
+  inpMs: number;
+};
+
+export const DEFAULT_PAGE_MONITOR_VITALS_THRESHOLDS: PageMonitorVitalsThresholds = {
+  lcpMs: 4000,
+  cls: 0.25,
+  inpMs: 500,
+};
+
+function clampInt(raw: unknown, fallback: number, min: number, max: number): number {
+  if (raw == null || raw === "") return fallback;
+  const n = typeof raw === "number" ? raw : Number(String(raw).trim());
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+function clampFloat(raw: unknown, fallback: number, min: number, max: number): number {
+  if (raw == null || raw === "") return fallback;
+  const n = typeof raw === "number" ? raw : Number(String(raw).trim());
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+export function normalizePageMonitorVitalsThresholds(raw: unknown): PageMonitorVitalsThresholds {
+  const obj =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  return {
+    lcpMs: clampInt(
+      obj.lcpMs ?? obj.lcp_ms,
+      DEFAULT_PAGE_MONITOR_VITALS_THRESHOLDS.lcpMs,
+      500,
+      60_000,
+    ),
+    cls: clampFloat(obj.cls, DEFAULT_PAGE_MONITOR_VITALS_THRESHOLDS.cls, 0.01, 2),
+    inpMs: clampInt(
+      obj.inpMs ?? obj.inp_ms,
+      DEFAULT_PAGE_MONITOR_VITALS_THRESHOLDS.inpMs,
+      50,
+      10_000,
+    ),
+  };
+}
+
+/** 0 关闭；缺省 30 秒；其它值限制在 10–600。 */
+export function normalizePageMonitorSyntheticIntervalSecs(raw: unknown): number {
+  if (raw == null || raw === "") return DEFAULT_PAGE_MONITOR_SYNTHETIC_INTERVAL_SECS;
+  const n = typeof raw === "number" ? raw : Number(String(raw).trim());
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(600, Math.max(10, Math.floor(n)));
+}
 
 /**
  * 页面监控是否应忽略该问题行（热更新、HMR、良性噪音）。
@@ -117,10 +210,36 @@ export function formatChromeDevtoolsIssueLine(issue: ChromeDevtoolsIssue): strin
       }
       return `Chrome slow request: ${message || "slow request"}`;
     }
+    case "breadcrumb": {
+      const action = (issue.metric ?? "").trim() || "action";
+      return message
+        ? `Chrome breadcrumb ${action}: ${message}`
+        : `Chrome breadcrumb ${action}`;
+    }
+    case "page-timing": {
+      const metric = (issue.metric ?? "").trim().toUpperCase();
+      const duration = Math.round(issue.value ?? issue.durationMs ?? 0);
+      if (metric) return `Chrome timing ${metric}: ${duration}ms`;
+      return `Chrome timing: ${message || `${duration}ms`}`;
+    }
+    case "blank-screen": {
+      const evidence = (issue.evidencePath ?? "").trim();
+      const base = `Chrome blank screen error: ${message || "blank screen"}`;
+      if (evidence && !message.includes("evidence:")) return `${base} evidence: ${evidence}`;
+      return base;
+    }
+    case "vitals-alert": {
+      const detail = message || pageMonitorVitalsPoorAlert(issue.metric, issue.value) || "poor vital";
+      return `Chrome vitals alert error: ${detail}`;
+    }
+    case "synthetic-check": {
+      if (url && status != null) return `${method} ${url} ${status}`;
+      return `Chrome synthetic check error: ${message || "failed"}`;
+    }
     case "page-error":
     default:
       return `Chrome page error: ${message || "error"}`;
-  }
+    }
 }
 
 /** 构造页面监控命中后交给 Claude 的自动修复提示。 */
@@ -174,6 +293,8 @@ export async function startChromeDevtoolsMonitor(input: {
   url: string;
   mode?: PageMonitorChromeMode;
   debugPort?: number;
+  vitals?: PageMonitorVitalsThresholds;
+  syntheticIntervalSecs?: number;
 }): Promise<void> {
   const sessionId = input.sessionId.trim();
   const url = input.url.trim();
@@ -184,7 +305,15 @@ export async function startChromeDevtoolsMonitor(input: {
     url: string;
     mode: PageMonitorChromeMode;
     debugPort?: number;
-  } = { sessionId, url, mode };
+    vitals: PageMonitorVitalsThresholds;
+    syntheticIntervalSecs: number;
+  } = {
+    sessionId,
+    url,
+    mode,
+    vitals: normalizePageMonitorVitalsThresholds(input.vitals),
+    syntheticIntervalSecs: normalizePageMonitorSyntheticIntervalSecs(input.syntheticIntervalSecs),
+  };
   if (mode === "attach") {
     payload.debugPort = normalizePageMonitorDebugPort(input.debugPort);
   }

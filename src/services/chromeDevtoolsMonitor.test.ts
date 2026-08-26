@@ -4,8 +4,12 @@ import {
   formatChromeDevtoolsIssueLine,
   isPageMonitorDiagnosticKind,
   isPageMonitorIgnorableNoise,
+  isPageMonitorTimelineKind,
   normalizePageMonitorChromeMode,
   normalizePageMonitorDebugPort,
+  normalizePageMonitorSyntheticIntervalSecs,
+  normalizePageMonitorVitalsThresholds,
+  pageMonitorVitalsPoorAlert,
   type ChromeDevtoolsIssue,
 } from "./chromeDevtoolsMonitor";
 import { detectRunLogIssue } from "../utils/repositoryRunCommand";
@@ -102,6 +106,57 @@ describe("formatChromeDevtoolsIssueLine", () => {
     expect(slow).toBe("GET http://localhost:3000/api/x 200 in 5120ms");
   });
 
+  test("formats breadcrumbs and page timing as diagnostics", () => {
+    const crumb = formatChromeDevtoolsIssueLine(
+      issue({
+        kind: "breadcrumb",
+        message: "button#save '保存'",
+        metric: "click",
+      }),
+    );
+    expect(crumb).toBe("Chrome breadcrumb click: button#save '保存'");
+    expect(detectRunLogIssue(crumb)).toBeNull();
+
+    const timing = formatChromeDevtoolsIssueLine(
+      issue({ kind: "page-timing", message: "DCL 320ms", metric: "dcl", value: 320, durationMs: 320 }),
+    );
+    expect(timing).toBe("Chrome timing DCL: 320ms");
+    expect(detectRunLogIssue(timing)).toBeNull();
+  });
+
+  test("formats blank screen as an auto-fix error", () => {
+    const line = formatChromeDevtoolsIssueLine(
+      issue({ kind: "blank-screen", message: "12 chars, 3 visible nodes" }),
+    );
+    expect(line).toBe("Chrome blank screen error: 12 chars, 3 visible nodes");
+    expect(detectRunLogIssue(line)?.kind).toBe("error");
+  });
+
+  test("appends evidence path to blank screen lines", () => {
+    const line = formatChromeDevtoolsIssueLine(
+      issue({
+        kind: "blank-screen",
+        message: "12 chars, 3 visible nodes",
+        evidencePath: "/tmp/blank.jpg",
+      }),
+    );
+    expect(line).toContain("evidence: /tmp/blank.jpg");
+    expect(detectRunLogIssue(line)?.kind).toBe("error");
+  });
+
+  test("formats vitals-alert as an auto-fix error", () => {
+    const line = formatChromeDevtoolsIssueLine(
+      issue({
+        kind: "vitals-alert",
+        message: "LCP 5200ms exceeds 4000ms",
+        metric: "lcp",
+        value: 5200,
+      }),
+    );
+    expect(line).toBe("Chrome vitals alert error: LCP 5200ms exceeds 4000ms");
+    expect(detectRunLogIssue(line)?.kind).toBe("error");
+  });
+
   test("tags non-API resource types on network issues", () => {
     const img = formatChromeDevtoolsIssueLine(
       issue({
@@ -135,11 +190,82 @@ describe("isPageMonitorDiagnosticKind", () => {
     expect(isPageMonitorDiagnosticKind("page-vitals")).toBe(true);
     expect(isPageMonitorDiagnosticKind("long-task")).toBe(true);
     expect(isPageMonitorDiagnosticKind("slow-request")).toBe(true);
+    expect(isPageMonitorDiagnosticKind("breadcrumb")).toBe(true);
+    expect(isPageMonitorDiagnosticKind("page-timing")).toBe(true);
     expect(isPageMonitorDiagnosticKind("SLOW-REQUEST")).toBe(true);
     expect(isPageMonitorDiagnosticKind("page-error")).toBe(false);
     expect(isPageMonitorDiagnosticKind("page-crash")).toBe(false);
+    expect(isPageMonitorDiagnosticKind("blank-screen")).toBe(false);
+    expect(isPageMonitorDiagnosticKind("vitals-alert")).toBe(false);
+    expect(isPageMonitorDiagnosticKind("synthetic-check")).toBe(false);
     expect(isPageMonitorDiagnosticKind(null)).toBe(false);
     expect(isPageMonitorDiagnosticKind(undefined)).toBe(false);
+    expect(isPageMonitorTimelineKind("breadcrumb")).toBe(true);
+    expect(isPageMonitorTimelineKind("page-timing")).toBe(false);
+  });
+});
+
+describe("pageMonitorVitalsPoorAlert", () => {
+  test("alerts only on Core Web Vitals poor thresholds", () => {
+    expect(pageMonitorVitalsPoorAlert("lcp", 3999)).toBeNull();
+    expect(pageMonitorVitalsPoorAlert("lcp", 4000)).toBe("LCP 4000ms exceeds 4000ms");
+    expect(pageMonitorVitalsPoorAlert("cls", 0.25)).toBe("CLS 0.25 exceeds 0.25");
+    expect(pageMonitorVitalsPoorAlert("inp", 500)).toBe("INP 500ms exceeds 500ms");
+    expect(pageMonitorVitalsPoorAlert("fcp", 9000)).toBeNull();
+    expect(pageMonitorVitalsPoorAlert("ttfb", 9000)).toBeNull();
+  });
+
+  test("uses custom thresholds when provided", () => {
+    const t = { lcpMs: 2000, cls: 0.1, inpMs: 200 };
+    expect(pageMonitorVitalsPoorAlert("lcp", 1999, t)).toBeNull();
+    expect(pageMonitorVitalsPoorAlert("lcp", 2000, t)).toBe("LCP 2000ms exceeds 2000ms");
+    expect(pageMonitorVitalsPoorAlert("cls", 0.1, t)).toBe("CLS 0.1 exceeds 0.1");
+  });
+});
+
+describe("normalizePageMonitorVitalsThresholds / synthetic interval", () => {
+  test("clamps vitals and synthetic interval", () => {
+    expect(normalizePageMonitorVitalsThresholds(null)).toEqual({
+      lcpMs: 4000,
+      cls: 0.25,
+      inpMs: 500,
+    });
+    expect(normalizePageMonitorVitalsThresholds({ lcpMs: 1, cls: 9, inpMs: 12 })).toEqual({
+      lcpMs: 500,
+      cls: 2,
+      inpMs: 50,
+    });
+    expect(normalizePageMonitorSyntheticIntervalSecs(undefined)).toBe(30);
+    expect(normalizePageMonitorSyntheticIntervalSecs(0)).toBe(0);
+    expect(normalizePageMonitorSyntheticIntervalSecs(5)).toBe(10);
+    expect(normalizePageMonitorSyntheticIntervalSecs(900)).toBe(600);
+  });
+});
+
+describe("formatChromeDevtoolsIssueLine synthetic-check", () => {
+  test("formats HTTP probe failures as request errors", () => {
+    const line = formatChromeDevtoolsIssueLine(
+      issue({
+        kind: "synthetic-check",
+        message: "GET http://localhost:5173 502",
+        method: "GET",
+        url: "http://localhost:5173",
+        status: 502,
+      }),
+    );
+    expect(line).toBe("GET http://localhost:5173 502");
+    expect(detectRunLogIssue(line)?.kind).toBe("http");
+  });
+
+  test("formats network probe failures as errors", () => {
+    const line = formatChromeDevtoolsIssueLine(
+      issue({
+        kind: "synthetic-check",
+        message: "Chrome synthetic check error: GET http://localhost:5173 failed: boom",
+      }),
+    );
+    expect(line).toContain("error");
+    expect(detectRunLogIssue(line)?.kind).toBe("error");
   });
 });
 

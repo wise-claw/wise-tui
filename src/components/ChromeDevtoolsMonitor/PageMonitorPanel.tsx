@@ -1,8 +1,28 @@
 import { Input, Switch } from "antd";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { HoverHint } from "../shared/HoverHint";
-import type { PageMonitorChromeMode } from "../../services/chromeDevtoolsMonitor";
-import type { PageMonitorIssueLine, PageMonitorStatus } from "../../stores/chromeDevtoolsMonitorRuntimeStore";
+import type { PageMonitorChromeMode, PageMonitorVitalsThresholds } from "../../services/chromeDevtoolsMonitor";
+import type {
+  PageMonitorIssueLine,
+  PageMonitorStatus,
+  PageMonitorTimelineItem,
+} from "../../stores/chromeDevtoolsMonitorRuntimeStore";
 import "../ClaudeSessions/index.css";
+
+const TIMELINE_ACTION_LABEL: Record<string, string> = {
+  click: "点击",
+  input: "输入",
+  submit: "提交",
+  navigate: "路由",
+};
+
+function evidenceSrc(path: string): string {
+  try {
+    return convertFileSrc(path);
+  } catch {
+    return path;
+  }
+}
 
 export type PageMonitorPanelProps = {
   urlDraft: string;
@@ -13,9 +33,14 @@ export type PageMonitorPanelProps = {
   setChromeMode: (mode: PageMonitorChromeMode) => void;
   debugPortDraft: string;
   setDebugPortDraft: (value: string) => void;
+  vitalsThresholds: PageMonitorVitalsThresholds;
+  setVitalsThresholds: (value: PageMonitorVitalsThresholds) => void;
+  syntheticEnabled: boolean;
+  setSyntheticEnabled: (enabled: boolean) => void;
   status: PageMonitorStatus;
   statusHint: string;
   issuePreview: PageMonitorIssueLine[];
+  timeline?: PageMonitorTimelineItem[];
   saveUrl: () => boolean;
   start: () => void | Promise<void>;
   stop: () => void | Promise<void>;
@@ -33,9 +58,14 @@ export function PageMonitorPanel({
   setChromeMode,
   debugPortDraft,
   setDebugPortDraft,
+  vitalsThresholds,
+  setVitalsThresholds,
+  syntheticEnabled,
+  setSyntheticEnabled,
   status,
   statusHint,
   issuePreview,
+  timeline = [],
   saveUrl,
   start,
   stop,
@@ -45,6 +75,7 @@ export function PageMonitorPanel({
 }: PageMonitorPanelProps) {
   const inputsDisabled = disabled || status === "stopping" || status === "starting";
   const monitoring = status === "monitoring" || status === "starting" || status === "stopping";
+  const thresholdLocked = disabled || monitoring;
   const attachMode = chromeMode === "attach";
   const extensionMode = chromeMode === "extension";
 
@@ -53,7 +84,7 @@ export function PageMonitorPanel({
       <header className="app-run-command-popover__header">
         <span className="app-run-command-popover__title">页面监控</span>
         <HoverHint
-          title="经 CDP / Chrome 扩展监听页面异常、console 报错/告警、接口 4xx/5xx、网络失败、慢请求（≥3s）、Web Vitals（LCP/CLS/INP/FCP/TTFB）、长任务（≥500ms）与页面崩溃；性能类诊断仅展示、不触发 AI 自动修复。「独立窗口」另开专用 Chrome；「附着已有」需 --remote-debugging-port；「Chrome 扩展」监控日常 Chrome 标签。"
+          title="经 CDP / Chrome 扩展监听页面异常（含堆栈摘要与 SourceMap 源码定位）、console、网络、慢请求、Web Vitals、加载时序、长任务、操作时间线、白屏（含证据截图）、崩溃与定时探活。LCP/CLS/INP 达到阈值会升为可自动修复的 vitals-alert。性能/轨迹类诊断默认不修复。"
           placement="topLeft"
         >
           <button
@@ -182,6 +213,60 @@ export function PageMonitorPanel({
           </div>
         ) : null}
 
+        <div className="app-run-command-popover__row app-page-monitor-popover__vitals-row">
+          <span className="app-run-command-popover__field-label">阈值</span>
+          <div className="app-page-monitor-popover__vitals-inputs">
+            <label className="app-page-monitor-popover__vital">
+              <span>LCP</span>
+              <Input
+                size="small"
+                value={String(vitalsThresholds.lcpMs)}
+                onChange={(event) => {
+                  const n = Number(event.target.value.replace(/[^\d]/g, ""));
+                  if (!Number.isFinite(n)) return;
+                  setVitalsThresholds({ ...vitalsThresholds, lcpMs: n });
+                }}
+                aria-label="LCP 阈值毫秒"
+                disabled={thresholdLocked}
+                inputMode="numeric"
+                suffix="ms"
+              />
+            </label>
+            <label className="app-page-monitor-popover__vital">
+              <span>CLS</span>
+              <Input
+                size="small"
+                value={String(vitalsThresholds.cls)}
+                onChange={(event) => {
+                  const raw = event.target.value.replace(/[^\d.]/g, "");
+                  const n = Number(raw);
+                  if (!Number.isFinite(n)) return;
+                  setVitalsThresholds({ ...vitalsThresholds, cls: n });
+                }}
+                aria-label="CLS 阈值"
+                disabled={thresholdLocked}
+                inputMode="decimal"
+              />
+            </label>
+            <label className="app-page-monitor-popover__vital">
+              <span>INP</span>
+              <Input
+                size="small"
+                value={String(vitalsThresholds.inpMs)}
+                onChange={(event) => {
+                  const n = Number(event.target.value.replace(/[^\d]/g, ""));
+                  if (!Number.isFinite(n)) return;
+                  setVitalsThresholds({ ...vitalsThresholds, inpMs: n });
+                }}
+                disabled={thresholdLocked}
+                inputMode="numeric"
+                suffix="ms"
+                aria-label="INP 阈值毫秒"
+              />
+            </label>
+          </div>
+        </div>
+
         <div className="app-run-command-popover__options-row">
           <div className="app-run-command-popover__option-item">
             <Switch
@@ -195,6 +280,20 @@ export function PageMonitorPanel({
               title="命中页面问题后自动交给 Claude Code 修复"
             >
               AI 自动修复
+            </span>
+          </div>
+          <div className="app-run-command-popover__option-item">
+            <Switch
+              size="small"
+              checked={syntheticEnabled}
+              onChange={setSyntheticEnabled}
+              disabled={thresholdLocked}
+            />
+            <span
+              className="app-run-command-popover__option-text"
+              title="监控期间每 30 秒请求监控地址，≥400 或网络失败记为 synthetic-check"
+            >
+              定时探活
             </span>
           </div>
         </div>
@@ -215,6 +314,22 @@ export function PageMonitorPanel({
         </div>
       </section>
 
+      {timeline.length > 0 ? (
+        <section className="app-run-command-popover__section app-page-monitor-popover__timeline">
+          <div className="app-run-command-popover__dock-label">最近操作</div>
+          <ol className="app-page-monitor-popover__timeline-list">
+            {timeline.map((item, index) => (
+              <li key={`${index}-${item.metric}-${item.message}`}>
+                <span className="app-page-monitor-popover__timeline-action">
+                  {TIMELINE_ACTION_LABEL[item.metric] ?? item.metric}
+                </span>
+                <span className="app-page-monitor-popover__timeline-msg">{item.message}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
       {issuePreview.length > 0 ? (
         <section className="app-run-command-popover__section app-run-command-popover__section--logs">
           <div className="app-run-command-popover__logs">
@@ -229,7 +344,14 @@ export function PageMonitorPanel({
                       : ""
                 }`}
               >
-                {line.text}
+                <div>{line.text}</div>
+                {line.evidencePath ? (
+                  <img
+                    className="app-page-monitor-popover__evidence"
+                    src={evidenceSrc(line.evidencePath)}
+                    alt="白屏证据"
+                  />
+                ) : null}
               </div>
             ))}
           </div>

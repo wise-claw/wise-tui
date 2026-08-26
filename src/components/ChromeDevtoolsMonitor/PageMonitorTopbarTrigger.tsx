@@ -88,9 +88,14 @@ export function PageMonitorTopbarTrigger({
           setChromeMode={monitor.setChromeMode}
           debugPortDraft={monitor.debugPortDraft}
           setDebugPortDraft={monitor.setDebugPortDraft}
+          vitalsThresholds={monitor.vitalsThresholds}
+          setVitalsThresholds={monitor.setVitalsThresholds}
+          syntheticEnabled={monitor.syntheticEnabled}
+          setSyntheticEnabled={monitor.setSyntheticEnabled}
           status={monitor.status}
           statusHint={monitor.statusHint}
           issuePreview={monitor.issuePreview}
+          timeline={monitor.timeline}
           saveUrl={monitor.saveUrl}
           start={monitor.start}
           stop={monitor.stop}

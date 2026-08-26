@@ -4,16 +4,17 @@
 //! - `launch`：独立 Chrome profile + 远程调试口（默认，与日常浏览器隔离）
 //! - `attach`：附着已开启 `--remote-debugging-port` 的既有 Chrome；停止时不断开浏览器进程
 
+use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
-use std::time::Duration;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::{mpsc, watch};
@@ -32,10 +33,10 @@ const SLOW_REQUEST_REPORT_MS: u64 = 3_000;
 /// 长任务超过该阈值（毫秒）即上报 long-task。
 const LONG_TASK_REPORT_MS: u64 = 500;
 
-/// 注入到页面主世界的 Web Vitals / 长任务采集脚本。
-/// 经 `Runtime.addBinding` 回传 JSON：`{kind:"vitals",metric,value}` 或 `{kind:"long-task",value,url}`。
+/// 注入到页面主世界：Web Vitals / 长任务 / 加载时序 / 用户操作轨迹 / 白屏。
+/// 经 `Runtime.addBinding` 回传 JSON。
 /// 请与 browser-extensions/wise-page-monitor/inject-vitals.js 保持同步。
-const PAGE_INJECTION_SCRIPT: &str = r#"(function () {
+const PAGE_INJECTION_SCRIPT: &str = r###"(function () {
   try {
     if (window.__wiseVitalsInstalled) return;
     window.__wiseVitalsInstalled = true;
@@ -43,6 +44,9 @@ const PAGE_INJECTION_SCRIPT: &str = r#"(function () {
       try { window.__wiseMonitorReport(JSON.stringify(payload)); } catch (e) {}
     };
     var round = function (n) { return Math.round(n); };
+    var pageUrl = function () {
+      try { return String(location.href || ""); } catch (e) { return ""; }
+    };
     try {
       var nav = performance.getEntriesByType("navigation")[0];
       if (nav && nav.responseStart > 0) {
@@ -115,8 +119,146 @@ const PAGE_INJECTION_SCRIPT: &str = r#"(function () {
       });
       ltObs.observe({ type: "longtask", buffered: true });
     } catch (e) {}
+    try {
+      var timingSent = {};
+      var sendTiming = function () {
+        try {
+          var navT = performance.getEntriesByType("navigation")[0];
+          if (!navT) return;
+          if (navT.domContentLoadedEventEnd > 0 && !timingSent.dcl) {
+            timingSent.dcl = true;
+            report({ kind: "timing", metric: "dcl", value: round(navT.domContentLoadedEventEnd), url: pageUrl() });
+          }
+          if (navT.loadEventEnd > 0 && !timingSent.load) {
+            timingSent.load = true;
+            report({ kind: "timing", metric: "load", value: round(navT.loadEventEnd), url: pageUrl() });
+          }
+        } catch (err) {}
+      };
+      sendTiming();
+      if (document.readyState !== "complete") {
+        window.addEventListener("load", function () { setTimeout(sendTiming, 0); });
+      }
+    } catch (e) {}
+    try {
+      var lastClickAt = 0;
+      var describe = function (el) {
+        if (!el || !el.tagName) return "";
+        var tag = String(el.tagName || "").toLowerCase();
+        var id = el.id ? "#" + String(el.id).slice(0, 40) : "";
+        var name = "";
+        try { name = el.getAttribute("name") || el.getAttribute("aria-label") || ""; } catch (err) {}
+        var namePart = name ? "[name=" + String(name).slice(0, 40) + "]" : "";
+        var txt = "";
+        try { txt = String(el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 32); } catch (err) {}
+        var txtPart = txt ? (" '" + txt + "'") : "";
+        return (tag + id + namePart + txtPart).slice(0, 120);
+      };
+      document.addEventListener("click", function (ev) {
+        var now = Date.now();
+        if (now - lastClickAt < 800) return;
+        lastClickAt = now;
+        report({ kind: "breadcrumb", metric: "click", message: describe(ev.target) || "click", url: pageUrl() });
+      }, true);
+      document.addEventListener("change", function (ev) {
+        var t = ev.target;
+        if (!t || !t.tagName) return;
+        var tag = String(t.tagName).toLowerCase();
+        if (tag !== "input" && tag !== "select" && tag !== "textarea") return;
+        var type = "";
+        try { type = String(t.type || "").toLowerCase(); } catch (err) {}
+        var label = describe(t) || tag;
+        if (type === "password") label += " (password)";
+        report({ kind: "breadcrumb", metric: "input", message: label, url: pageUrl() });
+      }, true);
+      document.addEventListener("submit", function (ev) {
+        report({ kind: "breadcrumb", metric: "submit", message: describe(ev.target) || "form", url: pageUrl() });
+      }, true);
+      var onNav = function (how) {
+        report({ kind: "breadcrumb", metric: "navigate", message: how + " " + pageUrl(), url: pageUrl() });
+      };
+      var wrapHist = function (name) {
+        try {
+          var orig = history[name];
+          if (typeof orig !== "function") return;
+          history[name] = function () {
+            var ret = orig.apply(this, arguments);
+            onNav(name);
+            return ret;
+          };
+        } catch (err) {}
+      };
+      wrapHist("pushState");
+      wrapHist("replaceState");
+      window.addEventListener("popstate", function () { onNav("popstate"); });
+      window.addEventListener("hashchange", function () { onNav("hashchange"); });
+    } catch (e) {}
+    try {
+      var blankSent = false;
+      var hadContent = false;
+      var textLen = function () {
+        try {
+          var body = document.body;
+          if (!body) return 0;
+          return String(body.innerText || body.textContent || "").replace(/\s+/g, " ").trim().length;
+        } catch (err) { return 0; }
+      };
+      var visibleCount = function () {
+        try {
+          if (!document.body) return 0;
+          var nodes = document.body.getElementsByTagName("*");
+          var n = 0;
+          var max = Math.min(nodes.length, 500);
+          for (var i = 0; i < max; i++) {
+            var el = nodes[i];
+            var tag = String(el.tagName || "");
+            if (tag === "SCRIPT" || tag === "STYLE" || tag === "LINK" || tag === "META" || tag === "NOSCRIPT") continue;
+            var r = el.getBoundingClientRect();
+            if (r.width >= 8 && r.height >= 8) n++;
+          }
+          return n;
+        } catch (err) { return 0; }
+      };
+      var hasSizedMedia = function () {
+        try {
+          var media = document.querySelectorAll("canvas, video, svg, img, iframe");
+          for (var i = 0; i < media.length; i++) {
+            var r = media[i].getBoundingClientRect();
+            if (r.width >= 40 && r.height >= 40) return true;
+          }
+        } catch (err) {}
+        return false;
+      };
+      var checkBlank = function (finalCheck) {
+        if (blankSent || hadContent) return;
+        try {
+          var href = pageUrl();
+          if (!href || href.indexOf("about:") === 0) return;
+          var chars = textLen();
+          var vis = visibleCount();
+          if (hasSizedMedia() || chars >= 40 || vis >= 8) {
+            hadContent = true;
+            return;
+          }
+          if (!finalCheck) return;
+          blankSent = true;
+          report({
+            kind: "blank-screen",
+            message: chars + " chars, " + vis + " visible nodes",
+            value: chars,
+            url: href
+          });
+        } catch (err) {}
+      };
+      var startBlankWatch = function () {
+        setTimeout(function () { checkBlank(false); }, 2500);
+        setTimeout(function () { checkBlank(true); }, 6000);
+      };
+      if (document.readyState === "complete") startBlankWatch();
+      else window.addEventListener("load", startBlankWatch);
+    } catch (e) {}
   } catch (e) {}
-})();"#;
+})();"###;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -124,6 +266,7 @@ pub struct ChromeDevtoolsIssue {
     pub session_id: String,
     /// `page-error` | `console-error` | `console-warning` | `network-http` | `network-failed`
     /// `page-crash` | `page-vitals` | `long-task` | `slow-request`
+    /// `breadcrumb` | `page-timing` | `blank-screen` | `vitals-alert` | `synthetic-check`
     pub kind: String,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -138,8 +281,238 @@ pub struct ChromeDevtoolsIssue {
     pub value: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resource_type: Option<String>,
+    /// 白屏等证据图的本机绝对路径（`~/.wise/page-monitor-evidence/*.jpg`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct VitalsThresholds {
+    #[serde(default = "default_lcp_ms")]
+    pub lcp_ms: u64,
+    #[serde(default = "default_cls")]
+    pub cls: f64,
+    #[serde(default = "default_inp_ms")]
+    pub inp_ms: u64,
+}
+
+fn default_lcp_ms() -> u64 {
+    4000
+}
+fn default_cls() -> f64 {
+    0.25
+}
+fn default_inp_ms() -> u64 {
+    500
+}
+
+impl Default for VitalsThresholds {
+    fn default() -> Self {
+        Self {
+            lcp_ms: default_lcp_ms(),
+            cls: default_cls(),
+            inp_ms: default_inp_ms(),
+        }
+    }
+}
+
+pub fn normalize_vitals_thresholds(raw: Option<VitalsThresholds>) -> VitalsThresholds {
+    let t = raw.unwrap_or_default();
+    VitalsThresholds {
+        lcp_ms: t.lcp_ms.clamp(500, 60_000),
+        cls: if t.cls.is_finite() {
+            t.cls.clamp(0.01, 2.0)
+        } else {
+            default_cls()
+        },
+        inp_ms: t.inp_ms.clamp(50, 10_000),
+    }
+}
+
+/// 0 表示关闭；其它值限制在 10–600 秒。缺省 30 秒。
+pub fn normalize_synthetic_interval_secs(raw: Option<u64>) -> u64 {
+    match raw.unwrap_or(30) {
+        0 => 0,
+        n => n.clamp(10, 600),
+    }
+}
+
+const SOURCEMAP_FETCH_TIMEOUT: Duration = Duration::from_millis(800);
+const SOURCEMAP_MAX_BYTES: usize = 2_000_000;
+const SOURCEMAP_CACHE_CAP: usize = 48;
+
+fn sourcemap_bytes_cache() -> &'static Mutex<HashMap<String, Option<Vec<u8>>>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<Vec<u8>>>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn candidate_map_urls(script_url: &str) -> Vec<String> {
+    let trimmed = script_url.trim();
+    if !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
+        return Vec::new();
+    }
+    let no_hash = trimmed.split('#').next().unwrap_or(trimmed);
+    let base = no_hash.split('?').next().unwrap_or(no_hash);
+    if base.is_empty() || base.ends_with(".map") {
+        return Vec::new();
+    }
+    let mut out = vec![format!("{base}.map")];
+    if let Some(query) = no_hash.strip_prefix(base).filter(|s| s.starts_with('?')) {
+        let with_query = format!("{base}.map{query}");
+        if with_query != out[0] {
+            out.push(with_query);
+        }
+    }
+    out
+}
+
+fn lookup_orig_in_map_bytes(bytes: &[u8], line: u32, column: u32) -> Option<String> {
+    let sm = sourcemap::SourceMap::from_slice(bytes).ok()?;
+    let token = sm.lookup_token(line, column)?;
+    let src = token.get_source()?.trim();
+    if src.is_empty() {
+        return None;
+    }
+    let src_line = token.get_src_line().saturating_add(1);
+    let src_col = token.get_src_col().saturating_add(1);
+    Some(format!("{src}:{src_line}:{src_col}"))
+}
+
+async fn fetch_map_bytes(map_url: &str) -> Option<Vec<u8>> {
+    {
+        let cache = sourcemap_bytes_cache().lock().ok()?;
+        if let Some(hit) = cache.get(map_url) {
+            return hit.clone();
+        }
+    }
+    let client = reqwest::Client::builder()
+        .timeout(SOURCEMAP_FETCH_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::limited(3))
+        .build()
+        .ok()?;
+    let bytes = match client.get(map_url).send().await {
+        Ok(resp) if resp.status().is_success() => resp.bytes().await.ok().map(|b| b.to_vec()),
+        _ => None,
+    };
+    let bytes = bytes.filter(|b| !b.is_empty() && b.len() <= SOURCEMAP_MAX_BYTES);
+    if let Ok(mut cache) = sourcemap_bytes_cache().lock() {
+        if cache.len() >= SOURCEMAP_CACHE_CAP {
+            cache.clear();
+        }
+        cache.insert(map_url.to_string(), bytes.clone());
+    }
+    bytes
+}
+
+/// 尝试 `{url}.map` 把 CDP 0-based 行列还原为源码位置（`src/App.tsx:12:4`）。
+pub async fn resolve_orig_source_location(url: &str, line: u32, column: u32) -> Option<String> {
+    for map_url in candidate_map_urls(url) {
+        let Some(bytes) = fetch_map_bytes(&map_url).await else {
+            continue;
+        };
+        if let Some(orig) = lookup_orig_in_map_bytes(&bytes, line, column) {
+            return Some(orig);
+        }
+    }
+    None
+}
+
+async fn append_orig_location(mut message: String, script_url: &str, line: u32, column: u32) -> String {
+    if script_url.is_empty() || message.contains("| orig ") {
+        return message;
+    }
+    if let Some(orig) = resolve_orig_source_location(script_url, line, column).await {
+        message = format!("{message} | orig {orig}");
+    }
+    message
+}
+
+pub async fn probe_synthetic_url(url: &str) -> Result<u16, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client
+        .get(url)
+        .header("User-Agent", "Wise-PageMonitor/1.0")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(resp.status().as_u16())
+}
+
+fn synthetic_check_issue(
+    session_id: &str,
+    url: &str,
+    result: Result<u16, String>,
+) -> Option<ChromeDevtoolsIssue> {
+    let url = url.trim();
+    if url.is_empty() {
+        return None;
+    }
+    let (message, status) = match result {
+        Ok(code) if code < 400 => return None,
+        Ok(code) => (format!("GET {url} {code}"), Some(code)),
+        Err(err) => {
+            let err = err.replace('\n', " ");
+            (
+                format!("Chrome synthetic check error: GET {url} failed: {err}"),
+                None,
+            )
+        }
+    };
+    Some(ChromeDevtoolsIssue {
+        session_id: session_id.to_string(),
+        kind: "synthetic-check".into(),
+        message,
+        url: Some(url.into()),
+        method: Some("GET".into()),
+        status,
+        metric: None,
+        value: None,
+        duration_ms: None,
+        resource_type: None,
+        evidence_path: None,
+    })
+}
+
+async fn run_synthetic_loop(
+    app: AppHandle,
+    session_id: String,
+    url: String,
+    interval_secs: u64,
+    mut cancel_rx: watch::Receiver<bool>,
+) {
+    if interval_secs == 0 {
+        loop {
+            if cancel_rx.changed().await.is_err() || *cancel_rx.borrow() {
+                break;
+            }
+        }
+        return;
+    }
+    let mut ticker = tokio::time::interval(Duration::from_secs(interval_secs));
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    ticker.tick().await;
+    loop {
+        tokio::select! {
+            changed = cancel_rx.changed() => {
+                if changed.is_err() || *cancel_rx.borrow() {
+                    break;
+                }
+            }
+            _ = ticker.tick() => {
+                let result = probe_synthetic_url(&url).await;
+                if let Some(issue) = synthetic_check_issue(&session_id, &url, result) {
+                    emit_issue(&app, issue);
+                }
+            }
+        }
+    }
 }
 
 enum MonitorCmd {
@@ -514,10 +887,45 @@ fn extract_exception_text(params: &Value) -> String {
     } else {
         format!("{text}: {desc}")
     };
+    let has_inline_stack = desc.contains('\n') || desc.contains(" at ");
     if !url.is_empty() {
         out.push_str(&format!(" at {url}:{line}"));
     }
+    let stack = extract_compact_stack_suffix(params);
+    if !stack.is_empty() && !has_inline_stack {
+        out.push_str(&stack);
+    }
     out.replace('\n', " ").trim().to_string()
+}
+
+fn extract_compact_stack_suffix(params: &Value) -> String {
+    let frames = params
+        .pointer("/exceptionDetails/stackTrace/callFrames")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut parts = Vec::new();
+    for frame in frames.iter().take(4) {
+        let fn_name = frame
+            .get("functionName")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or("(anonymous)");
+        let url = frame.get("url").and_then(|v| v.as_str()).unwrap_or("");
+        let line = frame
+            .get("lineNumber")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        if url.is_empty() && fn_name == "(anonymous)" {
+            continue;
+        }
+        parts.push(format!("{fn_name}@{url}:{line}"));
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!(" | {}", parts.join(" "))
+    }
 }
 
 fn extract_console_text(params: &Value) -> String {
@@ -550,10 +958,156 @@ struct BindingPayload {
     metric: Option<String>,
     value: Option<f64>,
     url: Option<String>,
+    message: Option<String>,
 }
 
 fn parse_binding_payload(raw: &str) -> Option<BindingPayload> {
     serde_json::from_str(raw).ok()
+}
+
+const TRAIL_MAX: usize = 10;
+
+fn push_trail(trail: &mut VecDeque<(String, String)>, metric: String, message: String) {
+    let metric = metric.trim().to_string();
+    let message = message.replace('\n', " ").trim().to_string();
+    if metric.is_empty() && message.is_empty() {
+        return;
+    }
+    trail.push_back((metric, message));
+    while trail.len() > TRAIL_MAX {
+        trail.pop_front();
+    }
+}
+
+fn format_trail_suffix(trail: &VecDeque<(String, String)>) -> String {
+    if trail.is_empty() {
+        return String::new();
+    }
+    let body = trail
+        .iter()
+        .map(|(metric, message)| {
+            if message.is_empty() {
+                metric.clone()
+            } else if metric.is_empty() {
+                message.clone()
+            } else {
+                format!("{metric} {message}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" > ");
+    format!(" | trail: {body}")
+}
+
+fn with_trail(message: String, trail: &VecDeque<(String, String)>) -> String {
+    let suffix = format_trail_suffix(trail);
+    if suffix.is_empty() {
+        message
+    } else {
+        format!("{message}{suffix}")
+    }
+}
+
+const MAX_EVIDENCE_B64_CHARS: usize = 1_500_000;
+
+/// Core Web Vitals "poor" 阈值；仅 LCP/CLS/INP 升级为可自动修复的告警。
+fn vitals_poor_alert(metric: &str, value: f64) -> Option<String> {
+    vitals_poor_alert_with(metric, value, &VitalsThresholds::default())
+}
+
+fn vitals_poor_alert_with(metric: &str, value: f64, t: &VitalsThresholds) -> Option<String> {
+    if !value.is_finite() || value < 0.0 {
+        return None;
+    }
+    match metric {
+        "lcp" if value >= t.lcp_ms as f64 => {
+            Some(format!(
+                "LCP {}ms exceeds {}ms",
+                value.round() as u64,
+                t.lcp_ms
+            ))
+        }
+        "cls" if value >= t.cls => Some(format!("CLS {value} exceeds {}", t.cls)),
+        "inp" if value >= t.inp_ms as f64 => {
+            Some(format!(
+                "INP {}ms exceeds {}ms",
+                value.round() as u64,
+                t.inp_ms
+            ))
+        }
+        _ => None,
+    }
+}
+
+fn sanitize_evidence_session_id(session_id: &str) -> String {
+    let safe: String = session_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if safe.is_empty() {
+        "default".into()
+    } else {
+        safe
+    }
+}
+
+fn decode_jpeg_base64(jpeg_base64: &str) -> Result<Vec<u8>, String> {
+    let trimmed = jpeg_base64.trim();
+    if trimmed.is_empty() {
+        return Err("empty screenshot".into());
+    }
+    if trimmed.len() > MAX_EVIDENCE_B64_CHARS {
+        return Err("screenshot too large".into());
+    }
+    let payload = trimmed
+        .strip_prefix("data:image/jpeg;base64,")
+        .or_else(|| trimmed.strip_prefix("data:image/jpg;base64,"))
+        .unwrap_or(trimmed);
+    base64::engine::general_purpose::STANDARD
+        .decode(payload)
+        .or_else(|_| base64::engine::general_purpose::STANDARD.decode(payload.replace('\n', "")))
+        .map_err(|e| format!("decode screenshot: {e}"))
+}
+
+pub(crate) fn write_jpeg_evidence(
+    dir: &Path,
+    session_id: &str,
+    jpeg_base64: &str,
+) -> Result<PathBuf, String> {
+    let bytes = decode_jpeg_base64(jpeg_base64)?;
+    fs::create_dir_all(dir).map_err(|e| format!("mkdir evidence: {e}"))?;
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let name = format!(
+        "{}-{ts}.jpg",
+        sanitize_evidence_session_id(session_id)
+    );
+    let path = dir.join(name);
+    fs::write(&path, bytes).map_err(|e| format!("write evidence: {e}"))?;
+    Ok(path)
+}
+
+/// 将 CDP / 扩展截到的 JPEG 写入 `~/.wise/page-monitor-evidence/`。
+pub fn save_page_monitor_jpeg_evidence(
+    session_id: &str,
+    jpeg_base64: &str,
+) -> Result<String, String> {
+    let dir = crate::wise_paths::wise_dir()?.join("page-monitor-evidence");
+    write_jpeg_evidence(&dir, session_id, jpeg_base64).map(|p| p.to_string_lossy().into_owned())
+}
+
+struct PendingScreenshot {
+    message: String,
+    url: Option<String>,
+    value: Option<f64>,
 }
 
 async fn run_cdp_loop(
@@ -561,6 +1115,9 @@ async fn run_cdp_loop(
     session_id: String,
     ws_url: String,
     navigate_url: Option<String>,
+    monitor_url: String,
+    vitals: VitalsThresholds,
+    synthetic_interval_secs: u64,
     mut cancel_rx: watch::Receiver<bool>,
     mut cmd_rx: mpsc::UnboundedReceiver<MonitorCmd>,
 ) {
@@ -578,6 +1135,7 @@ async fn run_cdp_loop(
                 value: None,
                 duration_ms: None,
                 resource_type: None,
+                evidence_path: None,
             },
         );
         return;
@@ -585,6 +1143,9 @@ async fn run_cdp_loop(
     let (mut write, mut read) = ws.split();
     let next_id = AtomicU64::new(1);
     let mut request_urls: HashMap<String, (String, String, f64)> = HashMap::new();
+    let mut trail: VecDeque<(String, String)> = VecDeque::new();
+    let mut pending_shots: HashMap<u64, PendingScreenshot> = HashMap::new();
+    let mut alerted_vitals: HashSet<String> = HashSet::new();
 
     let send = |method: &str, params: Value| {
         let id = next_id.fetch_add(1, Ordering::Relaxed);
@@ -615,6 +1176,15 @@ async fn run_cdp_loop(
         }
     }
 
+    let synthetic_on = synthetic_interval_secs > 0;
+    let mut ticker = tokio::time::interval(Duration::from_secs(if synthetic_on {
+        synthetic_interval_secs
+    } else {
+        3600
+    }));
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    ticker.tick().await;
+
     loop {
         tokio::select! {
             _ = cancel_rx.changed() => {
@@ -633,12 +1203,43 @@ async fn run_cdp_loop(
                     None => break,
                 }
             }
+            _ = ticker.tick() => {
+                if synthetic_on {
+                    let result = probe_synthetic_url(&monitor_url).await;
+                    if let Some(issue) = synthetic_check_issue(&session_id, &monitor_url, result) {
+                        emit_issue(&app, issue);
+                    }
+                }
+            }
             frame = read.next() => {
                 let Some(frame) = frame else { break; };
                 let Ok(Message::Text(text)) = frame else { continue; };
                 let Ok(value) = serde_json::from_str::<Value>(&text) else { continue; };
 
-                if value.get("id").is_some() {
+                if let Some(id) = value.get("id").and_then(|v| v.as_u64()) {
+                    if let Some(pending) = pending_shots.remove(&id) {
+                        let evidence_path = value
+                            .pointer("/result/data")
+                            .and_then(|v| v.as_str())
+                            .and_then(|data| save_page_monitor_jpeg_evidence(&session_id, data).ok());
+                        let mut message = pending.message;
+                        if let Some(path) = evidence_path.as_ref() {
+                            message = format!("{message} evidence: {path}");
+                        }
+                        emit_issue(&app, ChromeDevtoolsIssue {
+                            session_id: session_id.clone(),
+                            kind: "blank-screen".into(),
+                            message,
+                            url: pending.url,
+                            method: None,
+                            status: None,
+                            metric: None,
+                            value: pending.value,
+                            duration_ms: None,
+                            resource_type: None,
+                            evidence_path,
+                        });
+                    }
                     continue;
                 }
                 let Some(method) = value.get("method").and_then(|v| v.as_str()) else { continue; };
@@ -646,19 +1247,37 @@ async fn run_cdp_loop(
 
                 match method {
                     "Runtime.exceptionThrown" => {
-                        let message = extract_exception_text(&params);
+                        let mut message = extract_exception_text(&params);
                         if message.is_empty() { continue; }
+                        let script_url = params
+                            .pointer("/exceptionDetails/url")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let line = params
+                            .pointer("/exceptionDetails/lineNumber")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as u32;
+                        let column = params
+                            .pointer("/exceptionDetails/columnNumber")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as u32;
+                        message = append_orig_location(message, script_url, line, column).await;
                         emit_issue(&app, ChromeDevtoolsIssue {
                             session_id: session_id.clone(),
                             kind: "page-error".into(),
-                            message,
-                            url: params.pointer("/exceptionDetails/url").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                            message: with_trail(message, &trail),
+                            url: if script_url.is_empty() {
+                                None
+                            } else {
+                                Some(script_url.to_string())
+                            },
                             method: None,
                             status: None,
                             metric: None,
                             value: None,
                             duration_ms: None,
                             resource_type: None,
+                            evidence_path: None,
                         });
                     }
                     "Runtime.consoleAPICalled" => {
@@ -669,6 +1288,11 @@ async fn run_cdp_loop(
                         let message = extract_console_text(&params);
                         if message.is_empty() { continue; }
                         let kind = if level == "warning" { "console-warning" } else { "console-error" };
+                        let message = if kind == "console-error" {
+                            with_trail(message, &trail)
+                        } else {
+                            message
+                        };
                         emit_issue(&app, ChromeDevtoolsIssue {
                             session_id: session_id.clone(),
                             kind: kind.into(),
@@ -680,6 +1304,7 @@ async fn run_cdp_loop(
                             value: None,
                             duration_ms: None,
                             resource_type: None,
+                evidence_path: None,
                         });
                     }
                     "Runtime.bindingCalled" => {
@@ -705,14 +1330,32 @@ async fn run_cdp_loop(
                                     session_id: session_id.clone(),
                                     kind: "page-vitals".into(),
                                     message,
-                                    url: payload.url,
+                                    url: payload.url.clone(),
                                     method: None,
                                     status: None,
-                                    metric: Some(metric),
+                                    metric: Some(metric.clone()),
                                     value: Some(value),
                                     duration_ms: None,
                                     resource_type: None,
+                                    evidence_path: None,
                                 });
+                                if let Some(alert) = vitals_poor_alert_with(&metric, value, &vitals) {
+                                    if alerted_vitals.insert(metric.clone()) {
+                                        emit_issue(&app, ChromeDevtoolsIssue {
+                                            session_id: session_id.clone(),
+                                            kind: "vitals-alert".into(),
+                                            message: with_trail(alert, &trail),
+                                            url: payload.url,
+                                            method: None,
+                                            status: None,
+                                            metric: Some(metric),
+                                            value: Some(value),
+                                            duration_ms: None,
+                                            resource_type: None,
+                                            evidence_path: None,
+                                        });
+                                    }
+                                }
                             }
                             Some("long-task") => {
                                 let Some(value) = payload.value else { continue; };
@@ -731,7 +1374,112 @@ async fn run_cdp_loop(
                                     value: Some(value),
                                     duration_ms: Some(duration),
                                     resource_type: None,
+                evidence_path: None,
                                 });
+                            }
+                            Some("breadcrumb") => {
+                                let metric = payload
+                                    .metric
+                                    .unwrap_or_else(|| "action".into())
+                                    .trim()
+                                    .to_ascii_lowercase();
+                                if !matches!(
+                                    metric.as_str(),
+                                    "click" | "input" | "submit" | "navigate"
+                                ) {
+                                    continue;
+                                }
+                                let message = payload
+                                    .message
+                                    .unwrap_or_default()
+                                    .replace('\n', " ")
+                                    .trim()
+                                    .to_string();
+                                let message = if message.is_empty() {
+                                    metric.clone()
+                                } else {
+                                    message
+                                };
+                                push_trail(&mut trail, metric.clone(), message.clone());
+                                emit_issue(&app, ChromeDevtoolsIssue {
+                                    session_id: session_id.clone(),
+                                    kind: "breadcrumb".into(),
+                                    message,
+                                    url: payload.url,
+                                    method: None,
+                                    status: None,
+                                    metric: Some(metric),
+                                    value: None,
+                                    duration_ms: None,
+                                    resource_type: None,
+                evidence_path: None,
+                                });
+                            }
+                            Some("timing") => {
+                                let Some(metric) = payload.metric else { continue; };
+                                let metric = metric.trim().to_ascii_lowercase();
+                                if !matches!(metric.as_str(), "dcl" | "load") {
+                                    continue;
+                                }
+                                let Some(value) = payload.value else { continue; };
+                                if !value.is_finite() || value < 0.0 {
+                                    continue;
+                                }
+                                let duration = value.round() as u64;
+                                emit_issue(&app, ChromeDevtoolsIssue {
+                                    session_id: session_id.clone(),
+                                    kind: "page-timing".into(),
+                                    message: format!("{} {duration}ms", metric.to_uppercase()),
+                                    url: payload.url,
+                                    method: None,
+                                    status: None,
+                                    metric: Some(metric),
+                                    value: Some(value),
+                                    duration_ms: Some(duration),
+                                    resource_type: None,
+                evidence_path: None,
+                                });
+                            }
+                            Some("blank-screen") => {
+                                let message = payload
+                                    .message
+                                    .unwrap_or_else(|| "blank screen".into())
+                                    .replace('\n', " ")
+                                    .trim()
+                                    .to_string();
+                                if message.is_empty() {
+                                    continue;
+                                }
+                                let pending = PendingScreenshot {
+                                    message: with_trail(message, &trail),
+                                    url: payload.url,
+                                    value: payload.value,
+                                };
+                                let id = next_id.fetch_add(1, Ordering::Relaxed);
+                                pending_shots.insert(id, pending);
+                                let msg = json!({
+                                    "id": id,
+                                    "method": "Page.captureScreenshot",
+                                    "params": { "format": "jpeg", "quality": 50 }
+                                });
+                                if write.send(Message::Text(msg.to_string())).await.is_err() {
+                                    if let Some(pending) = pending_shots.remove(&id) {
+                                        emit_issue(&app, ChromeDevtoolsIssue {
+                                            session_id: session_id.clone(),
+                                            kind: "blank-screen".into(),
+                                            message: pending.message,
+                                            url: pending.url,
+                                            method: None,
+                                            status: None,
+                                            metric: None,
+                                            value: pending.value,
+                                            duration_ms: None,
+                                            resource_type: None,
+                                            evidence_path: None,
+                                        });
+                                    }
+                                    break;
+                                }
                             }
                             _ => {}
                         }
@@ -740,7 +1488,7 @@ async fn run_cdp_loop(
                         emit_issue(&app, ChromeDevtoolsIssue {
                             session_id: session_id.clone(),
                             kind: "page-crash".into(),
-                            message: "main frame crashed".into(),
+                            message: with_trail("main frame crashed".into(), &trail),
                             url: None,
                             method: None,
                             status: None,
@@ -748,6 +1496,7 @@ async fn run_cdp_loop(
                             value: None,
                             duration_ms: None,
                             resource_type: None,
+                evidence_path: None,
                         });
                     }
                     "Network.requestWillBeSent" => {
@@ -790,6 +1539,7 @@ async fn run_cdp_loop(
                                         value: None,
                                         duration_ms: Some(duration),
                                         resource_type,
+                                        evidence_path: None,
                                     });
                                 }
                             }
@@ -806,6 +1556,7 @@ async fn run_cdp_loop(
                             value: None,
                             duration_ms: None,
                             resource_type,
+                            evidence_path: None,
                         });
                     }
                     "Network.loadingFailed" => {
@@ -833,6 +1584,7 @@ async fn run_cdp_loop(
                             value: None,
                             duration_ms: None,
                             resource_type,
+                            evidence_path: None,
                         });
                     }
                     _ => {}
@@ -879,6 +1631,8 @@ pub async fn chrome_devtools_monitor_start(
     url: String,
     mode: Option<String>,
     debug_port: Option<u16>,
+    vitals: Option<VitalsThresholds>,
+    synthetic_interval_secs: Option<u64>,
 ) -> Result<(), String> {
     let session_id = session_id.trim().to_string();
     let url = url.trim().to_string();
@@ -889,6 +1643,8 @@ pub async fn chrome_devtools_monitor_start(
         return Err("url 必须是 http(s)".into());
     }
     let mode = normalize_mode(mode)?;
+    let vitals = normalize_vitals_thresholds(vitals);
+    let synthetic_interval_secs = normalize_synthetic_interval_secs(synthetic_interval_secs);
 
     {
         let mut guard = state
@@ -902,21 +1658,25 @@ pub async fn chrome_devtools_monitor_start(
 
     let (child, ws_url, navigate_url) = if mode == "extension" {
         let port = crate::chrome_page_monitor_bridge::ensure_started(app.clone()).await?;
-        crate::chrome_page_monitor_bridge::set_active_monitor(&session_id, &url)?;
+        crate::chrome_page_monitor_bridge::set_active_monitor(
+            &session_id,
+            &url,
+            vitals,
+            synthetic_interval_secs,
+        )?;
         let (cancel_tx, cancel_rx) = watch::channel(false);
         let session_clone = session_id.clone();
+        let url_clone = url.clone();
+        let app_clone = app.clone();
         let task = tokio::spawn(async move {
-            let mut cancel_rx = cancel_rx;
-            loop {
-                tokio::select! {
-                    _ = cancel_rx.changed() => {
-                        if *cancel_rx.borrow() {
-                            break;
-                        }
-                    }
-                    _ = tokio::time::sleep(Duration::from_secs(3600)) => {}
-                }
-            }
+            run_synthetic_loop(
+                app_clone,
+                session_clone.clone(),
+                url_clone,
+                synthetic_interval_secs,
+                cancel_rx,
+            )
+            .await;
             crate::chrome_page_monitor_bridge::clear_active_monitor(&session_clone);
         });
         let mut guard = state
@@ -964,12 +1724,16 @@ pub async fn chrome_devtools_monitor_start(
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
     let app_clone = app.clone();
     let session_clone = session_id.clone();
+    let monitor_url = url.clone();
     let task = tokio::spawn(async move {
         run_cdp_loop(
             app_clone,
             session_clone,
             ws_url,
             navigate_url,
+            monitor_url,
+            vitals,
+            synthetic_interval_secs,
             cancel_rx,
             cmd_rx,
         )
@@ -1076,8 +1840,15 @@ pub fn chrome_page_monitor_open_extension_dir(app: AppHandle) -> Result<(), Stri
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_url_for_match, parse_binding_payload, score_page_url_match, urlencoding_minimal,
+        candidate_map_urls, extract_compact_stack_suffix, format_trail_suffix,
+        lookup_orig_in_map_bytes, normalize_synthetic_interval_secs, normalize_url_for_match,
+        normalize_vitals_thresholds, parse_binding_payload, push_trail, score_page_url_match,
+        synthetic_check_issue, urlencoding_minimal, vitals_poor_alert, vitals_poor_alert_with,
+        write_jpeg_evidence, VitalsThresholds,
     };
+    use serde_json::json;
+    use std::collections::VecDeque;
+    use std::fs;
 
     #[test]
     fn url_match_prefers_exact() {
@@ -1130,5 +1901,167 @@ mod tests {
         assert_eq!(long_task.url.as_deref(), Some("http://x/a.js"));
 
         assert!(parse_binding_payload("not json").is_none());
+
+        let crumb = parse_binding_payload(
+            r#"{"kind":"breadcrumb","metric":"click","message":"button#save","url":"http://x/"}"#,
+        )
+        .expect("breadcrumb payload");
+        assert_eq!(crumb.kind.as_deref(), Some("breadcrumb"));
+        assert_eq!(crumb.metric.as_deref(), Some("click"));
+        assert_eq!(crumb.message.as_deref(), Some("button#save"));
+
+        let timing = parse_binding_payload(r#"{"kind":"timing","metric":"dcl","value":320}"#)
+            .expect("timing payload");
+        assert_eq!(timing.kind.as_deref(), Some("timing"));
+        assert_eq!(timing.metric.as_deref(), Some("dcl"));
+        assert_eq!(timing.value, Some(320.0));
+    }
+
+    #[test]
+    fn trail_suffix_joins_recent_actions() {
+        let mut trail = VecDeque::new();
+        push_trail(&mut trail, "click".into(), "button#save".into());
+        push_trail(&mut trail, "navigate".into(), "pushState http://x/app".into());
+        assert_eq!(
+            format_trail_suffix(&trail),
+            " | trail: click button#save > navigate pushState http://x/app"
+        );
+    }
+
+    #[test]
+    fn compact_stack_takes_top_frames() {
+        let params = json!({
+            "exceptionDetails": {
+                "stackTrace": {
+                    "callFrames": [
+                        { "functionName": "boom", "url": "http://x/app.js", "lineNumber": 12 },
+                        { "functionName": "", "url": "http://x/app.js", "lineNumber": 40 }
+                    ]
+                }
+            }
+        });
+        assert_eq!(
+            extract_compact_stack_suffix(&params),
+            " | boom@http://x/app.js:12 (anonymous)@http://x/app.js:40"
+        );
+    }
+
+    #[test]
+    fn vitals_poor_alert_uses_core_web_vitals_poor_thresholds() {
+        assert!(vitals_poor_alert("lcp", 3999.0).is_none());
+        assert_eq!(
+            vitals_poor_alert("lcp", 4000.0).as_deref(),
+            Some("LCP 4000ms exceeds 4000ms")
+        );
+        assert!(vitals_poor_alert("cls", 0.249).is_none());
+        assert_eq!(
+            vitals_poor_alert("cls", 0.25).as_deref(),
+            Some("CLS 0.25 exceeds 0.25")
+        );
+        assert!(vitals_poor_alert("inp", 499.0).is_none());
+        assert_eq!(
+            vitals_poor_alert("inp", 512.0).as_deref(),
+            Some("INP 512ms exceeds 500ms")
+        );
+        assert!(vitals_poor_alert("fcp", 9000.0).is_none());
+        assert!(vitals_poor_alert("ttfb", 9000.0).is_none());
+    }
+
+    #[test]
+    fn vitals_thresholds_clamp_and_custom_alert() {
+        let raw = VitalsThresholds {
+            lcp_ms: 1,
+            cls: 9.0,
+            inp_ms: 12,
+        };
+        let t = normalize_vitals_thresholds(Some(raw));
+        assert_eq!(t.lcp_ms, 500);
+        assert_eq!(t.cls, 2.0);
+        assert_eq!(t.inp_ms, 50);
+        assert_eq!(normalize_synthetic_interval_secs(None), 30);
+        assert_eq!(normalize_synthetic_interval_secs(Some(0)), 0);
+        assert_eq!(normalize_synthetic_interval_secs(Some(5)), 10);
+        assert_eq!(normalize_synthetic_interval_secs(Some(900)), 600);
+
+        let custom = VitalsThresholds {
+            lcp_ms: 2000,
+            cls: 0.1,
+            inp_ms: 200,
+        };
+        assert!(vitals_poor_alert_with("lcp", 1999.0, &custom).is_none());
+        assert_eq!(
+            vitals_poor_alert_with("lcp", 2000.0, &custom).as_deref(),
+            Some("LCP 2000ms exceeds 2000ms")
+        );
+        assert!(vitals_poor_alert_with("cls", 0.09, &custom).is_none());
+        assert_eq!(
+            vitals_poor_alert_with("cls", 0.1, &custom).as_deref(),
+            Some("CLS 0.1 exceeds 0.1")
+        );
+    }
+
+    #[test]
+    fn sourcemap_lookup_uses_identity_mapping() {
+        let map = br#"{
+          "version": 3,
+          "file": "app.js",
+          "sources": ["src/App.tsx"],
+          "names": [],
+          "mappings": "AAAA"
+        }"#;
+        assert_eq!(
+            lookup_orig_in_map_bytes(map, 0, 0).as_deref(),
+            Some("src/App.tsx:1:1")
+        );
+        assert_eq!(
+            candidate_map_urls("https://x.test/app.js?v=1#hash"),
+            vec![
+                "https://x.test/app.js.map".to_string(),
+                "https://x.test/app.js.map?v=1".to_string()
+            ]
+        );
+        assert!(candidate_map_urls("chrome-extension://x/app.js").is_empty());
+        assert!(candidate_map_urls("https://x.test/app.js.map").is_empty());
+    }
+
+    #[test]
+    fn synthetic_check_emits_http_and_network_failures() {
+        let http = synthetic_check_issue("s1", "http://localhost:5173", Ok(502)).unwrap();
+        assert_eq!(http.kind, "synthetic-check");
+        assert_eq!(http.message, "GET http://localhost:5173 502");
+        assert_eq!(http.status, Some(502));
+        assert!(synthetic_check_issue("s1", "http://localhost:5173", Ok(200)).is_none());
+        let fail = synthetic_check_issue(
+            "s1",
+            "http://localhost:5173",
+            Err("connection refused".into()),
+        )
+        .unwrap();
+        assert!(fail.message.contains("failed"));
+        assert!(fail.message.contains("error"));
+    }
+
+    #[test]
+    fn write_jpeg_evidence_decodes_and_sanitizes_session() {
+        let root = std::env::temp_dir().join(format!(
+            "wise-page-monitor-evidence-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let b64 = base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            b"\xff\xd8\xfffakejpeg",
+        );
+        let path = write_jpeg_evidence(&root, "sess 1", &b64).unwrap();
+        assert_eq!(path.extension().and_then(|e| e.to_str()), Some("jpg"));
+        assert!(path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("sess_1-"));
+        assert_eq!(fs::read(&path).unwrap(), b"\xff\xd8\xfffakejpeg");
+        assert!(write_jpeg_evidence(&root, "x", "not-base64").is_err());
+        let _ = fs::remove_dir_all(&root);
     }
 }

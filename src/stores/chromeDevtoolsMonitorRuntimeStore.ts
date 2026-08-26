@@ -5,12 +5,14 @@ import {
   formatChromeDevtoolsIssueLine,
   isPageMonitorDiagnosticKind,
   isPageMonitorIgnorableNoise,
+  isPageMonitorTimelineKind,
   normalizePageMonitorChromeMode,
   normalizePageMonitorDebugPort,
   startChromeDevtoolsMonitor,
   stopChromeDevtoolsMonitor,
   type ChromeDevtoolsIssue,
   type PageMonitorChromeMode,
+  type PageMonitorVitalsThresholds,
 } from "../services/chromeDevtoolsMonitor";
 import {
   buildRunErrorFingerprint,
@@ -27,6 +29,12 @@ export type PageMonitorStatus = "idle" | "starting" | "monitoring" | "stopping";
 export type PageMonitorIssueLine = {
   text: string;
   kind: string;
+  evidencePath?: string | null;
+};
+
+export type PageMonitorTimelineItem = {
+  metric: string;
+  message: string;
 };
 
 export type PageMonitorRuntimeState = {
@@ -35,6 +43,7 @@ export type PageMonitorRuntimeState = {
   url: string;
   autoFixEnabled: boolean;
   issuePreview: PageMonitorIssueLine[];
+  timeline: PageMonitorTimelineItem[];
 };
 
 type SessionInternals = {
@@ -58,6 +67,7 @@ const DEFAULT_STATE: PageMonitorRuntimeState = {
   url: "",
   autoFixEnabled: true,
   issuePreview: [],
+  timeline: [],
 };
 
 const stateBySessionId = new Map<string, PageMonitorRuntimeState>();
@@ -101,7 +111,10 @@ function notify(sessionId: string): void {
 function getOrCreateState(sessionId: string): PageMonitorRuntimeState {
   let state = stateBySessionId.get(sessionId);
   if (!state) {
-    state = { ...DEFAULT_STATE };
+    state = { ...DEFAULT_STATE, issuePreview: [], timeline: [] };
+    stateBySessionId.set(sessionId, state);
+  } else if (!Array.isArray(state.timeline)) {
+    state = { ...state, timeline: [] };
     stateBySessionId.set(sessionId, state);
   }
   return state;
@@ -235,10 +248,24 @@ function handleIssue(payload: ChromeDevtoolsIssue): void {
   const diagnostic = isPageMonitorDiagnosticKind(payload.kind);
   if (issues.length === 0 && !diagnostic) return;
 
-  const preview = [
-    ...state.issuePreview,
-    { text: line, kind: issues[0]?.kind ?? "info" },
-  ].slice(-12);
+  if (isPageMonitorTimelineKind(payload.kind)) {
+    const prevTimeline = Array.isArray(state.timeline) ? state.timeline : [];
+    const timeline = [
+      ...prevTimeline,
+      {
+        metric: String(payload.metric ?? "action").trim() || "action",
+        message: String(payload.message ?? "").trim(),
+      },
+    ].slice(-8);
+    patchState(sessionId, { timeline });
+    return;
+  }
+
+  const evidenceFromMessage = /\bevidence:\s+(\S+)/.exec(payload.message ?? "")?.[1] ?? "";
+  const evidencePath =
+    String(payload.evidencePath ?? evidenceFromMessage).trim() || null;
+  const nextLine = { text: line, kind: issues[0]?.kind ?? "info", evidencePath };
+  const preview = [...state.issuePreview, nextLine].slice(-12);
 
   // 性能 / 耗时类诊断：仅展示，不进修复指纹，也不触发 AI 自动修复。
   if (issues.length === 0) {
@@ -381,6 +408,8 @@ export async function startPageMonitor(input: {
   autoFixEnabled?: boolean;
   mode?: PageMonitorChromeMode;
   debugPort?: number;
+  vitals?: PageMonitorVitalsThresholds;
+  syntheticIntervalSecs?: number;
 }): Promise<void> {
   ensureIssueListener();
   const sessionId = input.sessionId.trim();
@@ -422,6 +451,7 @@ export async function startPageMonitor(input: {
     url: normalized,
     autoFixEnabled: internals.autoFixEnabled,
     issuePreview: [],
+    timeline: [],
   });
 
   try {
@@ -430,6 +460,8 @@ export async function startPageMonitor(input: {
       url: normalized,
       mode,
       debugPort: mode === "attach" ? debugPort : undefined,
+      vitals: input.vitals,
+      syntheticIntervalSecs: input.syntheticIntervalSecs,
     });
     const modeHint =
       mode === "attach"
@@ -481,6 +513,8 @@ export async function togglePageMonitor(input: {
   autoFixEnabled?: boolean;
   mode?: PageMonitorChromeMode;
   debugPort?: number;
+  vitals?: PageMonitorVitalsThresholds;
+  syntheticIntervalSecs?: number;
 }): Promise<void> {
   const state = getPageMonitorRuntimeSnapshot(input.sessionId);
   if (state.status === "monitoring" || state.status === "starting" || state.status === "stopping") {

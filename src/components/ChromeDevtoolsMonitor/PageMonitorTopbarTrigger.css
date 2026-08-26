@@ -15,7 +15,39 @@
 
 .app-page-monitor-popover__content {
   --app-run-popover-label-w: 52px;
-  width: 360px;
+  width: 380px;
+}
+
+.app-page-monitor-popover__vitals-row {
+  align-items: flex-start;
+}
+
+.app-page-monitor-popover__vitals-inputs {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-page-monitor-popover__vital {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-page-monitor-popover__vital .ant-input-affix-wrapper,
+.app-page-monitor-popover__vital .ant-input {
+  font-size: 11px;
+}
+
+.app-page-monitor-popover__options-row,
+.app-page-monitor-popover__content .app-run-command-popover__options-row {
+  flex-wrap: wrap;
+  gap: 8px 12px;
 }
 
 .app-page-monitor-popover__mode-row {
@@ -55,4 +87,49 @@
 .app-page-monitor-popover__link-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.app-page-monitor-popover__timeline {
+  padding-top: 4px;
+}
+
+.app-page-monitor-popover__timeline-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 88px;
+  overflow: auto;
+}
+
+.app-page-monitor-popover__timeline-list li {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-page-monitor-popover__timeline-action {
+  flex: 0 0 auto;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-page-monitor-popover__timeline-msg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-page-monitor-popover__evidence {
+  display: block;
+  margin-top: 4px;
+  max-width: 100%;
+  max-height: 88px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--ant-color-border-secondary);
 }

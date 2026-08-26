@@ -14,10 +14,18 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
 
-use crate::chrome_devtools_monitor::ChromeDevtoolsIssue;
+use crate::chrome_devtools_monitor::{ChromeDevtoolsIssue, VitalsThresholds};
 
 pub const DEFAULT_BRIDGE_PORT: u16 = 17321;
 const EVENT_ISSUE: &str = "chrome-devtools-issue";
+
+#[derive(Debug, Clone)]
+struct ActiveExtensionMonitor {
+    session_id: String,
+    url: String,
+    vitals: VitalsThresholds,
+    synthetic_interval_secs: u64,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,20 +39,57 @@ pub struct ActiveMonitorSnapshot {
     pub service: String,
     /// Monotonic token; extension reloads tabs when this increases.
     pub reload_token: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vitals: Option<VitalsThresholds>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub synthetic_interval_secs: Option<u64>,
+}
+
+fn empty_snapshot(port: u16, reload_token: u64) -> ActiveMonitorSnapshot {
+    ActiveMonitorSnapshot {
+        active: false,
+        session_id: None,
+        url: None,
+        port,
+        service: "wise-page-monitor".into(),
+        reload_token,
+        vitals: None,
+        synthetic_interval_secs: None,
+    }
+}
+
+fn snapshot_from(
+    port: u16,
+    reload_token: u64,
+    active: Option<&ActiveExtensionMonitor>,
+) -> ActiveMonitorSnapshot {
+    match active {
+        Some(a) => ActiveMonitorSnapshot {
+            active: true,
+            session_id: Some(a.session_id.clone()),
+            url: Some(a.url.clone()),
+            port,
+            service: "wise-page-monitor".into(),
+            reload_token,
+            vitals: Some(a.vitals),
+            synthetic_interval_secs: Some(a.synthetic_interval_secs),
+        },
+        None => empty_snapshot(port, reload_token),
+    }
 }
 
 #[derive(Clone)]
 struct BridgeInner {
     app: AppHandle,
     port: u16,
-    /// Single active extension monitor: (sessionId, url)
-    active: Arc<Mutex<Option<(String, String)>>>,
+    /// Single active extension monitor.
+    active: Arc<Mutex<Option<ActiveExtensionMonitor>>>,
     reload_token: Arc<Mutex<u64>>,
 }
 
 struct RunningBridge {
     port: u16,
-    active: Arc<Mutex<Option<(String, String)>>>,
+    active: Arc<Mutex<Option<ActiveExtensionMonitor>>>,
     reload_token: Arc<Mutex<u64>>,
     /// Held open while the bridge runs; sending/dropping triggers graceful shutdown.
     shutdown_tx: Option<oneshot::Sender<()>>,
@@ -77,6 +122,17 @@ fn with_cors(mut res: Response) -> Response {
     res
 }
 
+fn session_matches_active(
+    active: &Mutex<Option<ActiveExtensionMonitor>>,
+    session_id: &str,
+) -> bool {
+    active
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|a| a.session_id == session_id))
+        .unwrap_or(false)
+}
+
 async fn options_ok() -> Response {
     with_cors(StatusCode::NO_CONTENT.into_response())
 }
@@ -100,28 +156,8 @@ async fn active_monitor(AxumState(inner): AxumState<BridgeInner>) -> Response {
         .map(|g| *g)
         .unwrap_or(0);
     let snap = match inner.active.lock() {
-        Ok(guard) => {
-            let (session_id, url) = guard
-                .as_ref()
-                .map(|(k, v)| (Some(k.clone()), Some(v.clone())))
-                .unwrap_or((None, None));
-            ActiveMonitorSnapshot {
-                active: session_id.is_some(),
-                session_id,
-                url,
-                port: inner.port,
-                service: "wise-page-monitor".into(),
-                reload_token,
-            }
-        }
-        Err(_) => ActiveMonitorSnapshot {
-            active: false,
-            session_id: None,
-            url: None,
-            port: inner.port,
-            service: "wise-page-monitor".into(),
-            reload_token,
-        },
+        Ok(guard) => snapshot_from(inner.port, reload_token, guard.as_ref()),
+        Err(_) => empty_snapshot(inner.port, reload_token),
     };
     with_cors(Json(snap).into_response())
 }
@@ -140,12 +176,7 @@ async fn post_issue(
                 .into_response(),
         );
     }
-    let session_allowed = inner
-        .active
-        .lock()
-        .ok()
-        .and_then(|g| g.as_ref().map(|(sid, _)| sid == &session_id))
-        .unwrap_or(false);
+    let session_allowed = session_matches_active(&inner.active, &session_id);
     if !session_allowed {
         return with_cors(
             (
@@ -170,6 +201,11 @@ async fn post_issue(
             | "page-vitals"
             | "long-task"
             | "slow-request"
+            | "breadcrumb"
+            | "page-timing"
+            | "blank-screen"
+            | "vitals-alert"
+            | "synthetic-check"
     );
     if !allowed_kind || issue.message.trim().is_empty() {
         return with_cors(
@@ -184,6 +220,99 @@ async fn post_issue(
     issue.kind = kind;
     let _ = inner.app.emit(EVENT_ISSUE, issue);
     with_cors(Json(serde_json::json!({ "ok": true })).into_response())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EvidencePayload {
+    session_id: String,
+    image_jpeg: String,
+}
+
+async fn post_evidence(
+    AxumState(inner): AxumState<BridgeInner>,
+    Json(payload): Json<EvidencePayload>,
+) -> Response {
+    let session_id = payload.session_id.trim().to_string();
+    if session_id.is_empty() {
+        return with_cors(
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "ok": false, "error": "sessionId required" })),
+            )
+                .into_response(),
+        );
+    }
+    let session_allowed = session_matches_active(&inner.active, &session_id);
+    if !session_allowed {
+        return with_cors(
+            (
+                StatusCode::CONFLICT,
+                Json(serde_json::json!({
+                    "ok": false,
+                    "error": "session is not the active page monitor"
+                })),
+            )
+                .into_response(),
+        );
+    }
+    match crate::chrome_devtools_monitor::save_page_monitor_jpeg_evidence(
+        &session_id,
+        &payload.image_jpeg,
+    ) {
+        Ok(path) => with_cors(Json(serde_json::json!({ "ok": true, "path": path })).into_response()),
+        Err(error) => with_cors(
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "ok": false, "error": error })),
+            )
+                .into_response(),
+        ),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SourceLocationPayload {
+    session_id: String,
+    url: String,
+    line: Option<u32>,
+    column: Option<u32>,
+}
+
+async fn post_source_location(
+    AxumState(inner): AxumState<BridgeInner>,
+    Json(payload): Json<SourceLocationPayload>,
+) -> Response {
+    let session_id = payload.session_id.trim().to_string();
+    if session_id.is_empty() {
+        return with_cors(
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "ok": false, "error": "sessionId required" })),
+            )
+                .into_response(),
+        );
+    }
+    if !session_matches_active(&inner.active, &session_id) {
+        return with_cors(
+            (
+                StatusCode::CONFLICT,
+                Json(serde_json::json!({
+                    "ok": false,
+                    "error": "session is not the active page monitor"
+                })),
+            )
+                .into_response(),
+        );
+    }
+    let orig = crate::chrome_devtools_monitor::resolve_orig_source_location(
+        payload.url.trim(),
+        payload.line.unwrap_or(0),
+        payload.column.unwrap_or(0),
+    )
+    .await;
+    with_cors(Json(serde_json::json!({ "ok": true, "orig": orig })).into_response())
 }
 
 async fn bind_listener(preferred: u16) -> Result<(tokio::net::TcpListener, u16), String> {
@@ -212,7 +341,7 @@ pub async fn ensure_started(app: AppHandle) -> Result<u16, String> {
     }
 
     let (listener, port) = bind_listener(DEFAULT_BRIDGE_PORT).await?;
-    let active = Arc::new(Mutex::new(None::<(String, String)>));
+    let active = Arc::new(Mutex::new(None::<ActiveExtensionMonitor>));
     let reload_token = Arc::new(Mutex::new(0u64));
     let inner = BridgeInner {
         app,
@@ -229,6 +358,11 @@ pub async fn ensure_started(app: AppHandle) -> Result<u16, String> {
             get(active_monitor).options(options_ok),
         )
         .route("/v1/issues", post(post_issue).options(options_ok))
+        .route("/v1/evidence", post(post_evidence).options(options_ok))
+        .route(
+            "/v1/source-location",
+            post(post_source_location).options(options_ok),
+        )
         .with_state(inner);
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
@@ -258,7 +392,12 @@ pub async fn ensure_started(app: AppHandle) -> Result<u16, String> {
     Ok(port)
 }
 
-pub fn set_active_monitor(session_id: &str, url: &str) -> Result<(), String> {
+pub fn set_active_monitor(
+    session_id: &str,
+    url: &str,
+    vitals: VitalsThresholds,
+    synthetic_interval_secs: u64,
+) -> Result<(), String> {
     let sid = session_id.trim();
     let u = url.trim();
     if sid.is_empty() || u.is_empty() {
@@ -272,7 +411,12 @@ pub fn set_active_monitor(session_id: &str, url: &str) -> Result<(), String> {
         .active
         .lock()
         .map_err(|_| "扩展桥状态锁失败".to_string())?;
-    *map = Some((sid.to_string(), u.to_string()));
+    *map = Some(ActiveExtensionMonitor {
+        session_id: sid.to_string(),
+        url: u.to_string(),
+        vitals,
+        synthetic_interval_secs,
+    });
     if let Ok(mut token) = running.reload_token.lock() {
         *token = 0;
     }
@@ -292,7 +436,7 @@ pub fn request_reload(session_id: &str) -> Result<(), String> {
         .active
         .lock()
         .map_err(|_| "扩展桥状态锁失败".to_string())?;
-    let Some((active_sid, _)) = active.as_ref() else {
+    let Some(active_sid) = active.as_ref().map(|a| a.session_id.as_str()) else {
         return Err("当前没有扩展模式的活动监控".into());
     };
     if active_sid != sid {
@@ -319,7 +463,7 @@ pub fn clear_active_monitor(session_id: &str) {
     };
     if map
         .as_ref()
-        .is_some_and(|(sid, _)| sid == session_id.trim())
+        .is_some_and(|a| a.session_id == session_id.trim())
     {
         *map = None;
     }
@@ -332,24 +476,10 @@ pub fn bridge_port() -> Option<u16> {
 pub fn active_monitor_snapshot() -> ActiveMonitorSnapshot {
     let fallback_port = bridge_port().unwrap_or(DEFAULT_BRIDGE_PORT);
     let Ok(guard) = BRIDGE.lock() else {
-        return ActiveMonitorSnapshot {
-            active: false,
-            session_id: None,
-            url: None,
-            port: fallback_port,
-            service: "wise-page-monitor".into(),
-            reload_token: 0,
-        };
+        return empty_snapshot(fallback_port, 0);
     };
     let Some(running) = guard.as_ref() else {
-        return ActiveMonitorSnapshot {
-            active: false,
-            session_id: None,
-            url: None,
-            port: fallback_port,
-            service: "wise-page-monitor".into(),
-            reload_token: 0,
-        };
+        return empty_snapshot(fallback_port, 0);
     };
     let reload_token = running
         .reload_token
@@ -357,23 +487,8 @@ pub fn active_monitor_snapshot() -> ActiveMonitorSnapshot {
         .ok()
         .map(|g| *g)
         .unwrap_or(0);
-    let (session_id, url) = running
-        .active
-        .lock()
-        .ok()
-        .and_then(|g| {
-            g.as_ref()
-                .map(|(k, v)| (Some(k.clone()), Some(v.clone())))
-        })
-        .unwrap_or((None, None));
-    ActiveMonitorSnapshot {
-        active: session_id.is_some(),
-        session_id,
-        url,
-        port: running.port,
-        service: "wise-page-monitor".into(),
-        reload_token,
-    }
+    let active = running.active.lock().ok();
+    snapshot_from(running.port, reload_token, active.as_ref().and_then(|g| g.as_ref()))
 }
 
 const EXTENSION_DIR_NAME: &str = "wise-page-monitor";
