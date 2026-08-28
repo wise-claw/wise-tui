@@ -21,6 +21,8 @@ interface Props {
   showAllMessages?: boolean;
   /** 绑定到消息滚动容器，供父组件在内容增高时 `scrollTop = scrollHeight` */
   scrollContainerRef?: RefObject<HTMLDivElement | null>;
+  listVariant?: "chat" | "monitor";
+  pinUserMessages?: boolean;
 }
 
 export function ClaudeSessionMessagesColumn({
@@ -29,6 +31,8 @@ export function ClaudeSessionMessagesColumn({
   onOpenHistorySessionInInspector,
   sessionsForDispatchLookup,
   scrollContainerRef,
+  listVariant = "monitor",
+  pinUserMessages = true,
 }: Props) {
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollRef = scrollContainerRef ?? internalScrollRef;
@@ -85,7 +89,8 @@ export function ClaudeSessionMessagesColumn({
               rows={rows}
               scrollContainerRef={scrollRef}
               listResetKey={session.id}
-              listVariant="monitor"
+              listVariant={listVariant}
+              pinUserMessages={pinUserMessages}
               onOpenTaskDetail={onOpenTaskDetail}
               onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
               sessionsForDispatchLookup={sessionsForDispatchLookup}

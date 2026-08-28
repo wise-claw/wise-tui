@@ -128,6 +128,9 @@ describe("rowElementCacheHit", () => {
     expect(
       rowElementCacheHit(cachedEntry(row, 0, ctx), row, 0, baseCtx({ listVariant: "monitor" })),
     ).toBe(false);
+    expect(
+      rowElementCacheHit(cachedEntry(row, 0, ctx), row, 0, baseCtx({ pinUserMessages: false })),
+    ).toBe(false);
   });
 
   test("misses when other callback references change", () => {

@@ -1,6 +1,10 @@
 import type { ChatMessageListRow } from "../../utils/claudeChatMessageListRows";
 
-export function chatMessageListRowClassName(row: ChatMessageListRow, index: number): string {
+export function chatMessageListRowClassName(
+  row: ChatMessageListRow,
+  index: number,
+  options?: { pinUserMessages?: boolean },
+): string {
   const parts = ["app-claude-messages-virtual-row"];
   const mergedWithPrevious = row.kind === "message" && row.mergedWithPrevious;
   if (index > 0 && row.kind !== "thinking-hint" && !mergedWithPrevious) {
@@ -13,6 +17,7 @@ export function chatMessageListRowClassName(row: ChatMessageListRow, index: numb
     parts.push("app-claude-messages-virtual-row--streaming");
   }
   if (
+    options?.pinUserMessages !== false &&
     row.kind === "message" &&
     row.msg.role === "user" &&
     !row.toolUser &&

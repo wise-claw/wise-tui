@@ -46,6 +46,33 @@ function resolveFocusTargetSessionId(): string | null {
   return first ?? null;
 }
 
+function resolveComposerFocusSessionId(sessionId?: string | null): string | null {
+  const hinted = sessionId?.trim() ?? "";
+  if (hinted && focusRecipients.has(hinted)) return hinted;
+  return resolveFocusTargetSessionId();
+}
+
+/** 聚焦指定会话输入框；会话未注册时回退到最近触摸的输入面。 */
+export function focusComposerEditorForSession(sessionId?: string | null): boolean {
+  const sid = resolveComposerFocusSessionId(sessionId);
+  if (!sid) return false;
+  const fn = focusRecipients.get(sid);
+  if (!fn) return false;
+  fn();
+  return true;
+}
+
+/** 主窗刚从 HUD hide 恢复时立刻聚焦可能落空，短延迟再试一次。 */
+const HUD_EXIT_COMPOSER_FOCUS_RETRY_MS = 80;
+
+/** HUD 退出后恢复主会话输入框焦点（调用方须先把 HUD active store 置为 false）。 */
+export function restoreComposerFocusAfterHudExit(sessionId?: string | null): void {
+  focusComposerEditorForSession(sessionId);
+  setTimeout(() => {
+    focusComposerEditorForSession(sessionId);
+  }, HUD_EXIT_COMPOSER_FOCUS_RETRY_MS);
+}
+
 function ensureGlobalScreenshotListener(): void {
   if (globalScreenshotListenStarted) return;
   globalScreenshotListenStarted = true;
@@ -157,17 +184,9 @@ function ensureGlobalFocusComposerListener(): void {
   globalFocusComposerListenStarted = true;
   void listen("global-focus-composer", () => {
     if (!shouldHandleComposerShortcutOnThisWindow()) return;
-    const sid = resolveFocusTargetSessionId();
-    if (!sid) {
+    if (!focusComposerEditorForSession()) {
       console.warn("[focus-composer] no recipient registered");
-      return;
     }
-    const fn = focusRecipients.get(sid);
-    if (!fn) {
-      console.warn("[focus-composer] recipient missing for session", sid);
-      return;
-    }
-    fn();
   }).catch((err) => {
     console.error("[focus-composer] global listen failed:", err);
     globalFocusComposerListenStarted = false;

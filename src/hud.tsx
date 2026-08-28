@@ -10,6 +10,8 @@ import { setWiseHudModeActive } from "./stores/wiseHudModeStore";
 import { bootstrapAppTheme, startSystemThemeWatch, useAppTheme } from "./stores/appThemeStore";
 import { buildAppThemeConfig } from "./constants/appThemeTokens";
 import { ensureTauriEventUnlistenPatched, safeUnlisten } from "./utils/safeTauriUnlisten";
+import { useHudCompletionToasts } from "./hooks/useHudCompletionToasts";
+import { hudToastStackExtraHeight } from "./utils/hudCompletionToast";
 import {
   buildWiseHudSessionSnapshot,
   parseWiseHudActiveChanged,
@@ -28,11 +30,20 @@ startSystemThemeWatch();
 const HUD_COMPACT_HEIGHT = 64;
 const HUD_IMAGE_OVERLAY_MAX = 780;
 const HUD_MENU_OVERLAY_HEIGHT = 400;
+const HUD_DETAILS_OVERLAY_HEIGHT = 420;
 
 function overlayHeightForMode(mode: HudOverlayMode): number {
   if (mode === "menu") return HUD_MENU_OVERLAY_HEIGHT;
   if (mode === "images") return HUD_IMAGE_OVERLAY_MAX;
+  if (mode === "details") return HUD_DETAILS_OVERLAY_HEIGHT;
   return HUD_COMPACT_HEIGHT;
+}
+
+function overlayHeightFor(mode: HudOverlayMode, toastCount: number): number {
+  return Math.max(
+    overlayHeightForMode(mode),
+    HUD_COMPACT_HEIGHT + hudToastStackExtraHeight(toastCount),
+  );
 }
 
 function HudThemeRoot({ children }: { children: ReactNode }) {
@@ -59,18 +70,21 @@ function HudApp() {
   const overlayModeRef = useRef(overlayMode);
   overlayModeRef.current = overlayMode;
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { toasts, renderedCount, dismiss } = useHudCompletionToasts();
+  const toastCountRef = useRef(renderedCount);
+  toastCountRef.current = renderedCount;
 
-  const syncWindowHeight = useCallback(async (mode: HudOverlayMode) => {
+  const syncWindowHeight = useCallback(async (mode: HudOverlayMode, toastCount: number) => {
     try {
-      await wiseHudSetOverlayHeight(overlayHeightForMode(mode));
+      await wiseHudSetOverlayHeight(overlayHeightFor(mode, toastCount));
     } catch {
       /* 窗口 API 在非 Tauri 预览时不可用 */
     }
   }, []);
 
   useEffect(() => {
-    void syncWindowHeight(overlayMode);
-  }, [overlayMode, syncWindowHeight]);
+    void syncWindowHeight(overlayMode, renderedCount);
+  }, [overlayMode, renderedCount, syncWindowHeight]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,7 +117,7 @@ function HudApp() {
           saveTimer.current = null;
           void (async () => {
             try {
-              if (overlayModeRef.current !== "none") return;
+              if (overlayModeRef.current !== "none" || toastCountRef.current > 0) return;
               const pos = await win.outerPosition();
               const size = await win.outerSize();
               const scale = await win.scaleFactor();
@@ -135,7 +149,12 @@ function HudApp() {
   }, []);
 
   return (
-    <HudComposerBar snapshot={snapshot} onOverlayOpenChange={setOverlayMode} />
+    <HudComposerBar
+      snapshot={snapshot}
+      toasts={toasts}
+      onDismissToast={dismiss}
+      onOverlayOpenChange={setOverlayMode}
+    />
   );
 }
 

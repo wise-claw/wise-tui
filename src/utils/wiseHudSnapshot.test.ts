@@ -11,6 +11,7 @@ import {
   parseWiseHudSessionSnapshot,
   parseWiseHudSetEnginePayload,
   parseWiseHudSetModelPayload,
+  parseWiseHudSetDetailsOpenPayload,
   parseWiseHudSubmitPayload,
   isWiseHudForwardEvent,
   resolveHudAssistantPreview,
@@ -43,6 +44,7 @@ describe("buildWiseHudSessionSnapshot", () => {
     expect(snap.repositories).toEqual([]);
     expect(snap.runningCount).toBe(0);
     expect(snap.runStatus).toBe("idle");
+    expect(snap.messages).toEqual([]);
   });
 
   it("includes slim composer session and repositories", () => {
@@ -92,6 +94,23 @@ describe("buildWiseHudSessionSnapshot", () => {
     });
     expect(running.runningCount).toBe(3);
     expect(running.runStatus).toBe("running");
+  });
+
+  it("includes messages only when asked", () => {
+    const withMessages = buildWiseHudSessionSnapshot(
+      session({
+        messages: [{ id: 1, role: "user", content: "hi", parts: [], timestamp: 1 }],
+      }),
+      "claude",
+      { includeMessages: true },
+    );
+    expect(withMessages.messages).toEqual([
+      { id: 1, role: "user", content: "hi", parts: [], timestamp: 1 },
+    ]);
+    expect(hudComposerSessionToClaudeSession(withMessages)?.messages).toHaveLength(1);
+    expect(buildWiseHudSessionSnapshot(session({
+      messages: [{ id: 1, role: "user", content: "hi", parts: [], timestamp: 1 }],
+    })).messages).toEqual([]);
   });
 });
 
@@ -185,7 +204,9 @@ describe("parseWiseHud payloads", () => {
     expect(isWiseHudForwardEvent("wise-hud-new-session")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-set-engine")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-set-model")).toBe(true);
+    expect(isWiseHudForwardEvent("wise-hud-set-details-open")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-state")).toBe(false);
+    expect(isWiseHudForwardEvent("wise-hud-session-complete")).toBe(false);
   });
 
   it("parses set-engine and set-model payloads", () => {
@@ -202,6 +223,9 @@ describe("parseWiseHud payloads", () => {
     });
     expect(parseWiseHudSetModelPayload({ model: "   " })).toBeNull();
     expect(parseWiseHudSetModelPayload({ model: 1 })).toBeNull();
+    expect(parseWiseHudSetDetailsOpenPayload({ open: true })).toEqual({ open: true });
+    expect(parseWiseHudSetDetailsOpenPayload({ open: false })).toEqual({ open: false });
+    expect(parseWiseHudSetDetailsOpenPayload({ open: 1 })).toBeNull();
   });
 
   it("parses snapshot and active flag", () => {
@@ -226,6 +250,7 @@ describe("parseWiseHud payloads", () => {
       composerSession: null,
       runningCount: 0,
       runStatus: "idle",
+      messages: [],
     });
     expect(parseWiseHudActiveChanged({ active: true })).toBe(true);
     expect(parseWiseHudActiveChanged({ active: 1 })).toBeNull();
@@ -254,6 +279,7 @@ describe("parseWiseHud payloads", () => {
       },
       runningCount: 2,
       runStatus: "running",
+      messages: [{ id: 9, role: "assistant", content: "好的", parts: [], timestamp: 2 }],
     });
     expect(snap).toMatchObject({
       engine: "codex-rpc",
@@ -262,6 +288,9 @@ describe("parseWiseHud payloads", () => {
       runningCount: 2,
       runStatus: "running",
     });
+    expect(snap?.messages).toEqual([
+      { id: 9, role: "assistant", content: "好的", parts: [], timestamp: 2 },
+    ]);
     expect(snap?.repositories).toEqual([{ id: 3, name: "wise-tui", path: "/tmp/wise-tui" }]);
     expect(parseWiseHudSelectRepositoryPayload({ repositoryId: 3 })).toEqual({ repositoryId: 3 });
     expect(parseWiseHudSelectRepositoryPayload({ repositoryId: "3" })).toBeNull();

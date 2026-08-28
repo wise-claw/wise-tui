@@ -367,6 +367,7 @@ const HUD_FORWARD_EVENTS: &[&str] = &[
     "wise-hud-new-session",
     "wise-hud-set-engine",
     "wise-hud-set-model",
+    "wise-hud-set-details-open",
 ];
 
 fn is_hud_forward_event(event: &str) -> bool {
@@ -453,6 +454,7 @@ mod tests {
         assert!(is_hud_forward_event("wise-hud-new-session"));
         assert!(is_hud_forward_event("wise-hud-set-engine"));
         assert!(is_hud_forward_event("wise-hud-set-model"));
+        assert!(is_hud_forward_event("wise-hud-set-details-open"));
         assert!(!is_hud_forward_event("wise-hud-active-changed"));
         assert!(!is_hud_forward_event("wise-hud-state"));
         assert!(!is_hud_forward_event(""));

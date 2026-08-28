@@ -575,7 +575,7 @@ export const Topbar = memo(function Topbar({
         ) : null}
         <TopbarBtn
           icon={<IconHud />}
-          label="HUD 模式：⌘⇧H · Ctrl+Shift+H"
+          label="HUD 模式：⌥H · Alt+H"
           onClick={() => {
             void wiseHudToggle();
           }}

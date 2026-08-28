@@ -654,6 +654,56 @@ describe("buildMergedTextGroups", () => {
     }
   });
 
+  test("coalesces consecutive reasoning parts into one thinking card", () => {
+    const groups = buildMergedTextGroups([
+      reason("Two issues:"),
+      reason("So handleClaudeTurnComplete is already provided."),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.type).toBe("single");
+    if (groups[0]!.type === "single") {
+      expect(groups[0]!.part).toMatchObject({
+        type: "reasoning",
+        text: "Two issues:\n\nSo handleClaudeTurnComplete is already provided.",
+      });
+      expect(groups[0]!.originalIndex).toBe(0);
+    }
+  });
+
+  test("coalesces reasoning split by tools into one thinking card", () => {
+    const groups = buildMergedTextGroups([
+      reason("Two issues:"),
+      bashTool("t1"),
+      reason("So:"),
+      bashTool("t2"),
+      reason("So handleClaudeTurnComplete is already provided."),
+    ]);
+    expect(groups.map((g) => g.type)).toEqual(["single", "tool_group"]);
+    if (groups[0]!.type === "single") {
+      expect(groups[0]!.part.type).toBe("reasoning");
+      expect((groups[0]!.part as ReasoningPart).text).toBe(
+        "Two issues:\n\nSo:\n\nSo handleClaudeTurnComplete is already provided.",
+      );
+    }
+    if (groups[1]!.type === "tool_group") {
+      expect(groups[1]!.parts.map((p) => p.part.id)).toEqual(["t1", "t2"]);
+    }
+  });
+
+  test("replaces earlier reasoning when a later block is a full-thinking snapshot", () => {
+    const groups = buildMergedTextGroups([
+      reason("So:"),
+      bashTool("t1"),
+      reason("So: handleClaudeTurnComplete is already provided."),
+    ]);
+    expect(groups[0]!.type).toBe("single");
+    if (groups[0]!.type === "single") {
+      expect((groups[0]!.part as ReasoningPart).text).toBe(
+        "So: handleClaudeTurnComplete is already provided.",
+      );
+    }
+  });
+
   test("all parts filtered to whitespace-only text returns empty array (no empty card)", () => {
     // 全空 parts（实际很少见，但 buildMergedTextGroups 应鲁棒）
     const visible: MessagePart[] = [text(""), text("   "), text("\n\n")];

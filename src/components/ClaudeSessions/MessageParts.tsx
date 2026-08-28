@@ -1173,6 +1173,7 @@ const SubagentToolCard = memo(function SubagentToolCard({
  * 规则：
  * - 相邻 `text` parts 顺序合并，文本间以 `"\n\n"` 拼接（与 `assistantMessagePostToolTextParts` 对齐）。
  * - `reasoning` 与 `text` **不合并**（`ReasoningPartDisplay` 有专门样式与折叠行为，不能混入）。
+ * - 同一条助手消息里的多个 `reasoning` 合并为一段（工具/正文夹在中间也不拆成多张「思考:」卡片）。
  * - `tool_use` / 非可见 part 是天然分段边界。
  * - Task/Agent 子代理单独成卡；Explorer 可吞并后续连续 explore 类工具为 childParts。
  * - 空段或全 trim 空白段过滤掉，避免 memo 抖动 / 视觉空行。
@@ -1194,6 +1195,15 @@ export type PartRenderGroup =
       originalIndex: number;
       childParts: { part: ToolUsePart; originalIndex: number }[];
     };
+
+/** 多段 thinking 合成一张思考卡：全量重放走 containment，独立 block 以段落拼接。 */
+export function joinReasoningBlockTexts(existing: string, incoming: string): string {
+  if (!existing.trim()) return incoming;
+  if (!incoming.trim()) return existing;
+  if (incoming === existing || incoming.startsWith(existing)) return incoming;
+  if (existing.startsWith(incoming)) return existing;
+  return `${existing.trimEnd()}\n\n${incoming.trimStart()}`;
+}
 
 export function buildMergedTextGroups(visibleParts: readonly MessagePart[]): PartRenderGroup[] {
   const out: PartRenderGroup[] = [];
@@ -1268,7 +1278,29 @@ export function buildMergedTextGroups(visibleParts: readonly MessagePart[]): Par
       i = j - 1;
       continue;
     }
-    // reasoning / 其它不可渲染 part：单条 single 段
+    if (part.type === "reasoning") {
+      const existingIdx = out.findIndex(
+        (group) => group.type === "single" && group.part.type === "reasoning",
+      );
+      if (existingIdx >= 0) {
+        const existing = out[existingIdx]!;
+        if (existing.type === "single" && existing.part.type === "reasoning") {
+          out[existingIdx] = {
+            type: "single",
+            originalIndex: existing.originalIndex,
+            part: {
+              type: "reasoning",
+              text: joinReasoningBlockTexts(existing.part.text, part.text),
+              ...(existing.part.streamId ? { streamId: existing.part.streamId } : {}),
+            },
+          };
+        }
+        continue;
+      }
+      out.push({ type: "single", part, originalIndex: i });
+      continue;
+    }
+    // 其它不可渲染 part：单条 single 段
     out.push({ type: "single", part, originalIndex: i });
   }
   return out;
@@ -1311,6 +1343,7 @@ export const MessagePartsDisplay = memo(function MessagePartsDisplay({
   const lastOriginalIdx = visibleParts.length - 1;
   // "末段是否含原 parts 末条" 用于 inlinePendingHint：合并段里只要 lastOriginalIndex === lastOriginalIdx，就视为末段。
   const lastGroup = groups[groups.length - 1];
+  const lastVisibleIsReasoning = visibleParts[lastOriginalIdx]?.type === "reasoning";
 
   const toolGroupPending =
     streaming
@@ -1379,7 +1412,16 @@ export const MessagePartsDisplay = memo(function MessagePartsDisplay({
           case "text":
             return <TextPartDisplay key={key} part={part} streaming={streaming} showPendingHint={hintHere} />;
           case "reasoning":
-            return <ReasoningPartDisplay key={key} part={part} streaming={streaming} showPendingHint={hintHere} />;
+            return (
+              <ReasoningPartDisplay
+                key={key}
+                part={part}
+                streaming={streaming}
+                showPendingHint={
+                  hintHere || Boolean(streaming && inlinePendingHint && lastVisibleIsReasoning)
+                }
+              />
+            );
           case "tool_use":
             if (isSubagentToolPart(part)) {
               return (

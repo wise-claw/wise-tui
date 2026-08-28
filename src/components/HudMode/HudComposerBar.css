@@ -86,6 +86,9 @@
 .app-hud-context-anchor,
 .app-hud-context-pill,
 .app-hud-run-chip,
+.app-hud-toasts,
+.app-hud-toast,
+.app-hud-session-details,
 .app-hud-bar .app-claude-composer,
 .app-hud-bar .semi-aiChatInput {
   position: relative;
@@ -94,17 +97,36 @@
 }
 
 .app-hud-run-chip {
+  appearance: none;
+  -webkit-appearance: none;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 28px;
-  padding: 0;
+  padding: 0 4px;
   margin: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
   color: #16a34a;
   line-height: 1;
   white-space: nowrap;
   user-select: none;
+  cursor: pointer;
+}
+
+.app-hud-run-chip:disabled {
+  cursor: default;
+}
+
+.app-hud-run-chip:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.app-hud-run-chip--open,
+.app-hud-run-chip--open:hover:not(:disabled) {
+  background: rgba(34, 197, 94, 0.16);
 }
 
 .app-hud-run-chip__check {
@@ -156,10 +178,129 @@
   }
 }
 
+.app-hud-toasts {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(360px, calc(100% - 24px));
+  margin: 0 0 0 8px;
+  padding: 0 0 8px;
+  pointer-events: none;
+}
+
+.app-hud-toast {
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: auto;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  height: 36px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: #fff;
+  color: #1f2328;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 10px 24px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+  text-align: left;
+  animation: app-hud-toast-in 0.28s ease both;
+}
+
+.app-hud-toast--leaving {
+  animation: app-hud-toast-out 0.24s ease forwards;
+  pointer-events: none;
+}
+
+.app-hud-toast__message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1f2328;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+@keyframes app-hud-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes app-hud-toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+.app-hud-session-details {
+  position: relative;
+  z-index: 2;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0 12px 8px;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 32px rgba(15, 23, 42, 0.14);
+}
+
+.app-hud-session-details .app-claude-chat,
+.app-hud-session-details .app-claude-messages {
+  background: transparent;
+}
+
+.app-hud-session-details .app-claude-messages {
+  margin-top: 0;
+  padding: 10px 12px 12px;
+}
+
+.app-hud-session-details__empty {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8b8f98;
+  font-size: 13px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-hud-run-chip__spinner {
     animation: none;
     border-top-color: #22c55e;
+  }
+
+  .app-hud-toast,
+  .app-hud-toast--leaving {
+    animation: none;
   }
 }
 
@@ -760,6 +901,36 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
 
 :root[data-wise-theme="dark"] .app-hud-run-chip__badge {
   background: #52525b;
+}
+
+:root[data-wise-theme="dark"] .app-hud-run-chip:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-wise-theme="dark"] .app-hud-run-chip--open,
+:root[data-wise-theme="dark"] .app-hud-run-chip--open:hover:not(:disabled) {
+  background: rgba(74, 222, 128, 0.18);
+}
+
+:root[data-wise-theme="dark"] .app-hud-session-details {
+  background: #2a2a2e;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-wise-theme="dark"] .app-hud-session-details__empty {
+  color: #71717a;
+}
+
+:root[data-wise-theme="dark"] .app-hud-toast {
+  background: #2a2a2e;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #f4f4f5;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-wise-theme="dark"] .app-hud-toast__message {
+  color: #e4e4e7;
 }
 
 :root[data-wise-theme="dark"] .app-hud-empty-hint {

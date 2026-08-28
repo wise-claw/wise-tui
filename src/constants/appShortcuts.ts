@@ -34,8 +34,8 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
         description: "切换桌面宠物：当前可见则隐藏，当前隐藏则显示（替代右键无响应场景）。",
       },
       {
-        keys: "⌘⇧H · Ctrl+Shift+H",
-        description: "切换 HUD 模式：主窗口让出桌面，留下置顶胶囊输入条（再按一次展开）。",
+        keys: "⌥H · Alt+H",
+        description: "切换 HUD 模式：主窗口让出桌面，留下置顶胶囊输入条（再按一次展开）。应用未聚焦时也可打开。",
       },
       {
         keys: "⌘⇧G · Ctrl+Shift+G",

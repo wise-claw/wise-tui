@@ -3,10 +3,15 @@ import { emit, listen } from "@tauri-apps/api/event";
 import type { ClaudeSession, EmployeeItem, Repository } from "../types";
 import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
+import { restoreComposerFocusAfterHudExit } from "../services/globalScreenshotHotkey";
 import { wiseHudIsActive } from "../services/wiseHud";
-import { setWiseHudModeActive } from "../stores/wiseHudModeStore";
+import { getWiseHudModeActive, setWiseHudModeActive } from "../stores/wiseHudModeStore";
 import { resolveSessionExecutionEngine } from "../utils/sessionExecutionEngine";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
+import {
+  collectHudSessionCompletions,
+  sessionStatusMap,
+} from "../utils/hudCompletionToast";
 import {
   buildWiseHudSessionSnapshot,
   countHudRunningSessions,
@@ -15,6 +20,7 @@ import {
   parseWiseHudSelectRepositoryPayload,
   parseWiseHudSetEnginePayload,
   parseWiseHudSetModelPayload,
+  parseWiseHudSetDetailsOpenPayload,
   resolveHudRunStatus,
   resolveHudSubmitSessionId,
   WISE_HUD_ACTIVE_EVENT,
@@ -22,6 +28,8 @@ import {
   WISE_HUD_NEW_SESSION_EVENT,
   WISE_HUD_REQUEST_STATE_EVENT,
   WISE_HUD_SELECT_REPOSITORY_EVENT,
+  WISE_HUD_SESSION_COMPLETE_EVENT,
+  WISE_HUD_SET_DETAILS_OPEN_EVENT,
   WISE_HUD_SET_ENGINE_EVENT,
   WISE_HUD_SET_MODEL_EVENT,
   WISE_HUD_STATE_EVENT,
@@ -74,6 +82,8 @@ export function useWiseHudBridge({
   const lastKeyRef = useRef("");
   const publishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hadRunningInHudRef = useRef(false);
+  const prevStatusByIdRef = useRef<Map<string, string>>(new Map());
+  const detailsOpenRef = useRef(false);
 
   sessionsRef.current = sessions;
   activeSessionIdRef.current = activeSessionId;
@@ -105,6 +115,7 @@ export function useWiseHudBridge({
       activeRepositoryId: activeRepositoryRef.current?.id ?? null,
       runningCount,
       runStatus: resolveHudRunStatus(runningCount, hadRunningInHudRef.current),
+      includeMessages: detailsOpenRef.current,
     });
   };
 
@@ -124,6 +135,18 @@ export function useWiseHudBridge({
       publishNow();
     }, 80);
   };
+
+  useEffect(() => {
+    const completions = collectHudSessionCompletions(prevStatusByIdRef.current, sessions);
+    prevStatusByIdRef.current = sessionStatusMap(sessions);
+    if (
+      completions.length > 0 &&
+      getWiseHudModeActive() &&
+      isCurrentPrimaryMainWorkspaceWindowSync()
+    ) {
+      void emit(WISE_HUD_SESSION_COMPLETE_EVENT, { items: completions });
+    }
+  }, [sessions]);
 
   useEffect(() => {
     publishSoon();
@@ -173,6 +196,9 @@ export function useWiseHudBridge({
             countHudRunningSessions(sessionsRef.current) > 0;
           lastKeyRef.current = "";
           publishNow();
+        } else {
+          detailsOpenRef.current = false;
+          restoreComposerFocusAfterHudExit(activeSessionIdRef.current);
         }
       });
       const u5 = await listen<unknown>(WISE_HUD_SELECT_REPOSITORY_EVENT, (event) => {
@@ -205,6 +231,13 @@ export function useWiseHudBridge({
         if (!sessionId) return;
         setModelRef.current(sessionId, payload.model);
       });
+      const u9 = await listen<unknown>(WISE_HUD_SET_DETAILS_OPEN_EVENT, (event) => {
+        const payload = parseWiseHudSetDetailsOpenPayload(event.payload);
+        if (!payload) return;
+        detailsOpenRef.current = payload.open;
+        lastKeyRef.current = "";
+        publishNow();
+      });
       if (cancelled) {
         safeUnlisten(u1);
         safeUnlisten(u2);
@@ -214,6 +247,7 @@ export function useWiseHudBridge({
         safeUnlisten(u6);
         safeUnlisten(u7);
         safeUnlisten(u8);
+        safeUnlisten(u9);
         return;
       }
       unsubs.push(
@@ -225,6 +259,7 @@ export function useWiseHudBridge({
         () => safeUnlisten(u6),
         () => safeUnlisten(u7),
         () => safeUnlisten(u8),
+        () => safeUnlisten(u9),
       );
     })();
     return () => {

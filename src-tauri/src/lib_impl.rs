@@ -164,12 +164,8 @@ pub fn run() {
                 })
                 .map_err(|e| e.to_string())?;
 
-            // ⌘⇧H / Ctrl+Shift+H：切换 HUD 模式（全局，对齐 Hermes Desktop）。
-            #[cfg(target_os = "macos")]
-            let hud_toggle_mods = Modifiers::SUPER | Modifiers::SHIFT;
-            #[cfg(not(target_os = "macos"))]
-            let hud_toggle_mods = Modifiers::CONTROL | Modifiers::SHIFT;
-            let toggle_hud_shortcut = Shortcut::new(Some(hud_toggle_mods), Code::KeyH);
+            // ⌥H / Alt+H：切换 HUD 模式（全局，应用未聚焦也可打开）。
+            let toggle_hud_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::KeyH);
             app.global_shortcut()
                 .on_shortcut(toggle_hud_shortcut, |app_handle, _shortcut, event| {
                     if event.state() != ShortcutState::Pressed {

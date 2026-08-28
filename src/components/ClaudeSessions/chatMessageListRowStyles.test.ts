@@ -45,5 +45,8 @@ describe("chatMessageListRowClassName", () => {
     expect(
       chatMessageListRowClassName({ ...userRow, mergedWithPrevious: true } as ChatMessageListRow, 1),
     ).not.toContain("app-claude-messages-virtual-row--user-sticky");
+    expect(
+      chatMessageListRowClassName(userRow, 0, { pinUserMessages: false }),
+    ).not.toContain("app-claude-messages-virtual-row--user-sticky");
   });
 });

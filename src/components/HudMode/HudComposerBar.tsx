@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ComposerRegion } from "../ClaudeChatInput/composer-region";
-import { wiseHudCancel, wiseHudExit, wiseHudNewSession, wiseHudSubmit } from "../../services/wiseHud";
+import { wiseHudCancel, wiseHudExit, wiseHudNewSession, wiseHudSetDetailsOpen, wiseHudSubmit } from "../../services/wiseHud";
 import { HudContextPicker } from "./HudContextPicker";
+import { HudCompletionToasts } from "./HudCompletionToasts";
+import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import { safeUnlisten } from "../../utils/safeTauriUnlisten";
 import {
   hudComposerSessionToClaudeSession,
@@ -12,13 +14,16 @@ import {
   type WiseHudRunStatus,
   type WiseHudSessionSnapshot,
 } from "../../utils/wiseHudSnapshot";
+import type { HudCompletionToastView } from "../../utils/hudCompletionToast";
 import type { ImageAttachmentPart } from "../../types";
 import "./HudComposerBar.css";
 
-export type HudOverlayMode = "none" | "images" | "menu";
+export type HudOverlayMode = "none" | "images" | "menu" | "details";
 
 export interface HudComposerBarProps {
   snapshot: WiseHudSessionSnapshot;
+  toasts?: readonly HudCompletionToastView[];
+  onDismissToast?: (id: string) => void;
   onOverlayOpenChange?: (mode: HudOverlayMode) => void;
 }
 
@@ -50,9 +55,15 @@ function IconHudStop() {
 function HudRunStatusChip({
   runningCount,
   runStatus,
+  detailsOpen,
+  disabled,
+  onToggle,
 }: {
   runningCount: number;
   runStatus: WiseHudRunStatus;
+  detailsOpen: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
 }) {
   const label =
     runStatus === "running"
@@ -60,12 +71,23 @@ function HudRunStatusChip({
       : runStatus === "completed"
         ? "全部完成"
         : "就绪";
+  const title = disabled
+    ? label
+    : detailsOpen
+      ? `${label}，点击关闭会话详情`
+      : `${label}，点击打开会话详情`;
   return (
-    <div
-      className={`app-hud-run-chip app-hud-run-chip--${runStatus}`}
-      role="status"
-      title={label}
-      aria-label={label}
+    <button
+      type="button"
+      className={`app-hud-run-chip app-hud-run-chip--${runStatus}${detailsOpen ? " app-hud-run-chip--open" : ""}`}
+      aria-label={title}
+      aria-pressed={detailsOpen}
+      title={title}
+      disabled={disabled}
+      onClick={() => {
+        if (disabled) return;
+        onToggle();
+      }}
     >
       {runStatus === "running" ? (
         <>
@@ -86,7 +108,7 @@ function HudRunStatusChip({
           </svg>
         </span>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -114,7 +136,7 @@ function HudExitButton() {
       type="button"
       className="app-hud-exit-btn"
       aria-label="退出 HUD"
-      title="退出 HUD，回到主窗口（⌘⇧H）"
+      title="退出 HUD，回到主窗口（⌥H）"
       onClick={() => void wiseHudExit()}
     >
       <IconHudExit />
@@ -136,12 +158,20 @@ function HudStopButton() {
   );
 }
 
-export function HudComposerBar({ snapshot, onOverlayOpenChange }: HudComposerBarProps) {
+export function HudComposerBar({
+  snapshot,
+  toasts = [],
+  onDismissToast,
+  onOverlayOpenChange,
+}: HudComposerBarProps) {
   const session = useMemo(() => hudComposerSessionToClaudeSession(snapshot), [snapshot]);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [menuOverlay, setMenuOverlay] = useState(false);
   const [contextOverlay, setContextOverlay] = useState(false);
   const [previewImage, setPreviewImage] = useState<ImageAttachmentPart | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsOpenRef = useRef(detailsOpen);
+  detailsOpenRef.current = detailsOpen;
   const running = snapshot.busy;
 
   useEffect(() => {
@@ -149,27 +179,47 @@ export function HudComposerBar({ snapshot, onOverlayOpenChange }: HudComposerBar
   }, [session?.id]);
 
   useEffect(() => {
+    if (!session) setDetailsOpen(false);
+  }, [session]);
+
+  useEffect(() => {
     if (menuOverlay || contextOverlay) setPreviewImage(null);
   }, [menuOverlay, contextOverlay]);
 
   useEffect(() => {
     onOverlayOpenChange?.(
-      menuOverlay || contextOverlay ? "menu" : previewImage ? "images" : "none",
+      menuOverlay || contextOverlay
+        ? "menu"
+        : previewImage
+          ? "images"
+          : detailsOpen
+            ? "details"
+            : "none",
     );
-  }, [menuOverlay, contextOverlay, previewImage, onOverlayOpenChange]);
+  }, [menuOverlay, contextOverlay, previewImage, detailsOpen, onOverlayOpenChange]);
 
   useEffect(() => {
-    if (!previewImage) return;
+    void wiseHudSetDetailsOpen(detailsOpen);
+  }, [detailsOpen]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key !== "Escape") return;
+      if (previewImage) {
         event.preventDefault();
         event.stopPropagation();
         setPreviewImage(null);
+        return;
+      }
+      if (detailsOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        setDetailsOpen(false);
       }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [previewImage]);
+  }, [previewImage, detailsOpen]);
 
   const handleHudImagePreviewChange = useCallback((image: ImageAttachmentPart | null) => {
     setPreviewImage((prev) => {
@@ -186,10 +236,24 @@ export function HudComposerBar({ snapshot, onOverlayOpenChange }: HudComposerBar
   }, [snapshot.sessionId]);
 
   const focusEditor = useCallback(() => {
+    if (detailsOpenRef.current) return;
     const editor = shellRef.current?.querySelector<HTMLElement>(
       ".app-claude-semi-chat-input-wrap .tiptap",
     );
     editor?.focus();
+  }, []);
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (!target.closest(".app-claude-semi-chat-input-wrap")) return;
+      setDetailsOpen(false);
+    };
+    shell.addEventListener("focusin", onFocusIn);
+    return () => shell.removeEventListener("focusin", onFocusIn);
   }, []);
 
   useEffect(() => {
@@ -208,9 +272,9 @@ export function HudComposerBar({ snapshot, onOverlayOpenChange }: HudComposerBar
           if (focused) focusEditor();
         });
         const u2 = await listen<unknown>(WISE_HUD_ACTIVE_EVENT, (event) => {
-          if (parseWiseHudActiveChanged(event.payload) === true) {
-            focusEditor();
-          }
+          const active = parseWiseHudActiveChanged(event.payload);
+          if (active === true) focusEditor();
+          else if (active === false) setDetailsOpen(false);
         });
         if (cancelled) {
           safeUnlisten(u1);
@@ -248,10 +312,30 @@ export function HudComposerBar({ snapshot, onOverlayOpenChange }: HudComposerBar
           <img src={previewImage.dataUrl} alt={previewImage.filename} />
         </button>
       ) : null}
+      <HudCompletionToasts toasts={toasts} onDismiss={onDismissToast ?? (() => undefined)} />
+      {detailsOpen && !previewImage ? (
+        <div className="app-hud-session-details">
+          {session ? (
+            <ClaudeSessionMessagesColumn
+              session={session}
+              listVariant="chat"
+              pinUserMessages={false}
+            />
+          ) : (
+            <div className="app-hud-session-details__empty">暂无会话</div>
+          )}
+        </div>
+      ) : null}
       <div className={`app-hud-bar${running ? " app-hud-bar--running" : ""}`}>
         <div className="app-hud-bar-drag" data-tauri-drag-region aria-hidden />
         <HudNewSessionButton disabled={snapshot.activeRepositoryId == null} />
-        <HudRunStatusChip runningCount={snapshot.runningCount} runStatus={snapshot.runStatus} />
+        <HudRunStatusChip
+          runningCount={snapshot.runningCount}
+          runStatus={snapshot.runStatus}
+          detailsOpen={detailsOpen}
+          disabled={!session}
+          onToggle={() => setDetailsOpen((open) => !open)}
+        />
         {session ? (
           <div className="app-hud-composer">
             <ComposerRegion

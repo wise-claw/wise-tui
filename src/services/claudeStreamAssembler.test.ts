@@ -409,6 +409,35 @@ describe("mergeAssistantParts reasoning containment", () => {
       { type: "text", text: "正在读取配置。", streamId: "m-1" },
     ]);
   });
+
+  test("spurious startNewReasoningBlock mid-thinking concatenates fragments", () => {
+    let parts = mergeAssistantParts([], [{ type: "reasoning", text: "So" }], {
+      startNewReasoningBlock: true,
+    });
+    parts = mergeAssistantParts(parts, [{ type: "reasoning", text: ":" }], {
+      startNewReasoningBlock: true,
+    });
+    parts = mergeAssistantParts(parts, [{ type: "reasoning", text: " handleClaudeTurnComplete" }], {
+      startNewReasoningBlock: true,
+    });
+    expect(parts).toEqual([
+      { type: "reasoning", text: "So: handleClaudeTurnComplete" },
+    ]);
+  });
+
+  test("startNewReasoningBlock after a tool starts a new reasoning part", () => {
+    const merged = mergeAssistantParts(
+      [
+        { type: "reasoning", text: "Two issues:" },
+        { type: "tool_use", id: "t1", name: "Grep", input: {}, status: "completed" },
+      ],
+      [{ type: "reasoning", text: "So:" }],
+      { startNewReasoningBlock: true },
+    );
+    expect(merged).toHaveLength(3);
+    expect(merged[0]).toMatchObject({ type: "reasoning", text: "Two issues:" });
+    expect(merged[2]).toMatchObject({ type: "reasoning", text: "So:" });
+  });
 });
 
 describe("mergeAssistantParts tool_use ACP updates", () => {

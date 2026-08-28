@@ -27,6 +27,8 @@ export const WISE_HUD_SELECT_REPOSITORY_EVENT = "wise-hud-select-repository";
 export const WISE_HUD_NEW_SESSION_EVENT = "wise-hud-new-session";
 export const WISE_HUD_SET_ENGINE_EVENT = "wise-hud-set-engine";
 export const WISE_HUD_SET_MODEL_EVENT = "wise-hud-set-model";
+export const WISE_HUD_SESSION_COMPLETE_EVENT = "wise-hud-session-complete";
+export const WISE_HUD_SET_DETAILS_OPEN_EVENT = "wise-hud-set-details-open";
 
 export const HUD_ASSISTANT_PREVIEW_MAX_LEN = 280;
 
@@ -76,6 +78,7 @@ export interface WiseHudSessionSnapshot {
   composerSession: WiseHudComposerSession | null;
   runningCount: number;
   runStatus: WiseHudRunStatus;
+  messages: ClaudeMessage[];
 }
 
 export interface WiseHudSubmitPayload {
@@ -91,6 +94,7 @@ const HUD_FORWARD_EVENTS = [
   WISE_HUD_NEW_SESSION_EVENT,
   WISE_HUD_SET_ENGINE_EVENT,
   WISE_HUD_SET_MODEL_EVENT,
+  WISE_HUD_SET_DETAILS_OPEN_EVENT,
 ] as const;
 
 export type WiseHudForwardEvent = (typeof HUD_FORWARD_EVENTS)[number];
@@ -113,11 +117,16 @@ export interface WiseHudSetModelPayload {
   sessionId?: string;
 }
 
+export interface WiseHudSetDetailsOpenPayload {
+  open: boolean;
+}
+
 export interface BuildWiseHudSessionSnapshotExtras {
   repositories?: ReadonlyArray<{ id: number; name: string; path: string }>;
   activeRepositoryId?: number | null;
   runningCount?: number;
   runStatus?: WiseHudRunStatus;
+  includeMessages?: boolean;
 }
 
 const EMPTY_SNAPSHOT: WiseHudSessionSnapshot = {
@@ -135,6 +144,7 @@ const EMPTY_SNAPSHOT: WiseHudSessionSnapshot = {
   composerSession: null,
   runningCount: 0,
   runStatus: "idle",
+  messages: [],
 };
 
 export function isHudSessionBusyStatus(status: string): boolean {
@@ -243,6 +253,7 @@ export function buildWiseHudSessionSnapshot(
     extras.activeRepositoryId === undefined ? null : extras.activeRepositoryId;
   const runningCount = Math.max(0, Math.floor(extras.runningCount ?? 0));
   const runStatus = extras.runStatus ?? (runningCount > 0 ? "running" : "idle");
+  const messages = extras.includeMessages && session ? [...session.messages] : [];
   if (!session) {
     return {
       ...EMPTY_SNAPSHOT,
@@ -250,6 +261,7 @@ export function buildWiseHudSessionSnapshot(
       activeRepositoryId,
       runningCount,
       runStatus,
+      messages,
     };
   }
   const busy = session.status === "running" || session.status === "connecting";
@@ -276,6 +288,7 @@ export function buildWiseHudSessionSnapshot(
     composerSession: buildHudComposerSession(session, engine),
     runningCount,
     runStatus,
+    messages,
   };
 }
 
@@ -291,7 +304,7 @@ export function hudComposerSessionToClaudeSession(
     repositoryName: item.repositoryName,
     model: item.model,
     status: item.status,
-    messages: [],
+    messages: snapshot.messages ?? [],
     createdAt: 0,
     pendingPrompt: "",
     connectionKind: item.connectionKind,
@@ -369,6 +382,28 @@ function parseHudRunningCount(raw: unknown): number {
   return Math.max(0, Math.floor(raw));
 }
 
+function parseHudMessages(raw: unknown): ClaudeMessage[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ClaudeMessage[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const value = item as Partial<ClaudeMessage>;
+    if (typeof value.id !== "number" || !Number.isFinite(value.id)) continue;
+    if (value.role !== "user" && value.role !== "assistant" && value.role !== "system") continue;
+    if (typeof value.content !== "string" || typeof value.timestamp !== "number") continue;
+    out.push({
+      id: value.id,
+      role: value.role,
+      content: value.content,
+      parts: Array.isArray(value.parts) ? value.parts : [],
+      timestamp: value.timestamp,
+      defaultInstructionApplied:
+        typeof value.defaultInstructionApplied === "string" ? value.defaultInstructionApplied : undefined,
+    });
+  }
+  return out;
+}
+
 function parseHudComposerSession(raw: unknown): WiseHudComposerSession | null {
   if (!raw || typeof raw !== "object") return null;
   const value = raw as Partial<WiseHudComposerSession>;
@@ -426,6 +461,7 @@ export function parseWiseHudSessionSnapshot(raw: unknown): WiseHudSessionSnapsho
     composerSession: parseHudComposerSession(value.composerSession),
     runningCount: parseHudRunningCount(value.runningCount),
     runStatus: parseHudRunStatus(value.runStatus),
+    messages: parseHudMessages(value.messages),
   };
 }
 
@@ -460,6 +496,12 @@ export function parseWiseHudSetModelPayload(raw: unknown): WiseHudSetModelPayloa
   if (!model) return null;
   const sessionId = parseOptionalSessionId((raw as { sessionId?: unknown }).sessionId);
   return sessionId ? { model, sessionId } : { model };
+}
+
+export function parseWiseHudSetDetailsOpenPayload(raw: unknown): WiseHudSetDetailsOpenPayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const open = (raw as { open?: unknown }).open;
+  return typeof open === "boolean" ? { open } : null;
 }
 
 export function parseWiseHudActiveChanged(raw: unknown): boolean | null {

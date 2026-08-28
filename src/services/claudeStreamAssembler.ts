@@ -379,9 +379,15 @@ export function mergeAssistantParts(
     const lastReason = merged[merged.length - 1];
     if (startNewReasoningBlock) {
       startNewReasoningBlock = false;
-      merged.push(part);
-    } else if (lastReason?.type === "reasoning") {
-      // 与 text 分支对称：thinking 全量重发/重放时 incoming 可能以 existing 开头或相等，
+      // 与 text 分支对称：content_block_start(thinking) 只在上一段不是 reasoning 时另起 part。
+      // 若每个 thinking_delta 前都误发 content_block_start，旧逻辑会一词一张「思考:」卡片。
+      if (lastReason?.type !== "reasoning") {
+        merged.push(part);
+        continue;
+      }
+    }
+    if (lastReason?.type === "reasoning") {
+      // thinking 全量重发/重放时 incoming 可能以 existing 开头或相等，
       // 直接拼接会致思考翻倍。用 containment 合并避免重复，正常 thinking_delta 增量走拼接。
       merged[merged.length - 1] = {
         ...lastReason,

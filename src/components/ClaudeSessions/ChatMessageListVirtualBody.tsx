@@ -50,6 +50,8 @@ interface Props {
   onWindowExhausted?: () => void;
   /** 全量磁盘重载后解除 maxVisible 封顶，使加载更早消息按钮在长会话下仍可逐段扩展窗口。 */
   transcriptMemoryUnlimited?: boolean;
+  /** 为 false 时用户消息不吸顶（HUD 详情）。默认 true。 */
+  pinUserMessages?: boolean;
 }
 
 /** 影响单行 element 输出的上下文 prop 集合（element 缓存引用相等判据用）。 */
@@ -63,6 +65,7 @@ export interface RowElementCacheContext {
   sessionsForDispatchLookup?: SessionDispatchLookup;
   onReplayUserMessage?: (prompt: string) => void;
   renderRow?: (row: ChatMessageListRow, index: number) => ReactNode;
+  pinUserMessages?: boolean;
 }
 
 /** 单行 element 缓存条目：element 引用 + 命中判据所需的全量输入。 */
@@ -96,7 +99,8 @@ export function rowElementCacheHit(
     cached.onOpenSessionConversationTaskDetail === ctx.onOpenSessionConversationTaskDetail &&
     cached.sessionsForDispatchLookup === ctx.sessionsForDispatchLookup &&
     cached.onReplayUserMessage === ctx.onReplayUserMessage &&
-    cached.renderRow === ctx.renderRow
+    cached.renderRow === ctx.renderRow &&
+    cached.pinUserMessages === ctx.pinUserMessages
   );
 }
 
@@ -136,6 +140,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       companionMessageListWindow,
       onWindowExhausted,
       transcriptMemoryUnlimited,
+      pinUserMessages = true,
     },
     ref,
   ) {
@@ -245,6 +250,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       sessionsForDispatchLookup,
       onReplayUserMessage,
       renderRow,
+      pinUserMessages,
     };
     // 迁移式缓存：每轮新建 nextCache，命中条目迁移，未命中 createElement 写入；
     // 循环后替换 ref，旧 Map 中未迁移条目（已移出窗口的行）随旧 Map GC。
@@ -260,7 +266,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
         return cached.element;
       }
       const element = (
-        <div key={row.key} className={chatMessageListRowClassName(row, index)}>
+        <div key={row.key} className={chatMessageListRowClassName(row, index, { pinUserMessages })}>
           {renderRow ? (
             renderRow(row, index)
           ) : (
@@ -286,6 +292,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
     // 原生 sticky 会让多个用户行同时停在顶部。这里用一帧一帧的推挤距离驱动交接：
     // 下一条消息接近时，前一条先向上移出，完全离开后才切换 active。
     useLayoutEffect(() => {
+      if (!pinUserMessages) return;
       const sc = scrollContainerRef.current;
       if (!sc) return;
       let frame = 0;
@@ -334,7 +341,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
         sc.removeEventListener("scroll", onScroll);
         if (frame !== 0) window.cancelAnimationFrame(frame);
       };
-    }, [rows, scrollContainerRef, visibleStartIndex, scrollGeneration]);
+    }, [pinUserMessages, rows, scrollContainerRef, visibleStartIndex, scrollGeneration]);
 
     return (
       <>
