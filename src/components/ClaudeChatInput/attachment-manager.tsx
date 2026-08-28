@@ -161,14 +161,122 @@ export function ImageThumbnails({
   images,
   onRemove,
   onReplace,
+  onPreviewImageChange,
 }: {
   images: ImageAttachmentPart[];
   onRemove: (id: string) => void;
   onReplace: (id: string, next: ImageAttachmentPart) => void;
+  /** HUD：点缩略图在胶囊上方撑开展示整图；主窗口仍走 Ant Design 灯箱。 */
+  onPreviewImageChange?: (image: ImageAttachmentPart | null) => void;
 }) {
   const [editing, setEditing] = useState<ImageAttachmentPart | null>(null);
+  const hudPreview = Boolean(onPreviewImageChange);
+
+  useEffect(() => {
+    if (images.length === 0) onPreviewImageChange?.(null);
+  }, [images.length, onPreviewImageChange]);
 
   if (images.length === 0) return null;
+
+  const thumbs = images.map((img) => (
+    <div
+      key={img.id}
+      className="app-claude-image-thumb-wrap"
+      onClick={
+        hudPreview
+          ? (e) => {
+              e.stopPropagation();
+              onPreviewImageChange?.(img);
+            }
+          : undefined
+      }
+      style={{
+        position: "relative",
+        width: "48px",
+        height: "48px",
+        borderRadius: "6px",
+        overflow: "hidden",
+        border: "1px solid var(--ant-color-border-secondary)",
+        flexShrink: 0,
+        cursor: hudPreview ? "zoom-in" : undefined,
+      }}
+    >
+      <Image
+        src={img.dataUrl}
+        alt={img.filename}
+        width={48}
+        height={48}
+        style={{ objectFit: "cover", display: "block", pointerEvents: hudPreview ? "none" : undefined }}
+        preview={hudPreview ? false : { mask: "预览" }}
+      />
+      <button
+        type="button"
+        aria-label="编辑图片"
+        title="编辑图片（裁剪、红框标注、划线）"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          setEditing(img);
+        }}
+        style={{
+          position: "absolute",
+          bottom: "2px",
+          left: "2px",
+          zIndex: 2,
+          width: "16px",
+          height: "16px",
+          borderRadius: "4px",
+          border: "none",
+          background: "rgba(0,0,0,0.65)",
+          color: "#fff",
+          cursor: "pointer",
+          fontSize: "10px",
+          lineHeight: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+        }}
+      >
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+          <path d="M17 3a2.83 2.83 0 114 4L7 21l-4 1 1-4L17 3z" strokeLinejoin="round" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        aria-label="移除图片"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          onRemove(img.id);
+        }}
+        style={{
+          position: "absolute",
+          top: "2px",
+          right: "2px",
+          zIndex: 2,
+          width: "14px",
+          height: "14px",
+          borderRadius: "50%",
+          border: "none",
+          background: "rgba(0,0,0,0.6)",
+          color: "#fff",
+          cursor: "pointer",
+          fontSize: "9px",
+          lineHeight: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+        }}
+      >
+        ×
+      </button>
+    </div>
+  ));
+
   return (
     <>
       <ImageRedBoxCropModal
@@ -178,99 +286,7 @@ export function ImageThumbnails({
         onApply={(next) => onReplace(next.id, next)}
       />
       <div className="app-claude-image-thumbs" style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "6px" }}>
-        <Image.PreviewGroup>
-          {images.map((img) => (
-            <div
-              key={img.id}
-              className="app-claude-image-thumb-wrap"
-              style={{
-                position: "relative",
-                width: "48px",
-                height: "48px",
-                borderRadius: "6px",
-                overflow: "hidden",
-                border: "1px solid var(--ant-color-border-secondary)",
-                flexShrink: 0,
-              }}
-            >
-              <Image
-                src={img.dataUrl}
-                alt={img.filename}
-                width={48}
-                height={48}
-                style={{ objectFit: "cover", display: "block" }}
-                preview={{
-                  mask: "预览",
-                }}
-              />
-              <button
-                type="button"
-                aria-label="编辑图片"
-                title="编辑图片（裁剪、红框标注、划线）"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  setEditing(img);
-                }}
-                style={{
-                  position: "absolute",
-                  bottom: "2px",
-                  left: "2px",
-                  zIndex: 2,
-                  width: "16px",
-                  height: "16px",
-                  borderRadius: "4px",
-                  border: "none",
-                  background: "rgba(0,0,0,0.65)",
-                  color: "#fff",
-                  cursor: "pointer",
-                  fontSize: "10px",
-                  lineHeight: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: 0,
-                }}
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
-                  <path d="M17 3a2.83 2.83 0 114 4L7 21l-4 1 1-4L17 3z" strokeLinejoin="round" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                aria-label="移除图片"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onRemove(img.id);
-                }}
-                style={{
-                  position: "absolute",
-                  top: "2px",
-                  right: "2px",
-                  zIndex: 2,
-                  width: "14px",
-                  height: "14px",
-                  borderRadius: "50%",
-                  border: "none",
-                  background: "rgba(0,0,0,0.6)",
-                  color: "#fff",
-                  cursor: "pointer",
-                  fontSize: "9px",
-                  lineHeight: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: 0,
-                }}
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </Image.PreviewGroup>
+        {hudPreview ? thumbs : <Image.PreviewGroup>{thumbs}</Image.PreviewGroup>}
       </div>
     </>
   );

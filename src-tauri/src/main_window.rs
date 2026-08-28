@@ -118,6 +118,19 @@ pub fn emit_to_focused_main_workspace_window<S: serde::Serialize + Clone>(
     let _ = app.emit(event, payload);
 }
 
+/// HUD 等非主窗必须打到 `main`：桥接只在主窗 label 上 listen，不能走「当前聚焦窗」。
+pub fn emit_to_primary_main_workspace_window<S: serde::Serialize + Clone>(
+    app: &AppHandle,
+    event: &str,
+    payload: S,
+) {
+    if let Some(win) = app.get_webview_window(PRIMARY_MAIN_WINDOW_LABEL) {
+        let _ = win.emit(event, payload);
+        return;
+    }
+    let _ = app.emit(event, payload);
+}
+
 pub fn open_main_workspace_window(
     app: &AppHandle,
     repository_id: Option<i64>,
@@ -220,6 +233,7 @@ mod tests {
         assert!(is_main_workspace_window_label("main"));
         assert!(is_main_workspace_window_label("main-dock-123"));
         assert!(!is_main_workspace_window_label("mascot"));
+        assert!(!is_main_workspace_window_label("hud"));
     }
 
     #[test]

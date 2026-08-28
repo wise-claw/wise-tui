@@ -280,31 +280,31 @@ fn read_top_level_toml_string(config: &str, key: &str) -> Option<String> {
     None
 }
 
-/// 档案是否把请求打到非 OpenAI 的自定义 provider（DeepSeek / 火山等）。
-pub(crate) fn codex_config_uses_custom_provider(config: &str) -> bool {
-    let lower = config.to_lowercase();
-    const MARKERS: &[&str] = &[
-        "deepseek.com",
-        "volces.com",
-        "volcengine.com",
-        "dashscope.aliyuncs.com",
-        "api.minimax.chat",
-        "api.moonshot.cn",
-        "openrouter.ai",
-        "api.together.xyz",
-        "siliconflow.cn",
-        "bigmodel.cn",
-    ];
-    if MARKERS.iter().any(|marker| lower.contains(marker)) {
-        return true;
-    }
+/// 当前生效的 Codex provider 键。未设置或 openai/chatgpt 都视为官方 OpenAI。
+/// 只看顶层 `model_provider`，忽略残留的 `[model_providers.deepseek]` 段。
+pub(crate) fn effective_codex_provider_key(config: &str) -> String {
     match read_top_level_toml_string(config, "model_provider") {
         Some(provider) => {
             let p = provider.trim().to_lowercase();
-            !p.is_empty() && p != "openai" && p != "chatgpt"
+            if p.is_empty() || p == "openai" || p == "chatgpt" {
+                "openai".to_string()
+            } else {
+                p
+            }
         }
-        None => false,
+        None => "openai".to_string(),
     }
+}
+
+/// 切供应商（GPT ↔ DeepSeek 等）后不能续接旧 thread，否则会卡住且无输出。
+pub(crate) fn codex_provider_switched(previous_config: &str, next_config: &str) -> bool {
+    effective_codex_provider_key(previous_config) != effective_codex_provider_key(next_config)
+}
+
+/// 档案是否把请求打到非 OpenAI 的自定义 provider（DeepSeek / 火山等）。
+/// 只看顶层 `model_provider`：GPT 切走后残留的 `[model_providers.deepseek]` 不算正在使用。
+pub(crate) fn codex_config_uses_custom_provider(config: &str) -> bool {
+    effective_codex_provider_key(config) != "openai"
 }
 
 /// 去掉顶层 `model_provider = ...`，让 Codex 回退 OpenAI 默认 provider。
@@ -332,7 +332,58 @@ pub(crate) fn strip_top_level_model_provider(config: &str) -> String {
     out
 }
 
+fn model_providers_table_id(trimmed: &str) -> Option<String> {
+    let name = trimmed
+        .trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim();
+    let rest = name.strip_prefix("model_providers")?;
+    if rest.is_empty() {
+        return Some(String::new());
+    }
+    let rest = rest.strip_prefix('.').unwrap_or(rest);
+    Some(
+        rest.trim_matches('"')
+            .trim_matches('\'')
+            .trim()
+            .to_lowercase(),
+    )
+}
+
+fn is_openai_builtin_provider_id(id: &str) -> bool {
+    id == "openai" || id == "chatgpt"
+}
+
+/// 去掉自定义 `[model_providers.*]`，避免 GPT 目录模型仍带着 DeepSeek 段。
+pub(crate) fn strip_custom_model_provider_tables(config: &str) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    let mut skipping = false;
+    for line in config.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            skipping = match model_providers_table_id(trimmed) {
+                Some(id) => !is_openai_builtin_provider_id(&id),
+                None => false,
+            };
+            if skipping {
+                continue;
+            }
+        }
+        if skipping {
+            continue;
+        }
+        lines.push(line.to_string());
+    }
+    let mut out = lines.join("\n");
+    if config.ends_with('\n') && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out
+}
+
 /// 只改磁盘 `config.toml` 的顶层 `model`，保留当前 provider / 其它配置。
+#[allow(dead_code)]
 pub(crate) fn patch_codex_disk_model(model: &str) -> Result<(), String> {
     let trimmed = model.trim();
     if trimmed.is_empty() {
@@ -352,14 +403,40 @@ pub(crate) fn patch_codex_disk_model(model: &str) -> Result<(), String> {
 
 /// 去掉自定义 `model_provider` 并把模型改成目录模型，避免 GPT 请求打到 DeepSeek。
 pub(crate) fn restore_codex_openai_provider_for_model(model: &str) -> Result<(), String> {
+    apply_codex_openai_catalog_envelope(
+        &CodexProfileEnvelope {
+            auth: Map::new(),
+            config: String::new(),
+        },
+        model,
+    )
+}
+
+/// 切到官方 GPT 目录模型：去掉自定义 provider，并丢掉上一档案残留的 API Key
+/// （否则会把 DeepSeek 的 `sk-…` 送到 api.openai.com 导致 401）。
+pub(crate) fn apply_codex_openai_catalog_envelope(
+    overlay: &CodexProfileEnvelope,
+    model: &str,
+) -> Result<(), String> {
     let current = read_codex_profile_envelope();
-    let stripped = strip_top_level_model_provider(&current.config);
-    let patched = patch_codex_config_model(&stripped, model.trim());
-    write_config_toml(&patched)?;
-    warm_codex_disk_cache(&CodexProfileEnvelope {
-        auth: current.auth,
-        config: patched,
-    })
+    let mut config = if overlay.config.trim().is_empty()
+        || is_model_only_codex_config(&overlay.config)
+    {
+        strip_top_level_model_provider(&current.config)
+    } else {
+        preserve_projects_tables(&overlay.config, &current.config)
+    };
+    config = strip_top_level_model_provider(&config);
+    config = strip_custom_model_provider_tables(&config);
+    if !model.trim().is_empty() {
+        config = patch_codex_config_model(&config, model.trim());
+    }
+    let auth = merge_auth_for_openai_default(&current.auth, &overlay.auth);
+    write_config_toml(&config)?;
+    if !auth_maps_equal(&current.auth, &auth) {
+        write_auth_json(&auth)?;
+    }
+    warm_codex_disk_cache(&CodexProfileEnvelope { auth, config })
 }
 
 /// 解析顶层（首个 `[section]` 之前）所有 `model =` 行：保留最后一行的值，删除其它重复。
@@ -444,6 +521,44 @@ fn merge_auth_maps(current: &Map<String, Value>, overlay: &Map<String, Value>) -
         for key in CHATGPT_SESSION_AUTH_KEYS {
             out.remove(*key);
         }
+    }
+    out
+}
+
+fn overlay_has_openai_api_key(overlay: &Map<String, Value>) -> bool {
+    overlay
+        .get("OPENAI_API_KEY")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_some()
+}
+
+/// 切到 OpenAI / ChatGPT 默认 provider 时的 auth 合并：
+/// - 档案明确是 API Key 模式：用档案的 Key（并清掉 ChatGPT session）。
+/// - 档案带 ChatGPT tokens：丢掉上一档案残留的 `OPENAI_API_KEY`，否则 Codex 会优先用
+///   DeepSeek 的 `sk-…` 打 `api.openai.com` 得到 401。
+/// - 档案既无 Key 也无 tokens：同样清掉残留 Key，改走本机 ChatGPT 登录态。
+fn merge_auth_for_openai_default(
+    current: &Map<String, Value>,
+    overlay: &Map<String, Value>,
+) -> Map<String, Value> {
+    if overlay_is_apikey_auth(overlay) {
+        return merge_auth_maps(current, overlay);
+    }
+    let overlay_has_chatgpt_tokens = overlay.get("tokens").is_some();
+    if overlay_has_openai_api_key(overlay) && !overlay_has_chatgpt_tokens {
+        return merge_auth_maps(current, overlay);
+    }
+    let mut out = merge_auth_maps(current, overlay);
+    out.remove("OPENAI_API_KEY");
+    if out
+        .get("auth_mode")
+        .and_then(Value::as_str)
+        .map(|s| s.eq_ignore_ascii_case("apikey"))
+        .unwrap_or(false)
+    {
+        out.remove("auth_mode");
     }
     out
 }
@@ -592,7 +707,11 @@ fn apply_codex_profile_envelope_inner(envelope: &CodexProfileEnvelope) -> Result
     if !is_model_only_codex_config(&envelope.config) {
         let merged_config = preserve_projects_tables(&envelope.config, &current.config);
         write_config_toml(&merged_config)?;
-        let merged_auth = merge_auth_maps(&current.auth, &envelope.auth);
+        let merged_auth = if codex_config_uses_custom_provider(&merged_config) {
+            merge_auth_maps(&current.auth, &envelope.auth)
+        } else {
+            merge_auth_for_openai_default(&current.auth, &envelope.auth)
+        };
         if !auth_maps_equal(&current.auth, &merged_auth) {
             write_auth_json(&merged_auth)?;
         }
@@ -769,6 +888,28 @@ base_url = "https://api.deepseek.com/v1"
         assert!(!codex_config_uses_custom_provider(
             "model = \"gpt-5.6\"\nmodel_provider = \"openai\"\n"
         ));
+        let leftover = r#"model = "gpt-5.6"
+
+[model_providers.deepseek]
+base_url = "https://api.deepseek.com/v1"
+"#;
+        assert_eq!(effective_codex_provider_key(leftover), "openai");
+        assert!(!codex_config_uses_custom_provider(leftover));
+        assert!(codex_provider_switched(leftover, deepseek));
+        assert!(!codex_provider_switched(leftover, "model = \"gpt-5.4\"\n"));
+        let catalog_stripped = strip_custom_model_provider_tables(&stripped);
+        assert!(!catalog_stripped.contains("[model_providers.deepseek]"));
+        assert!(!catalog_stripped.contains("deepseek.com"));
+    }
+
+    #[test]
+    fn openai_to_deepseek_provider_switch_is_detected() {
+        let openai = "model = \"gpt-5.6\"\n";
+        let deepseek = "model = \"deepseek-v4-flash\"\nmodel_provider = \"deepseek\"\n";
+        assert_eq!(effective_codex_provider_key(openai), "openai");
+        assert_eq!(effective_codex_provider_key(deepseek), "deepseek");
+        assert!(codex_provider_switched(openai, deepseek));
+        assert!(codex_provider_switched(deepseek, openai));
     }
 
     #[test]
@@ -810,6 +951,70 @@ base_url = "https://api.deepseek.com/v1"
         assert_eq!(merged["auth_mode"].as_str(), Some("apikey"));
         assert!(merged.get("tokens").is_none());
         assert!(merged.get("last_refresh").is_none());
+    }
+
+    #[test]
+    fn merge_auth_for_openai_default_drops_leftover_apikey() {
+        let current: Map<String, Value> = serde_json::from_value(serde_json::json!({
+            "OPENAI_API_KEY": "sk-deepseek-leftover",
+            "auth_mode": "apikey"
+        }))
+        .expect("parse current");
+        let chatgpt_overlay: Map<String, Value> = serde_json::from_value(serde_json::json!({
+            "tokens": { "access_token": "chatgpt" }
+        }))
+        .expect("parse chatgpt overlay");
+        let merged = merge_auth_for_openai_default(&current, &chatgpt_overlay);
+        assert!(merged.get("OPENAI_API_KEY").is_none());
+        assert!(merged.get("auth_mode").is_none());
+        assert_eq!(
+            merged["tokens"]["access_token"].as_str(),
+            Some("chatgpt")
+        );
+
+        let empty_overlay = Map::new();
+        let stripped = merge_auth_for_openai_default(&current, &empty_overlay);
+        assert!(stripped.get("OPENAI_API_KEY").is_none());
+        assert!(stripped.get("auth_mode").is_none());
+    }
+
+    #[test]
+    fn merge_auth_for_openai_default_keeps_explicit_apikey_profile() {
+        let current: Map<String, Value> = serde_json::from_value(serde_json::json!({
+            "OPENAI_API_KEY": "sk-deepseek-leftover",
+            "tokens": { "access_token": "stale" }
+        }))
+        .expect("parse current");
+        let overlay: Map<String, Value> = serde_json::from_value(serde_json::json!({
+            "OPENAI_API_KEY": "sk-openai",
+            "auth_mode": "apikey"
+        }))
+        .expect("parse overlay");
+        let merged = merge_auth_for_openai_default(&current, &overlay);
+        assert_eq!(merged["OPENAI_API_KEY"].as_str(), Some("sk-openai"));
+        assert_eq!(merged["auth_mode"].as_str(), Some("apikey"));
+        assert!(merged.get("tokens").is_none());
+    }
+
+    #[test]
+    fn merge_auth_for_openai_default_prefers_chatgpt_tokens_over_stale_key() {
+        let current: Map<String, Value> = serde_json::from_value(serde_json::json!({
+            "OPENAI_API_KEY": "sk-deepseek-leftover",
+            "auth_mode": "apikey"
+        }))
+        .expect("parse current");
+        let overlay: Map<String, Value> = serde_json::from_value(serde_json::json!({
+            "OPENAI_API_KEY": "sk-deepseek-leftover",
+            "tokens": { "access_token": "chatgpt" }
+        }))
+        .expect("parse overlay");
+        let merged = merge_auth_for_openai_default(&current, &overlay);
+        assert!(merged.get("OPENAI_API_KEY").is_none());
+        assert!(merged.get("auth_mode").is_none());
+        assert_eq!(
+            merged["tokens"]["access_token"].as_str(),
+            Some("chatgpt")
+        );
     }
 
     #[test]

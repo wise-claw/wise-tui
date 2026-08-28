@@ -9,10 +9,12 @@ use uuid::Uuid;
 
 use crate::claude_config_dir::user_claude_dir;
 use crate::codex_config_dir::{
-    apply_codex_profile_envelope, codex_config_uses_custom_provider, codex_profile_envelope_to_json,
+    apply_codex_openai_catalog_envelope, apply_codex_profile_envelope,
+    codex_config_uses_custom_provider, codex_profile_envelope_to_json,
     effective_codex_model_from_disk, clear_codex_user_config, looks_like_openai_catalog_model,
-    parse_codex_profile_envelope, patch_codex_disk_model, read_codex_user_settings_pretty,
-    read_effective_codex_model_from_envelope, restore_codex_openai_provider_for_model, user_codex_dir,
+    parse_codex_profile_envelope, read_codex_user_settings_pretty,
+    read_effective_codex_model_from_envelope, restore_codex_openai_provider_for_model,
+    user_codex_dir,
 };
 use crate::opencode_config_dir::{
     apply_opencode_profile_to_disk, effective_opencode_model_from_disk,
@@ -608,12 +610,8 @@ pub(crate) fn ensure_codex_profile_applied_for_model(
     match resolve_codex_runtime_profile(&store, requested_model) {
         CodexRuntimeProfileChoice::DiskProfile(profile) => apply_profile_to_disk(profile),
         CodexRuntimeProfileChoice::OpenAiProfile { profile, model } => {
-            apply_profile_to_disk(profile)?;
-            let profile_model = resolve_profile_model_id(profile).unwrap_or_default();
-            if !model.trim().eq_ignore_ascii_case(profile_model.trim()) {
-                patch_codex_disk_model(model)?;
-            }
-            Ok(())
+            let envelope = parse_codex_profile_envelope(&profile.settings_json)?;
+            apply_codex_openai_catalog_envelope(&envelope, model)
         }
         CodexRuntimeProfileChoice::StripCustomProvider { model } => {
             restore_codex_openai_provider_for_model(model)

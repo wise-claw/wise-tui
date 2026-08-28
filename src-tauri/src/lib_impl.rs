@@ -8,7 +8,7 @@ use crate::{
     code_review_commands, cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands,
     main_window, mcp, my_extensions,
     openspec_bootstrap, project_relative_files, remote_channels, repository_files, skills, skills_sh, system_resource,
-    composer_image_gc, wise_data_cleanup, wise_db, wise_mascot, wise_paths, wise_push,
+    composer_image_gc, wise_data_cleanup, wise_db, wise_hud, wise_mascot, wise_paths, wise_push,
     wise_db::WiseDb,
     workspace_commands,
     workspace_inspector_commands,
@@ -165,6 +165,42 @@ pub fn run() {
                 })
                 .map_err(|e| e.to_string())?;
 
+            // ⌘⇧H / Ctrl+Shift+H：切换 HUD 模式（全局，对齐 Hermes Desktop）。
+            #[cfg(target_os = "macos")]
+            let hud_toggle_mods = Modifiers::SUPER | Modifiers::SHIFT;
+            #[cfg(not(target_os = "macos"))]
+            let hud_toggle_mods = Modifiers::CONTROL | Modifiers::SHIFT;
+            let toggle_hud_shortcut = Shortcut::new(Some(hud_toggle_mods), Code::KeyH);
+            app.global_shortcut()
+                .on_shortcut(toggle_hud_shortcut, |app_handle, _shortcut, event| {
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    let Some(db) = app_handle.try_state::<WiseDb>() else {
+                        return;
+                    };
+                    let _ = wise_hud::hud_toggle(app_handle, &*db);
+                })
+                .map_err(|e| e.to_string())?;
+
+            // ⌘⇧G / Ctrl+Shift+G：把 HUD 吸到指针处（未打开则先进入 HUD）。
+            #[cfg(target_os = "macos")]
+            let hud_snap_mods = Modifiers::SUPER | Modifiers::SHIFT;
+            #[cfg(not(target_os = "macos"))]
+            let hud_snap_mods = Modifiers::CONTROL | Modifiers::SHIFT;
+            let snap_hud_shortcut = Shortcut::new(Some(hud_snap_mods), Code::KeyG);
+            app.global_shortcut()
+                .on_shortcut(snap_hud_shortcut, |app_handle, _shortcut, event| {
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    let Some(db) = app_handle.try_state::<WiseDb>() else {
+                        return;
+                    };
+                    let _ = wise_hud::hud_snap_to_cursor(app_handle, &*db);
+                })
+                .map_err(|e| e.to_string())?;
+
             // ⌥M / Alt+M：切换桌面宠物的可见性。
             // 用户曾反馈右键菜单在 macOS WKWebView transparent 窗口中不稳定，
             // 给一个常驻全局快捷键作为冗余开关；面板见 `src/constants/appShortcuts.ts`。
@@ -234,6 +270,10 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let Some(w) = app.handle().get_webview_window("mascot") {
                 let _ = w.set_always_on_top(true);
+            }
+            if let Some(w) = app.handle().get_webview_window(wise_hud::HUD_WINDOW_LABEL) {
+                let _ = w.set_always_on_top(true);
+                let _ = w.set_skip_taskbar(true);
             }
 
             Ok(())
@@ -748,6 +788,15 @@ pub fn run() {
             wise_mascot::wise_mascot_show,
             wise_mascot::wise_mascot_hide,
             wise_mascot::wise_mascot_save_position,
+            wise_hud::wise_hud_toggle,
+            wise_hud::wise_hud_enter,
+            wise_hud::wise_hud_exit,
+            wise_hud::wise_hud_snap_to_cursor,
+            wise_hud::wise_hud_reset_layout,
+            wise_hud::wise_hud_save_bounds,
+            wise_hud::wise_hud_is_active,
+            wise_hud::wise_hud_set_overlay_height,
+            wise_hud::wise_hud_emit_to_main,
             wise_mascot::wise_notification_unread_total,
             wise_mascot::wise_notification_ingest,
             wise_mascot::wise_notification_mark_all_read,

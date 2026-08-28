@@ -6,6 +6,7 @@ import {
   useEffect,
   useLayoutEffect,
   useSyncExternalStore,
+  type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
 import { HoverHint } from "../shared/HoverHint";
@@ -61,6 +62,7 @@ import { shouldSkipStaleComposerSetContent } from "./composerSetContentGuard";
 import { debounce } from "../../utils/debounce";
 import { useAtMentionDefaultTarget } from "../../hooks/useAtMentionDefaultTarget";
 import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
+import { useHudOverlaySelectOpen } from "../../hooks/useHudOverlaySelectOpen";
 import { resolveComposerCommonPhraseAction } from "../../constants/composerCommonPhrase";
 import type { ComposerCommonPhrase } from "../../constants/composerCommonPhrase";
 import {
@@ -105,6 +107,7 @@ import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
 import { Button, message, Popover, Select, Tabs, Tag } from "antd";
 import { buildWorkspaceRepositoryFlatSelectOptions } from "../../utils/workspaceRepositoryTreeSelect";
+import { HUD_SELECT_BUILTIN_PLACEMENTS, HUD_SELECT_POPUP_ALIGN, hudSelectPopupContainer } from "../../utils/hudSelectPopup";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ComposerVoiceSettingsPanel } from "./ComposerVoiceSettingsPanel";
@@ -382,6 +385,12 @@ interface ComposerInnerProps {
    * 不影响 `composerFooterChrome` 的全局配置（中栏依旧按用户偏好显示）。
    * 多屏（`paneCount > 1`）同样强制仅图标，与紧凑模式一致。 */
   compactFooterChrome?: boolean;
+  /** HUD 胶囊：隐藏附件/常用语，执行环境/模型收成一个图标，与仓库、发送、退出同排。 */
+  hudChrome?: boolean;
+  hudLeadingActions?: ReactNode;
+  hudTrailingActions?: ReactNode;
+  onHudOverlayChange?: (open: boolean) => void;
+  onHudImagePreviewChange?: (image: ImageAttachmentPart | null) => void;
 }
 
 interface LastSentComposerDraft {
@@ -682,6 +691,11 @@ function ComposerInner({
   paneRuntimeOverride = null,
   onUpdatePaneRuntimeOverride,
   compactFooterChrome = false,
+  hudChrome = false,
+  hudLeadingActions,
+  hudTrailingActions,
+  onHudOverlayChange,
+  onHudImagePreviewChange,
 }: ComposerInnerProps) {
   const { breakdown, loading: contextBreakdownLoading, ensureBreakdown } =
     useContextBreakdown(session);
@@ -754,6 +768,7 @@ function ComposerInner({
     });
   }, [session.repositoryPath, composerDefaultInstruction, sessionExecutionEngine]);
   const [trigger, setTrigger] = useState<TriggerInfo>({ mode: null, query: "", rect: null });
+  const hudRepoSelect = useHudOverlaySelectOpen(hudChrome);
   const [dragOverNativeFiles, setDragOverNativeFiles] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isCursorEngine = sessionExecutionEngine === "cursor";
@@ -1992,6 +2007,40 @@ function ComposerInner({
         return;
       }
 
+      if (hudChrome) {
+        clearComposerSurfaceSync(logicalSnap.trim());
+        const outbound = logicalSnap.trim();
+        if (!outbound && imagesSnap.length === 0 && contextSnap.length === 0) {
+          restoreComposerDraft(rollbackDraft);
+          return;
+        }
+        if (imagesSnap.length > 0 || contextSnap.length > 0) {
+          try {
+            const payload = await buildClaudeComposerSendPayload({
+              prompt: promptSnap,
+              contextItems: contextSnap,
+              images: imagesSnap,
+              repositoryPath: session.repositoryPath,
+              userBubbleMain: logicalSnap,
+            });
+            const built = payload.outbound.replace(/\u200B/g, "").trim();
+            if (built) {
+              onExecute(session.id, built);
+              return;
+            }
+          } catch {
+            restoreComposerDraft(rollbackDraft);
+            return;
+          }
+        }
+        if (!outbound) {
+          restoreComposerDraft(rollbackDraft);
+          return;
+        }
+        onExecute(session.id, outbound);
+        return;
+      }
+
       clearComposerSurfaceSync(logicalSnap.trim());
 
       // @Claude Code / @Codex 等执行环境派发：跳过完整 outbound 构建与默认指令无关等待，
@@ -2499,6 +2548,7 @@ function ComposerInner({
     [
       isSessionBusy,
       allowSendWhileBusy,
+      hudChrome,
       prompt,
       contextItems,
       images,
@@ -2969,8 +3019,91 @@ function ComposerInner({
     void ensureBreakdown();
   }, [ensureBreakdown]);
 
+  useLayoutEffect(() => {
+    if (!hudChrome) return;
+    onHudOverlayChange?.(Boolean(trigger.mode) || hudRepoSelect.overlayWanted);
+  }, [hudChrome, hudRepoSelect.overlayWanted, onHudOverlayChange, trigger.mode]);
+
+  const repositoryPickerSelect = useMemo(() => {
+    if (!dualPaneRepositoryPicker) return null;
+    const select = (
+      <Select
+        size="small"
+        variant="borderless"
+        className="app-claude-dual-pane-repo-picker"
+        classNames={{
+          popup: {
+            root: hudChrome
+              ? "app-claude-dual-pane-repo-picker-dropdown app-hud-repo-picker-dropdown"
+              : "app-claude-dual-pane-repo-picker-dropdown",
+          },
+        }}
+        popupMatchSelectWidth={false}
+        listHeight={280}
+        placement={hudChrome ? "topRight" : undefined}
+        builtinPlacements={hudChrome ? HUD_SELECT_BUILTIN_PLACEMENTS : undefined}
+        popupAlign={hudChrome ? HUD_SELECT_POPUP_ALIGN : undefined}
+        getPopupContainer={hudChrome ? hudSelectPopupContainer : undefined}
+        showSearch
+        optionFilterProp="label"
+        title="切换仓库"
+        aria-label="选择仓库"
+        value={dualPaneRepositoryPicker.valueKey}
+        open={hudChrome ? hudRepoSelect.open : undefined}
+        onOpenChange={hudChrome ? hudRepoSelect.onOpenChange : undefined}
+        options={(() => {
+          const repositories = dualPaneRepositoryPicker.repositories ?? [];
+          const projects = dualPaneRepositoryPicker.projects ?? [];
+          const includeProjects = Boolean(dualPaneRepositoryPicker.onSelectProjectId);
+          const flat = buildWorkspaceRepositoryFlatSelectOptions(projects, repositories, {
+            includeProjects,
+          });
+          const valueKey = dualPaneRepositoryPicker.valueKey;
+          if (
+            valueKey.startsWith("project:") &&
+            !flat.some((item) => item.value === valueKey)
+          ) {
+            const projectId = valueKey.slice("project:".length);
+            const project = projects.find((item) => item.id === projectId);
+            if (project) {
+              flat.unshift({
+                value: valueKey,
+                label: project.name?.trim() || "未命名工作区",
+                kind: "project",
+              });
+            }
+          }
+          return flat.map((item) => ({
+            value: item.value,
+            label: item.label,
+          }));
+        })()}
+        onChange={(value) => {
+          const raw = String(value ?? "");
+          if (raw.startsWith("repo:")) {
+            dualPaneRepositoryPicker.onSelectRepositoryId(Number(raw.slice(5)));
+            return;
+          }
+          if (raw.startsWith("project:")) {
+            dualPaneRepositoryPicker.onSelectProjectId?.(raw.slice(8));
+          }
+        }}
+        placeholder="选择仓库"
+      />
+    );
+    if (!hudChrome) return select;
+    return (
+      <div className="app-hud-repo-anchor" onMouseDown={hudRepoSelect.prepareOverlay}>
+        {select}
+      </div>
+    );
+  }, [dualPaneRepositoryPicker, hudChrome, hudRepoSelect.open, hudRepoSelect.onOpenChange, hudRepoSelect.prepareOverlay]);
+
   /** 与 Semi 底栏同一行：左侧附件 / 截屏 */
   const renderSemiComposerConfigureArea = useCallback(() => {
+    if (hudChrome) {
+      return <div className="app-claude-semi-footer-toolbar-left" />;
+    }
     return (
       <div
         className="app-claude-semi-footer-toolbar-left"
@@ -3193,59 +3326,7 @@ function ComposerInner({
             }
           />
         ) : null}
-        {dualPaneRepositoryPicker ? (
-          <Select
-            size="small"
-            variant="borderless"
-            className="app-claude-dual-pane-repo-picker"
-            classNames={{ popup: { root: "app-claude-dual-pane-repo-picker-dropdown" } }}
-            popupMatchSelectWidth={false}
-            listHeight={280}
-            showSearch
-            optionFilterProp="label"
-            title="右侧执行会话目标（仓库）"
-            aria-label="选择仓库"
-            value={dualPaneRepositoryPicker.valueKey}
-            options={(() => {
-              const repositories = dualPaneRepositoryPicker.repositories ?? [];
-              const projects = dualPaneRepositoryPicker.projects ?? [];
-              const includeProjects = Boolean(dualPaneRepositoryPicker.onSelectProjectId);
-              const flat = buildWorkspaceRepositoryFlatSelectOptions(projects, repositories, {
-                includeProjects,
-              });
-              const valueKey = dualPaneRepositoryPicker.valueKey;
-              if (
-                valueKey.startsWith("project:") &&
-                !flat.some((item) => item.value === valueKey)
-              ) {
-                const projectId = valueKey.slice("project:".length);
-                const project = projects.find((item) => item.id === projectId);
-                if (project) {
-                  flat.unshift({
-                    value: valueKey,
-                    label: project.name?.trim() || "未命名工作区",
-                    kind: "project",
-                  });
-                }
-              }
-              return flat.map((item) => ({
-                value: item.value,
-                label: item.label,
-              }));
-            })()}
-            onChange={(value) => {
-              const raw = String(value ?? "");
-              if (raw.startsWith("repo:")) {
-                dualPaneRepositoryPicker.onSelectRepositoryId(Number(raw.slice(5)));
-                return;
-              }
-              if (raw.startsWith("project:")) {
-                dualPaneRepositoryPicker.onSelectProjectId?.(raw.slice(8));
-              }
-            }}
-            placeholder="选择仓库"
-          />
-        ) : null}
+        {repositoryPickerSelect}
         {composerFooterChrome.showComposerFooterContextRing ? (
           <ContextCompactProgressRing
             className="app-claude-semi-footer-compact-context"
@@ -3287,6 +3368,7 @@ function ComposerInner({
     ensureBreakdown,
     handleFileAttach,
     handleScreenshot,
+    hudChrome,
     isClaudeEngine,
     isCodexEngineFamily,
     isSessionBusy,
@@ -3311,9 +3393,8 @@ function ComposerInner({
     voiceSettingsPanel,
     compactFooterChrome,
     paneCount,
+    repositoryPickerSelect,
   ]);
-
-  /** 与 Semi 底栏同一行：常用语 + 模型选择 + 发送（结束按钮在左侧 configure 区） */
   const renderSemiComposerActionArea = useCallback(
     ({ menuItem, className }: { menuItem: React.ReactNode[]; className: string }) => (
       <div
@@ -3321,6 +3402,15 @@ function ComposerInner({
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
+        {hudChrome ? (
+          <>
+            {hudLeadingActions}
+            {repositoryPickerSelect}
+            {menuItem}
+            {hudTrailingActions}
+          </>
+        ) : (
+          <>
         {/* 右栏紧凑模式：跳过常用语 trigger。仍受全局 composerFooterChrome 控制以保持中栏一致。 */}
         {!compactFooterChrome && composerFooterChrome.showComposerFooterCommonPhrases ? (
           <ComposerCommonPhrasesManageTrigger
@@ -3379,6 +3469,8 @@ function ComposerInner({
           />
         ) : null}
         {menuItem}
+          </>
+        )}
       </div>
     ),
     [
@@ -3413,6 +3505,10 @@ function ComposerInner({
       paneRuntimeOverride,
       onUpdatePaneRuntimeOverride,
       compactFooterChrome,
+      hudChrome,
+      hudLeadingActions,
+      hudTrailingActions,
+      repositoryPickerSelect,
     ],
   );
 
@@ -3475,9 +3571,9 @@ function ComposerInner({
     }
   }, [semiEditorReady, composerRefocusSignal, session.id]);
 
-  const showQuestionChrome = Boolean(useAggregatedQuestionDock || questionRequest);
-  const showPermissionChrome = Boolean(permissionRequest);
-  const showCodexApprovalChrome = Boolean(codexApprovalPending);
+  const showQuestionChrome = !hudChrome && Boolean(useAggregatedQuestionDock || questionRequest);
+  const showPermissionChrome = !hudChrome && Boolean(permissionRequest);
+  const showCodexApprovalChrome = !hudChrome && Boolean(codexApprovalPending);
   showQuestionChromeRef.current = showQuestionChrome;
   showPermissionChromeRef.current = showPermissionChrome;
   showCodexApprovalChromeRef.current = showCodexApprovalChrome;
@@ -3485,7 +3581,7 @@ function ComposerInner({
   return (
     <div
       ref={composerEscapeRootRef}
-      className={`app-claude-composer${showQuestionChrome ? " app-claude-composer--pending-question" : ""}${showPermissionChrome || showCodexApprovalChrome ? " app-claude-composer--pending-permission" : ""}`}
+      className={`app-claude-composer${hudChrome ? " app-claude-composer--hud" : ""}${showQuestionChrome ? " app-claude-composer--pending-question" : ""}${showPermissionChrome || showCodexApprovalChrome ? " app-claude-composer--pending-permission" : ""}`}
       data-wise-composer-root=""
       data-session-id={session.id}
       onFocusCapture={() => noteComposerScreenshotFocus(session.id)}
@@ -3493,7 +3589,7 @@ function ComposerInner({
       onKeyDown={handleKeyDown}
     >
       {/* Docks above editor：同仓库多路 AskUserQuestion 时 Tabs 嵌在题卡顶栏（原「待你确认」行） */}
-      {useAggregatedQuestionDock && activeQuestionDockTab ? (
+      {hudChrome ? null : useAggregatedQuestionDock && activeQuestionDockTab ? (
         <div style={{ padding: "0 6px" }}>
           <QuestionDock
             key={`${activeQuestionDockTab.ownerSessionId}:${activeQuestionDockTab.question.id}`}
@@ -3555,7 +3651,7 @@ function ComposerInner({
           />
         </div>
       ) : null}
-      {permissionRequest ? (
+      {hudChrome ? null : permissionRequest ? (
         <div style={{ padding: "0 6px" }}>
           <PermissionDock
             request={permissionRequest}
@@ -3565,7 +3661,7 @@ function ComposerInner({
           />
         </div>
       ) : null}
-      {codexApprovalPending ? (
+      {hudChrome ? null : codexApprovalPending ? (
         <div style={{ padding: "0 6px" }}>
           <CodexApprovalDock
             request={codexApprovalPending}
@@ -3587,7 +3683,7 @@ function ComposerInner({
           className={`app-claude-input-container${dragOverNativeFiles ? " app-claude-input-container--drop-target" : ""}`}
         >
           {/* Followup suggestions */}
-          {followupItems.length > 0 && !isSessionBusy && (
+          {followupItems.length > 0 && !isSessionBusy && !hudChrome && (
             <FollowupDock
               items={followupItems}
               onSend={onSendFollowup}
@@ -3597,10 +3693,17 @@ function ComposerInner({
           )}
 
           {/* Revert dock */}
-          <RevertDock items={revertItems} onRestore={onRestoreRevert} onClose={onClearRevertItems} />
+          {!hudChrome ? (
+            <RevertDock items={revertItems} onRestore={onRestoreRevert} onClose={onClearRevertItems} />
+          ) : null}
 
           {/* 附图缩略图：放在 Semi 外，避免误用 topSlot / renderTopSlot 导致永不挂载 */}
-          <ImageThumbnails images={images} onRemove={removeImage} onReplace={replaceImage} />
+          <ImageThumbnails
+            images={images}
+            onRemove={removeImage}
+            onReplace={replaceImage}
+            onPreviewImageChange={hudChrome ? onHudImagePreviewChange : undefined}
+          />
 
           {/* Context items (file chips) */}
           <ContextItems items={contextItems} />
@@ -3627,12 +3730,17 @@ function ComposerInner({
                 atMentionDefaultTarget={atMentionDefaultTarget}
                 onAtMentionDefaultTargetChange={(next) => void saveAtMentionDefaultTarget(next)}
                 sessionExecutionEngine={sessionExecutionEngine}
+                layout={hudChrome ? "inline" : "anchored"}
               />
               {semiEditorReady ? (
                 <AIChatInput
                   ref={aiChatRef}
                   extensions={SEMI_COMPOSER_TOKEN_HIGHLIGHT_EXTENSIONS}
-                  placeholder="@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条"
+                  placeholder={
+                    hudChrome
+                      ? "@ 提及，/ 命令"
+                      : "@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条"
+                  }
                   keepSkillAfterSend={false}
                   // 必须挂载 Upload：Semi paste→manualUpload 依赖 uploadRef；纸夹按钮 CSS 隐藏，改走我们的 +
                   showUploadButton
@@ -3679,6 +3787,7 @@ function ComposerInner({
         </div>
 
         {/* Bottom bar：会话元信息（CSS 长期 display:none；可见控件已迁到 Semi 输入底栏） */}
+        {!hudChrome ? (
         <div className="app-claude-input-bottom-bar">
           <span className="app-claude-input-bottom-statusline" title={bottomStatus.fullLine}>
             session:{bottomStatus.sessionDuration} |{" "}
@@ -3687,6 +3796,7 @@ function ComposerInner({
           </span>
           <AutoApproveBadge repositoryPath={session.repositoryPath ?? null} />
         </div>
+        ) : null}
       </div>
 
     </div>
@@ -3815,6 +3925,12 @@ export interface ComposerRegionProps {
    * 不影响 `composerFooterChrome` 的全局配置（中栏依旧按用户偏好显示）。
    * 多屏（`paneCount > 1`）同样强制仅图标，与紧凑模式一致。 */
   compactFooterChrome?: boolean;
+  /** HUD 胶囊：隐藏附件/常用语，执行环境/模型收成一个图标，与仓库、发送、退出同排。 */
+  hudChrome?: boolean;
+  hudLeadingActions?: ReactNode;
+  hudTrailingActions?: ReactNode;
+  onHudOverlayChange?: (open: boolean) => void;
+  onHudImagePreviewChange?: (image: ImageAttachmentPart | null) => void;
 }
 
 export function ComposerRegion({

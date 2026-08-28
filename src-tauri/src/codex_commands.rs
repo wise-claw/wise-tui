@@ -287,7 +287,17 @@ pub(crate) fn codex_line_is_benign_noise(line: &str) -> bool {
         || lower.contains("defaulting to fallback metadata")
         || lower.contains("is deprecated")
         || lower.contains("deprecated")
+        || is_codex_websocket_fallback_noise(&lower)
         || is_codex_reconnect_progress(&lower)
+}
+
+fn is_codex_websocket_fallback_noise(lower: &str) -> bool {
+    let trimmed = lower.trim();
+    trimmed.starts_with("falling back from websockets to https")
+        && !trimmed.contains("401")
+        && !trimmed.contains("402")
+        && !trimmed.contains("invalid_api_key")
+        && !trimmed.contains("incorrect api key")
 }
 
 fn is_codex_reconnect_progress(lower: &str) -> bool {
@@ -302,6 +312,9 @@ pub(crate) fn format_codex_rpc_error_line(message: &str) -> String {
         return "Codex error: 执行失败".to_string();
     }
     if let Some(friendly) = codex_payment_error_display(trimmed) {
+        return friendly;
+    }
+    if let Some(friendly) = codex_auth_error_display(trimmed) {
         return friendly;
     }
     format!("Codex error: {trimmed}")
@@ -325,6 +338,22 @@ fn codex_payment_error_display(message: &str) -> Option<String> {
     };
     Some(format!(
         "{provider}账户额度不足，请充值或更换 Codex 档案后再试。\n{message}"
+    ))
+}
+
+fn codex_auth_error_display(message: &str) -> Option<String> {
+    let lower = message.to_lowercase();
+    let invalid_key = lower.contains("invalid_api_key")
+        || lower.contains("incorrect api key")
+        || (lower.contains("401")
+            && (lower.contains("openai.com")
+                || lower.contains("api.openai")
+                || lower.contains("unauthorized")));
+    if !invalid_key {
+        return None;
+    }
+    Some(format!(
+        "OpenAI API Key 无效。请在「openAI default」档案填入平台 Key，或重新登录 ChatGPT 后再试。\n{message}"
     ))
 }
 
@@ -1013,6 +1042,9 @@ mod tests {
         ));
         assert!(codex_line_is_benign_noise("Reconnecting... 1/5"));
         assert!(codex_line_is_benign_noise("Reconnecting... 5/5"));
+        assert!(codex_line_is_benign_noise(
+            "Falling back from WebSockets to HTTPS transport."
+        ));
         let mixed = "Reconnecting... 1/5\nReconnecting... 2/5\nunexpected status 402 Payment Required: Insufficient Balance, url: https://api.deepseek.com/responses";
         let cleaned = strip_benign_noise(mixed).expect("402 line must survive reconnect noise");
         assert!(cleaned.contains("402"));
@@ -1025,6 +1057,9 @@ mod tests {
         assert!(!codex_line_is_benign_noise("Error: unauthorized 401"));
         assert!(!codex_line_is_benign_noise("session not found"));
         assert!(!codex_line_is_benign_noise("API key invalid"));
+        assert!(!codex_line_is_benign_noise(
+            "Falling back from WebSockets to HTTPS transport. unexpected status 401 Unauthorized: { \"e, url: wss://api.openai.com/v1/responses"
+        ));
         assert!(!codex_line_is_benign_noise(
             "unexpected status 402 Payment Required: Insufficient Balance, url: https://api.deepseek.com/responses"
         ));
@@ -1042,5 +1077,11 @@ mod tests {
             format_codex_rpc_error_line("API key invalid"),
             "Codex error: API key invalid"
         );
+        let auth = format_codex_rpc_error_line(
+            "unexpected status 401 Unauthorized: Incorrect API key provided: sk-test, url: https://api.openai.com/v1/responses, auth error code: invalid_api_key",
+        );
+        assert!(auth.contains("OpenAI API Key 无效"));
+        assert!(auth.contains("openAI default"));
+        assert!(!auth.starts_with("Codex error:"));
     }
 }

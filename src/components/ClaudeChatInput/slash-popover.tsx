@@ -80,6 +80,11 @@ interface SlashPopoverProps {
   sessionExecutionEngine?: SessionExecutionEngine;
   /** 弹出层 z-index；在 Ant Modal（如需求弹窗 z-index 10000）等高层级容器内需显式调高。 */
   zIndex?: number;
+  /**
+   * `anchored`：主窗口内 fixed portal，贴着光标上方。
+   * `inline`：HUD 胶囊外的 overlay 层，避免被圆角条裁切。
+   */
+  layout?: "anchored" | "inline";
 }
 
 function reservedSlashLabelsForEngine(
@@ -167,6 +172,7 @@ export function SlashPopover({
   onAtMentionDefaultTargetChange,
   sessionExecutionEngine = "claude",
   zIndex = 1200,
+  layout = "anchored",
 }: SlashPopoverProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [fileResults, setFileResults] = useState<SlashOption[]>([]);
@@ -476,37 +482,61 @@ export function SlashPopover({
   if (!mode) return null;
   if (typeof document === "undefined") return null;
 
+  const inline = layout === "inline";
   const positionRoot = surfaceRef.current?.anchorEl();
   const caretRect =
     surfaceRef.current?.resolveTriggerAnchorRect?.() ?? trigger.rect ?? null;
   const placement =
-    positionRoot && caretRect
+    !inline && positionRoot && caretRect
       ? computeSlashPopoverPlacement(positionRoot, caretRect)
       : null;
-  if (!placement) return null;
+  if (!inline && !placement) return null;
 
-  const portalRoot = resolveSlashPopoverPortalRoot(positionRoot ?? null);
-  // 实色底：从仍在 Ant css-var 作用域内的 shell 解析后写入，避免 portal 丢变量后背景透明
+  const hudPortalRoot = inline ? document.body : null;
+  const portalRoot = inline
+    ? hudPortalRoot
+    : resolveSlashPopoverPortalRoot(positionRoot ?? null);
   const opaqueBackground = resolveSlashPopoverOpaqueBackground(positionRoot ?? null);
 
-  const popoverBaseStyle: React.CSSProperties = {
-    position: "fixed",
-    left: `${placement.left}px`,
-    bottom: `${placement.bottom}px`,
-    zIndex,
-    width: "480px",
-    background: opaqueBackground,
-    backgroundColor: opaqueBackground,
-    opacity: 1,
-    border: "1px solid var(--ant-color-border-secondary)",
-    borderRadius: "8px",
-    boxShadow: "var(--ant-box-shadow-secondary)",
-  };
+  const popoverBaseStyle: React.CSSProperties = inline
+    ? {
+        position: "fixed",
+        left: 12,
+        right: 12,
+        bottom: 56,
+        top: "auto",
+        width: "auto",
+        maxHeight: 280,
+        overflowY: "auto",
+        zIndex: 50,
+        background: "#ffffff",
+        backgroundColor: "#ffffff",
+      }
+    : {
+        position: "fixed",
+        left: `${placement!.left}px`,
+        bottom: `${placement!.bottom}px`,
+        zIndex,
+        width: "480px",
+        background: opaqueBackground,
+        backgroundColor: opaqueBackground,
+        opacity: 1,
+        border: "1px solid var(--ant-color-border-secondary)",
+        borderRadius: "8px",
+        boxShadow: "var(--ant-box-shadow-secondary)",
+      };
+
+  const popoverClassName = inline
+    ? "app-claude-slash-popover app-claude-slash-popover--inline"
+    : "app-claude-slash-popover";
+
+  const mountPopover = (node: React.ReactElement) =>
+    portalRoot ? createPortal(node, portalRoot) : node;
 
   if (mode === "at" && fileLoading && options.length === 0) {
-    return createPortal(
+    return mountPopover(
       <div
-        className="app-claude-slash-popover"
+        className={popoverClassName}
         style={{
           ...popoverBaseStyle,
           display: "flex",
@@ -517,14 +547,13 @@ export function SlashPopover({
       >
         <Spin size="small" />
       </div>,
-      portalRoot,
     );
   }
 
   if (mode === "slash" && slashCatalogLoading && options.length === 0) {
-    return createPortal(
+    return mountPopover(
       <div
-        className="app-claude-slash-popover"
+        className={popoverClassName}
         style={{
           ...popoverBaseStyle,
           display: "flex",
@@ -535,18 +564,17 @@ export function SlashPopover({
       >
         <Spin size="small" />
       </div>,
-      portalRoot,
     );
   }
 
   if (options.length === 0) return null;
 
-  return createPortal(
+  return mountPopover(
     <div
-      className="app-claude-slash-popover"
+      className={popoverClassName}
       style={{
         ...popoverBaseStyle,
-        maxHeight: "400px",
+        maxHeight: inline ? 280 : "400px",
         overflowY: "auto",
         padding: "4px",
       }}
@@ -653,7 +681,6 @@ export function SlashPopover({
         })
       )}
     </div>,
-    portalRoot,
   );
 }
 

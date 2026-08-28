@@ -168,6 +168,11 @@ impl CodexRpcSession {
         self.active_model.as_deref()
     }
 
+    /// The current thread id, if any.
+    pub fn current_thread_id(&self) -> Option<&str> {
+        self.current_thread_id.as_deref()
+    }
+
     /// Start a new thread and return its id.
     pub async fn start_thread(
         &mut self,
@@ -423,11 +428,6 @@ impl CodexRpcSession {
     /// Whether the session has completed the initialize handshake.
     pub fn is_initialized(&self) -> bool {
         self.initialized
-    }
-
-    /// The current thread id, if any.
-    pub fn current_thread_id(&self) -> Option<&str> {
-        self.current_thread_id.as_deref()
     }
 
     /// The current turn id, if any.

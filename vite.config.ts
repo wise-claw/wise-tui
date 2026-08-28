@@ -110,6 +110,7 @@ export default defineConfig(async () => ({
       input: {
         main: resolve(root, "index.html"),
         mascot: resolve(root, "mascot.html"),
+        hud: resolve(root, "hud.html"),
       },
       output: {
         manualChunks(id) {

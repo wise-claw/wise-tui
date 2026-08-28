@@ -19,7 +19,9 @@ use crate::claude_events::{
 use crate::claude_model_profiles::ensure_codex_profile_applied_for_model;
 use crate::codex_binary::find_codex_binary;
 use crate::codex_commands::{format_codex_rpc_error_line, load_codex_default_settings};
-use crate::codex_config_dir::ensure_codex_project_trusted;
+use crate::codex_config_dir::{
+    codex_provider_switched, ensure_codex_project_trusted, read_codex_profile_envelope,
+};
 use crate::codex_rpc_session::CodexRpcSession;
 use crate::codex_rpc_stream_adapter::{
     adapt_notification_to_stream_lines, emit_approval_request, emit_dynamic_tool_request,
@@ -242,9 +244,12 @@ pub(crate) async fn execute_codex_rpc(
     }
 
     let proxy_model = crate::opencode_go_proxy::apply_codex_bridge_for_spawn(&db)?;
+    let previous_config = read_codex_profile_envelope().config;
     if proxy_model.is_none() {
         ensure_codex_profile_applied_for_model(&db, params.model.as_deref())?;
     }
+    let provider_switched =
+        proxy_model.is_none() && codex_provider_switched(&previous_config, &read_codex_profile_envelope().config);
     if let Err(e) = ensure_codex_project_trusted(&params.project_path) {
         eprintln!("[codex_rpc] failed to mark project trusted: {e}");
     }
@@ -350,13 +355,16 @@ pub(crate) async fn execute_codex_rpc(
     });
     session.set_active_model(effective_model.as_deref());
 
-    let thread_result = if let Some(thread_id) = resume_id {
+    let mut started_new_thread = false;
+    let had_resume_id = resume_id.is_some();
+    let thread_result = if let Some(thread_id) = resume_id.as_deref().filter(|_| !provider_switched) {
         match session.resume_thread(thread_id).await {
             Ok(()) => Ok(()),
             Err(e) if codex_rpc_resume_should_start_fresh(&e.to_string()) => {
                 eprintln!(
                     "[codex_rpc] resume incompatible with current provider, starting new thread: {e}"
                 );
+                started_new_thread = true;
                 session
                     .start_thread(
                         Some(params.project_path.as_str()),
@@ -369,6 +377,12 @@ pub(crate) async fn execute_codex_rpc(
             Err(e) => Err(e),
         }
     } else {
+        if provider_switched && had_resume_id {
+            eprintln!(
+                "[codex_rpc] provider switched, skipping resume and starting new thread"
+            );
+        }
+        started_new_thread = true;
         session
             .start_thread(
                 Some(params.project_path.as_str()),
@@ -397,6 +411,41 @@ pub(crate) async fn execute_codex_rpc(
         registry.mark_completed(&session_id, false);
         emit_rpc_complete(&app, invocation_key.as_deref(), &session_id, false);
         return Err(msg);
+    }
+
+    if started_new_thread {
+        if let Some(tid) = session.current_thread_id() {
+            emit_and_persist_rpc_output_line(
+                &app,
+                &params.project_path,
+                &session_id,
+                &json!({
+                    "type": "codex_session",
+                    "sessionId": tid,
+                })
+                .to_string(),
+                invocation_key.as_deref(),
+            );
+        }
+        if provider_switched && had_resume_id {
+            emit_and_persist_rpc_output_line(
+                &app,
+                &params.project_path,
+                &session_id,
+                &json!({
+                    "type": "assistant",
+                    "message": {
+                        "role": "assistant",
+                        "content": [{
+                            "type": "text",
+                            "text": "已切换 Codex 供应商，无法续接上一轮对话，已新开会话。"
+                        }]
+                    }
+                })
+                .to_string(),
+                invocation_key.as_deref(),
+            );
+        }
     }
 
     // Start the turn.
@@ -1587,6 +1636,23 @@ pub(crate) async fn respond_codex_rpc_dynamic_tool(
 #[cfg(test)]
 mod tests {
     use super::{codex_rpc_resume_should_start_fresh, is_codex_rpc_thread_id};
+    use crate::codex_config_dir::codex_provider_switched;
+
+    #[test]
+    fn gpt_to_deepseek_skips_resume() {
+        let openai = "model = \"gpt-5.6\"\n";
+        let deepseek = r#"model = "deepseek-v4-flash"
+model_provider = "deepseek"
+
+[model_providers.deepseek]
+base_url = "https://api.deepseek.com/v1"
+"#;
+        assert!(codex_provider_switched(openai, deepseek));
+        assert!(codex_provider_switched(
+            "model = \"gpt-5.6\"\n\n[model_providers.deepseek]\nbase_url = \"https://api.deepseek.com/v1\"\n",
+            deepseek
+        ));
+    }
 
     #[test]
     fn missing_deepseek_provider_starts_fresh() {

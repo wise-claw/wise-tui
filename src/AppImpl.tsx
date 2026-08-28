@@ -40,7 +40,7 @@ import {
   type SessionPaneSpawnContext,
 } from "./utils/sessionExecutionEngine";
 import { mergePaneRuntimeOverride, type PaneRuntimeOverride } from "./types/paneRuntimeOverride";
-import { isSessionExecutionEngine } from "./constants/sessionExecutionEngine";
+import { isSessionExecutionEngine, type SessionExecutionEngine } from "./constants/sessionExecutionEngine";
 import type { PaneClaudeProxyRoute } from "./types/paneRuntimeOverride";
 import { resolveChatContextRepository } from "./utils/workspaceSelectionState";
 import {
@@ -67,6 +67,7 @@ import type { AuthorPane } from "./types/viewMode";
 import { useRepoPanelPlacementDefault } from "./hooks/useRepoPanelPlacementDefault";
 import type { PaneCount, PaneSlot } from "./constants/mainLayoutWidths";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
+import { useWiseHudBridge } from "./hooks/useWiseHudBridge";
 import { useRepositoryList } from "./hooks/useRepositoryList";
 import { openRepositoryRemoteInBrowser } from "./services/openRepositoryRemote";
 import { openInFinder } from "./services/repository";
@@ -130,6 +131,7 @@ import { initGlobalAtMentionShortcutRouting } from "./services/globalScreenshotH
 import {
   loadAtMentionShortcutByTargetFromStore,
   registerAtMentionGlobalShortcuts,
+  saveDefaultExecutionEngineToStore,
   WISE_AT_MENTION_SHORTCUTS_CHANGED,
 } from "./services/wiseDefaultConfigStore";
 import { getTaskTemplate, setTaskTemplate } from "./services/projectState";
@@ -1941,6 +1943,33 @@ export default function App() {
     [repositories, activeRepositoryId],
   );
 
+  const hudSelectRepositoryRef = useRef<(repositoryId: number) => void>(() => {});
+  const hudCreateNewSessionRef = useRef<(repository: Repository) => void | Promise<void>>(() => {});
+  const hudSetEngineRef = useRef<(sessionId: string, engine: SessionExecutionEngine) => void>(() => {});
+  const hudSetModelRef = useRef<(sessionId: string, model: string) => void>(() => {});
+
+  useWiseHudBridge({
+    sessions,
+    activeSessionId,
+    repositories,
+    employees,
+    activeRepository,
+    executeSession: handleComposerExecute,
+    cancelSession,
+    selectRepository: (repositoryId) => {
+      hudSelectRepositoryRef.current(repositoryId);
+    },
+    createNewSession: (repository) => {
+      void hudCreateNewSessionRef.current(repository);
+    },
+    setExecutionEngine: (sessionId, engine) => {
+      hudSetEngineRef.current(sessionId, engine);
+    },
+    setModel: (sessionId, model) => {
+      hudSetModelRef.current(sessionId, model);
+    },
+  });
+
   const fileEditorRootPath = useMemo(() => {
     const path = resolveChatTopbarContext({
       activeRepository,
@@ -2287,6 +2316,19 @@ export default function App() {
     onRestoreHistorySessionAsMainComplete: () => setInspectorHistorySessionId(null),
   });
   ensureRepositoryMainSessionRef.current = ensureRepositoryMainSession;
+  hudSelectRepositoryRef.current = handleSidebarRepositorySelectLeavingMcpHub;
+  hudCreateNewSessionRef.current = handleManualNewRepositorySession;
+  hudSetEngineRef.current = (sessionId, engine) => {
+    void updateSessionExecutionEngine(sessionId, engine);
+    void saveDefaultExecutionEngineToStore(engine).catch(() => undefined);
+    const repo = activeRepository;
+    if (repo) {
+      void handleUpdateRepositoryExecutionEngine(repo.id, engine);
+    }
+  };
+  hudSetModelRef.current = (sessionId, model) => {
+    updateSessionModel(sessionId, model);
+  };
 
   // 需求详情中的「打开关联会话」统一由根路由处理，确保无论当前在哪个 Hub 都切回对应仓库的会话窗。
   useEffect(() => {

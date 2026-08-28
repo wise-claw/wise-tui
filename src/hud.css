@@ -1,0 +1,20 @@
+/* HUD 独立窗口：透明底，胶囊本身带阴影。 */
+
+html,
+body,
+#root,
+#root > .ant-app,
+.app-hud-antd-app {
+  margin: 0;
+  height: 100% !important;
+  min-height: 100%;
+  background: transparent !important;
+  overflow: hidden;
+}
+
+.app-claude-slash-popover,
+.ant-select-dropdown,
+.semi-portal,
+.app-hud-image-float {
+  -webkit-app-region: no-drag;
+}

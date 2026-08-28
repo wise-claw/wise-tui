@@ -2427,6 +2427,21 @@ mod tests {
     }
 
     #[test]
+    fn invalid_api_key_error_is_humanized() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let notif = ServerNotification::Error {
+            code: -1,
+            message: "unexpected status 401 Unauthorized: Incorrect API key provided: sk-test, url: https://api.openai.com/v1/responses, auth error code: invalid_api_key".to_string(),
+            data: None,
+        };
+        let out = adapt(&notif, &mut state);
+        assert_eq!(out.emit.len(), 1);
+        assert!(out.emit[0].contains("OpenAI API Key 无效"));
+        assert!(out.emit[0].contains("openAI default"));
+        assert!(!out.emit[0].contains("Codex error:"));
+    }
+
+    #[test]
     fn empty_delta_produces_no_lines() {
         let mut state = CodexRpcStreamAdaptState::default();
         let notif = ServerNotification::AgentMessageDelta {
@@ -2580,6 +2595,14 @@ mod tests {
             thread_id: None,
         };
         let out = adapt(&noise, &mut state);
+        assert!(out.emit.is_empty());
+        assert!(out.persist.is_empty());
+
+        let websocket = ServerNotification::Warning {
+            message: "Falling back from WebSockets to HTTPS transport.".to_string(),
+            thread_id: None,
+        };
+        let out = adapt(&websocket, &mut state);
         assert!(out.emit.is_empty());
         assert!(out.persist.is_empty());
 

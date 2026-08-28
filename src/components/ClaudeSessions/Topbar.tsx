@@ -1,6 +1,9 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../../types";
 import { HoverHint } from "../shared/HoverHint";
 import { AppearanceThemeToggle } from "../AppearanceThemeToggle";
+import { IconHud } from "../icons/IconHud";
+import { wiseHudToggle } from "../../services/wiseHud";
+import { useWiseHudModeActive } from "../../stores/wiseHudModeStore";
 import { message, Popover, Spin } from "antd";
 import { lazy, Suspense, memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
@@ -257,6 +260,7 @@ export const Topbar = memo(function Topbar({
   onOpenRemoteChannels,
 }: TopbarProps) {
   const topbarChrome = useWiseTopbarChromeVisibility();
+  const hudActive = useWiseHudModeActive();
   const [selectedOpenAppId, setSelectedOpenAppId] = useState<string>(() => {
     return getOpenAppPreferenceSync() || DEFAULT_OPEN_APP_ID;
   });
@@ -569,6 +573,14 @@ export const Topbar = memo(function Topbar({
             className="app-topbar-btn--close-pane"
           />
         ) : null}
+        <TopbarBtn
+          icon={<IconHud />}
+          label="HUD 模式：⌘⇧H · Ctrl+Shift+H"
+          onClick={() => {
+            void wiseHudToggle();
+          }}
+          active={hudActive}
+        />
         <AppearanceThemeToggle />
         <div className="app-topbar-divider" />
         {topbarToolsReady || onChangePaneCount || onToggleTerminal ? (
