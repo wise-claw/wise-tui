@@ -200,7 +200,7 @@ import {
   registerGlobalFocusComposerRecipient,
   registerGlobalScreenshotRecipient,
 } from "../../services/globalScreenshotHotkey";
-import { wiseMainWindowFocus } from "../../services/wiseMascot";
+import { wiseFocusActiveComposerSurface } from "../../services/wiseHud";
 import type { ControlRequestStatus } from "../../notifications";
 import type { QuestionDockTabSpec } from "../../hooks/useQuestionDockTabs";
 import { buildClaudeSessionHoverTitle } from "../../utils/claudeSessionIdTooltip";
@@ -385,7 +385,7 @@ interface ComposerInnerProps {
    * 不影响 `composerFooterChrome` 的全局配置（中栏依旧按用户偏好显示）。
    * 多屏（`paneCount > 1`）同样强制仅图标，与紧凑模式一致。 */
   compactFooterChrome?: boolean;
-  /** HUD 胶囊：隐藏附件/常用语，执行环境/模型收成一个图标，与仓库、发送、退出同排。 */
+  /** HUD 胶囊：隐藏附件/常用语；仓库与运行时在条左侧，发送/退出走 trailing。 */
   hudChrome?: boolean;
   hudLeadingActions?: ReactNode;
   hudTrailingActions?: ReactNode;
@@ -3001,9 +3001,9 @@ function ComposerInner({
     const part = screenshotResultToImagePart(result);
     // 必须走 ref：await screencapture 期间 draftBucketKey/setImages 可能已换新
     setImagesRef.current((prev) => [...prev, part]);
-    // screencapture 结束后系统焦点在别处：先置顶主窗，再在下一帧聚焦输入框（WKWebView 上更稳）
+    // screencapture 结束后系统焦点在别处：先聚焦当前输入面，再在下一帧聚焦编辑器（WKWebView 上更稳）
     try {
-      await wiseMainWindowFocus();
+      await wiseFocusActiveComposerSurface();
     } catch {
       /* 浏览器 dev / 非 Tauri */
     }
@@ -3516,7 +3516,7 @@ function ComposerInner({
   useEffect(() => {
     return registerGlobalScreenshotRecipient(session.id, (part) => {
       setImagesRef.current((prev) => [...prev, part]);
-      void wiseMainWindowFocus().catch(() => {});
+      void wiseFocusActiveComposerSurface().catch(() => {});
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           aiChatRef.current?.focusEditor?.("end");
@@ -3525,7 +3525,7 @@ function ComposerInner({
     });
   }, [session.id]);
 
-  /** ⌥Z（Option+Z）：Rust 侧已置顶主窗；此处仅聚焦本会话输入框 */
+  /** ⌥Z（Option+Z）：Rust 侧已聚焦当前输入面；此处仅聚焦本会话编辑器 */
   useEffect(() => {
     return registerGlobalFocusComposerRecipient(session.id, () => {
       requestAnimationFrame(() => {
@@ -3738,7 +3738,7 @@ function ComposerInner({
                   extensions={SEMI_COMPOSER_TOKEN_HIGHLIGHT_EXTENSIONS}
                   placeholder={
                     hudChrome
-                      ? "@ 提及，/ 命令"
+                      ? "@ 提及，/ 命令，Enter 发送"
                       : "@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条"
                   }
                   keepSkillAfterSend={false}
@@ -3925,7 +3925,7 @@ export interface ComposerRegionProps {
    * 不影响 `composerFooterChrome` 的全局配置（中栏依旧按用户偏好显示）。
    * 多屏（`paneCount > 1`）同样强制仅图标，与紧凑模式一致。 */
   compactFooterChrome?: boolean;
-  /** HUD 胶囊：隐藏附件/常用语，执行环境/模型收成一个图标，与仓库、发送、退出同排。 */
+  /** HUD 胶囊：隐藏附件/常用语；仓库与运行时在条左侧，发送/退出走 trailing。 */
   hudChrome?: boolean;
   hudLeadingActions?: ReactNode;
   hudTrailingActions?: ReactNode;

@@ -20,6 +20,7 @@ import {
 } from "./composerInteractionGate";
 import { isMainThreadCongested } from "./mainThreadCongestionStore";
 import { getClaudeChatUserPausedFollow } from "./claudeChatMessageScrollBridge";
+import { getWiseHudModeActive, subscribeWiseHudMode } from "./wiseHudModeStore";
 
 let sessionsSnapshot: ClaudeSession[] = [];
 let structureKey = "";
@@ -67,6 +68,11 @@ function attachVisibilityFlushHook(): void {
   visibilityFlushHookAttached = true;
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible" || !deferFlushWhileHidden) return;
+    deferFlushWhileHidden = false;
+    scheduleLiveListenerFlush();
+  });
+  subscribeWiseHudMode(() => {
+    if (getWiseHudModeActive() || !deferFlushWhileHidden) return;
     deferFlushWhileHidden = false;
     scheduleLiveListenerFlush();
   });
@@ -121,6 +127,11 @@ function scheduleLiveListenerFlush(): void {
 
   const runFlush = () => {
     if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+      if (getWiseHudModeActive()) {
+        deferFlushWhileHidden = false;
+        flushLiveListeners();
+        return;
+      }
       deferFlushWhileHidden = true;
       attachVisibilityFlushHook();
       return;
@@ -143,6 +154,17 @@ function scheduleLiveListenerFlush(): void {
 
   if (typeof window === "undefined") {
     runFlush();
+    return;
+  }
+
+  const hidden = typeof document !== "undefined" && document.visibilityState !== "visible";
+  if (hidden && getWiseHudModeActive()) {
+    if (liveFlushTimer !== null) return;
+    if (liveFlushRaf !== null) {
+      window.cancelAnimationFrame(liveFlushRaf);
+      liveFlushRaf = null;
+    }
+    liveFlushTimer = setTimeout(runFlush, 0);
     return;
   }
 

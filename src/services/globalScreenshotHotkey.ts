@@ -1,6 +1,17 @@
 import { listen } from "@tauri-apps/api/event";
+import { getWiseHudModeActive } from "../stores/wiseHudModeStore";
 import type { ImageAttachmentPart } from "../types";
+import { shouldHandleComposerGlobalShortcut } from "../utils/composerShortcutSurface";
+import { isCurrentHudWindowSync } from "./mainWindow";
 import { captureScreenshot, screenshotResultToImagePart } from "./screenshot";
+
+function shouldHandleComposerShortcutOnThisWindow(): boolean {
+  return shouldHandleComposerGlobalShortcut(
+    isCurrentHudWindowSync() ? "hud" : "main",
+    getWiseHudModeActive(),
+    typeof document !== "undefined" && document.visibilityState === "hidden",
+  );
+}
 
 type Recipient = (part: ImageAttachmentPart) => void;
 
@@ -39,6 +50,7 @@ function ensureGlobalScreenshotListener(): void {
   if (globalScreenshotListenStarted) return;
   globalScreenshotListenStarted = true;
   void listen("global-screenshot", async () => {
+    if (!shouldHandleComposerShortcutOnThisWindow()) return;
     console.log("[screenshot] global-screenshot (singleton listener)");
     const result = await captureScreenshot();
     if (!result) return;
@@ -79,6 +91,7 @@ function ensureGlobalAtMentionShortcutListener(): void {
   if (globalAtMentionListenStarted) return;
   globalAtMentionListenStarted = true;
   void listen("global-at-mention-shortcut", (event) => {
+    if (!shouldHandleComposerShortcutOnThisWindow()) return;
     const targetKey = (event.payload as { targetKey?: string })?.targetKey;
     if (!targetKey) return;
     routeGlobalAtMentionShortcut(targetKey);
@@ -143,6 +156,7 @@ function ensureGlobalFocusComposerListener(): void {
   if (globalFocusComposerListenStarted) return;
   globalFocusComposerListenStarted = true;
   void listen("global-focus-composer", () => {
+    if (!shouldHandleComposerShortcutOnThisWindow()) return;
     const sid = resolveFocusTargetSessionId();
     if (!sid) {
       console.warn("[focus-composer] no recipient registered");

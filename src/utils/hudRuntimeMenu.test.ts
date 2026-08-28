@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   capHudRuntimeModelOptions,
+  filterHudPickerItems,
+  hudContextPickerFilterPlaceholder,
   hudModelMenuKey,
   hudRuntimeBusyBlocksEngineSwitch,
   parseHudModelMenuKey,
@@ -29,5 +31,20 @@ describe("hudRuntimeMenu", () => {
     expect(hudRuntimeBusyBlocksEngineSwitch("claude", "codex-rpc", true)).toBe(true);
     expect(hudRuntimeBusyBlocksEngineSwitch("claude", "claude", true)).toBe(false);
     expect(hudRuntimeBusyBlocksEngineSwitch("claude", "codex-rpc", false)).toBe(false);
+  });
+
+  it("filters picker items by case-insensitive label", () => {
+    const items = [
+      { value: "a", label: "wise-tui" },
+      { value: "b", label: "fund-awards" },
+    ];
+    expect(filterHudPickerItems(items, "WISE").map((item) => item.value)).toEqual(["a"]);
+    expect(filterHudPickerItems(items, "  ").map((item) => item.value)).toEqual(["a", "b"]);
+  });
+
+  it("uses repo-first filter placeholders", () => {
+    expect(hudContextPickerFilterPlaceholder("repo")).toBe("过滤仓库...");
+    expect(hudContextPickerFilterPlaceholder("engine")).toBe("过滤执行环境...");
+    expect(hudContextPickerFilterPlaceholder("model")).toBe("过滤模型...");
   });
 });

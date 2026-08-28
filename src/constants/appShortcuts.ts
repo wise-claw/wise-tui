@@ -15,11 +15,11 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
     rows: [
       {
         keys: "F3",
-        description: "桌面截图，并把图片投递到最近操作过的会话输入框。",
+        description: "桌面截图，并把图片投递到当前模式的会话输入框（HUD 开着时只进 HUD）。",
       },
       {
         keys: "⌥Z · Alt+Z",
-        description: "置顶主窗口，并将焦点切到最近操作过的会话输入框。",
+        description: "聚焦当前模式的会话输入框：HUD 开着时只聚焦 HUD，否则置顶主窗口并聚焦输入框。",
       },
       {
         keys: "⌥S · Alt+S",

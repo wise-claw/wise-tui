@@ -1,6 +1,6 @@
 use crate::{
     agent_registry, agents_explorer, app_state_commands, assistants, at_mention_shortcuts, cc_switch_import,
-    chrome_devtools_monitor, stagehand_browse, in_app_shortcuts,
+    chrome_devtools_monitor, chrome_page_monitor_bridge, stagehand_browse, in_app_shortcuts,
     claude_code_line_edits, claude_code_usage, claude_commands, codex_commands, codex_models, codex_rpc_commands, codex_rpc_disk, opencode_commands, opencode_acp_commands,
     qoder_commands, claude_config_dir,
     claude_llm_proxy, claude_model_profiles,
@@ -117,19 +117,18 @@ pub fn run() {
             app.global_shortcut()
                 .on_shortcut(screenshot_shortcut, |_app, _shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
-                        // Trigger screenshot via frontend event
-                        let _ = _app.emit("global-screenshot", ());
+                        wise_hud::emit_to_active_composer_surface(_app, "global-screenshot", ());
                     }
                 })
                 .map_err(|e| e.to_string())?;
 
-            // ⌥Z / Alt+Z：置顶主窗口并通知前端聚焦会话输入框（macOS 上 Alt 对应 Option）
+            // ⌥Z / Alt+Z：聚焦当前模式的会话输入框（HUD 开着时不要把主窗重新拉出来）
             let focus_composer_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::KeyZ);
             app.global_shortcut()
                 .on_shortcut(focus_composer_shortcut, |_app, _shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
-                        let _ = wise_mascot::wise_main_window_focus(_app.clone());
-                        let _ = _app.emit("global-focus-composer", ());
+                        let _ = wise_hud::focus_active_composer_surface(_app);
+                        wise_hud::emit_to_active_composer_surface(_app, "global-focus-composer", ());
                     }
                 })
                 .map_err(|e| e.to_string())?;
@@ -261,6 +260,14 @@ pub fn run() {
             app.manage(extension_registry);
             app.manage(agent_registry::AgentRegistry::new());
             composer_image_gc::spawn_composer_image_gc_scanner(app.handle().clone());
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = chrome_page_monitor_bridge::ensure_started(handle).await {
+                        eprintln!("[chrome_page_monitor_bridge] start failed: {e}");
+                    }
+                });
+            }
             claude_llm_proxy::bootstrap_from_db(app.handle());
             opencode_go_proxy::bootstrap_from_db(app.handle());
 
@@ -795,6 +802,7 @@ pub fn run() {
             wise_hud::wise_hud_reset_layout,
             wise_hud::wise_hud_save_bounds,
             wise_hud::wise_hud_is_active,
+            wise_hud::wise_focus_composer_surface,
             wise_hud::wise_hud_set_overlay_height,
             wise_hud::wise_hud_emit_to_main,
             wise_mascot::wise_notification_unread_total,

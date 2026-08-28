@@ -122,6 +122,21 @@ export type ChromeDevtoolsIssueEvent = {
 const chromeDevtoolsIssueHub =
   createEventHub<ChromeDevtoolsIssueEvent>("chrome-devtools-issue");
 
+export type ChromeSelectionRequirementEventPayload = {
+  text: string;
+  pageUrl: string;
+  pageTitle: string;
+  images: Array<{
+    alt: string;
+    path?: string;
+    url?: string;
+  }>;
+};
+
+const chromeSelectionRequirementHub = createEventHub<ChromeSelectionRequirementEventPayload>(
+  "wise-chrome-requirement",
+);
+
 export function subscribeTerminalOutput(
   onEvent: (event: TerminalOutputEvent) => void,
   options?: EventHubOptions,
@@ -165,4 +180,11 @@ export function subscribeChromeDevtoolsIssue(
   options?: EventHubOptions,
 ): () => void {
   return chromeDevtoolsIssueHub.subscribe(onEvent, options);
+}
+
+export function subscribeChromeSelectionRequirement(
+  onEvent: (event: ChromeSelectionRequirementEventPayload) => void,
+  options?: EventHubOptions,
+): () => void {
+  return chromeSelectionRequirementHub.subscribe(onEvent, options);
 }

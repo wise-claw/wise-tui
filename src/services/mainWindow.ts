@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export const PRIMARY_MAIN_WINDOW_LABEL = "main";
 export const AUX_MAIN_WINDOW_LABEL_PREFIX = "main-dock";
+export const HUD_WINDOW_LABEL = "hud";
 
 /** 进程内缓存：窗口 label 在单 WebView 生命周期内不变，避免 tabs/标题等热路径重复 IPC。 */
 let cachedWindowLabel: string | null | undefined;
@@ -26,6 +27,14 @@ export function isMainWorkspaceWindowLabel(label: string | null | undefined): bo
 
 export function isPrimaryMainWorkspaceWindowLabel(label: string | null | undefined): boolean {
   return label === PRIMARY_MAIN_WINDOW_LABEL;
+}
+
+export function isHudWindowLabel(label: string | null | undefined): boolean {
+  return label === HUD_WINDOW_LABEL;
+}
+
+export function isCurrentHudWindowSync(): boolean {
+  return isHudWindowLabel(getCurrentMainWorkspaceWindowLabel());
 }
 
 /** 同步读取当前窗口 label（首调后走内存缓存）。 */

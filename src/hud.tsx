@@ -5,13 +5,16 @@ import zhCN from "antd/locale/zh_CN";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { HudComposerBar, type HudOverlayMode } from "./components/HudMode/HudComposerBar";
-import { wiseHudRequestState, wiseHudSaveBounds, wiseHudSetOverlayHeight } from "./services/wiseHud";
+import { wiseHudIsActive, wiseHudRequestState, wiseHudSaveBounds, wiseHudSetOverlayHeight } from "./services/wiseHud";
+import { setWiseHudModeActive } from "./stores/wiseHudModeStore";
 import { bootstrapAppTheme, startSystemThemeWatch, useAppTheme } from "./stores/appThemeStore";
 import { buildAppThemeConfig } from "./constants/appThemeTokens";
 import { ensureTauriEventUnlistenPatched, safeUnlisten } from "./utils/safeTauriUnlisten";
 import {
   buildWiseHudSessionSnapshot,
+  parseWiseHudActiveChanged,
   parseWiseHudSessionSnapshot,
+  WISE_HUD_ACTIVE_EVENT,
   WISE_HUD_STATE_EVENT,
   type WiseHudSessionSnapshot,
 } from "./utils/wiseHudSnapshot";
@@ -74,15 +77,24 @@ function HudApp() {
     const unsubs: UnlistenFn[] = [];
     void (async () => {
       await wiseHudRequestState();
+      void wiseHudIsActive()
+        .then((active) => setWiseHudModeActive(active))
+        .catch(() => setWiseHudModeActive(false));
       const u1 = await listen<unknown>(WISE_HUD_STATE_EVENT, (event) => {
         const next = parseWiseHudSessionSnapshot(event.payload);
         if (next) setSnapshot(next);
       });
+      const uActive = await listen<unknown>(WISE_HUD_ACTIVE_EVENT, (event) => {
+        const active = parseWiseHudActiveChanged(event.payload);
+        if (active == null) return;
+        setWiseHudModeActive(active);
+      });
       if (cancelled) {
         safeUnlisten(u1);
+        safeUnlisten(uActive);
         return;
       }
-      unsubs.push(u1);
+      unsubs.push(u1, uActive);
 
       const win = getCurrentWindow();
       const persist = () => {

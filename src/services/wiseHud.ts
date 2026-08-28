@@ -61,6 +61,11 @@ export async function wiseHudIsActive(): Promise<boolean> {
   return invoke<boolean>("wise_hud_is_active");
 }
 
+/** 聚焦当前模式的输入面：HUD 开着时聚焦 HUD，否则置顶主窗口。 */
+export async function wiseFocusActiveComposerSurface(): Promise<void> {
+  return invoke("wise_focus_composer_surface");
+}
+
 export async function wiseHudRequestState(): Promise<void> {
   await emitToPrimaryMain(WISE_HUD_REQUEST_STATE_EVENT);
 }

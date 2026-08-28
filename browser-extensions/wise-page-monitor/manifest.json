@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Wise 页面监控",
-  "version": "0.5.0",
-  "description": "将日常 Chrome 标签的页面异常（含 SourceMap 源码定位）/ console / 网络错误 / Web Vitals 可配置告警 / 加载时序 / 长任务 / 用户操作时间线 / 白屏证据图 / 页面崩溃转发到 Wise 页面监控与 AI 自动修复。",
-  "permissions": ["debugger", "tabs", "storage", "alarms"],
+  "version": "0.7.0",
+  "description": "将页面异常转发到 Wise 页面监控；也可把选中图文作为需求发送给 Wise 处理。",
+  "permissions": ["debugger", "tabs", "storage", "alarms", "contextMenus", "scripting", "activeTab"],
   "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
   "background": {
     "service_worker": "background.js",
@@ -22,5 +22,14 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "commands": {
+    "wise-send-selection": {
+      "suggested_key": {
+        "default": "Alt+Shift+W",
+        "mac": "Alt+Shift+W"
+      },
+      "description": "将选中图文发送到 Wise 作为需求"
+    }
   }
 }

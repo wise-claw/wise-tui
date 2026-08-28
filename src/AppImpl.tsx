@@ -181,6 +181,7 @@ import { dispatchExecutionEnvironmentFromMainSession } from "./services/executio
 import { dispatchSessionFeedbackLoopAnalysis } from "./services/sessionFeedbackLoopDispatch";
 import { dispatchRuntimeAutoFix } from "./services/runtimeAutoFixDispatch";
 import { usePageMonitorAutoFixReload } from "./hooks/usePageMonitorAutoFixReload";
+import { useChromeSelectionRequirementIngest } from "./hooks/useChromeSelectionRequirementIngest";
 import type { FeedbackLoopDispatchKind } from "./utils/sessionFeedbackLoopDispatch";
 import { createFreshTerminalWorkerTab, isTerminalWorkerWiseTab } from "./services/terminalDispatch";
 import {
@@ -1496,6 +1497,11 @@ export default function App() {
 
   usePageMonitorAutoFixReload({
     getSessions: () => sessionsLatestRef.current,
+  });
+
+  useChromeSelectionRequirementIngest({
+    repositories,
+    activeRepositoryId,
   });
 
   beforeSpawnClaudeRef.current = (session) =>

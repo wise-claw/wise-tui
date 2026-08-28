@@ -3,21 +3,33 @@
 //! Binds `127.0.0.1` only. The extension polls `/v1/active-monitor` and posts
 //! CDP-equivalent issues to `/v1/issues`, which are re-emitted as
 //! `chrome-devtools-issue` for the existing frontend auto-fix pipeline.
+//! Selected page text/images can be posted to `/v1/requirements` without an
+//! active monitor session; they are re-emitted as `wise-chrome-requirement`.
 
-use axum::extract::State as AxumState;
+use axum::extract::{DefaultBodyLimit, State as AxumState};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use base64::Engine;
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
+use uuid::Uuid;
 
 use crate::chrome_devtools_monitor::{ChromeDevtoolsIssue, VitalsThresholds};
 
 pub const DEFAULT_BRIDGE_PORT: u16 = 17321;
 const EVENT_ISSUE: &str = "chrome-devtools-issue";
+const EVENT_REQUIREMENT: &str = "wise-chrome-requirement";
+const MAX_SELECTION_IMAGES: usize = 8;
+const MAX_SELECTION_IMAGE_BYTES: usize = 4 * 1024 * 1024;
+const MAX_SELECTION_TEXT_CHARS: usize = 50_000;
+const MAX_SELECTION_B64_CHARS: usize = (MAX_SELECTION_IMAGE_BYTES * 4) / 3 + 64;
+const MAX_SELECTION_BODY_BYTES: usize = 50 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 struct ActiveExtensionMonitor {
@@ -315,6 +327,227 @@ async fn post_source_location(
     with_cors(Json(serde_json::json!({ "ok": true, "orig": orig })).into_response())
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RequirementImagePayload {
+    #[serde(default)]
+    alt: String,
+    #[serde(default)]
+    mime: String,
+    #[serde(default, alias = "data_base64")]
+    data_base64: String,
+    #[serde(default)]
+    url: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RequirementPayload {
+    #[serde(default)]
+    text: String,
+    #[serde(default, alias = "page_url")]
+    page_url: String,
+    #[serde(default, alias = "page_title")]
+    page_title: String,
+    #[serde(default)]
+    images: Vec<RequirementImagePayload>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ChromeSelectionImage {
+    alt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ChromeSelectionRequirementEvent {
+    text: String,
+    page_url: String,
+    page_title: String,
+    images: Vec<ChromeSelectionImage>,
+}
+
+fn image_ext_for_mime(mime: &str) -> Option<&'static str> {
+    match mime.trim().to_ascii_lowercase().as_str() {
+        "image/png" => Some("png"),
+        "image/jpeg" | "image/jpg" => Some("jpg"),
+        "image/gif" => Some("gif"),
+        "image/webp" => Some("webp"),
+        _ => None,
+    }
+}
+
+fn parse_inline_data_url(raw: &str) -> Option<(String, String)> {
+    let trimmed = raw.trim();
+    let rest = trimmed.strip_prefix("data:")?;
+    let (meta, data) = rest.split_once(',')?;
+    if !meta.to_ascii_lowercase().contains(";base64") {
+        return None;
+    }
+    let mime = meta
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    if !mime.starts_with("image/") {
+        return None;
+    }
+    let b64: String = data.chars().filter(|c| !c.is_whitespace()).collect();
+    if b64.is_empty() {
+        return None;
+    }
+    Some((mime, b64))
+}
+
+fn decode_selection_image(mime: &str, data_base64: &str) -> Option<(Vec<u8>, &'static str)> {
+    let trimmed = data_base64.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let (mime_resolved, b64) = if let Some((parsed_mime, data)) = parse_inline_data_url(trimmed) {
+        (parsed_mime, data)
+    } else {
+        (
+            mime.trim().to_ascii_lowercase(),
+            trimmed.chars().filter(|c| !c.is_whitespace()).collect(),
+        )
+    };
+    let ext = image_ext_for_mime(&mime_resolved)?;
+    if b64.len() > MAX_SELECTION_B64_CHARS {
+        return None;
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&b64)
+        .or_else(|_| base64::engine::general_purpose::STANDARD.decode(b64.replace('\n', "")))
+        .ok()?;
+    if bytes.is_empty() || bytes.len() > MAX_SELECTION_IMAGE_BYTES {
+        return None;
+    }
+    Some((bytes, ext))
+}
+
+fn http_image_url(raw: &str) -> Option<String> {
+    let url = raw.trim();
+    if url.is_empty() || url.len() > 2048 {
+        return None;
+    }
+    let lower = url.to_ascii_lowercase();
+    if lower.starts_with("https://") || lower.starts_with("http://") {
+        Some(url.to_string())
+    } else {
+        None
+    }
+}
+
+fn persist_selection_image(dest_dir: &Path, bytes: &[u8], ext: &str) -> Option<String> {
+    if fs::create_dir_all(dest_dir).is_err() {
+        return None;
+    }
+    let name = format!("{}-selection.{ext}", Uuid::new_v4());
+    let path = dest_dir.join(name);
+    fs::write(&path, bytes).ok()?;
+    Some(path.to_string_lossy().into_owned())
+}
+
+fn materialize_selection_images(
+    images: &[RequirementImagePayload],
+    dest_dir: &Path,
+) -> Vec<ChromeSelectionImage> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for img in images.iter().take(MAX_SELECTION_IMAGES) {
+        let alt = img.alt.trim().to_string();
+        let mut path = None;
+        if let Some((bytes, ext)) = decode_selection_image(&img.mime, &img.data_base64) {
+            path = persist_selection_image(dest_dir, &bytes, ext);
+        }
+        let url = if path.is_none() {
+            http_image_url(&img.url)
+        } else {
+            None
+        };
+        let key = path
+            .clone()
+            .or_else(|| url.clone())
+            .unwrap_or_default();
+        if key.is_empty() || !seen.insert(key) {
+            continue;
+        }
+        out.push(ChromeSelectionImage { alt, path, url });
+    }
+    out
+}
+
+fn build_requirement_event(
+    payload: RequirementPayload,
+    dest_dir: &Path,
+) -> Result<ChromeSelectionRequirementEvent, String> {
+    let text = payload
+        .text
+        .trim()
+        .chars()
+        .take(MAX_SELECTION_TEXT_CHARS)
+        .collect::<String>();
+    let page_url = payload.page_url.trim().to_string();
+    let page_title = payload.page_title.trim().to_string();
+    let images = materialize_selection_images(&payload.images, dest_dir);
+    if text.is_empty() && images.is_empty() {
+        return Err("empty selection".into());
+    }
+    Ok(ChromeSelectionRequirementEvent {
+        text,
+        page_url,
+        page_title,
+        images,
+    })
+}
+
+fn selection_images_dir() -> Result<PathBuf, String> {
+    let dir = crate::wise_paths::wise_dir()?
+        .join("composer-images")
+        .join("chrome-selection");
+    fs::create_dir_all(&dir).map_err(|e| format!("mkdir chrome-selection: {e}"))?;
+    Ok(dir)
+}
+
+async fn post_requirement(
+    AxumState(inner): AxumState<BridgeInner>,
+    Json(payload): Json<RequirementPayload>,
+) -> Response {
+    let dest = match selection_images_dir() {
+        Ok(dir) => dir,
+        Err(error) => {
+            return with_cors(
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "ok": false, "error": error })),
+                )
+                    .into_response(),
+            );
+        }
+    };
+    match build_requirement_event(payload, &dest) {
+        Ok(event) => {
+            let _ = inner.app.emit(EVENT_REQUIREMENT, event);
+            let _ = crate::main_window::focus_main_workspace_window(&inner.app);
+            with_cors(Json(serde_json::json!({ "ok": true })).into_response())
+        }
+        Err(error) => with_cors(
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "ok": false, "error": error })),
+            )
+                .into_response(),
+        ),
+    }
+}
+
 async fn bind_listener(preferred: u16) -> Result<(tokio::net::TcpListener, u16), String> {
     for offset in 0u16..=16 {
         let port = preferred.saturating_add(offset);
@@ -363,6 +596,11 @@ pub async fn ensure_started(app: AppHandle) -> Result<u16, String> {
             "/v1/source-location",
             post(post_source_location).options(options_ok),
         )
+        .route(
+            "/v1/requirements",
+            post(post_requirement).options(options_ok),
+        )
+        .layer(DefaultBodyLimit::max(MAX_SELECTION_BODY_BYTES))
         .with_state(inner);
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
@@ -633,5 +871,146 @@ mod extension_export_tests {
 
         let _ = fs::remove_dir_all(&root);
         let _: PathBuf = root;
+    }
+}
+
+#[cfg(test)]
+mod requirement_ingest_tests {
+    use super::{
+        build_requirement_event, decode_selection_image, http_image_url, image_ext_for_mime,
+        RequirementImagePayload, RequirementPayload,
+    };
+    use std::fs;
+
+    const PNG_1X1: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+    #[test]
+    fn mime_whitelist() {
+        assert_eq!(image_ext_for_mime("image/png"), Some("png"));
+        assert_eq!(image_ext_for_mime("IMAGE/JPEG"), Some("jpg"));
+        assert_eq!(image_ext_for_mime("image/svg+xml"), None);
+        assert_eq!(image_ext_for_mime("text/html"), None);
+    }
+
+    #[test]
+    fn http_url_rejects_javascript_and_data() {
+        assert_eq!(
+            http_image_url("https://cdn.example.com/a.png").as_deref(),
+            Some("https://cdn.example.com/a.png")
+        );
+        assert!(http_image_url("javascript:alert(1)").is_none());
+        assert!(http_image_url("data:image/png;base64,aaa").is_none());
+        assert!(http_image_url("").is_none());
+    }
+
+    #[test]
+    fn decode_accepts_raw_base64_and_data_url() {
+        let raw = decode_selection_image("image/png", PNG_1X1).expect("raw");
+        assert_eq!(raw.1, "png");
+        assert!(!raw.0.is_empty());
+        let wrapped = format!("data:image/png;base64,{PNG_1X1}");
+        let from_url = decode_selection_image("", &wrapped).expect("data url");
+        assert_eq!(from_url.0, raw.0);
+    }
+
+    #[test]
+    fn empty_payload_rejected() {
+        let dir = std::env::temp_dir().join(format!(
+            "wise-chrome-req-empty-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        let err = build_requirement_event(
+            RequirementPayload {
+                text: "  ".into(),
+                page_url: "https://example.com".into(),
+                page_title: "Demo".into(),
+                images: vec![],
+            },
+            &dir,
+        )
+        .unwrap_err();
+        assert_eq!(err, "empty selection");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn text_only_ok() {
+        let dir = std::env::temp_dir().join(format!(
+            "wise-chrome-req-text-{}",
+            std::process::id()
+        ));
+        let event = build_requirement_event(
+            RequirementPayload {
+                text: "  把按钮改蓝  ".into(),
+                page_url: "https://example.com/app".into(),
+                page_title: "设计稿".into(),
+                images: vec![],
+            },
+            &dir,
+        )
+        .unwrap();
+        assert_eq!(event.text, "把按钮改蓝");
+        assert_eq!(event.page_url, "https://example.com/app");
+        assert!(event.images.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn inline_image_persisted_and_url_passthrough() {
+        let dir = std::env::temp_dir().join(format!(
+            "wise-chrome-req-img-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        let event = build_requirement_event(
+            RequirementPayload {
+                text: "".into(),
+                page_url: "https://example.com".into(),
+                page_title: "Shot".into(),
+                images: vec![
+                    RequirementImagePayload {
+                        alt: "按钮".into(),
+                        mime: "image/png".into(),
+                        data_base64: PNG_1X1.into(),
+                        url: "".into(),
+                    },
+                    RequirementImagePayload {
+                        alt: "远端".into(),
+                        mime: "".into(),
+                        data_base64: "".into(),
+                        url: "https://cdn.example.com/b.png".into(),
+                    },
+                    RequirementImagePayload {
+                        alt: "坏".into(),
+                        mime: "image/svg+xml".into(),
+                        data_base64: "aaa".into(),
+                        url: "javascript:alert(1)".into(),
+                    },
+                ],
+            },
+            &dir,
+        )
+        .unwrap();
+        assert_eq!(event.images.len(), 2);
+        let saved = event.images[0].path.as_deref().unwrap();
+        assert!(saved.ends_with(".png"));
+        assert!(fs::read(saved).is_ok());
+        assert_eq!(
+            event.images[1].url.as_deref(),
+            Some("https://cdn.example.com/b.png")
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn deserialize_snake_case_aliases() {
+        let payload: RequirementPayload = serde_json::from_str(
+            r#"{"text":"hi","page_url":"https://example.com","page_title":"T","images":[{"alt":"a","data_base64":"","url":"https://cdn.example.com/x.png"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(payload.page_url, "https://example.com");
+        assert_eq!(payload.page_title, "T");
+        assert_eq!(payload.images[0].url, "https://cdn.example.com/x.png");
     }
 }

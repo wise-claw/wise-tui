@@ -5,6 +5,7 @@ import {
   buildWiseHudSessionSnapshot,
   countHudRunningSessions,
   formatHudModelLabel,
+  hudComposerSessionToClaudeSession,
   parseWiseHudActiveChanged,
   parseWiseHudSelectRepositoryPayload,
   parseWiseHudSessionSnapshot,
@@ -57,6 +58,11 @@ describe("buildWiseHudSessionSnapshot", () => {
       model: "gpt-5.4",
     });
     expect(snap.repositories).toEqual([{ id: 9, name: "demo", path: "/tmp/demo" }]);
+  });
+
+  it("does not treat the Wise tab id as a Claude session id", () => {
+    const snap = buildWiseHudSessionSnapshot(session());
+    expect(hudComposerSessionToClaudeSession(snap)?.claudeSessionId).toBeNull();
   });
 
   it("marks connecting/running as busy and cancellable", () => {

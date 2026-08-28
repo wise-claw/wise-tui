@@ -286,7 +286,7 @@ export function hudComposerSessionToClaudeSession(
   if (!item) return null;
   return {
     id: item.id,
-    claudeSessionId: item.id,
+    claudeSessionId: null,
     repositoryPath: item.repositoryPath,
     repositoryName: item.repositoryName,
     model: item.model,

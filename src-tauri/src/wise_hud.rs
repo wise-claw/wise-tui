@@ -188,6 +188,49 @@ fn hide_main_workspace_windows(app: &AppHandle) {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComposerShortcutSurface {
+    Hud,
+    Main,
+}
+
+/// HUD 开着时会话快捷键只打 HUD；否则只打主工作区。
+pub fn resolve_composer_shortcut_surface(hud_visible: bool) -> ComposerShortcutSurface {
+    if hud_visible {
+        ComposerShortcutSurface::Hud
+    } else {
+        ComposerShortcutSurface::Main
+    }
+}
+
+/// 只向当前输入面派发，避免 `app.emit` 让主窗和 HUD 同时响应。
+pub fn emit_to_active_composer_surface<S: serde::Serialize + Clone>(
+    app: &AppHandle,
+    event: &str,
+    payload: S,
+) {
+    if resolve_composer_shortcut_surface(hud_is_visible(app)) == ComposerShortcutSurface::Hud {
+        if let Ok(hud) = hud_window(app) {
+            let _ = hud.emit(event, payload);
+            return;
+        }
+    }
+    crate::main_window::emit_to_focused_main_workspace_window(app, event, payload);
+}
+
+/// 聚焦当前输入面：HUD 开着时不要把主窗口重新 show 出来。
+pub fn focus_active_composer_surface(app: &AppHandle) -> Result<(), String> {
+    if resolve_composer_shortcut_surface(hud_is_visible(app)) == ComposerShortcutSurface::Hud {
+        let hud = hud_window(app)?;
+        let _ = hud.set_always_on_top(true);
+        let _ = hud.unminimize();
+        hud.show().map_err(|e| e.to_string())?;
+        hud.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    crate::main_window::focus_main_workspace_window(app)
+}
+
 fn show_main_workspace_windows(app: &AppHandle) {
     for (label, win) in app.webview_windows() {
         if main_window::is_main_workspace_window_label(&label) {
@@ -306,6 +349,11 @@ pub fn wise_hud_is_active(app: AppHandle) -> bool {
 }
 
 #[tauri::command]
+pub fn wise_focus_composer_surface(app: AppHandle) -> Result<(), String> {
+    focus_active_composer_surface(&app)
+}
+
+#[tauri::command]
 pub fn wise_hud_set_overlay_height(app: AppHandle, height: f64) -> Result<(), String> {
     let hud = hud_window(&app)?;
     hud_set_overlay_height(&hud, height)
@@ -408,5 +456,17 @@ mod tests {
         assert!(!is_hud_forward_event("wise-hud-active-changed"));
         assert!(!is_hud_forward_event("wise-hud-state"));
         assert!(!is_hud_forward_event(""));
+    }
+
+    #[test]
+    fn composer_shortcuts_target_hud_only_when_hud_visible() {
+        assert_eq!(
+            resolve_composer_shortcut_surface(true),
+            ComposerShortcutSurface::Hud
+        );
+        assert_eq!(
+            resolve_composer_shortcut_surface(false),
+            ComposerShortcutSurface::Main
+        );
     }
 }

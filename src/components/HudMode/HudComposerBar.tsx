@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Select } from "antd";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ComposerRegion, type DualPaneComposerRepositoryPickerProps } from "../ClaudeChatInput/composer-region";
-import { useHudOverlaySelectOpen } from "../../hooks/useHudOverlaySelectOpen";
-import { wiseHudCancel, wiseHudExit, wiseHudNewSession, wiseHudSelectRepository, wiseHudSubmit } from "../../services/wiseHud";
-import { HudRuntimePicker } from "./HudRuntimePicker";
+import { ComposerRegion } from "../ClaudeChatInput/composer-region";
+import { wiseHudCancel, wiseHudExit, wiseHudNewSession, wiseHudSubmit } from "../../services/wiseHud";
+import { HudContextPicker } from "./HudContextPicker";
 import { safeUnlisten } from "../../utils/safeTauriUnlisten";
-import { HUD_SELECT_BUILTIN_PLACEMENTS, HUD_SELECT_POPUP_ALIGN, hudSelectPopupContainer } from "../../utils/hudSelectPopup";
-import { buildWorkspaceRepositoryFlatSelectOptions } from "../../utils/workspaceRepositoryTreeSelect";
 import {
   hudComposerSessionToClaudeSession,
   parseWiseHudActiveChanged,
@@ -16,7 +12,7 @@ import {
   type WiseHudRunStatus,
   type WiseHudSessionSnapshot,
 } from "../../utils/wiseHudSnapshot";
-import type { ImageAttachmentPart, Repository } from "../../types";
+import type { ImageAttachmentPart } from "../../types";
 import "./HudComposerBar.css";
 
 export type HudOverlayMode = "none" | "images" | "menu";
@@ -26,27 +22,27 @@ export interface HudComposerBarProps {
   onOverlayOpenChange?: (mode: HudOverlayMode) => void;
 }
 
-function toHudRepositories(snapshot: WiseHudSessionSnapshot): Repository[] {
-  return snapshot.repositories.map((item) => ({
-    id: item.id,
-    name: item.name,
-    path: item.path,
-    repositoryType: "document",
-    createdAt: "",
-    updatedAt: "",
-  }));
-}
-
 function IconHudExit() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M9 5H5v4M15 5h4v4M9 19H5v-4M15 19h4v-4"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <rect x="4" y="5" width="16" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M14.5 5v14" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function IconHudPlus() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 6v12M6 12h12" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconHudStop() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="7" y="7" width="10" height="10" rx="1.8" fill="currentColor" />
     </svg>
   );
 }
@@ -63,7 +59,7 @@ function HudRunStatusChip({
       ? `${runningCount} 个任务运行中`
       : runStatus === "completed"
         ? "全部完成"
-        : "暂无运行中的任务";
+        : "就绪";
   return (
     <div
       className={`app-hud-run-chip app-hud-run-chip--${runStatus}`}
@@ -71,37 +67,26 @@ function HudRunStatusChip({
       title={label}
       aria-label={label}
     >
-      <span className="app-hud-run-chip__indicator" aria-hidden>
-        {runStatus === "completed" ? (
-          <svg viewBox="0 0 16 16" className="app-hud-run-chip__check">
+      {runStatus === "running" ? (
+        <>
+          <span className="app-hud-run-chip__spinner" aria-hidden />
+          <span className="app-hud-run-chip__badge">{runningCount}</span>
+        </>
+      ) : (
+        <span className="app-hud-run-chip__check" aria-hidden>
+          <svg viewBox="0 0 16 16">
             <path
-              d="M3.5 8.5 6.5 11.5 12.5 4.5"
+              d="M3.6 8.2 6.6 11.1 12.4 4.7"
               fill="none"
               stroke="currentColor"
-              strokeWidth="1.8"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           </svg>
-        ) : null}
-      </span>
-      {runStatus === "running" ? (
-        <span className="app-hud-run-chip__count">{runningCount}</span>
-      ) : runStatus === "completed" ? (
-        <span className="app-hud-run-chip__label">完成</span>
-      ) : (
-        <span className="app-hud-run-chip__label">就绪</span>
+        </span>
       )}
     </div>
-  );
-}
-
-function IconHudNewSession() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
   );
 }
 
@@ -118,7 +103,7 @@ function HudNewSessionButton({ disabled }: { disabled?: boolean }) {
         void wiseHudNewSession();
       }}
     >
-      <IconHudNewSession />
+      <IconHudPlus />
     </button>
   );
 }
@@ -137,84 +122,41 @@ function HudExitButton() {
   );
 }
 
-function HudRepositorySelect({
-  snapshot,
-  onOpenChange,
-}: {
-  snapshot: WiseHudSessionSnapshot;
-  onOpenChange?: (open: boolean) => void;
-}) {
-  const repositories = useMemo(() => toHudRepositories(snapshot), [snapshot]);
-  const options = useMemo(
-    () =>
-      buildWorkspaceRepositoryFlatSelectOptions([], repositories).map((item) => ({
-        value: item.value,
-        label: item.label,
-      })),
-    [repositories],
-  );
-  const hudSelect = useHudOverlaySelectOpen(true);
-  const valueKey =
-    snapshot.activeRepositoryId != null ? `repo:${snapshot.activeRepositoryId}` : undefined;
-
-  useEffect(() => {
-    onOpenChange?.(hudSelect.overlayWanted);
-  }, [hudSelect.overlayWanted, onOpenChange]);
-
+function HudStopButton() {
   return (
-    <div className="app-hud-repo-anchor" onMouseDown={hudSelect.prepareOverlay}>
-      <Select
-        size="small"
-        variant="borderless"
-        className="app-claude-dual-pane-repo-picker app-hud-repo-picker"
-        classNames={{ popup: { root: "app-claude-dual-pane-repo-picker-dropdown app-hud-repo-picker-dropdown" } }}
-        placement="topRight"
-        builtinPlacements={HUD_SELECT_BUILTIN_PLACEMENTS}
-        popupAlign={HUD_SELECT_POPUP_ALIGN}
-        getPopupContainer={hudSelectPopupContainer}
-        popupMatchSelectWidth={false}
-        listHeight={240}
-        showSearch
-        optionFilterProp="label"
-        title="切换仓库"
-        aria-label="选择仓库"
-        placeholder="选择仓库"
-        open={hudSelect.open}
-        value={valueKey}
-        options={options}
-        onOpenChange={hudSelect.onOpenChange}
-        onChange={(value) => {
-          const raw = String(value ?? "");
-          if (raw.startsWith("repo:")) {
-            void wiseHudSelectRepository(Number(raw.slice(5)));
-          }
-        }}
-      />
-    </div>
+    <button
+      type="button"
+      className="app-hud-stop-btn"
+      aria-label="停止当前运行"
+      title="停止当前运行"
+      onClick={() => void wiseHudCancel()}
+    >
+      <IconHudStop />
+    </button>
   );
 }
 
 export function HudComposerBar({ snapshot, onOverlayOpenChange }: HudComposerBarProps) {
   const session = useMemo(() => hudComposerSessionToClaudeSession(snapshot), [snapshot]);
-  const repositories = useMemo(() => toHudRepositories(snapshot), [snapshot]);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [menuOverlay, setMenuOverlay] = useState(false);
-  const [runtimeOverlay, setRuntimeOverlay] = useState(false);
+  const [contextOverlay, setContextOverlay] = useState(false);
   const [previewImage, setPreviewImage] = useState<ImageAttachmentPart | null>(null);
+  const running = snapshot.busy;
 
   useEffect(() => {
     setPreviewImage(null);
   }, [session?.id]);
 
   useEffect(() => {
-    if (menuOverlay || runtimeOverlay) setPreviewImage(null);
-  }, [menuOverlay, runtimeOverlay]);
+    if (menuOverlay || contextOverlay) setPreviewImage(null);
+  }, [menuOverlay, contextOverlay]);
 
   useEffect(() => {
     onOverlayOpenChange?.(
-      menuOverlay || runtimeOverlay ? "menu" : previewImage ? "images" : "none",
+      menuOverlay || contextOverlay ? "menu" : previewImage ? "images" : "none",
     );
-  }, [menuOverlay, runtimeOverlay, previewImage, onOverlayOpenChange]);
+  }, [menuOverlay, contextOverlay, previewImage, onOverlayOpenChange]);
 
   useEffect(() => {
     if (!previewImage) return;
@@ -236,18 +178,6 @@ export function HudComposerBar({ snapshot, onOverlayOpenChange }: HudComposerBar
       return image;
     });
   }, []);
-
-  const dualPaneRepositoryPicker = useMemo<DualPaneComposerRepositoryPickerProps | undefined>(() => {
-    if (repositories.length === 0) return undefined;
-    return {
-      repositories,
-      valueKey:
-        snapshot.activeRepositoryId != null ? `repo:${snapshot.activeRepositoryId}` : "",
-      onSelectRepositoryId: (repositoryId) => {
-        void wiseHudSelectRepository(repositoryId);
-      },
-    };
-  }, [repositories, snapshot.activeRepositoryId]);
 
   const handleExecute = useCallback((sessionId: string, prompt: string) => {
     const text = prompt.replace(/\u200B/g, "").trim();
@@ -300,6 +230,10 @@ export function HudComposerBar({ snapshot, onOverlayOpenChange }: HudComposerBar
     };
   }, [focusEditor]);
 
+  const contextPicker = (
+    <HudContextPicker snapshot={snapshot} onOverlayWantedChange={setContextOverlay} />
+  );
+
   return (
     <div className="app-hud-shell" ref={shellRef}>
       <div className="app-hud-drag-shell" data-tauri-drag-region aria-hidden />
@@ -314,11 +248,10 @@ export function HudComposerBar({ snapshot, onOverlayOpenChange }: HudComposerBar
           <img src={previewImage.dataUrl} alt={previewImage.filename} />
         </button>
       ) : null}
-      <div className="app-hud-bar">
+      <div className={`app-hud-bar${running ? " app-hud-bar--running" : ""}`}>
         <div className="app-hud-bar-drag" data-tauri-drag-region aria-hidden />
         <HudNewSessionButton disabled={snapshot.activeRepositoryId == null} />
         <HudRunStatusChip runningCount={snapshot.runningCount} runStatus={snapshot.runStatus} />
-        <span className="app-hud-bar-divider" aria-hidden />
         {session ? (
           <div className="app-hud-composer">
             <ComposerRegion
@@ -341,12 +274,14 @@ export function HudComposerBar({ snapshot, onOverlayOpenChange }: HudComposerBar
               onRestoreRevert={() => undefined}
               sessionExecutionEngine={snapshot.engine}
               allowSendWhileBusy
-              dualPaneRepositoryPicker={dualPaneRepositoryPicker}
               hudChrome
-              hudLeadingActions={
-                <HudRuntimePicker snapshot={snapshot} onOverlayWantedChange={setRuntimeOverlay} />
+              hudLeadingActions={contextPicker}
+              hudTrailingActions={
+                <>
+                  {snapshot.canCancel ? <HudStopButton /> : null}
+                  <HudExitButton />
+                </>
               }
-              hudTrailingActions={<HudExitButton />}
               onHudOverlayChange={setMenuOverlay}
               onHudImagePreviewChange={handleHudImagePreviewChange}
               draftBucketKey={`hud:${session.id}`}
@@ -355,7 +290,7 @@ export function HudComposerBar({ snapshot, onOverlayOpenChange }: HudComposerBar
         ) : (
           <>
             <div className="app-hud-empty-hint">选择仓库后可新建会话</div>
-            <HudRepositorySelect snapshot={snapshot} onOpenChange={setMenuOverlay} />
+            {contextPicker}
             <HudExitButton />
           </>
         )}

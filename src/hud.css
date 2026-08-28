@@ -14,7 +14,9 @@ body,
 
 .app-claude-slash-popover,
 .ant-select-dropdown,
+.ant-popover,
 .semi-portal,
-.app-hud-image-float {
+.app-hud-image-float,
+.app-hud-context-popover {
   -webkit-app-region: no-drag;
 }

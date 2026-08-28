@@ -42,6 +42,7 @@ import {
 import { loadSessionOwnerHints, WISE_SESSION_OWNER_HINTS_CHANGED_EVENT } from "../utils/sessionOwnerHints";
 import { resolveFocusedPaneTargetSlot } from "../utils/multiPaneSlots";
 import { getActivePaneIndex } from "../stores/activePaneIndexStore";
+import type { UseViewModeApi } from "./useViewMode";
 import { requestPaneCenterView } from "../stores/paneCenterViewControlStore";
 import {
   getClaudeSessionsSnapshot,

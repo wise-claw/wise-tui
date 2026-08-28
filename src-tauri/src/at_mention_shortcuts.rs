@@ -3,7 +3,7 @@
 use keyboard_types::{Code, Modifiers};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 #[derive(Debug, Clone)]
@@ -206,12 +206,12 @@ pub fn register_at_mention_shortcuts(
                     return;
                 }
                 let payload = serde_json::json!({ "targetKey": target_key_clone });
-                let Some(win) = crate::main_window::resolve_main_workspace_window_for_focus(&app_clone) else {
-                    let _ = app_clone.emit("global-at-mention-shortcut", payload);
-                    return;
-                };
-                let _ = crate::main_window::focus_main_workspace_window(&app_clone);
-                let _ = win.emit("global-at-mention-shortcut", payload);
+                let _ = crate::wise_hud::focus_active_composer_surface(&app_clone);
+                crate::wise_hud::emit_to_active_composer_surface(
+                    &app_clone,
+                    "global-at-mention-shortcut",
+                    payload,
+                );
             }) {
                 eprintln!("[at_mention_shortcuts] failed to register '{}': {}", chord, e);
                 continue;

@@ -57,7 +57,8 @@ import {
   resolveExpectedTurnNonceForTab,
   shouldApplyClaudeTurnComplete,
 } from "../utils/claudeTurnCompleteGate";
-import { isWiseAppFocused } from "../utils/isWiseAppFocused";
+import { shouldAcceptBackgroundClaudeStream } from "../utils/isWiseAppFocused";
+import { getWiseHudModeActive, subscribeWiseHudMode } from "../stores/wiseHudModeStore";
 import {
   markWorkspaceRequirementOpen,
   markWorkspaceRequirementVerifying,
@@ -145,6 +146,12 @@ function isDocumentHidden(): boolean {
   return typeof document !== "undefined" && document.visibilityState !== "visible";
 }
 
+/** HUD 把主窗藏到后台时仍需落盘流式结果，不能按普通 hidden 丢弃/推迟。 */
+function shouldDeferClaudeStreamUi(): boolean {
+  if (getWiseHudModeActive()) return false;
+  return isDocumentHidden();
+}
+
 /** 窗口 hidden 时仍须解析 Hub 的行（权限 / 追问 / init 等）。 */
 function streamLineNeedsHubWhileHidden(line: string): boolean {
   return (
@@ -168,6 +175,11 @@ function ensureHiddenUiVisibilityListener(): void {
   hiddenUiVisibilityListenerReady = true;
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
+      hiddenUiFlushHandler?.();
+    }
+  });
+  subscribeWiseHudMode(() => {
+    if (!getWiseHudModeActive()) {
       hiddenUiFlushHandler?.();
     }
   });
@@ -289,6 +301,14 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   }
 
   function schedulePendingStreamSessionFlush(): void {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+      if (streamSessionFlushRaf !== null) {
+        window.cancelAnimationFrame(streamSessionFlushRaf);
+        streamSessionFlushRaf = null;
+      }
+      flushPendingStreamSessionUpdates({ immediate: true });
+      return;
+    }
     if (streamSessionFlushRaf !== null) return;
     streamSessionFlushRaf = window.requestAnimationFrame(() => {
       streamSessionFlushRaf = null;
@@ -435,7 +455,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     line: string,
     parsed: unknown,
   ) {
-    const hidden = isDocumentHidden();
+    const hidden = shouldDeferClaudeStreamUi();
     const now = Date.now();
 
     if (hidden && !streamLineNeedsHubWhileHidden(line) && !streamLineMayInit(line)) {
@@ -468,7 +488,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     }
     const systemErrMsg = extractSystemErrorMessageFromParsed(parsed);
     if (systemErrMsg) {
-      if (isDocumentHidden()) {
+      if (shouldDeferClaudeStreamUi()) {
         pushDeferredSystemError(tid, systemErrMsg);
       } else {
         setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, systemErrMsg));
@@ -477,7 +497,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     const resultErrMsg = extractResultErrorMessageFromParsed(parsed);
     if (resultErrMsg) {
       const formatted = formatClaudeResultErrorForSessionUi(resultErrMsg);
-      if (isDocumentHidden()) {
+      if (shouldDeferClaudeStreamUi()) {
         pushDeferred(deferredSystemErrors, { tid, msg: formatted });
       } else {
         setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, formatted));
@@ -721,7 +741,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     // 单屏：与 invocation 路径共用 tab 映射，`system.init` 后 tab id 会变为 Claude session_id，旧 ref 须经 sessionIdMap 解析。
     // 全局 claude-output 通道被所有主窗口共享监听（仅 attach 失败时后端才发全局通道），
     // 非聚焦窗口消费会把本窗口输出灌入活动会话造成跨窗口串流，故加焦点守卫。
-    if (!isWiseAppFocused()) return;
+    if (!shouldAcceptBackgroundClaudeStream()) return;
     handleOutputForSendTab(refTid, payload);
   }
 
@@ -914,7 +934,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       notifyCompletion({ tid, success: uiSuccess, nonce: turnNonce, previewRaw, structuredVerdict });
       // 消费本轮 expected nonce：同一 nonce 的 complete 只接受一次投递，双通道二次送达被门禁拦截。
       consumeExpectedTurnNonceForTab(tid, turnNonce);
-      if (isDocumentHidden()) {
+      if (shouldDeferClaudeStreamUi()) {
         pushDeferred(deferredCompletes, { tid, payload, turnNonce });
         return true;
       }
@@ -1053,7 +1073,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     if (nonceForTurn === undefined) return;
     // 单屏兜底：全局 claude-complete 通道被所有主窗口共享监听（attach 失败降级时后端才发全局通道），
     // 非聚焦窗口消费会跨窗口误完结会话（stale complete 二次 finalize），故加焦点守卫。
-    if (!isWiseAppFocused()) return;
+    if (!shouldAcceptBackgroundClaudeStream()) return;
     handleCompleteForSendTab(refTid, payload, nonceForTurn);
   }
 
@@ -1083,7 +1103,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       return;
     }
     // 单屏兜底：全局 claude-error 通道被所有主窗口共享监听，非聚焦窗口消费会跨窗口串流错误态，加焦点守卫。
-    if (!isWiseAppFocused()) return;
+    if (!shouldAcceptBackgroundClaudeStream()) return;
     handleErrorForSendTab(refTid, payload);
   }
 
@@ -1093,7 +1113,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     const tid = session?.id ?? mapped;
     const errorMsg = typeof payload === "string" ? payload : JSON.stringify(payload);
     const fullMsg = `Claude stderr: ${errorMsg}`;
-    if (isDocumentHidden()) {
+    if (shouldDeferClaudeStreamUi()) {
       pushDeferred(deferredStderrErrors, { tid, msg: fullMsg });
       return;
     }

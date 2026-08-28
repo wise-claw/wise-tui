@@ -30,16 +30,28 @@
         margin-top: 8px;
         width: 100%;
       }
+      button:disabled {
+        opacity: 0.6;
+      }
       code {
+        font-size: 11px;
+      }
+      .hint {
+        margin-top: 8px;
+        color: #666;
         font-size: 11px;
       }
     </style>
   </head>
   <body>
-    <h1>Wise 页面监控</h1>
+    <h1>Wise 浏览器助手</h1>
     <div id="status" class="row warn">正在连接…</div>
     <div id="detail" class="row"></div>
+    <button id="send" type="button">发送选中图文到 Wise</button>
+    <button id="send-viewport" type="button">发送可见区域到 Wise</button>
     <button id="refresh" type="button">刷新状态</button>
+    <div id="send-result" class="row"></div>
+    <div class="hint">选中后右键「发送到 Wise 作为需求」，或按 Alt+Shift+W。发送前可补充说明；⌘/Ctrl+Enter 确认。</div>
     <script src="popup.js"></script>
   </body>
 </html>

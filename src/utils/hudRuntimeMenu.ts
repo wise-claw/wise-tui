@@ -52,3 +52,29 @@ export function hudRuntimeBusyBlocksEngineSwitch(
 ): boolean {
   return busy && engine !== nextEngine;
 }
+
+export type HudContextPickerTab = "repo" | "engine" | "model";
+
+export const HUD_CONTEXT_PICKER_TABS: ReadonlyArray<{
+  id: HudContextPickerTab;
+  label: string;
+}> = [
+  { id: "repo", label: "仓库" },
+  { id: "engine", label: "执行环境" },
+  { id: "model", label: "模型" },
+];
+
+export function hudContextPickerFilterPlaceholder(tab: HudContextPickerTab): string {
+  if (tab === "engine") return "过滤执行环境...";
+  if (tab === "model") return "过滤模型...";
+  return "过滤仓库...";
+}
+
+export function filterHudPickerItems<T extends { label: string }>(
+  items: readonly T[],
+  query: string,
+): T[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [...items];
+  return items.filter((item) => item.label.toLowerCase().includes(q));
+}
