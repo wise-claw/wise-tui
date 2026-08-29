@@ -1,6 +1,8 @@
 import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import { normalizeSessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import { CURSOR_SDK_DEFAULT_MODEL } from "../constants/cursorSdk";
+import { OPENCODE_DEFAULT_MODEL } from "./opencodeModel";
+import { QODER_DEFAULT_MODEL } from "./qoderModel";
 import { normalizeClaudeReasoningEffort } from "../constants/claudeReasoningEffort";
 import { normalizeCodexReasoningEffort } from "../constants/codexReasoningEffort";
 import {
@@ -32,6 +34,24 @@ export interface NewSessionComposerPatch {
   claudeReasoningEffort?: string;
 }
 
+/** 各执行环境在没有任何已保存 / 可继承模型时的缺省选择。 */
+export function engineDefaultComposerModel(engine: SessionExecutionEngine): string {
+  if (engine === "codex" || engine === "codex-rpc") return "";
+  if (engine === "cursor") return CURSOR_SDK_DEFAULT_MODEL;
+  if (engine === "opencode") return OPENCODE_DEFAULT_MODEL;
+  if (engine === "qoder") return QODER_DEFAULT_MODEL;
+  return "sonnet";
+}
+
+/**
+ * 模型域：同域的执行环境共用同一套模型 id（`codex` 与 `codex-rpc` 都是 Codex 模型），
+ * 跨域的模型 id 互不通用（Cursor / OpenCode 的 `auto`、Claude 的 `sonnet` 等）。
+ */
+export function engineModelDomain(engine: SessionExecutionEngine): string {
+  if (engine === "codex" || engine === "codex-rpc") return "codex";
+  return engine;
+}
+
 /** 新建会话模型：已保存的环境默认优先，其次继承当前会话，再回退引擎缺省。 */
 export function resolveNewSessionComposerModel(
   engine: SessionExecutionEngine,
@@ -41,9 +61,25 @@ export function resolveNewSessionComposerModel(
   if (saved) return saved;
   const inherited = inheritModel?.trim() || "";
   if (inherited) return inherited;
-  if (engine === "codex" || engine === "codex-rpc") return "";
-  if (engine === "cursor") return CURSOR_SDK_DEFAULT_MODEL;
-  return "sonnet";
+  return engineDefaultComposerModel(engine);
+}
+
+/**
+ * 切换执行环境后的模型：该环境上次保存的选择优先；只有同一模型域（`codex` ↔ `codex-rpc`）
+ * 才可沿用当前会话模型，跨域一律退回目标环境自身缺省，避免把 Cursor / OpenCode 的 `auto`
+ * 或 Claude 的 `sonnet` 带进新环境。
+ */
+export function resolveEngineSwitchComposerModel(
+  engine: SessionExecutionEngine,
+  currentModel?: string | null,
+  previousEngine?: SessionExecutionEngine | null,
+): string {
+  const saved = getCachedExecutionEngineDefaultModel(engine)?.trim() || "";
+  if (saved) return saved;
+  const sameDomain =
+    Boolean(previousEngine) && engineModelDomain(previousEngine!) === engineModelDomain(engine);
+  if (sameDomain) return currentModel?.trim() || engineDefaultComposerModel(engine);
+  return engineDefaultComposerModel(engine);
 }
 
 /** 新建会话执行环境：当前会话覆盖优先，其次全局「新建会话默认」，再回退仓库默认。 */
@@ -89,10 +125,12 @@ export function resolveNewSessionComposerDefaults(input: {
     input.repoEngine,
     input.inheritEngine === false ? null : input.prior?.executionEngine,
   );
+  // 同一模型域（codex ↔ codex-rpc）才继承当前会话模型，跨域的模型 id 互不通用。
   const inheritModel =
     input.prior &&
-    normalizeSessionExecutionEngine(input.prior.executionEngine || executionEngine) ===
-      executionEngine
+    engineModelDomain(
+      normalizeSessionExecutionEngine(input.prior.executionEngine || executionEngine),
+    ) === engineModelDomain(executionEngine)
       ? input.prior.model
       : null;
   return {

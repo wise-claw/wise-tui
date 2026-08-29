@@ -775,9 +775,17 @@ function ComposerInner({
   const isOpencodeEngine = sessionExecutionEngine === "opencode";
   const isSelectOnlyEngine = isCursorEngine || isOpencodeEngine;
   const [model, setModel] = useState(() => session.model?.trim() || "sonnet");
+  const modelEngineRef = useRef(sessionExecutionEngine);
   useEffect(() => {
     const next = session.model?.trim();
-    if (!next) return;
+    const engineChanged = modelEngineRef.current !== sessionExecutionEngine;
+    modelEngineRef.current = sessionExecutionEngine;
+    if (!next) {
+      // 切换执行环境后会话模型被清空（交给目标环境自己决定）：不能继续显示上一个环境的模型，
+      // 交由 ComposerModelPicker 按该环境的已保存默认 / 档案重新填充。
+      if (engineChanged) setModel("");
+      return;
+    }
     setModel((prev) => {
       if (prev === next) return prev;
       if (isCursorEngine && (next === "auto" || next === "default")) {
@@ -786,7 +794,7 @@ function ComposerInner({
       }
       return next;
     });
-  }, [session.id, session.model, isCursorEngine]);
+  }, [session.id, session.model, isCursorEngine, sessionExecutionEngine]);
   const [profileStoreRevision, setProfileStoreRevision] = useState(0);
   const profileEngineForPicker: ModelProfileEngine | null = isSelectOnlyEngine
     ? null

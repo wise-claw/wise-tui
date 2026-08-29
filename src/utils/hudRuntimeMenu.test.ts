@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   capHudRuntimeModelOptions,
+  ensureHudCurrentModelOption,
   filterHudPickerItems,
   hudContextPickerFilterPlaceholder,
   hudModelMenuKey,
@@ -13,6 +14,20 @@ describe("hudRuntimeMenu", () => {
     expect(parseHudModelMenuKey(hudModelMenuKey("gpt-5.4"))).toBe("gpt-5.4");
     expect(parseHudModelMenuKey("claude")).toBeNull();
     expect(parseHudModelMenuKey("hud-model:")).toBeNull();
+  });
+
+  it("keeps the current model without truncating the rest", () => {
+    const options = [
+      { value: "a", label: "A" },
+      { value: "b", label: "B" },
+      { value: "latest", label: "Latest" },
+    ];
+    expect(ensureHudCurrentModelOption(options, "c").map((item) => item.value)).toEqual([
+      "c",
+      "a",
+      "b",
+      "latest",
+    ]);
   });
 
   it("keeps the current model when capping", () => {

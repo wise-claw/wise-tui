@@ -214,6 +214,8 @@ import { invalidateWorkflowRunCacheForRepository } from "./hooks/useWorkflowRun"
 import { deleteAppSetting, getAppSetting, setAppSetting } from "./services/appSettingsStore";
 import { persistMultiPaneLayoutState } from "./services/multiPaneLayoutPersist";
 import { loadWiseDefaultConfig } from "./services/wiseDefaultConfigStore";
+import { loadExecutionEngineModelDefaults } from "./services/executionEngineModelDefaults";
+import { loadExecutionEngineReasoningDefaults } from "./services/executionEngineReasoningDefaults";
 import { migratePromptContextSessionKey } from "./components/ClaudeChatInput/prompt-context";
 import {
   loadClaudeConcurrencyLimits,
@@ -513,6 +515,9 @@ export default function App() {
     void loadWiseDefaultConfig().catch(() => {
       /* 启动时确保默认配置已迁入 app_settings */
     });
+    // 执行环境的模型 / 推理默认值供 Composer 与新建会话同步读取，启动即 hydrate。
+    void loadExecutionEngineModelDefaults().catch(() => undefined);
+    void loadExecutionEngineReasoningDefaults().catch(() => undefined);
   }, []);
 
   const enterAuthorPane = useCallback(

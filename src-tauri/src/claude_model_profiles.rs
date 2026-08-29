@@ -12,7 +12,7 @@ use crate::codex_config_dir::{
     apply_codex_openai_catalog_envelope, apply_codex_profile_envelope,
     codex_config_uses_custom_provider, codex_profile_envelope_to_json,
     effective_codex_model_from_disk, clear_codex_user_config, looks_like_openai_catalog_model,
-    parse_codex_profile_envelope, read_codex_user_settings_pretty,
+    parse_codex_profile_envelope, patch_codex_disk_model, read_codex_user_settings_pretty,
     read_effective_codex_model_from_envelope, restore_codex_openai_provider_for_model,
     user_codex_dir,
 };
@@ -160,6 +160,16 @@ struct EffectiveModelsSnapshot {
 }
 
 static EFFECTIVE_MODELS_SNAPSHOT: Mutex<Option<EffectiveModelsSnapshot>> = Mutex::new(None);
+
+/// 档案 / 模型写盘的串行锁：apply 会读改写 `settings.json`、`auth.json`、`config.toml`，
+/// 并发执行会互相覆盖（快速连点切换模型时表现为「切了又弹回上一个档案」）。
+static PROFILE_APPLY_LOCK: Mutex<()> = Mutex::new(());
+
+fn profile_apply_guard() -> std::sync::MutexGuard<'static, ()> {
+    PROFILE_APPLY_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 fn model_profile_disk_mtimes() -> ModelProfileDiskMtimes {
     let codex_dir = user_codex_dir();
@@ -603,6 +613,15 @@ pub(crate) fn ensure_active_opencode_profile_applied(db: &WiseDb) -> Result<(), 
 /// spawn 前按本次请求的模型选择写入 `~/.codex`。
 /// 目录 GPT 模型不能沿用当前 DeepSeek 等自定义 provider 档案，否则会打到错误的 base_url。
 pub(crate) fn ensure_codex_profile_applied_for_model(
+    db: &WiseDb,
+    requested_model: Option<&str>,
+) -> Result<(), String> {
+    let _guard = profile_apply_guard();
+    ensure_codex_profile_applied_for_model_inner(db, requested_model)
+}
+
+/// 已持有 {@link PROFILE_APPLY_LOCK} 时使用（`std::sync::Mutex` 不可重入）。
+fn ensure_codex_profile_applied_for_model_inner(
     db: &WiseDb,
     requested_model: Option<&str>,
 ) -> Result<(), String> {
@@ -1074,6 +1093,7 @@ pub(crate) fn failover_to_next_model_profile(
     engine: String,
     exclude_profile_ids: Option<Vec<String>>,
 ) -> Result<ModelProfileFailoverResult, String> {
+    let _guard = profile_apply_guard();
     let engine_norm = normalize_profile_engine(&engine);
     let exclude = exclude_profile_ids.unwrap_or_default();
     let store = load_store(&db);
@@ -1137,6 +1157,7 @@ pub(crate) fn apply_claude_model_profile(
     db: tauri::State<'_, WiseDb>,
     profile_id: String,
 ) -> Result<ClaudeModelProfileStoreView, String> {
+    let _guard = profile_apply_guard();
     let id = profile_id.trim();
     let store = load_store(&db);
     let profile = store
@@ -1168,6 +1189,60 @@ pub(crate) fn apply_claude_model_profile(
     }
     save_store(&db, &next)?;
     Ok(store_view_after_disk_write(&next))
+}
+
+/// Composer 选中 Claude 模型即写盘：把 `~/.claude/settings.json` 的模型选择
+///（`env.ANTHROPIC_*MODEL` + 顶层 `model` + `availableModels`）对齐到所选模型，
+/// 其余配置（base_url / token / hooks 等）保持不变。
+#[tauri::command]
+pub(crate) fn apply_claude_runtime_model(
+    db: tauri::State<'_, WiseDb>,
+    model: String,
+) -> Result<ClaudeModelProfileStoreView, String> {
+    let requested = model.trim();
+    if requested.is_empty() {
+        return Err("模型 ID 不能为空".to_string());
+    }
+    let _guard = profile_apply_guard();
+    let path = user_claude_dir().join("settings.json");
+    let mut root = if path.is_file() {
+        let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        if text.trim().is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::from_str::<serde_json::Value>(&text)
+                .map_err(|e| format!("settings.json 不是合法 JSON: {e}"))?
+        }
+    } else {
+        serde_json::json!({})
+    };
+    if !root.is_object() {
+        root = serde_json::json!({});
+    }
+    if read_effective_model(&root).as_deref() != Some(requested) {
+        sync_claude_code_model_selection(&mut root, requested)?;
+        write_user_settings_json(&root)?;
+    }
+    Ok(store_view_after_disk_write(&load_store(&db)))
+}
+
+/// Composer 选中 Codex 模型即写盘：按所选模型决定应生效的档案 / OpenAI 官方 provider
+///（复用执行前的同一套决策），再把 `config.toml` 顶层 `model` 对齐到所选模型。
+/// 目录 GPT 模型会剥掉上一个自定义 provider 与其残留 API Key，避免打到错误的 base_url。
+#[tauri::command]
+pub(crate) fn apply_codex_runtime_model(
+    db: tauri::State<'_, WiseDb>,
+    model: String,
+) -> Result<ClaudeModelProfileStoreView, String> {
+    let requested = model.trim();
+    if requested.is_empty() {
+        return Err("模型 ID 不能为空".to_string());
+    }
+    let _guard = profile_apply_guard();
+    ensure_codex_profile_applied_for_model_inner(&db, Some(requested))?;
+    // 档案 config 带的 model 可能不是所选项（同一 provider 下换模型），最后统一对齐。
+    patch_codex_disk_model(requested)?;
+    Ok(store_view_after_disk_write(&load_store(&db)))
 }
 
 #[tauri::command]

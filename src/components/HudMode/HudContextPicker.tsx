@@ -6,7 +6,7 @@ import { useAgentRegistryCursorAvailable } from "../../hooks/useAgentRegistryCur
 import { useAgentRegistryGeminiAvailable } from "../../hooks/useAgentRegistryGeminiAvailable";
 import { useAgentRegistryOpencodeAvailable } from "../../hooks/useAgentRegistryOpencodeAvailable";
 import { useAgentRegistryQoderAvailable } from "../../hooks/useAgentRegistryQoderAvailable";
-import { getClaudeModelPickerOptions } from "../../services/claude";
+import { getClaudeModelPickerOptions, type ClaudeModelPickerOptions } from "../../services/claude";
 import {
   getCachedClaudeModelPickerOptions,
   getCachedCodexModels,
@@ -20,11 +20,13 @@ import {
   saveCachedOpencodeModels,
   saveCachedQoderModels,
 } from "../../services/executionEngineModelListCache";
-import { listCodexModels } from "../../services/codex";
-import { listCursorModels } from "../../services/cursorAgent";
-import { listOpencodeModels } from "../../services/opencode";
-import { listQoderModels } from "../../services/qoder";
+import { listCodexModels, type CodexModelListItem } from "../../services/codex";
+import { listCursorModels, type CursorModelListItem } from "../../services/cursorAgent";
+import { listOpencodeModels, type OpencodeModelListItem } from "../../services/opencode";
+import { listQoderModels, type QoderModelListItem } from "../../services/qoder";
+import { getClaudeModelProfileStore } from "../../services/claudeModelProfiles";
 import { getCachedModelProfileStore } from "../../stores/modelProfileStoreCache";
+import type { ClaudeModelProfile } from "../../types/claudeModelProfile";
 import { wiseHudSelectRepository, wiseHudSetEngine, wiseHudSetModel } from "../../services/wiseHud";
 import {
   isSessionExecutionEngine,
@@ -34,7 +36,7 @@ import {
 } from "../../constants/sessionExecutionEngine";
 import { hudSelectPopupContainer, isInsideHudContextPicker } from "../../utils/hudSelectPopup";
 import {
-  capHudRuntimeModelOptions,
+  ensureHudCurrentModelOption,
   filterHudPickerItems,
   HUD_CONTEXT_PICKER_TABS,
   hudContextPickerFilterPlaceholder,
@@ -117,16 +119,26 @@ function IconHudChevron() {
   );
 }
 
+interface HudModelListSources {
+  claudePicker: ClaudeModelPickerOptions | null;
+  profiles: readonly ClaudeModelProfile[];
+  codexModels: readonly CodexModelListItem[];
+  cursorModels: readonly CursorModelListItem[];
+  opencodeModels: readonly OpencodeModelListItem[];
+  qoderModels: readonly QoderModelListItem[];
+}
+
 function collectHudModelOptions(
   engine: SessionExecutionEngine,
   sessionModel: string,
+  sources: HudModelListSources,
 ): HudRuntimeModelOption[] {
   const current = sessionModel.trim();
   if (engine === "claude") {
-    return capHudRuntimeModelOptions(
+    return ensureHudCurrentModelOption(
       buildClaudeModelPickerOptions({
-        picker: getCachedClaudeModelPickerOptions(),
-        profiles: getCachedModelProfileStore()?.profiles ?? [],
+        picker: sources.claudePicker,
+        profiles: sources.profiles,
         sessionModel: current,
         currentModel: current,
       }),
@@ -134,33 +146,30 @@ function collectHudModelOptions(
     );
   }
   if (engine === "codex" || engine === "codex-rpc") {
-    return capHudRuntimeModelOptions(
-      buildCodexModelPickerOptions(
-        getCachedCodexModels() ?? [],
-        getCachedModelProfileStore()?.profiles ?? [],
-      ),
+    return ensureHudCurrentModelOption(
+      buildCodexModelPickerOptions(sources.codexModels, sources.profiles),
       current,
     );
   }
   if (engine === "cursor") {
-    return capHudRuntimeModelOptions(
-      buildCursorModelPickerOptions(getCachedCursorModels() ?? []),
+    return ensureHudCurrentModelOption(
+      buildCursorModelPickerOptions(sources.cursorModels),
       current,
     );
   }
   if (engine === "opencode") {
-    return capHudRuntimeModelOptions(
-      buildOpencodeModelPickerOptions(getCachedOpencodeModels() ?? []),
+    return ensureHudCurrentModelOption(
+      buildOpencodeModelPickerOptions(sources.opencodeModels),
       current,
     );
   }
   if (engine === "qoder") {
-    return capHudRuntimeModelOptions(
-      buildQoderModelPickerOptions(getCachedQoderModels() ?? []),
+    return ensureHudCurrentModelOption(
+      buildQoderModelPickerOptions(sources.qoderModels),
       current,
     );
   }
-  return capHudRuntimeModelOptions([], current);
+  return ensureHudCurrentModelOption([], current);
 }
 
 function HudContextList({
@@ -210,7 +219,24 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
   const [query, setQuery] = useState("");
   const [optimisticEngine, setOptimisticEngine] = useState<SessionExecutionEngine | null>(null);
   const [optimisticModel, setOptimisticModel] = useState<string | null>(null);
-  const [modelTick, setModelTick] = useState(0);
+  const [claudePicker, setClaudePicker] = useState<ClaudeModelPickerOptions | null>(
+    () => getCachedClaudeModelPickerOptions(),
+  );
+  const [profiles, setProfiles] = useState<readonly ClaudeModelProfile[]>(
+    () => getCachedModelProfileStore()?.profiles ?? [],
+  );
+  const [codexModels, setCodexModels] = useState<readonly CodexModelListItem[]>(
+    () => getCachedCodexModels() ?? [],
+  );
+  const [cursorModels, setCursorModels] = useState<readonly CursorModelListItem[]>(
+    () => getCachedCursorModels() ?? [],
+  );
+  const [opencodeModels, setOpencodeModels] = useState<readonly OpencodeModelListItem[]>(
+    () => getCachedOpencodeModels() ?? [],
+  );
+  const [qoderModels, setQoderModels] = useState<readonly QoderModelListItem[]>(
+    () => getCachedQoderModels() ?? [],
+  );
   const pointerDownTargetRef = useRef<EventTarget | null>(null);
   const engine = optimisticEngine ?? snapshot.engine;
   const sessionModel = optimisticModel ?? snapshot.composerSession?.model ?? "";
@@ -266,46 +292,96 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
   }, [hudSelect.open]);
 
   useEffect(() => {
-    if (!hudSelect.open) return;
+    if (!hudSelect.open || tab !== "model") return;
     let cancelled = false;
+    const repositoryPath = snapshot.composerSession?.repositoryPath?.trim() || null;
     void (async () => {
       try {
-        await loadExecutionEngineModelLists();
-        if (!cancelled) setModelTick((n) => n + 1);
+        const [, store] = await Promise.all([
+          loadExecutionEngineModelLists(),
+          getClaudeModelProfileStore().catch(() => null),
+        ]);
+        if (cancelled) return;
+        if (store) setProfiles(store.profiles);
+        setClaudePicker(getCachedClaudeModelPickerOptions());
+        setCodexModels(getCachedCodexModels() ?? []);
+        setCursorModels(getCachedCursorModels() ?? []);
+        setOpencodeModels(getCachedOpencodeModels() ?? []);
+        setQoderModels(getCachedQoderModels() ?? []);
+
         if (engine === "claude") {
-          const picker = await getClaudeModelPickerOptions();
+          const picker = await getClaudeModelPickerOptions(repositoryPath);
           if (cancelled) return;
-          await saveCachedClaudeModelPickerOptions(picker);
-        } else if (engine === "codex" || engine === "codex-rpc") {
+          if (picker.defaultModel || picker.availableModels.length > 0) {
+            void saveCachedClaudeModelPickerOptions(picker);
+            setClaudePicker(picker);
+          }
+          return;
+        }
+        if (engine === "codex" || engine === "codex-rpc") {
           const models = await listCodexModels();
           if (cancelled) return;
-          await saveCachedCodexModels(models);
-        } else if (engine === "cursor") {
+          if (models.length > 0) {
+            void saveCachedCodexModels(models);
+            setCodexModels(models);
+          }
+          return;
+        }
+        if (engine === "cursor") {
           const models = await listCursorModels();
           if (cancelled) return;
-          await saveCachedCursorModels(models);
-        } else if (engine === "opencode") {
+          if (models.length > 0) {
+            void saveCachedCursorModels(models);
+            setCursorModels(models);
+          }
+          return;
+        }
+        if (engine === "opencode") {
           const models = await listOpencodeModels();
           if (cancelled) return;
-          await saveCachedOpencodeModels(models);
-        } else if (engine === "qoder") {
+          if (models.length > 0) {
+            void saveCachedOpencodeModels(models);
+            setOpencodeModels(models);
+          }
+          return;
+        }
+        if (engine === "qoder") {
           const models = await listQoderModels();
           if (cancelled) return;
-          await saveCachedQoderModels(models);
+          if (models.length > 0) {
+            void saveCachedQoderModels(models);
+            setQoderModels(models);
+          }
         }
-        if (!cancelled) setModelTick((n) => n + 1);
       } catch {
-        if (!cancelled) setModelTick((n) => n + 1);
+        /* 保留已hydrate的缓存列表 */
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [engine, hudSelect.open]);
+  }, [engine, hudSelect.open, snapshot.composerSession?.repositoryPath, tab]);
 
   const modelOptions = useMemo(
-    () => collectHudModelOptions(engine, sessionModel),
-    [engine, sessionModel, modelTick],
+    () =>
+      collectHudModelOptions(engine, sessionModel, {
+        claudePicker,
+        profiles,
+        codexModels,
+        cursorModels,
+        opencodeModels,
+        qoderModels,
+      }),
+    [
+      claudePicker,
+      codexModels,
+      cursorModels,
+      engine,
+      opencodeModels,
+      profiles,
+      qoderModels,
+      sessionModel,
+    ],
   );
 
   const engineItems = useMemo(() => {
@@ -497,8 +573,8 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
       >
         <button
           type="button"
-          className="app-hud-context-pill"
-          style={{ padding: "0 14px 0 16px" }}
+          className={`app-hud-context-pill${hudSelect.open ? " app-hud-context-pill--open" : ""}`}
+          aria-expanded={hudSelect.open}
           aria-label="切换仓库、执行环境和模型"
           title={`${activeRepoLabel} · ${SESSION_EXECUTION_ENGINE_LABELS[engine].title}`}
         >

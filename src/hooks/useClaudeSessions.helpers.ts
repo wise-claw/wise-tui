@@ -411,6 +411,20 @@ export async function modelsForRepositoryPaths(paths: string[]): Promise<Map<str
   return map;
 }
 
+/**
+ * 启动 hydrate 时会话模型的取值：tabs.json 里已有模型说明用户在 Composer 选择过
+ *（可能属于 Codex / Cursor / OpenCode 等非 Claude 环境），必须原样复用；
+ * Claude settings.json 的模型只用来补空缺。
+ */
+export function resolveHydratedSessionModel(
+  persistedModel: string | undefined | null,
+  claudeConfigModel: string | undefined | null,
+): string {
+  const persisted = persistedModel?.trim() || "";
+  if (persisted) return persisted;
+  return claudeConfigModel?.trim() || "";
+}
+
 export function pruneGhostRepositorySessions(
   sessions: ClaudeSession[],
   repositoryPath: string,

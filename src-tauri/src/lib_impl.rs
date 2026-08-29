@@ -693,6 +693,8 @@ pub fn run() {
             claude_model_profiles::upsert_claude_model_profile,
             claude_model_profiles::delete_claude_model_profile,
             claude_model_profiles::apply_claude_model_profile,
+            claude_model_profiles::apply_claude_runtime_model,
+            claude_model_profiles::apply_codex_runtime_model,
             claude_model_profiles::failover_to_next_model_profile,
             claude_model_profiles::set_claude_model_profile_auto_failover,
             claude_model_profiles::reorder_claude_model_profiles,

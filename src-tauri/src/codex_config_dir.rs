@@ -383,7 +383,6 @@ pub(crate) fn strip_custom_model_provider_tables(config: &str) -> String {
 }
 
 /// 只改磁盘 `config.toml` 的顶层 `model`，保留当前 provider / 其它配置。
-#[allow(dead_code)]
 pub(crate) fn patch_codex_disk_model(model: &str) -> Result<(), String> {
     let trimmed = model.trim();
     if trimmed.is_empty() {

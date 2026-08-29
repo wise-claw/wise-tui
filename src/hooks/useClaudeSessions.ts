@@ -58,10 +58,11 @@ import {
 import { buildClaudeModelSwitchReconnectPlan } from "../utils/claudeModelProfileReconnect";
 import { resolveCursorResumeAgentId } from "../utils/cursorAgentId";
 import {
+  engineModelDomain,
+  resolveEngineSwitchComposerModel,
   resolveNewSessionComposerModel,
   resolveNewSessionComposerReasoning,
 } from "../utils/newSessionComposerDefaults";
-import { CURSOR_SDK_DEFAULT_MODEL } from "../constants/cursorSdk";
 import {
   loadDefaultClaudeConnectionKind,
   applyTabConnectionKindOverride,
@@ -278,6 +279,7 @@ import {
   pruneGhostRepositorySessions,
   pruneRepoDiskIndexSessions,
   purgeClaudeSessionStreamSidecarRefs,
+  resolveHydratedSessionModel,
   resolveTabIdForClaudeStream,
   resolveTabIdFromCompletePayload,
   sessionHasHookSystemActivity,
@@ -1998,7 +2000,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           const modelByPath = await modelsForRepositoryPaths(normalized.map((s) => s.repositoryPath));
           const normalizedWithModels = normalized.map((s) => {
             const cfg = modelByPath.get(s.repositoryPath);
-            const withModel = cfg ? { ...s, model: cfg } : s;
+            const hydratedModel = resolveHydratedSessionModel(s.model, cfg);
+            const withModel =
+              hydratedModel && hydratedModel !== s.model ? { ...s, model: hydratedModel } : s;
             return {
               ...withModel,
               messages: capSessionMessagesForMemory(withModel.messages, PERSIST_SESSION_MESSAGES_MAX),
@@ -2964,10 +2968,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const nextConnectionKind: ClaudeSessionConnectionKind =
         nextEngine === "claude" ? "streaming" : "oneshot";
       const globalDefault = defaultConnectionKindRef.current;
-      const savedModel = getCachedExecutionEngineDefaultModel(nextEngine)?.trim() || "";
-      const nextModel =
-        savedModel ||
-        (nextEngine === "cursor" ? CURSOR_SDK_DEFAULT_MODEL : session.model);
+      // 已保存的环境默认模型可能尚未 hydrate；先加载再解析，否则切环境会掉回缺省档。
+      await loadExecutionEngineModelDefaults();
+      const nextModel = resolveEngineSwitchComposerModel(nextEngine, session.model, prevEngine);
+      // 跨模型域切换（如 Cursor 的 `auto` → Codex）必须落新值，哪怕是空：
+      // Codex 缺省为空表示交给 config.toml 决定，保留旧模型会让底栏继续显示上一个环境的模型。
+      const modelDomainChanged = engineModelDomain(prevEngine) !== engineModelDomain(nextEngine);
       await loadExecutionEngineReasoningDefaults();
       const reasoning = resolveNewSessionComposerReasoning(nextEngine);
       if (reasoning.codexReasoningEffort) {
@@ -2980,7 +2986,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             ...s,
             executionEngine: nextEngine,
             claudeSessionId: null,
-            ...(nextModel.trim() ? { model: nextModel } : {}),
+            ...(nextModel.trim()
+              ? { model: nextModel }
+              : modelDomainChanged
+                ? { model: "" }
+                : {}),
             ...reasoning,
           };
           return applyTabConnectionKindOverride(withEngine, nextConnectionKind, globalDefault);

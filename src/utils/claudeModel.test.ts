@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ClaudeModelProfileStoreView } from "../types/claudeModelProfile";
 import {
   buildClaudeModelPickerOptions,
+  isClaudeProfileModelId,
   resolveClaudeExecModelId,
   resolveClaudeProfileModelFromStore,
 } from "./claudeModel";
@@ -149,5 +150,38 @@ describe("buildClaudeModelPickerOptions", () => {
       currentModel: "sonnet",
     });
     expect(opts.map((o) => o.value)).toEqual(["deepseek-v4-flash", "glm-5.1", "sonnet"]);
+  });
+});
+
+describe("isClaudeProfileModelId", () => {
+  const profile = (
+    partial: Partial<import("../types/claudeModelProfile").ClaudeModelProfile>,
+  ): import("../types/claudeModelProfile").ClaudeModelProfile => ({
+    id: "p-1",
+    company: "火山",
+    name: "glm",
+    modelId: "glm-5",
+    settingsJson: "{}",
+    engine: "claude",
+    createdAtMs: 0,
+    updatedAtMs: 0,
+    ...partial,
+  });
+
+  test("命中本地 claude 档案的模型（settings.json 里没有也算已知）", () => {
+    const profiles = [profile({ modelId: "qwen3-max" })];
+    expect(isClaudeProfileModelId("qwen3-max", profiles)).toBe(true);
+    expect(isClaudeProfileModelId(" qwen3-max ", profiles)).toBe(true);
+    expect(isClaudeProfileModelId("opus", profiles)).toBe(false);
+  });
+
+  test("其它引擎的档案模型不算 claude 已知模型", () => {
+    const profiles = [profile({ engine: "codex", modelId: "deepseek-v4-flash" })];
+    expect(isClaudeProfileModelId("deepseek-v4-flash", profiles)).toBe(false);
+  });
+
+  test("空值与空档案列表返回 false", () => {
+    expect(isClaudeProfileModelId("", [profile({})])).toBe(false);
+    expect(isClaudeProfileModelId("glm-5", null)).toBe(false);
   });
 });

@@ -391,12 +391,12 @@
   height: 28px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 14px 0 16px !important;
+  gap: 4px;
+  padding: 0 8px !important;
   border: none;
   border-radius: 999px;
-  background: #f3f4f6;
-  color: #6b7280;
+  background: transparent !important;
+  color: #8b8f98;
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
@@ -406,9 +406,10 @@
   appearance: none;
 }
 
-.app-hud-context-pill:hover {
-  background: #eceef1;
-  color: #4b5563;
+.app-hud-context-pill:hover,
+.app-hud-context-pill--open {
+  background: rgba(15, 23, 42, 0.06) !important;
+  color: #1f2328;
 }
 
 .app-hud-context-pill__name {
@@ -422,7 +423,7 @@
 .app-hud-context-pill__chevron {
   flex: 0 0 auto;
   display: inline-flex;
-  color: #9ca3af;
+  color: inherit;
 }
 
 .app-hud-context-pill__stack svg {
@@ -521,30 +522,30 @@
 .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-footer-action,
 .app-hud-bar .app-claude-composer--hud .app-claude-semi-footer-toolbar-right {
   height: 28px;
-  gap: 6px;
-  column-gap: 6px;
+  gap: 4px;
+  column-gap: 4px;
   align-items: center;
   flex-wrap: nowrap;
 }
 
 .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-footer-action-button {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
   border-radius: 999px;
-  background: #d1d5db !important;
+  background: #1f2328 !important;
   color: #fff !important;
 }
 
 .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-footer-action-button svg {
-  width: 13px;
-  height: 13px;
+  width: 11px;
+  height: 11px;
 }
 
 .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-footer-action-send-disabled {
-  background: #d1d5db;
-  color: #fff;
+  background: #d1d5db !important;
+  color: #fff !important;
 }
 
 .app-hud-bar--running .app-claude-composer--hud button.semi-aiChatInput-footer-action-button {
@@ -949,13 +950,14 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
 }
 
 :root[data-wise-theme="dark"] .app-hud-context-pill {
-  background: rgba(255, 255, 255, 0.08);
+  background: transparent !important;
   color: #a1a1aa;
 }
 
-:root[data-wise-theme="dark"] .app-hud-context-pill:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #e4e4e7;
+:root[data-wise-theme="dark"] .app-hud-context-pill:hover,
+:root[data-wise-theme="dark"] .app-hud-context-pill--open {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #f4f4f5;
 }
 
 :root[data-wise-theme="dark"] .app-hud-context-popover .ant-popover-inner,
@@ -1017,9 +1019,14 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
   color: #71717a;
 }
 
-:root[data-wise-theme="dark"] .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-footer-action-send-disabled,
 :root[data-wise-theme="dark"] .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-footer-action-button {
+  background: #e4e4e7 !important;
+  color: #18181b !important;
+}
+
+:root[data-wise-theme="dark"] .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-footer-action-send-disabled {
   background: #52525b !important;
+  color: #fff !important;
 }
 
 :root[data-wise-theme="dark"] .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-editor-content .tiptap p.is-editor-empty:first-child::before {

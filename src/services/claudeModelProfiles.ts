@@ -144,6 +144,26 @@ export async function applyClaudeModelProfile(
   return invoke<ClaudeModelProfileStoreView>("apply_claude_model_profile", { profileId });
 }
 
+/**
+ * Composer 选中 Claude 模型即写盘：把 `~/.claude/settings.json` 的模型键对齐到所选模型，
+ * 不改动 base_url / token 等其它配置。
+ */
+export async function applyClaudeRuntimeModel(
+  model: string,
+): Promise<ClaudeModelProfileStoreView> {
+  return invoke<ClaudeModelProfileStoreView>("apply_claude_runtime_model", { model });
+}
+
+/**
+ * Composer 选中 Codex 模型即写盘：按所选模型决定应生效的档案 / OpenAI 官方 provider，
+ * 同步 `~/.codex/auth.json` 与 `config.toml`（含顶层 `model`）。
+ */
+export async function applyCodexRuntimeModel(
+  model: string,
+): Promise<ClaudeModelProfileStoreView> {
+  return invoke<ClaudeModelProfileStoreView>("apply_codex_runtime_model", { model });
+}
+
 export async function setClaudeModelProfileAutoFailover(
   enabled: boolean,
 ): Promise<ClaudeModelProfileStoreView> {

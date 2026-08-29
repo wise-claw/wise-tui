@@ -10,6 +10,8 @@ import { listOpencodeModels, type OpencodeModelListItem } from "../../services/o
 import { listQoderModels, type QoderModelListItem } from "../../services/qoder";
 import {
   applyClaudeModelProfile,
+  applyClaudeRuntimeModel,
+  applyCodexRuntimeModel,
   clearCodexUserSettings,
   dispatchClaudeUserSettingsChanged,
   dispatchModelProfileStoreChanged,
@@ -58,11 +60,9 @@ import {
   buildCodexModelPickerOptions,
   formatCodexModelLabel,
   isCodexModelId,
-  looksLikeOpenAiCatalogModel,
   matchesCodexModelPickerFilter,
   mergeCodexKnownModels,
   resolveCodexComposerModel,
-  resolveCodexOpenAiDefaultProfileId,
   type CodexModelPickerOption,
 } from "../../utils/codexModel";
 import {
@@ -75,12 +75,14 @@ import {
 import {
   buildClaudeModelPickerOptions,
   formatClaudeModelLabel,
+  isClaudeProfileModelId,
   isKnownClaudePickerModel,
 } from "../../utils/claudeModel";
 import {
   normalizeSessionExecutionEngine,
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
+import { createLatestTaskQueue, type LatestTaskQueue } from "../../utils/latestTaskQueue";
 import { useComposerActiveProxyRoute } from "../../hooks/useComposerActiveProxyRoute";
 import {
   getCachedExecutionEngineDefaultModel,
@@ -140,6 +142,12 @@ function findProfileByModelId(
       normalizeModelProfileEngine(p.engine) === engine &&
       (p.modelId ?? "").trim() === trimmed,
   );
+}
+
+interface ComposerModelExplicitPick {
+  value: string;
+  label: string;
+  company: string;
 }
 
 function opencodeOptionProviderLabel(option: OpencodeModelPickerOption): string {
@@ -282,6 +290,37 @@ function ComposerModelPickerImpl({
   const modelRef = useRef(model);
   modelRef.current = model;
   const pickedModelRef = useRef<string | null>(null);
+  /**
+   * 用户在本菜单里显式选中的那一项：底栏与同步逻辑都以它为准，
+   * 直到会话切换或模型被其它来源改成别的值。解决「切到另一类模型后名称不变」。
+   */
+  const [explicitPick, setExplicitPick] = useState<ComposerModelExplicitPick | null>(null);
+  const explicitPickRef = useRef<ComposerModelExplicitPick | null>(null);
+  /**
+   * 模型选择的写盘队列：档案 apply 会读改写 settings.json / auth.json / config.toml，
+   * 必须串行；且快速连点时早先那次返回后不能再回写模型，否则模型被弹回上一次选择。
+   */
+  const pickQueueRef = useRef<LatestTaskQueue | null>(null);
+  if (!pickQueueRef.current) pickQueueRef.current = createLatestTaskQueue();
+  const pickQueue = pickQueueRef.current;
+  const rememberExplicitPick = useCallback(
+    (option: { value: string; label?: string; company?: string } | null, fallbackValue?: string) => {
+      const value = (option?.value ?? fallbackValue ?? "").trim();
+      if (!value) {
+        explicitPickRef.current = null;
+        setExplicitPick(null);
+        return;
+      }
+      const pick: ComposerModelExplicitPick = {
+        value,
+        label: option?.label?.trim() || value,
+        company: option?.company?.trim() || "",
+      };
+      explicitPickRef.current = pick;
+      setExplicitPick(pick);
+    },
+    [],
+  );
 
   const { store, setStore, loading: profileStoreLoading } = useModelProfileSwitcher(panelOpen);
 
@@ -378,9 +417,13 @@ function ComposerModelPickerImpl({
     });
   }, []);
 
+  // 会话或执行环境变化：上一个环境选的模型不能再参与本环境的解析与展示
+  //（否则从 Cursor 切到 Codex 后底栏会继续显示 Auto）。
   useEffect(() => {
     pickedModelRef.current = null;
-  }, [session.id]);
+    explicitPickRef.current = null;
+    setExplicitPick(null);
+  }, [session.id, sessionExecutionEngine]);
 
   useEffect(() => {
     if (!isCursorEngine) return;
@@ -408,22 +451,47 @@ function ComposerModelPickerImpl({
   useEffect(() => {
     if (!isOpencodeEngine) return;
     const fromSession = session.model?.trim();
+    if (fromSession && isOpencodeModelId(fromSession, opencodeModels ?? undefined)) {
+      syncModelIfNeeded(fromSession);
+      return;
+    }
+    // 会话上没有可用模型时套用用户上次为 OpenCode 选过的模型，避免新会话/刷新退回 Auto。
+    const savedDefault = getCachedExecutionEngineDefaultModel("opencode")?.trim() || "";
     const nextModel =
-      fromSession && isOpencodeModelId(fromSession, opencodeModels ?? undefined)
-        ? fromSession
+      savedDefault && isOpencodeModelId(savedDefault, opencodeModels ?? undefined)
+        ? savedDefault
         : OPENCODE_DEFAULT_MODEL;
     syncModelIfNeeded(nextModel);
-  }, [isOpencodeEngine, session.id, session.model, opencodeModels, syncModelIfNeeded]);
+  }, [
+    isOpencodeEngine,
+    session.id,
+    session.model,
+    opencodeModels,
+    modelDefaultsRevision,
+    syncModelIfNeeded,
+  ]);
 
   useEffect(() => {
     if (!isQoderEngine) return;
     const fromSession = session.model?.trim();
+    if (fromSession && isQoderModelId(fromSession, qoderModels ?? undefined)) {
+      syncModelIfNeeded(fromSession);
+      return;
+    }
+    const savedDefault = getCachedExecutionEngineDefaultModel("qoder")?.trim() || "";
     const nextModel =
-      fromSession && isQoderModelId(fromSession, qoderModels ?? undefined)
-        ? fromSession
+      savedDefault && isQoderModelId(savedDefault, qoderModels ?? undefined)
+        ? savedDefault
         : QODER_DEFAULT_MODEL;
     syncModelIfNeeded(nextModel);
-  }, [isQoderEngine, session.id, session.model, qoderModels, syncModelIfNeeded]);
+  }, [
+    isQoderEngine,
+    session.id,
+    session.model,
+    qoderModels,
+    modelDefaultsRevision,
+    syncModelIfNeeded,
+  ]);
 
   useEffect(() => {
     if (!isCodexEngine) return;
@@ -436,18 +504,39 @@ function ComposerModelPickerImpl({
       profileModel: fromProfile,
       knownModels: mergeCodexKnownModels(codexModels, store?.profiles ?? []),
     });
-    if (nextModel) syncModelIfNeeded(nextModel);
-  }, [isCodexEngine, session.id, session.model, codexModels, profileStoreRevision, syncModelIfNeeded]);
+    if (nextModel) {
+      syncModelIfNeeded(nextModel);
+      return;
+    }
+    // 会话与档案都没有模型（刚从别的执行环境切过来）：套用上次为 Codex 选过的模型，
+    // 否则底栏会继续显示上一个环境的模型。
+    const savedDefault =
+      getCachedExecutionEngineDefaultModel(sessionExecutionEngine)?.trim() || "";
+    if (savedDefault) syncModelIfNeeded(savedDefault);
+  }, [
+    isCodexEngine,
+    session.id,
+    session.model,
+    sessionExecutionEngine,
+    codexModels,
+    modelDefaultsRevision,
+    profileStoreRevision,
+    syncModelIfNeeded,
+  ]);
 
   useEffect(() => {
     if (!isClaudeEngine) return;
+    const store = getCachedModelProfileStore();
     const fromProfile =
-      resolveEffectiveModelForProfileEngine("claude", getCachedModelProfileStore())?.trim() || null;
+      resolveEffectiveModelForProfileEngine("claude", store)?.trim() || null;
     const fromSession = session.model?.trim();
     // 与 Codex 一致：会话模型为已知 Claude 模型且与档案不同，视为 Composer 显式切换，不覆盖。
+    // 本地档案模型同样算「已知」：否则刚选中的档案模型会在 apply IPC 返回前被旧档案模型打回，
+    // 之后反过来被当成显式切换保护住，表现为「点了另一类模型，名称完全没变」。
     if (
       fromSession &&
-      isKnownClaudePickerModel(fromSession, claudePicker) &&
+      (isKnownClaudePickerModel(fromSession, claudePicker) ||
+        isClaudeProfileModelId(fromSession, store?.profiles)) &&
       fromProfile &&
       fromSession !== fromProfile
     ) {
@@ -769,7 +858,19 @@ function ComposerModelPickerImpl({
     });
   }, [refreshClaudeModelPicker]);
 
+  /** 显式选中项仍是当前模型时的底栏展示（公司 + 所选项标签）。 */
+  const explicitPickParts = useMemo(() => {
+    const pick = explicitPick;
+    if (!pick || pick.value !== model.trim()) return null;
+    return { company: pick.company, modelName: pick.label };
+  }, [explicitPick, model]);
+
   const modelDisplayLabel = useMemo(() => {
+    if (explicitPickParts) {
+      return explicitPickParts.company
+        ? `${explicitPickParts.company} ${explicitPickParts.modelName}`
+        : explicitPickParts.modelName;
+    }
     if (profileEngine) {
       const store = getCachedModelProfileStore();
       const fromActive = resolveActiveModelProfileComposerBarLabel(profileEngine, store);
@@ -797,6 +898,7 @@ function ComposerModelPickerImpl({
     }
     return model;
   }, [
+    explicitPickParts,
     selectOnlyModelOptions,
     model,
     profileEngine,
@@ -821,6 +923,8 @@ function ComposerModelPickerImpl({
         modelName: activeProxyRoute.label,
       };
     }
+    // 用户刚在菜单里选中的项优先：档案 active / effective 还没跟上时也不能显示成别的模型。
+    if (explicitPickParts) return explicitPickParts;
     const profileStore = getCachedModelProfileStore();
     if (profileEngine && profileStore) {
       const activeId = resolveActiveModelProfileId(profileEngine, profileStore);
@@ -856,6 +960,7 @@ function ComposerModelPickerImpl({
     return splitFlatModelDropdownLabel(modelDisplayLabel);
   }, [
     activeProxyRoute,
+    explicitPickParts,
     modelDisplayLabel,
     model,
     profileEngine,
@@ -903,16 +1008,32 @@ function ComposerModelPickerImpl({
   const handleSelectOnlyMenuClick = useCallback(
     ({ key }: { key: string }) => {
       if (typeof key !== "string" || key === "__no_match__") return;
+      const pickSeq = pickQueue.next();
       const optionIndexMatch = /^opt-(\d+)$/.exec(key);
       const modelId = optionIndexMatch
         ? selectOnlyModelOptions[Number(optionIndexMatch[1])]?.value?.trim() || null
         : fromComposerModelMenuKey(key);
       if (!modelId) return;
+      const pickedOption = selectOnlyModelOptions.find((o) => o.value === modelId) as
+        | { value: string; label: string; company?: string; providerId?: string; profileId?: string }
+        | undefined;
+      // 记录用户选的那一项：底栏据此展示，不再被档案 active / effective 反算成别的模型。
+      rememberExplicitPick(
+        pickedOption
+          ? {
+              value: pickedOption.value,
+              label: pickedOption.label,
+              company:
+                (pickedOption as { company?: string }).company?.trim() ||
+                (isCodexEngine || isOpencodeEngine ? pickedOption.providerId?.trim() : "") ||
+                "",
+            }
+          : null,
+        modelId,
+      );
       if (isCodexEngine) {
         // 命中已配置档案：应用档案（写入 codex 配置并广播，Composer 同步会话模型）。
-        const option = selectOnlyModelOptions.find(
-          (o) => o.value === modelId,
-        ) as CodexModelPickerOption | undefined;
+        const option = pickedOption as CodexModelPickerOption | undefined;
         if (option?.profileId) {
           const profileId = option.profileId;
           pickedModelRef.current = null;
@@ -922,23 +1043,21 @@ function ComposerModelPickerImpl({
             onModelChange(modelId);
           });
           void saveExecutionEngineDefaultModel(sessionExecutionEngine, modelId).catch(() => undefined);
-          void applyClaudeModelProfile(profileId)
-            .then((next) => {
-              seedModelProfileStoreCache(next);
-              setProfileStoreRevision((n) => n + 1);
-              pickedModelRef.current = null;
-              dispatchModelProfileStoreChanged(next, { engine: "codex" });
-              onModelChange(modelId);
-            })
-            .catch(() => undefined);
+          pickQueue.run(pickSeq, async () => {
+            const next = await applyClaudeModelProfile(profileId);
+            if (pickQueue.current() !== pickSeq) return;
+            seedModelProfileStoreCache(next);
+            setProfileStoreRevision((n) => n + 1);
+            pickedModelRef.current = null;
+            dispatchModelProfileStoreChanged(next, { engine: "codex" });
+            onModelChange(modelId);
+          });
           return;
         }
       }
       if (isClaudeEngine) {
         // 命中 Claude 档案：应用档案（写 settings 并广播，触发流式会话按新模型重连）。
-        const option = selectOnlyModelOptions.find(
-          (o) => o.value === modelId,
-        ) as { value: string; label: string; company?: string; profileId?: string } | undefined;
+        const option = pickedOption;
         if (option?.profileId) {
           const profileId = option.profileId;
           pickedModelRef.current = null;
@@ -948,16 +1067,17 @@ function ComposerModelPickerImpl({
             onModelChange(modelId);
           });
           void saveExecutionEngineDefaultModel(sessionExecutionEngine, modelId).catch(() => undefined);
-          void applyClaudeModelProfile(profileId)
-            .then((next) => {
-              seedModelProfileStoreCache(next);
-              setProfileStoreRevision((n) => n + 1);
-              dispatchModelProfileStoreChanged(next, {
-                engine: "claude",
-                sessionReconnect: true,
-              });
-            })
-            .catch(() => undefined);
+          pickQueue.run(pickSeq, async () => {
+            const next = await applyClaudeModelProfile(profileId);
+            if (pickQueue.current() !== pickSeq) return;
+            seedModelProfileStoreCache(next);
+            setProfileStoreRevision((n) => n + 1);
+            dispatchModelProfileStoreChanged(next, {
+              engine: "claude",
+              sessionReconnect: true,
+            });
+            onModelChange(modelId);
+          });
           return;
         }
       }
@@ -979,22 +1099,26 @@ function ComposerModelPickerImpl({
           });
         }
       }
-      if (isCodexEngine && looksLikeOpenAiCatalogModel(modelId)) {
-        const openaiProfileId = resolveCodexOpenAiDefaultProfileId(
-          getCachedModelProfileStore()?.profiles ?? [],
-        );
-        if (openaiProfileId) {
-          void applyClaudeModelProfile(openaiProfileId)
-            .then((next) => {
-              seedModelProfileStoreCache(next);
-              setProfileStoreRevision((n) => n + 1);
-              pickedModelRef.current = modelId;
-              dispatchModelProfileStoreChanged(next, { engine: "codex" });
-              pickedModelRef.current = modelId;
-              onModelChange(modelId);
-            })
-            .catch(() => undefined);
-        }
+      // 选中即写盘：Claude 的 settings.json 模型键、Codex 的 auth.json / config.toml
+      // 立刻对齐所选模型，配置面板与外部 CLI 不再滞后到下一次发送。
+      if (isClaudeEngine) {
+        pickQueue.run(pickSeq, async () => {
+          const next = await applyClaudeRuntimeModel(modelId);
+          if (pickQueue.current() !== pickSeq) return;
+          seedModelProfileStoreCache(next);
+          setProfileStoreRevision((n) => n + 1);
+        });
+      }
+      if (isCodexEngine) {
+        pickQueue.run(pickSeq, async () => {
+          const next = await applyCodexRuntimeModel(modelId);
+          if (pickQueue.current() !== pickSeq) return;
+          seedModelProfileStoreCache(next);
+          setProfileStoreRevision((n) => n + 1);
+          pickedModelRef.current = modelId;
+          dispatchModelProfileStoreChanged(next, { engine: "codex" });
+          onModelChange(modelId);
+        });
       }
       setSelectOnlyMenuOpen(false);
       setSelectOnlyFilter("");
@@ -1004,6 +1128,9 @@ function ComposerModelPickerImpl({
       onModelChange,
       isCodexEngine,
       isClaudeEngine,
+      isOpencodeEngine,
+      rememberExplicitPick,
+      pickQueue,
       selectOnlyModelOptions,
       sessionExecutionEngine,
     ],

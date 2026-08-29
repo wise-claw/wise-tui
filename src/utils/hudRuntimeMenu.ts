@@ -18,6 +18,30 @@ export function parseHudModelMenuKey(key: string): string | null {
   return id || null;
 }
 
+/** 当前会话模型始终出现在列表中；可搜索的 HUD 面板不再截断。 */
+export function ensureHudCurrentModelOption(
+  options: readonly HudRuntimeModelOption[],
+  currentModel: string,
+): HudRuntimeModelOption[] {
+  const current = currentModel.trim();
+  const seen = new Set<string>();
+  const out: HudRuntimeModelOption[] = [];
+  const push = (item: HudRuntimeModelOption) => {
+    const value = item.value.trim();
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    out.push({ value, label: item.label.trim() || value });
+  };
+  if (current) {
+    const match = options.find((item) => item.value.trim() === current);
+    push(match ?? { value: current, label: current });
+  }
+  for (const item of options) {
+    push(item);
+  }
+  return out;
+}
+
 /** 保留当前模型，其余按原顺序截到上限。 */
 export function capHudRuntimeModelOptions(
   options: readonly HudRuntimeModelOption[],

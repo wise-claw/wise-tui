@@ -70,6 +70,20 @@ export interface ClaudeModelPickerOption {
   profileId?: string;
 }
 
+/** 模型 id 是否是某个本地 Claude 档案的模型（档案模型不在 settings.json 列表中也算已知）。 */
+export function isClaudeProfileModelId(
+  modelId: string,
+  profiles: readonly ClaudeModelProfile[] | null | undefined,
+): boolean {
+  const v = modelId.trim();
+  if (!v || !profiles) return false;
+  return profiles.some(
+    (profile) =>
+      normalizeModelProfileEngine(profile.engine) === "claude" &&
+      (profile.modelId ?? "").trim() === v,
+  );
+}
+
 /** 模型 id 是否属于当前 Claude 环境已知模型（配置默认 / 可选列表 / 官方兜底）。 */
 export function isKnownClaudePickerModel(
   modelId: string,
