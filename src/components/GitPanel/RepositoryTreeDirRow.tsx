@@ -48,7 +48,7 @@ function RepositoryTreeDirRowInner({
       aria-expanded={isExpanded}
       onDragStart={(e) => {
         e.stopPropagation();
-        setWiseRepositoryFileDragData(e.dataTransfer, node.path);
+        setWiseRepositoryFileDragData(e.dataTransfer, node.path, { isDir: true });
       }}
       onClick={activateDir}
       onKeyDown={(event) => {

@@ -714,6 +714,7 @@ function FloatingRepositoryRowInner({
   onPromoteToNewProject,
   onJoinExistingProject,
   onRemove,
+  onHide,
   trellisReady = false,
   scheduledTasksTotalCount = 0,
   scheduledTasksEnabledCount = 0,
@@ -751,6 +752,7 @@ function FloatingRepositoryRowInner({
   onPromoteToNewProject?: (repository: StandaloneRepo) => void;
   onJoinExistingProject?: (repository: StandaloneRepo, projectId: string) => void;
   onRemove: (repository: StandaloneRepo) => void;
+  onHide?: (repository: StandaloneRepo) => void;
   trellisReady?: boolean;
   scheduledTasksTotalCount?: number;
   scheduledTasksEnabledCount?: number;
@@ -796,6 +798,7 @@ function FloatingRepositoryRowInner({
     onOpenExecutableTasks: Boolean(onOpenExecutableTasks),
     onPromoteToNewProject: Boolean(onPromoteToNewProject),
     onJoinExistingProject: Boolean(onJoinExistingProject),
+    onHide: Boolean(onHide),
     repositoryOpenAppId: repository.openAppId,
   });
   // 「移除仓库」菜单项点击后由行内受控 Popconfirm 承接确认（锚点独立于下拉菜单，避免随菜单销毁）。
@@ -1011,6 +1014,7 @@ function FloatingRepositoryRowInner({
               if (key === "requirements" && trellisEnabled) onOpenRequirements?.(repository);
               if (key === "executable-tasks" && trellisEnabled) onOpenExecutableTasks?.(repository);
               if (key === "promote") onPromoteToNewProject?.(repository);
+              if (key === "hide") onHide?.(repository);
               if (typeof key === "string" && key.startsWith("join-")) {
                 const projectId = key.slice("join-".length);
                 onJoinExistingProject?.(repository, projectId);

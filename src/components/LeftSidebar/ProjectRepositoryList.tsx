@@ -20,10 +20,12 @@ import type {
 import { type SidebarScheduledTasksSummary } from "./useSidebarScheduledTasksMap";
 import { type WorkspaceFocus } from "../../utils/workspaceMode";
 import { collectFlatWorkspaceRepositories } from "../../utils/repositoryWorkspaceTree";
+import { filterVisibleWorkspaceRepositories } from "../../utils/workspaceHiddenRepositories";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import {
   ExpandIcon,
   PlusIcon,
+  VisibilityConfigIcon,
 } from "./SidebarIcons";
 import {
   FloatingRepositoryRow,
@@ -32,6 +34,7 @@ import {
 } from "./repositoryRows";
 import { LeftSidebarQuickActionsPopover } from "./LeftSidebarQuickActionsPopover";
 import { RepositoryWorkspaceSessionTree } from "./RepositoryWorkspaceSessionTree";
+import { WorkspaceRepositoryVisibilityPopover } from "./WorkspaceRepositoryVisibilityPopover";
 import { projectRepositoryListPropsEqual } from "./projectRepositoryListPropsEqual";
 
 const EMPTY_JOINABLE_PROJECTS: Workspace[] = [];
@@ -41,6 +44,7 @@ export interface ProjectRepositoryListProps {
   repositoriesById: Map<number, Repository>;
   floatingRepositories: StandaloneRepo[];
   workspaceRepositoryOrder?: readonly number[];
+  hiddenWorkspaceRepositoryIds?: readonly number[];
   activeProjectId: string | null;
   activeWorkspaceFocus?: WorkspaceFocus;
   activeRepositoryId: number | null;
@@ -91,6 +95,8 @@ export interface ProjectRepositoryListProps {
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   /** 扁平工作区列表拖拽排序 */
   onReorderWorkspaceRepositories?: (repositoryIds: number[]) => void | Promise<void>;
+  onSetWorkspaceRepositoryHidden?: (repositoryId: number, hidden: boolean) => void;
+  onShowAllWorkspaceRepositories?: () => void;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
   onMoveRepositoryToProjectWithExpand: (targetProjectId: string, repositoryId: number) => Promise<void>;
   onProjectDropTargetChange: (projectId: string | null | ((cur: string | null) => string | null)) => void;
@@ -150,6 +156,7 @@ function ProjectRepositoryListInner({
   repositoriesById,
   floatingRepositories,
   workspaceRepositoryOrder = [],
+  hiddenWorkspaceRepositoryIds = [],
   activeProjectId,
   activeRepositoryId,
   showRepositoryIconBadgesInWorkspaceList = false,
@@ -172,6 +179,8 @@ function ProjectRepositoryListInner({
   onOpenSplitSessionForRepository,
   onRemoveFloatingRepository,
   onReorderWorkspaceRepositories,
+  onSetWorkspaceRepositoryHidden,
+  onShowAllWorkspaceRepositories,
   onClearRepoSidebarDrag,
   repositoryTrellisReadyById = {},
   scheduledTasksByRepoId = {},
@@ -220,6 +229,7 @@ function ProjectRepositoryListInner({
   const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
   const { message } = AntdApp.useApp();
   const [workspaceDropHint, setWorkspaceDropHint] = useState<RepositoryReorderUi["dropHint"]>(null);
+  const [visibilityOpen, setVisibilityOpen] = useState(false);
 
   const flatRepositories = useMemo(
     () =>
@@ -230,8 +240,18 @@ function ProjectRepositoryListInner({
       ),
     [repositoriesById, floatingRepositories, workspaceRepositoryOrder],
   );
+  const visibleRepositories = useMemo(
+    () => filterVisibleWorkspaceRepositories(flatRepositories, hiddenWorkspaceRepositoryIds),
+    [flatRepositories, hiddenWorkspaceRepositoryIds],
+  );
   const workspaceRowReorderEnabled =
-    Boolean(onReorderWorkspaceRepositories) && flatRepositories.length > 1;
+    Boolean(onReorderWorkspaceRepositories) && visibleRepositories.length > 1;
+  const handleHideRepository = useCallback(
+    (repository: StandaloneRepo) => {
+      onSetWorkspaceRepositoryHidden?.(repository.id, true);
+    },
+    [onSetWorkspaceRepositoryHidden],
+  );
 
   const onWorkspaceListPointerEnter = useCallback(() => {
     setWorkspacePointerActive(true);
@@ -267,6 +287,16 @@ function ProjectRepositoryListInner({
             repositoriesById={repositoriesById}
             floatingRepositories={floatingRepositories}
           />
+          {onSetWorkspaceRepositoryHidden && flatRepositories.length > 0 ? (
+            <WorkspaceRepositoryVisibilityPopover
+              repositories={flatRepositories}
+              hiddenIds={hiddenWorkspaceRepositoryIds}
+              open={visibilityOpen}
+              onOpenChange={setVisibilityOpen}
+              onSetHidden={onSetWorkspaceRepositoryHidden}
+              onShowAll={onShowAllWorkspaceRepositories}
+            />
+          ) : null}
           {onAddFloatingRepositoryClick ? (
             <DeferredHoverTooltip title="添加仓库">
               <button
@@ -307,7 +337,7 @@ function ProjectRepositoryListInner({
         onMouseEnter={onWorkspaceListPointerEnter}
         onMouseLeave={onWorkspaceListPointerLeave}
       >
-        {flatRepositories.map((repository) => {
+        {visibleRepositories.map((repository) => {
           const expanded =
             expandedRepositoryIds == null
               ? false
@@ -315,7 +345,7 @@ function ProjectRepositoryListInner({
           const reorderUi: RepositoryReorderUi | undefined = workspaceRowReorderEnabled
             ? buildFlatWorkspaceReorderUi({
                 repository,
-                flatRepositories,
+                flatRepositories: visibleRepositories,
                 rowReorderEnabled: workspaceRowReorderEnabled,
                 dropHint: workspaceDropHint,
                 setDropHint: setWorkspaceDropHint,
@@ -349,6 +379,7 @@ function ProjectRepositoryListInner({
               onPromoteToNewProject={undefined}
               onJoinExistingProject={undefined}
               onRemove={onRemoveFloatingRepository}
+              onHide={onSetWorkspaceRepositoryHidden ? handleHideRepository : undefined}
               trellisReady={repositoryTrellisReadyById[repository.id] === true}
               scheduledTasksTotalCount={scheduledTasksByRepoId[repository.id]?.total ?? 0}
               scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
@@ -399,13 +430,21 @@ function ProjectRepositoryListInner({
             </FloatingRepositoryRow>
           );
         })}
-        {flatRepositories.length === 0 && (
+        {visibleRepositories.length === 0 && (
           <div
             className="app-repository-item app-repository-item--add"
-            onClick={onAddFloatingRepositoryClick ?? onCreateProjectClick}
+            onClick={
+              flatRepositories.length > 0 && onSetWorkspaceRepositoryHidden
+                ? () => setVisibilityOpen(true)
+                : onAddFloatingRepositoryClick ?? onCreateProjectClick
+            }
           >
-            <span className="app-repository-add-icon"><PlusIcon /></span>
-            <span className="app-repository-add-text">添加仓库</span>
+            <span className="app-repository-add-icon">
+              {flatRepositories.length > 0 ? <VisibilityConfigIcon /> : <PlusIcon />}
+            </span>
+            <span className="app-repository-add-text">
+              {flatRepositories.length > 0 ? "已隐藏全部仓库" : "添加仓库"}
+            </span>
           </div>
         )}
       </div>

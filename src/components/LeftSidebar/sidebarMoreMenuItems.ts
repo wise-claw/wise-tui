@@ -382,6 +382,7 @@ export interface BuildFloatingRepositoryMoreMenuItemsInput {
   onOpenExecutableTasks?: boolean;
   onPromoteToNewProject?: boolean;
   onJoinExistingProject?: boolean;
+  onHide?: boolean;
   onOpenRepositoryInTerminal?: boolean;
   repositoryOpenAppId?: string | null;
 }
@@ -404,6 +405,7 @@ export function buildFloatingRepositoryMoreMenuItems(
     onOpenExecutableTasks,
     onPromoteToNewProject,
     onJoinExistingProject,
+    onHide,
     onOpenRepositoryInTerminal,
     onMainSessionRun,
     runCommandRunning = false,
@@ -467,6 +469,9 @@ export function buildFloatingRepositoryMoreMenuItems(
               children: joinChildren,
             }
           : null,
+      ]),
+      sidebarMenuSection([
+        onHide ? { key: "hide", label: "隐藏" } : null,
       ]),
     ],
     [{ key: "remove", label: "移除仓库", danger: true }],

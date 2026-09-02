@@ -83,4 +83,38 @@ describe("projectRepositoryListPropsEqual", () => {
       }),
     ).toBe(false);
   });
+
+  test("detects hidden workspace repository changes", () => {
+    const projects = [stubProject("p1")];
+    const repositoriesById = new Map<number, Repository>([[1, stubRepo(1)]]);
+    const base = {
+      projects,
+      repositoriesById,
+      floatingRepositories: [],
+      activeProjectId: "p1",
+      activeWorkspaceFocus: "repository" as const,
+      activeRepositoryId: 1,
+      showRepositoryIconBadgesInWorkspaceList: false,
+      pinnedProjectIds: [],
+      expandedProjects: new Set<string>(),
+      projectDropTargetId: null,
+      projectTrellisReadyById: {},
+      repositoryTrellisReadyById: {},
+      scheduledTasksByRepoId: {},
+      requirementUnsplitByProjectId: {},
+      requirementUnsplitByRepoId: {},
+      executableTasksByProjectId: {},
+      executableTasksByRepoId: {},
+      runningMainSessionByProjectId: {},
+      runningMainSessionByRepositoryId: {},
+      sectionCollapsed: false,
+      hiddenWorkspaceRepositoryIds: [] as number[],
+    };
+    expect(
+      projectRepositoryListPropsEqual(base, {
+        ...base,
+        hiddenWorkspaceRepositoryIds: [1],
+      }),
+    ).toBe(false);
+  });
 });

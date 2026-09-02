@@ -105,6 +105,9 @@ export interface LeftSidebarProps {
   ) => void | Promise<void>;
   floatingRepositories?: Repository[];
   workspaceRepositoryOrder?: readonly number[];
+  hiddenWorkspaceRepositoryIds?: readonly number[];
+  onSetWorkspaceRepositoryHidden?: (repositoryId: number, hidden: boolean) => void;
+  onShowAllWorkspaceRepositories?: () => void;
   onRemoveRepository?: (repository: Repository) => void | Promise<void>;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
   onUpdateRepositorySddMode?: (repositoryId: number, sddMode: SddMode) => void | Promise<void>;

@@ -19,6 +19,7 @@ import { RepositoryVirtualTreeList } from "./RepositoryVirtualTreeList";
 import { MIN_EXPLORER_SEARCH_QUERY_LEN } from "./fileTree";
 import type { GitPanelOpenFileOptions } from "./types";
 import { useRepositoryFilesExplorer } from "./useRepositoryFilesExplorer";
+import { useExplorerTreeDrop } from "./useExplorerTreeDrop";
 import { useGitRepositoryExplorerStatus } from "../../hooks/useGitRepositoryExplorerStatus";
 import { useRepositoryEditorDirtyPaths } from "../../hooks/useRepositoryEditorDirtyPaths";
 import { useRepositoryExplorerPointerHover } from "../../hooks/useRepositoryExplorerPointerHover";
@@ -92,6 +93,11 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
   );
   const trimmedSearch = search.trim();
   const searchActive = trimmedSearch.length > 0;
+  const treeDrop = useExplorerTreeDrop({
+    enabled: active && !searchActive && !explorer.loadError,
+    onMove: explorer.moveExplorerEntry,
+    onHoverExpandDir: explorer.handleDropHoverExpandDir,
+  });
   const rootInline = explorer.inlineCreate?.parentDir === "" && !searchActive;
   const treeEmpty =
     !searchActive &&
@@ -390,6 +396,9 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
             ? " git-files-explorer-scroll-region--refreshing"
             : ""
         }`}
+        onDragOver={treeDrop.onDragOver}
+        onDragLeave={treeDrop.onDragLeave}
+        onDrop={treeDrop.onDrop}
       >
         {(explorer.loading || explorer.isRefreshing || switchingRepositoryTree) &&
         explorer.filteredTree.length === 0 ? (

@@ -77,7 +77,8 @@ pub struct HudActiveChanged {
     pub active: bool,
 }
 
-pub fn is_hud_window_label(label: &str) -> bool {
+#[cfg(test)]
+fn is_hud_window_label(label: &str) -> bool {
     label == HUD_WINDOW_LABEL
 }
 

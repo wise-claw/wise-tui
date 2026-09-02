@@ -32,6 +32,7 @@ export type LeftSidebarWorkspaceListSlotProps = {
   repositories: Repository[];
   floatingRepositories: StandaloneRepo[];
   workspaceRepositoryOrder?: readonly number[];
+  hiddenWorkspaceRepositoryIds?: readonly number[];
   activeProjectId: string | null;
   activeWorkspaceFocus: WorkspaceFocus;
   activeRepositoryId: number | null;
@@ -86,6 +87,8 @@ export type LeftSidebarWorkspaceListSlotProps = {
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onReorderWorkspaceRepositories?: (repositoryIds: number[]) => void | Promise<void>;
+  onSetWorkspaceRepositoryHidden?: (repositoryId: number, hidden: boolean) => void;
+  onShowAllWorkspaceRepositories?: () => void;
   onMoveRepositoryError: (message: string, err: unknown) => void;
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
   onOpenScheduledTasksForProject?: (project: Workspace) => void;
@@ -215,6 +218,7 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
           repositoriesById={projectRepositoryState.repositoriesById}
           floatingRepositories={props.floatingRepositories}
           workspaceRepositoryOrder={props.workspaceRepositoryOrder}
+          hiddenWorkspaceRepositoryIds={props.hiddenWorkspaceRepositoryIds}
           activeProjectId={props.activeProjectId}
           activeWorkspaceFocus={props.activeWorkspaceFocus}
           activeRepositoryId={props.activeRepositoryId}
@@ -268,6 +272,8 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
           onDetachRepositoryFromProject={props.onDetachRepositoryFromProject}
           onReorderRepositoriesInProject={props.onReorderRepositoriesInProject}
           onReorderWorkspaceRepositories={props.onReorderWorkspaceRepositories}
+          onSetWorkspaceRepositoryHidden={props.onSetWorkspaceRepositoryHidden}
+          onShowAllWorkspaceRepositories={props.onShowAllWorkspaceRepositories}
           onMoveRepositoryToProject={undefined}
           onMoveRepositoryToProjectWithExpand={projectRepositoryState.moveRepositoryWithExpand}
           onProjectDropTargetChange={projectRepositoryState.setProjectDropTargetId}
@@ -320,6 +326,7 @@ export const LeftSidebarWorkspaceListSlot = memo(
       prev.repositories !== next.repositories ||
       prev.floatingRepositories !== next.floatingRepositories ||
       prev.workspaceRepositoryOrder !== next.workspaceRepositoryOrder ||
+      prev.hiddenWorkspaceRepositoryIds !== next.hiddenWorkspaceRepositoryIds ||
       prev.pinnedProjectIds !== next.pinnedProjectIds ||
       prev.workspaceSessions !== next.workspaceSessions ||
       prev.employeeMonitorItems !== next.employeeMonitorItems ||

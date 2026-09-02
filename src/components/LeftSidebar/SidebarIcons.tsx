@@ -71,6 +71,21 @@ export function PlusIcon() {
   );
 }
 
+/** 工作区仓库显示/隐藏配置。 */
+export function VisibilityConfigIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path
+        d="M2.2 8s2.2-4 5.8-4 5.8 4 5.8 4-2.2 4-5.8 4-5.8-4-5.8-4z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <circle cx="8" cy="8" r="1.7" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
+
 /** 分屏打开会话：双栏窗格示意。 */
 export function SplitPaneIcon() {
   return (

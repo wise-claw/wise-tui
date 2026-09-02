@@ -2783,6 +2783,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-left-sidebar-repo-panel-tab {
+  position: relative;
   width: 24px;
   height: 24px;
   display: inline-flex;
@@ -2795,6 +2796,18 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   color: var(--ant-color-text-tertiary);
   cursor: pointer;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.app-left-sidebar-repo-panel-tab__change-dot {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ant-color-warning);
+  box-shadow: 0 0 0 2px var(--ant-color-bg-container);
+  pointer-events: none;
 }
 
 .app-left-sidebar-repo-panel-tab svg {
@@ -2810,6 +2823,10 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-left-sidebar-repo-panel-tab--active {
   color: var(--ant-color-primary) !important;
   background: color-mix(in srgb, var(--ant-color-primary) 10%, var(--ant-color-fill-secondary)) !important;
+}
+
+.app-left-sidebar-repo-panel-tab--active .app-left-sidebar-repo-panel-tab__change-dot {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ant-color-primary) 10%, var(--ant-color-fill-secondary));
 }
 
 .app-left-sidebar-bottom-tab-content {

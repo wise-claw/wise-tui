@@ -118,6 +118,8 @@ function RepositoryVirtualTreeListInner({
                 <div
                   className="repo-tree-children-loading repo-tree-virtual-list__hint"
                   style={{ paddingLeft: repositoryTreeDepthIndentPx(row.depth) }}
+                  data-repo-path={row.parentPath}
+                  data-repo-is-dir="1"
                   aria-live="polite"
                 >
                   加载中…
@@ -127,6 +129,8 @@ function RepositoryVirtualTreeListInner({
                 <div
                   className="repo-tree-children-loading repo-tree-virtual-list__hint"
                   style={{ paddingLeft: repositoryTreeDepthIndentPx(row.depth) }}
+                  data-repo-path={row.parentPath}
+                  data-repo-is-dir="1"
                   aria-live="polite"
                 >
                   空文件夹

@@ -136,6 +136,11 @@ export function areLeftSidebarContentPropsEqual(
     const b = next.workspaceRepositoryOrder ?? [];
     if (a.length !== b.length || a.some((id, i) => id !== b[i])) return false;
   }
+  if (prev.hiddenWorkspaceRepositoryIds !== next.hiddenWorkspaceRepositoryIds) {
+    const a = prev.hiddenWorkspaceRepositoryIds ?? [];
+    const b = next.hiddenWorkspaceRepositoryIds ?? [];
+    if (a.length !== b.length || a.some((id, i) => id !== b[i])) return false;
+  }
   if (prev.repositoryMainSessionBindings !== next.repositoryMainSessionBindings) return false;
   if (prev.pinnedProjectIds !== next.pinnedProjectIds) return false;
   if (prev.leftSidebarHubQuickEntryIds !== next.leftSidebarHubQuickEntryIds) return false;

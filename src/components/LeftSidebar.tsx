@@ -153,6 +153,9 @@ export function LeftSidebar({
   onPromoteFloatingRepositoryToProject,
   floatingRepositories = [],
   workspaceRepositoryOrder = [],
+  hiddenWorkspaceRepositoryIds = [],
+  onSetWorkspaceRepositoryHidden,
+  onShowAllWorkspaceRepositories,
   onRemoveRepository,
   onDetachRepositoryFromProject,
   onUpdateRepositorySddMode,
@@ -1104,6 +1107,7 @@ export function LeftSidebar({
               repositories={repositories}
               floatingRepositories={floatingRepositories}
               workspaceRepositoryOrder={workspaceRepositoryOrder}
+              hiddenWorkspaceRepositoryIds={hiddenWorkspaceRepositoryIds}
               activeProjectId={activeProjectId}
               activeWorkspaceFocus={activeWorkspaceFocus}
               activeRepositoryId={activeRepositoryId}
@@ -1206,6 +1210,8 @@ export function LeftSidebar({
               onDetachRepositoryFromProject={onDetachRepositoryFromProject}
               onReorderRepositoriesInProject={onReorderRepositoriesInProject}
               onReorderWorkspaceRepositories={onReorderWorkspaceRepositories}
+              onSetWorkspaceRepositoryHidden={onSetWorkspaceRepositoryHidden}
+              onShowAllWorkspaceRepositories={onShowAllWorkspaceRepositories}
               onMoveRepositoryError={(text, err) => {
                 message.error(text);
                 console.error(err);

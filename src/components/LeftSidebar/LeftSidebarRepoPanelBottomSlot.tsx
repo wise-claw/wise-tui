@@ -116,7 +116,11 @@ function LeftSidebarRepoPanelBottomSlotInner({
   );
 
   const leftTabSwitcherPrefix: ReactNode = repoPanelRenderState.leftTabMode ? (
-    <LeftSidebarBottomTabSwitcher activeTab={leftBottomTab} onChange={onLeftBottomTabChange} />
+    <LeftSidebarBottomTabSwitcher
+      activeTab={leftBottomTab}
+      onChange={onLeftBottomTabChange}
+      repositoryPath={effectiveRepoPanelPath}
+    />
   ) : null;
 
   const leftSidebarGitBottomPane = useMemo(

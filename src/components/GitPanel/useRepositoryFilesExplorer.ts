@@ -1085,6 +1085,61 @@ export function useRepositoryFilesExplorer({
     [inlineRename, loadChildrenForDir, repositoryPath],
   );
 
+  const moveInFlightRef = useRef(false);
+  const moveExplorerEntry = useCallback(
+    async (fromPath: string, toPath: string, isDir: boolean) => {
+      if (moveInFlightRef.current || fromPath === toPath) {
+        return;
+      }
+      moveInFlightRef.current = true;
+      try {
+        await renameRepositoryEntry(repositoryPath, fromPath, toPath);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        message.error(`移动失败：${msg}`);
+        return;
+      }
+      try {
+        const fromParent = explorerParentDir(fromPath);
+        const toParent = explorerParentDir(toPath);
+        const wasExpanded = isDir && expandedDirsRef.current.has(fromPath);
+        setLoadedChildrenByDir((prev) => {
+          let next = new Map(prev);
+          next.delete(fromParent);
+          next.delete(toParent);
+          if (isDir) {
+            next = pruneLoadedChildrenMap(next, fromPath);
+          }
+          return next;
+        });
+        if (isDir) {
+          dispatchExpand({ type: "renameDir", fromPath, toPath });
+        }
+        if (toParent) {
+          dispatchExpand({ type: "expandAncestors", parentDir: toParent });
+        }
+        await loadChildrenForDir(fromParent, { force: true });
+        if (toParent !== fromParent) {
+          await loadChildrenForDir(toParent, { force: true });
+        }
+        if (wasExpanded) {
+          await loadChildrenForDir(toPath, { force: true });
+        }
+        setSelected({ path: toPath, isDir });
+      } finally {
+        moveInFlightRef.current = false;
+      }
+    },
+    [loadChildrenForDir, repositoryPath],
+  );
+
+  const handleDropHoverExpandDir = useCallback(
+    (dirPath: string) => {
+      expandAncestorsForDir(dirPath);
+    },
+    [expandAncestorsForDir],
+  );
+
   const handleInlineRenameCommit = useCallback(
     (value: string) => {
       void commitInlineRename(value);
@@ -1207,6 +1262,8 @@ export function useRepositoryFilesExplorer({
     startInlineRename,
     commitInlineRename,
     handleInlineRenameCommit,
+    moveExplorerEntry,
+    handleDropHoverExpandDir,
   };
 }
 

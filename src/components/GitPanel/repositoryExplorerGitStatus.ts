@@ -33,6 +33,10 @@ export const EMPTY_EXPLORER_GIT_STATUS_INDEX: ExplorerGitStatusIndex = {
   dirStatusByPath: new Map(),
 };
 
+export function explorerGitStatusHasFileChanges(index: ExplorerGitStatusIndex): boolean {
+  return index.fileStatusByPath.size > 0;
+}
+
 function addAncestorDirs(set: Set<string>, filePath: string): void {
   let slash = filePath.lastIndexOf("/");
   while (slash > 0) {

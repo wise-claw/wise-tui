@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import {
   EMPTY_EXPLORER_GIT_STATUS_INDEX,
+  explorerGitStatusHasFileChanges,
   type ExplorerGitStatusIndex,
 } from "../components/GitPanel/repositoryExplorerGitStatus";
 import {
@@ -42,6 +43,7 @@ export function useGitRepositoryExplorerStatus(repositoryPath: string, enabled =
   return useMemo(
     () => ({
       generation,
+      hasFileChanges: explorerGitStatusHasFileChanges(index),
       getFileStatus: (path: string) => index.fileStatusByPath.get(path) ?? null,
       getDirStatus: (path: string) => index.dirStatusByPath.get(path) ?? null,
       dirHasChanges: (path: string) => index.dirsWithChanges.has(path),

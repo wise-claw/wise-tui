@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   buildExplorerGitStatusIndex,
+  explorerGitStatusHasFileChanges,
   explorerGitStatusIndexEqual,
 } from "./repositoryExplorerGitStatus";
 import type { GitStatusResponse } from "../../types";
@@ -43,6 +44,27 @@ describe("buildExplorerGitStatusIndex", () => {
     expect(index.fileStatusByPath.size).toBe(0);
     expect(index.dirsWithChanges.size).toBe(0);
     expect(index.dirStatusByPath.size).toBe(0);
+    expect(explorerGitStatusHasFileChanges(index)).toBe(false);
+  });
+
+  it("reports file changes when staged or unstaged files exist", () => {
+    expect(explorerGitStatusHasFileChanges(buildExplorerGitStatusIndex(null))).toBe(false);
+    expect(
+      explorerGitStatusHasFileChanges(
+        buildExplorerGitStatusIndex({
+          ...emptyStatus,
+          staged: [{ path: "a.ts", status: "A", additions: 1, deletions: 0 }],
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      explorerGitStatusHasFileChanges(
+        buildExplorerGitStatusIndex({
+          ...emptyStatus,
+          unstaged: [{ path: "b.ts", status: "M", additions: 0, deletions: 1 }],
+        }),
+      ),
+    ).toBe(true);
   });
 
   it("computes dir status by aggregating child severity", () => {

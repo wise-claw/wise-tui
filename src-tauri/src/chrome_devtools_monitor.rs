@@ -1011,6 +1011,7 @@ fn with_trail(message: String, trail: &VecDeque<(String, String)>) -> String {
 const MAX_EVIDENCE_B64_CHARS: usize = 1_500_000;
 
 /// Core Web Vitals "poor" 阈值；仅 LCP/CLS/INP 升级为可自动修复的告警。
+#[cfg(test)]
 fn vitals_poor_alert(metric: &str, value: f64) -> Option<String> {
     vitals_poor_alert_with(metric, value, &VitalsThresholds::default())
 }

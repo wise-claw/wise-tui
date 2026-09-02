@@ -41,7 +41,7 @@ function RepositoryTreeFileNodeInner({
       draggable
       onDragStart={(e) => {
         e.stopPropagation();
-        setWiseRepositoryFileDragData(e.dataTransfer, node.path);
+        setWiseRepositoryFileDragData(e.dataTransfer, node.path, { isDir: false });
       }}
       tabIndex={-1}
     >

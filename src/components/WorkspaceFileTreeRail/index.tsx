@@ -45,7 +45,11 @@ export const WorkspaceFileTreeRail = memo(function WorkspaceFileTreeRail({
   const headerPrefix = useMemo((): ReactNode => {
     return (
       <div className="app-workspace-file-tree-rail__prefix">
-        <LeftSidebarBottomTabSwitcher activeTab={activeTab} onChange={setActiveTab} />
+        <LeftSidebarBottomTabSwitcher
+          activeTab={activeTab}
+          onChange={setActiveTab}
+          repositoryPath={trimmedRepositoryPath}
+        />
         <HoverHint title="关闭文件树">
           <button
             type="button"
@@ -58,7 +62,7 @@ export const WorkspaceFileTreeRail = memo(function WorkspaceFileTreeRail({
         </HoverHint>
       </div>
     );
-  }, [activeTab, onClose]);
+  }, [activeTab, onClose, trimmedRepositoryPath]);
 
   const gitPane = useMemo(
     () => (

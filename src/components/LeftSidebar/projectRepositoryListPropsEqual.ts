@@ -6,6 +6,7 @@ export type ProjectRepositoryListEqualProps = Pick<
   | "projects"
   | "floatingRepositories"
   | "workspaceRepositoryOrder"
+  | "hiddenWorkspaceRepositoryIds"
   | "activeProjectId"
   | "activeWorkspaceFocus"
   | "activeRepositoryId"
@@ -119,6 +120,11 @@ export function projectRepositoryListPropsEqual(
   if (prev.workspaceRepositoryOrder !== next.workspaceRepositoryOrder) {
     const a = prev.workspaceRepositoryOrder ?? [];
     const b = next.workspaceRepositoryOrder ?? [];
+    if (a.length !== b.length || a.some((id, i) => id !== b[i])) return false;
+  }
+  if (prev.hiddenWorkspaceRepositoryIds !== next.hiddenWorkspaceRepositoryIds) {
+    const a = prev.hiddenWorkspaceRepositoryIds ?? [];
+    const b = next.hiddenWorkspaceRepositoryIds ?? [];
     if (a.length !== b.length || a.some((id, i) => id !== b[i])) return false;
   }
   if (prev.activeProjectId !== next.activeProjectId) return false;

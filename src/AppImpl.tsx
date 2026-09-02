@@ -696,6 +696,8 @@ export default function App() {
     handleUpdateRepositoryIconBadge,
     handleReorderRepositoriesInProject,
     handleReorderWorkspaceRepositories,
+    handleSetWorkspaceRepositoryHidden,
+    handleShowAllWorkspaceRepositories,
     handleReconcileProjectWorkspace,
     handleUpdateRepositoryMainOwnerAgent,
     handleUpdateRepositoryExecutionEngine,
@@ -705,6 +707,7 @@ export default function App() {
     togglePinProject,
     floatingRepositories,
     workspaceRepositoryOrder,
+    hiddenWorkspaceRepositoryIds,
     standaloneRepos,
   } = useRepositoryList();
 
@@ -2968,6 +2971,9 @@ export default function App() {
         onPromoteFloatingRepositoryToProject: handlePromoteFloatingRepositoryToProject,
         floatingRepositories,
         workspaceRepositoryOrder,
+        hiddenWorkspaceRepositoryIds,
+        onSetWorkspaceRepositoryHidden: handleSetWorkspaceRepositoryHidden,
+        onShowAllWorkspaceRepositories: handleShowAllWorkspaceRepositories,
         onRemoveRepository: handleRemoveRepositoryWithSessionCleanup,
         onDetachRepositoryFromProject: handleDetachRepositoryFromProjectWithSessionCleanup,
         onUpdateRepositorySddMode: handleUpdateRepositorySddMode,

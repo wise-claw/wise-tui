@@ -1,23 +1,31 @@
 import { GitBottomTabIcon, FilesBottomTabIcon } from "./SidebarIcons";
 import type { LeftBottomTab } from "./sidebarStorage";
+import { useGitRepositoryExplorerStatus } from "../../hooks/useGitRepositoryExplorerStatus";
 
 interface LeftSidebarBottomTabSwitcherProps {
   activeTab: LeftBottomTab;
   onChange: (tab: LeftBottomTab) => void;
+  repositoryPath?: string;
 }
 
-export function LeftSidebarBottomTabSwitcher({
+export function LeftSidebarBottomTabSwitcherView({
   activeTab,
   onChange,
-}: LeftSidebarBottomTabSwitcherProps) {
+  hasGitFileChanges,
+}: {
+  activeTab: LeftBottomTab;
+  onChange: (tab: LeftBottomTab) => void;
+  hasGitFileChanges: boolean;
+}) {
+  const showGitChangeDot = hasGitFileChanges && activeTab !== "git";
   return (
     <div className="app-left-sidebar-repo-panel-tabs" role="tablist" aria-label="仓库面板">
       <button
         type="button"
         role="tab"
         aria-selected={activeTab === "git"}
-        aria-label="Git"
-        title="Git 变更"
+        aria-label={showGitChangeDot ? "Git，有文件变更" : "Git"}
+        title={showGitChangeDot ? "Git 变更（有未提交文件）" : "Git 变更"}
         className={
           "app-left-sidebar-repo-panel-tab" +
           (activeTab === "git" ? " app-left-sidebar-repo-panel-tab--active" : "")
@@ -25,6 +33,9 @@ export function LeftSidebarBottomTabSwitcher({
         onClick={() => onChange("git")}
       >
         <GitBottomTabIcon />
+        {showGitChangeDot ? (
+          <span className="app-left-sidebar-repo-panel-tab__change-dot" aria-hidden />
+        ) : null}
       </button>
       <button
         type="button"
@@ -41,5 +52,20 @@ export function LeftSidebarBottomTabSwitcher({
         <FilesBottomTabIcon />
       </button>
     </div>
+  );
+}
+
+export function LeftSidebarBottomTabSwitcher({
+  activeTab,
+  onChange,
+  repositoryPath = "",
+}: LeftSidebarBottomTabSwitcherProps) {
+  const { hasFileChanges } = useGitRepositoryExplorerStatus(repositoryPath);
+  return (
+    <LeftSidebarBottomTabSwitcherView
+      activeTab={activeTab}
+      onChange={onChange}
+      hasGitFileChanges={hasFileChanges}
+    />
   );
 }

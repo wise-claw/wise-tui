@@ -2517,6 +2517,17 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   background: color-mix(in srgb, var(--ant-color-primary-bg) 100%, var(--ant-color-fill-content));
 }
 
+.repo-tree-node--drop-target,
+.repo-tree-node--selected.repo-tree-node--drop-target,
+.repo-tree-node--selected:hover.repo-tree-node--drop-target {
+  background: color-mix(in srgb, var(--ant-color-primary) 18%, transparent);
+  box-shadow: inset 0 0 0 1px var(--ant-color-primary);
+}
+
+.git-files-explorer-scroll-region--drop-target {
+  box-shadow: inset 0 0 0 1px var(--ant-color-primary);
+}
+
 .repo-tree-node--dir {
   font-weight: 400;
   color: var(--ant-color-text);

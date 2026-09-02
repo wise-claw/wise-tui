@@ -55,6 +55,12 @@ import {
   normalizeWorkspaceRepositoryOrder,
   parseWorkspaceRepositoryOrderFromSetting,
 } from "../utils/workspaceRepositoryOrder";
+import {
+  WORKSPACE_HIDDEN_REPOSITORY_IDS_STORAGE_KEY,
+  normalizeHiddenRepositoryIds,
+  parseHiddenRepositoryIdsFromSetting,
+  toggleHiddenRepositoryId,
+} from "../utils/workspaceHiddenRepositories";
 import { repositoryFolderBasename } from "../utils/repositoryType";
 import type { WorkspaceFocus } from "../utils/workspaceMode";
 import {
@@ -101,6 +107,7 @@ export function useRepositoryList() {
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [pinnedProjectIds, setPinnedProjectIds] = useState<string[]>([]);
   const [workspaceRepositoryOrder, setWorkspaceRepositoryOrder] = useState<number[]>([]);
+  const [hiddenWorkspaceRepositoryIds, setHiddenWorkspaceRepositoryIds] = useState<number[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeWorkspaceFocus, setActiveWorkspaceFocus] = useState<WorkspaceFocus>("repository");
   const [loading, setLoading] = useState(true);
@@ -212,6 +219,7 @@ export function useRepositoryList() {
         const settingsKeys = [
           PINNED_PROJECT_IDS_STORAGE_KEY,
           WORKSPACE_REPOSITORY_ORDER_STORAGE_KEY,
+          WORKSPACE_HIDDEN_REPOSITORY_IDS_STORAGE_KEY,
           selectionStorageKey,
           ...(isPrimary ? [WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY] : []),
         ];
@@ -222,6 +230,8 @@ export function useRepositoryList() {
         ]);
         const rawPins = settingsBatch[PINNED_PROJECT_IDS_STORAGE_KEY] ?? null;
         const rawWorkspaceOrder = settingsBatch[WORKSPACE_REPOSITORY_ORDER_STORAGE_KEY] ?? null;
+        const rawHiddenRepositoryIds =
+          settingsBatch[WORKSPACE_HIDDEN_REPOSITORY_IDS_STORAGE_KEY] ?? null;
         const rawLastSelection = settingsBatch[selectionStorageKey] ?? null;
         const rawLastSessionRepoId = isPrimary
           ? settingsBatch[WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY] ?? null
@@ -288,6 +298,25 @@ export function useRepositoryList() {
           }
         }
 
+        const hiddenDirty = parseHiddenRepositoryIdsFromSetting(rawHiddenRepositoryIds);
+        const hiddenRepositoryIds = normalizeHiddenRepositoryIds(
+          hiddenDirty,
+          repositoryList.map((repo) => repo.id),
+        );
+        if (
+          hiddenRepositoryIds.length !== hiddenDirty.length ||
+          hiddenRepositoryIds.some((id, i) => id !== hiddenDirty[i])
+        ) {
+          if (hiddenRepositoryIds.length > 0) {
+            void setAppSetting(
+              WORKSPACE_HIDDEN_REPOSITORY_IDS_STORAGE_KEY,
+              JSON.stringify(hiddenRepositoryIds),
+            );
+          } else if (hiddenDirty.length > 0) {
+            void deleteAppSetting(WORKSPACE_HIDDEN_REPOSITORY_IDS_STORAGE_KEY);
+          }
+        }
+
         const parsedLastSessionRepoId = parseLastSessionRepoId(rawLastSessionRepoId);
         const parsedLastSelection = parseWorkspaceLastSelection(rawLastSelection);
         const startup = resolveStartupSelection({
@@ -303,6 +332,7 @@ export function useRepositoryList() {
         setRepositories(repositoryList);
         setPinnedProjectIds(pins);
         setWorkspaceRepositoryOrder(workspaceOrder);
+        setHiddenWorkspaceRepositoryIds(hiddenRepositoryIds);
         setProjects(sortedProjects);
         setActiveWorkspaceFocus(startup.workspaceFocus);
         setActiveProjectId(startup.projectId);
@@ -694,6 +724,17 @@ export function useRepositoryList() {
       })),
     );
     setActiveRepositoryId((prev) => (prev === repositoryId ? null : prev));
+    setHiddenWorkspaceRepositoryIds((prev) => {
+      const next = prev.filter((id) => id !== repositoryId);
+      if (next.length !== prev.length) {
+        if (next.length > 0) {
+          void setAppSetting(WORKSPACE_HIDDEN_REPOSITORY_IDS_STORAGE_KEY, JSON.stringify(next));
+        } else {
+          void deleteAppSetting(WORKSPACE_HIDDEN_REPOSITORY_IDS_STORAGE_KEY);
+        }
+      }
+      return next;
+    });
   }, []);
 
   /** 侧栏「移出项目」：与全局移除仓库一致。 */
@@ -743,6 +784,34 @@ export function useRepositoryList() {
     setWorkspaceRepositoryOrder(next);
     void setAppSetting(WORKSPACE_REPOSITORY_ORDER_STORAGE_KEY, JSON.stringify(next));
   }, []);
+
+  const persistHiddenWorkspaceRepositoryIds = useCallback((next: number[]) => {
+    setHiddenWorkspaceRepositoryIds(next);
+    if (next.length > 0) {
+      void setAppSetting(WORKSPACE_HIDDEN_REPOSITORY_IDS_STORAGE_KEY, JSON.stringify(next));
+    } else {
+      void deleteAppSetting(WORKSPACE_HIDDEN_REPOSITORY_IDS_STORAGE_KEY);
+    }
+  }, []);
+
+  const handleSetWorkspaceRepositoryHidden = useCallback(
+    (repositoryId: number, hidden: boolean) => {
+      setHiddenWorkspaceRepositoryIds((prev) => {
+        const next = toggleHiddenRepositoryId(prev, repositoryId, hidden);
+        if (next.length > 0) {
+          void setAppSetting(WORKSPACE_HIDDEN_REPOSITORY_IDS_STORAGE_KEY, JSON.stringify(next));
+        } else {
+          void deleteAppSetting(WORKSPACE_HIDDEN_REPOSITORY_IDS_STORAGE_KEY);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleShowAllWorkspaceRepositories = useCallback(() => {
+    persistHiddenWorkspaceRepositoryIds([]);
+  }, [persistHiddenWorkspaceRepositoryIds]);
 
   /** 将仓库从其它项目移入目标项目（目标项目已有该仓库时仅解除其它项目关联） */
   const handleUpdateRepositoryMainOwnerAgent = useCallback(async (repositoryId: number, mainOwnerAgentName: string | null) => {
@@ -825,6 +894,7 @@ export function useRepositoryList() {
     projects,
     pinnedProjectIds,
     workspaceRepositoryOrder,
+    hiddenWorkspaceRepositoryIds,
     activeProject,
     activeProjectId,
     projectRepositories,
@@ -852,6 +922,8 @@ export function useRepositoryList() {
     handleUpdateRepositoryIconBadge,
     handleReorderRepositoriesInProject,
     handleReorderWorkspaceRepositories,
+    handleSetWorkspaceRepositoryHidden,
+    handleShowAllWorkspaceRepositories,
     handleMoveRepositoryToProject,
     handleReconcileProjectWorkspace,
     handleUpdateRepositoryMainOwnerAgent,
