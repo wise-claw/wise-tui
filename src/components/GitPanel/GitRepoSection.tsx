@@ -23,11 +23,9 @@ import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemo
 import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { WISE_GIT_REPOSITORY_STATUS_REFRESH, type GitRepositoryStatusRefreshDetail } from "../../constants/gitUiEvents";
 import {
-  aiCommitPullPushRepository,
   commitPullPushRepository,
   gitCommitPullPushNoopMessage,
   gitCommitPullPushSuccessMessage,
-  isGitMergeConflictError,
   needsPublishBranch,
 } from "../../services/gitCommitPullPush";
 import { maybeAutoCodeReviewAfterCommit } from "../../services/codeReview";
@@ -47,7 +45,9 @@ import {
   gitStatusSnapshotEqual,
   hasUnstagedFilesUnderDirectory,
   type GitStatusHeaderSnapshot,
+  workingTreeNeedsCommitMessage,
 } from "./gitPanelUtils";
+import { startGitPanelPush, type GitCommitDraftHandle } from "./promptGitCommitMessage";
 import type { GitPanelOpenFileOptions } from "./types";
 
 export interface GitRepoSectionEntry {
@@ -151,6 +151,7 @@ function GitRepoSectionInner({
   });
 
   const statusRef = useRef<GitStatusResponse | null>(null);
+  const commitDraftHandleRef = useRef<GitCommitDraftHandle | null>(null);
   const headerSnapshotRef = useRef<GitStatusHeaderSnapshot | null>(null);
   const runningActions = useRef(new Set<string>());
   const gitSyncActiveRef = useRef<GitSyncActionKind | null>(null);
@@ -597,31 +598,16 @@ function GitRepoSectionInner({
 
   const handlePush = useCallback(() => {
     if (!repositoryPath) return;
-    runGitSync(
-      "push",
-      async () => {
-        const outcome = await aiCommitPullPushRepository(repositoryPath, {
-          executionEngine: entry.executionEngine,
-          onAiFallback: ({ executionEngine: engine, reason }) => {
-            message.warning(`提交信息 AI（${engine}）不可用，已改用规则生成：${reason}`);
-          },
-        });
-        if (outcome === "noop") {
-          message.info(gitCommitPullPushNoopMessage());
-        } else {
-          const successMsg = gitCommitPullPushSuccessMessage(outcome);
-          if (successMsg) message.success(successMsg);
-        }
-      },
-      (msg) => {
-        if (isGitMergeConflictError(msg)) {
-          message.warning("拉取/合并存在冲突，请手动解决后重试");
-        } else {
-          message.error(`推送失败: ${msg}`);
-        }
-      },
-    );
-  }, [entry.executionEngine, repositoryPath, runGitSync]);
+    void startGitPanelPush({
+      repositoryPath,
+      needsCommitMessage: workingTreeNeedsCommitMessage(status, headerSnapshot),
+      commitDraft: commitDraftHandleRef.current,
+      executionEngine: entry.executionEngine,
+      status,
+      setPreparing: (preparing) => setLoading((prev) => ({ ...prev, push: preparing })),
+      runGitSync,
+    });
+  }, [entry.executionEngine, headerSnapshot, repositoryPath, runGitSync, status]);
 
   const handlePull = useCallback(() => {
     if (!repositoryPath) return;
@@ -774,6 +760,7 @@ function GitRepoSectionInner({
                 onDiscardAll={handleDiscardAll}
                 onCommit={handleCommit}
                 onCommitAndPush={handleCommitAndPush}
+                commitDraftHandleRef={commitDraftHandleRef}
                 onOpenFile={handleOpenRepoFile}
                 onBranchChanged={() => void loadStatus({ silent: true })}
                 onDismissError={handleDismissError}

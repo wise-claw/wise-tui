@@ -51,7 +51,7 @@ export const GitSyncActions = memo(function GitSyncActions({
       : "本地分支尚未同步到远端 · 点击发布"
     : ahead > 0
       ? `AI 生成提交信息并提交、拉取、推送 · 领先 ${ahead}`
-      : "AI 生成提交信息并提交、拉取、推送";
+      : "AI 生成提交信息并提交、拉取、推送；失败时可手填";
   const pushAriaLabel = needsPublish
     ? ahead > 0
       ? `发布分支到远端，领先 ${ahead} 个提交`

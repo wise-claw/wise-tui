@@ -23,11 +23,9 @@ import type { SessionExecutionEngine } from "../../constants/sessionExecutionEng
 import { normalizeSessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { WISE_GIT_REPOSITORY_STATUS_REFRESH, type GitRepositoryStatusRefreshDetail } from "../../constants/gitUiEvents";
 import {
-  aiCommitPullPushRepository,
   commitPullPushRepository,
   gitCommitPullPushNoopMessage,
   gitCommitPullPushSuccessMessage,
-  isGitMergeConflictError,
 } from "../../services/gitCommitPullPush";
 import { maybeAutoCodeReviewAfterCommit } from "../../services/codeReview";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
@@ -42,7 +40,8 @@ import { GitHistoryDrawer } from "./GitHistoryDrawer";
 import { GitPanelMoreMenu } from "./GitPanelMoreMenu";
 import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
-import { hasUnstagedFilesUnderDirectory, GIT_WATCHER_REFRESH_MS, gitStatusSnapshotEqual } from "./gitPanelUtils";
+import { hasUnstagedFilesUnderDirectory, GIT_WATCHER_REFRESH_MS, gitStatusSnapshotEqual, workingTreeNeedsCommitMessage } from "./gitPanelUtils";
+import { startGitPanelPush, type GitCommitDraftHandle } from "./promptGitCommitMessage";
 import { GitMultiRepoPanel } from "./GitMultiRepoPanel";
 import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
 import type { GitPanelOpenFileOptions } from "./types";
@@ -119,6 +118,7 @@ function GitSingleRepoPanel({
   const pendingSilentRefreshRef = useRef(false);
   const pendingSilentStatusRefreshRef = useRef(false);
   const statusRef = useRef<GitStatusResponse | null>(null);
+  const commitDraftHandleRef = useRef<GitCommitDraftHandle | null>(null);
   const statusLoadInFlightRef = useRef<Promise<void> | null>(null);
   const lastStatusLoadedAtRef = useRef(0);
   const DEBOUNCE_MS = 400;
@@ -430,31 +430,16 @@ function GitSingleRepoPanel({
 
   const handlePush = useCallback(() => {
     if (!repositoryPath) return;
-    runGitSync(
-      "push",
-      async () => {
-        const outcome = await aiCommitPullPushRepository(repositoryPath, {
-          executionEngine,
-          onAiFallback: ({ executionEngine: engine, reason }) => {
-            message.warning(`提交信息 AI（${engine}）不可用，已改用规则生成：${reason}`);
-          },
-        });
-        if (outcome === "noop") {
-          message.info(gitCommitPullPushNoopMessage());
-        } else {
-          const successMsg = gitCommitPullPushSuccessMessage(outcome);
-          if (successMsg) message.success(successMsg);
-        }
-      },
-      (msg) => {
-        if (isGitMergeConflictError(msg)) {
-          message.warning("拉取/合并存在冲突，请手动解决后重试");
-        } else {
-          message.error(`推送失败: ${msg}`);
-        }
-      },
-    );
-  }, [executionEngine, repositoryPath, runGitSync]);
+    void startGitPanelPush({
+      repositoryPath,
+      needsCommitMessage: workingTreeNeedsCommitMessage(status),
+      commitDraft: commitDraftHandleRef.current,
+      executionEngine,
+      status,
+      setPreparing: (preparing) => setLoading((prev) => ({ ...prev, push: preparing })),
+      runGitSync,
+    });
+  }, [executionEngine, repositoryPath, runGitSync, status]);
 
   const handlePull = useCallback(() => {
     if (!repositoryPath) return;
@@ -572,6 +557,7 @@ function GitSingleRepoPanel({
               onDiscardAll={handleDiscardAll}
               onCommit={handleCommit}
               onCommitAndPush={handleCommitAndPush}
+              commitDraftHandleRef={commitDraftHandleRef}
               onOpenFile={handleOpenRepoFile}
               onBranchChanged={() => void loadStatus({ silent: true })}
               onDismissError={handleDismissError}

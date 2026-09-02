@@ -146,6 +146,7 @@ export async function executeSessionEngineAndWait(params: {
   const errorLines: string[] = [];
   const MAX_CAPTURED_LINES = 8000;
   const MAX_SINGLE_LINE_CHARS = 24_000;
+  const INVOCATION_OUTPUT_DRAIN_MS = 80;
   const timeoutMs = params.timeoutMs ?? 120_000;
 
   const {
@@ -155,6 +156,7 @@ export async function executeSessionEngineAndWait(params: {
   } = claudeInvocationStreamEvents(invocationKey);
 
   let resolveDone: ((value: ClaudeInvocationResult) => void) | null = null;
+  let drainHandle: ReturnType<typeof setTimeout> | null = null;
   const donePromise = new Promise<ClaudeInvocationResult>((resolve) => {
     resolveDone = resolve;
   });
@@ -175,12 +177,16 @@ export async function executeSessionEngineAndWait(params: {
   });
   const unlistenComplete = await listen<{ success?: boolean }>(completeEvent, (event) => {
     const success = resolveClaudeCompleteSuccess(event.payload);
-    resolveDone?.({
-      success,
-      outputLines: [...outputLines],
-      errorLines: [...errorLines],
-      invocationKey,
-    });
+    // complete 与 output 走不同事件名，短 oneshot 可能先完成再送达最后一行正文。
+    drainHandle = globalThis.setTimeout(() => {
+      drainHandle = null;
+      resolveDone?.({
+        success,
+        outputLines: [...outputLines],
+        errorLines: [...errorLines],
+        invocationKey,
+      });
+    }, INVOCATION_OUTPUT_DRAIN_MS);
   });
 
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
@@ -229,6 +235,7 @@ export async function executeSessionEngineAndWait(params: {
     return await Promise.race([donePromise, timeoutPromise]);
   } finally {
     if (timeoutHandle != null) globalThis.clearTimeout(timeoutHandle);
+    if (drainHandle != null) globalThis.clearTimeout(drainHandle);
     safeUnlisten(unlistenOutput);
     safeUnlisten(unlistenError);
     safeUnlisten(unlistenComplete);

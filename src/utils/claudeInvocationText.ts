@@ -15,11 +15,17 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function extractTextFromAssistantMessage(payload: Record<string, unknown>): string[] {
   const message = payload.message;
+  if (typeof message === "string" && message.trim()) return [message.trim()];
   if (!isRecord(message)) return [];
   const content = message.content;
+  if (typeof content === "string" && content.trim()) return [content.trim()];
   if (!Array.isArray(content)) return [];
   const texts: string[] = [];
   for (const item of content) {
+    if (typeof item === "string" && item.trim()) {
+      texts.push(item.trim());
+      continue;
+    }
     if (!isRecord(item)) continue;
     if (item.type !== "text") continue;
     const text = typeof item.text === "string" ? item.text.trim() : "";
@@ -28,10 +34,22 @@ function extractTextFromAssistantMessage(payload: Record<string, unknown>): stri
   return texts;
 }
 
+function extractResultText(parsed: Record<string, unknown>): string {
+  if (typeof parsed.result === "string" && parsed.result.trim()) return parsed.result.trim();
+  if (typeof parsed.output === "string" && parsed.output.trim()) return parsed.output.trim();
+  if (typeof parsed.text === "string" && parsed.text.trim()) return parsed.text.trim();
+  const item = parsed.item;
+  if (isRecord(item) && typeof item.text === "string" && item.text.trim()) {
+    return item.text.trim();
+  }
+  return "";
+}
+
 /**
- * 从 Claude Code 事件流文本中提取“最终可用正文”，过滤 hook/init/thinking 等 JSON 噪音。
+ * 从 invocation 输出中收集可能含提交信息的正文候选（result / assistant / 纯文本）。
+ * 顺序：权威 result → 拼接后的助手正文 → 各段助手正文 → 非 JSON 纯文本。
  */
-export function extractClaudeInvocationFinalText(lines: string[]): string {
+export function collectClaudeInvocationTextCandidates(lines: readonly string[]): string[] {
   const fallbackPlain = lines
     .map((line) => line.trim())
     .filter(Boolean)
@@ -49,16 +67,36 @@ export function extractClaudeInvocationFinalText(lines: string[]): string {
 
     const type = typeof parsed.type === "string" ? parsed.type : "";
     if (type === "result") {
-      const result = typeof parsed.result === "string" ? parsed.result.trim() : "";
+      const result = extractResultText(parsed);
       if (result) resultText = result;
     } else if (type === "assistant") {
       assistantTexts.push(...extractTextFromAssistantMessage(parsed));
+    } else if (type === "item.completed" || type === "item/completed") {
+      const nested = extractResultText(parsed);
+      if (nested) assistantTexts.push(nested);
     }
   }
 
-  if (resultText) return resultText;
-  if (assistantTexts.length > 0) return assistantTexts.join("\n").trim();
-  return fallbackPlain;
+  const candidates: string[] = [];
+  const push = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || candidates.includes(trimmed)) return;
+    candidates.push(trimmed);
+  };
+  push(resultText);
+  if (assistantTexts.length > 0) {
+    push(assistantTexts.join("\n"));
+    for (const text of assistantTexts) push(text);
+  }
+  push(fallbackPlain);
+  return candidates;
+}
+
+/**
+ * 从 Claude Code 事件流文本中提取“最终可用正文”，过滤 hook/init/thinking 等 JSON 噪音。
+ */
+export function extractClaudeInvocationFinalText(lines: string[]): string {
+  return collectClaudeInvocationTextCandidates(lines)[0] ?? "";
 }
 
 /** Claude Code 流式 stdout 末尾常见的结果包络（对人无信息量的 JSON 一行） */

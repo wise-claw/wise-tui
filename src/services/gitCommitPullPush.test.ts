@@ -192,7 +192,7 @@ describe("aiCommitPullPushRepository execution engine", () => {
     gitCommitMessageContext.mockImplementation(async () => "@@ -1 +1 @@\n-old\n+new");
   });
 
-  it("passes selected executionEngine to oneshot wait", async () => {
+  it("tries the default engine first, then the repository engine", async () => {
     gitStatus.mockImplementation(async () =>
       makeStatus({
         upstream: "origin/master",
@@ -200,17 +200,30 @@ describe("aiCommitPullPushRepository execution engine", () => {
       }),
     );
     const invokeEngine = mock(async (params: { executionEngine?: string; model?: string }) => {
+      if (params.executionEngine === "claude") {
+        expect(params.model).toBeUndefined();
+        return { success: false, outputLines: [], errorLines: ["default unavailable"] };
+      }
       expect(params.executionEngine).toBe("codex");
       expect(params.model).toBeUndefined();
-      return { success: false, outputLines: [], errorLines: [] };
+      return {
+        success: true,
+        outputLines: [JSON.stringify({ type: "result", result: "fix: 回退引擎生成摘要" })],
+        errorLines: [],
+      };
     });
 
     await aiCommitPullPushRepository("/repo", {
       executionEngine: "codex",
+      getDefaultEngine: () => "claude",
       invokeEngine: invokeEngine as never,
     });
 
-    expect(invokeEngine).toHaveBeenCalledTimes(1);
+    expect(invokeEngine.mock.calls.map((call) => call[0]?.executionEngine)).toEqual([
+      "claude",
+      "codex",
+    ]);
+    expect(gitCommit.mock.calls[0]?.[1]).toBe("fix: 回退引擎生成摘要");
   });
 
   it("uses AI text when oneshot succeeds", async () => {
@@ -233,6 +246,7 @@ describe("aiCommitPullPushRepository execution engine", () => {
 
     await aiCommitPullPushRepository("/repo", {
       executionEngine: "claude",
+      getDefaultEngine: () => "claude",
       invokeEngine: invokeEngine as never,
     });
 
@@ -257,7 +271,10 @@ describe("aiCommitPullPushRepository execution engine", () => {
       };
     });
 
-    await aiCommitPullPushRepository("/repo", { invokeEngine: invokeEngine as never });
+    await aiCommitPullPushRepository("/repo", {
+      getDefaultEngine: () => "claude",
+      invokeEngine: invokeEngine as never,
+    });
 
     expect(gitCommitMessageContext).toHaveBeenCalledWith("/repo");
     expect(gitCommit.mock.calls[0]?.[1]).toBe("fix: 使用实际差异生成摘要");
@@ -279,6 +296,7 @@ describe("aiCommitPullPushRepository execution engine", () => {
 
     await aiCommitPullPushRepository("/repo", {
       invokeEngine: invokeEngine as never,
+      getDefaultEngine: () => "claude",
       onAiFallback,
     });
 
@@ -300,11 +318,13 @@ describe("aiCommitPullPushRepository execution engine", () => {
 
     const outcome = await aiCommitPullPushRepository("/repo", {
       executionEngine: "cursor",
+      getDefaultEngine: () => "claude",
       invokeEngine: invokeEngine as never,
       onAiFallback,
     });
 
     expect(outcome).toBe("committed_and_pushed");
+    expect(invokeEngine).toHaveBeenCalledTimes(2);
     expect(onAiFallback.mock.calls[0]?.[0]).toEqual({
       executionEngine: "cursor",
       reason: "Cursor ACP unavailable",
@@ -332,6 +352,7 @@ describe("aiCommitPullPushRepository execution engine", () => {
 
     await aiCommitPullPushRepository("/repo", {
       executionEngine: "claude",
+      getDefaultEngine: () => "claude",
       invokeEngine: invokeEngine as never,
       onAiFallback,
     });

@@ -1,24 +1,15 @@
 import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import { normalizeSessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import type { GitStatusResponse, GitStatusSummaryResponse } from "../types";
-import { extractClaudeInvocationFinalText } from "../utils/claudeInvocationText";
-import { humanizeClaudeError } from "../utils/humanizeClaudeError";
-import {
-  buildConventionalCommitFallback,
-  conventionalCommitPromptLines,
-  normalizeConventionalCommitMessage,
-  parseAiConventionalCommitMessage,
-} from "../utils/conventionalCommitMessage";
-import { getClaudeConfigModel } from "./claude";
 import {
   gitCommit,
-  gitCommitMessageContext,
   gitPull,
   gitPush,
   gitStageAll,
   gitStatus,
 } from "./git";
-import { executeSessionEngineAndWait } from "./sessionEngineInvocation";
+import { generateGitCommitMessageByAi } from "./gitCommitMessageAi";
+import type { executeSessionEngineAndWait } from "./sessionEngineInvocation";
 
 export function hasWorkingTreeChanges(status: GitStatusResponse): boolean {
   return status.staged.length > 0 || status.unstaged.length > 0;
@@ -148,33 +139,21 @@ export async function commitPullPushRepository(
 export interface AiCommitPullPushHooks {
   onPhase?: (phase: string) => void;
   /**
-   * 当前会话/仓库选中的执行引擎。AI 润色走该引擎 oneshot；
-   * 未传或 Gemini 等不支持时回退规则生成（不阻断推送）。
+   * 当前仓库选中的执行引擎，作为默认执行环境失败后的回退。
+   * Gemini 等不支持 oneshot 时会跳过，全部失败则改用规则生成（不阻断推送）。
    */
   executionEngine?: SessionExecutionEngine | null;
+  /** 测试可注入默认执行环境；默认读工作台缓存。 */
+  getDefaultEngine?: () => SessionExecutionEngine;
   /** 测试可注入；默认 `executeSessionEngineAndWait`。 */
   invokeEngine?: typeof executeSessionEngineAndWait;
-  /** AI 不可用或输出不合格、改用规则提交信息时通知调用方。 */
+  /** AI 全部失败、改用规则提交信息时通知调用方。 */
   onAiFallback?: (detail: { executionEngine: SessionExecutionEngine; reason: string }) => void;
 }
 
-function compactAiFailureReason(lines: readonly string[], fallback: string): string {
-  const text = lines
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(-3)
-    .join(" · ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!text) return fallback;
-  const compact = text.length > 180 ? `${text.slice(0, 180)}…` : text;
-  return humanizeClaudeError(compact);
-}
-
 /**
- * 一体化推送：AI 生成提交信息（失败/超时回退规则生成，不阻断）→ 暂存 → 提交 → 拉取 → 推送。
- * 无弹窗、无手动确认，点击即执行完整流程。供会话快捷面板与 git 面板顶部推送共用，
- * 保证两处「推送」行为一致。
+ * 一体化推送：AI 生成提交信息（先默认执行环境，失败再试仓库引擎；再失败回退规则生成）
+ * → 暂存 → 提交 → 拉取 → 推送。
  *
  * @returns 与 {@link commitPullPushRepository} 相同的结局：committed_and_pushed / pushed_only / noop
  */
@@ -183,85 +162,29 @@ export async function aiCommitPullPushRepository(
   hooks?: AiCommitPullPushHooks,
 ): Promise<GitCommitPullPushOutcome> {
   const onPhase = hooks?.onPhase;
-  const executionEngine = normalizeSessionExecutionEngine(hooks?.executionEngine);
 
   onPhase?.("读取变更");
   const status = await gitStatus(path);
-  const fallback = normalizeConventionalCommitMessage(buildConventionalCommitFallback(status));
-  let commitMessage = fallback;
-
   const changedFiles = [...status.staged, ...status.unstaged];
+  let commitMessage = "";
+
   if (changedFiles.length > 0) {
     onPhase?.("AI 润色");
-    const changedFileLines = changedFiles
-      .map((item) => `- ${item.path} (${item.status}, +${item.additions}, -${item.deletions})`)
-      .join("\n");
-    let diffContext = "";
-    try {
-      diffContext = await gitCommitMessageContext(path);
-    } catch {
-      // diff 读取失败仍可基于文件清单生成；不阻断后续提交与推送。
-    }
-    const prompt = [
-      ...conventionalCommitPromptLines(),
-      "",
-      `仓库路径: ${path}`,
-      `分支: ${status.branch ?? "(unknown)"}`,
-      `总计: +${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`,
-      `暂存文件数: ${status.staged.length}, 未暂存文件数: ${status.unstaged.length}`,
-      "文件清单：",
-      changedFileLines || "- 无",
-      "",
-      "实际变更 diff（可能截断；以此判断改动目的）：",
-      diffContext || "（diff 不可用，请基于文件清单生成）",
-    ].join("\n");
-    // Claude 才读仓库配置模型；其它引擎交给各自 CLI 默认，避免把 ANTHROPIC_MODEL 误传给 Codex 等。
-    let configuredModel: string | undefined;
-    if (executionEngine === "claude") {
-      try {
-        configuredModel = (await getClaudeConfigModel(path)) ?? undefined;
-      } catch {
-        // 配置读取失败时仍让 Claude CLI 使用自身默认模型；不应因此中断推送。
-      }
-    }
-
-    const invokeEngine = hooks?.invokeEngine ?? executeSessionEngineAndWait;
-    try {
-      const result = await invokeEngine({
-        executionEngine,
-        repositoryPath: path,
-        prompt,
-        model: configuredModel ?? undefined,
-        timeoutMs: 45_000,
-      });
-      if (result.success) {
-        const cleaned = extractClaudeInvocationFinalText(result.outputLines);
-        const parsed = parseAiConventionalCommitMessage(cleaned);
-        if (parsed) {
-          commitMessage = parsed;
-        } else {
-          hooks?.onAiFallback?.({
-            executionEngine,
-            reason: "AI 返回内容不符合提交信息格式",
-          });
-        }
-      } else {
-        const outputReason = extractClaudeInvocationFinalText(result.outputLines);
-        hooks?.onAiFallback?.({
-          executionEngine,
-          reason: compactAiFailureReason(
-            [...result.errorLines, outputReason],
-            "执行环境调用失败",
-          ),
-        });
-      }
-    } catch (error) {
+    const generated = await generateGitCommitMessageByAi({
+      repositoryPath: path,
+      status,
+      repositoryEngine: hooks?.executionEngine,
+      getDefaultEngine: hooks?.getDefaultEngine,
+      invokeEngine: hooks?.invokeEngine,
+    });
+    commitMessage = generated.message;
+    if (generated.aiFailed) {
       hooks?.onAiFallback?.({
-        executionEngine,
-        reason: error instanceof Error ? error.message : String(error),
+        executionEngine:
+          generated.engineUsed ?? normalizeSessionExecutionEngine(hooks?.executionEngine),
+        reason: generated.failureReason ?? "执行环境调用失败",
       });
     }
-    // AI 失败/超时/输出不合格：commitMessage 保持 fallback，流程继续
   }
 
   return commitPullPushRepository(path, commitMessage, { onPhase });

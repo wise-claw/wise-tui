@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo, type MutableRefObject } from "react";
 import { useDiffModeExpandedDirs } from "./useDiffModeExpandedDirs";
 import { HoverHint } from "../shared/HoverHint";
 import { Button, Input, Modal, message, notification, Popconfirm, Space, Typography } from "antd";
@@ -13,17 +13,11 @@ import {
   VerticalAlignTopOutlined,
 } from "@ant-design/icons";
 import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
-import { cancelClaudeInvocation, getClaudeConfigModel } from "../../services/claude";
+import { cancelClaudeInvocation } from "../../services/claude";
 import { needsPublishBranch } from "../../services/gitCommitPullPush";
-import { gitCommitMessageContext } from "../../services/git";
-import { executeSessionEngineAndWait } from "../../services/sessionEngineInvocation";
+import { generateGitCommitMessageByAi } from "../../services/gitCommitMessageAi";
 import type { GitFileStatus, GitStatusResponse } from "../../types";
-import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
-import {
-  conventionalCommitPromptLines,
-  normalizeConventionalCommitMessage,
-  parseAiConventionalCommitMessage,
-} from "../../utils/conventionalCommitMessage";
+import { normalizeConventionalCommitMessage } from "../../utils/conventionalCommitMessage";
 import { openCodeReviewDrawer } from "../../constants/workflowUiEvents";
 import {
   buildCodeReviewToastContent,
@@ -36,7 +30,7 @@ import { FileRow } from "./FileRow";
 import { FileTreeView } from "./FileTreeView";
 import { GitFileListSection } from "./GitFileListSection";
 import { GitBranchSwitcher } from "./GitBranchSwitcher";
-import { buildCommitDraftFromStatus } from "./gitPanelUtils";
+import { promptGitCommitMessage, resolvePushMessageAfterAi, type GitCommitDraftHandle } from "./promptGitCommitMessage";
 import { RevertIcon } from "./RevertIcon";
 import type { FileTreeNode, GitPanelOpenFileOptions, UnstagedViewMode } from "./types";
 
@@ -57,7 +51,7 @@ function collectTreeDirPaths(files: GitFileStatus[]): string[] {
 
 interface DiffModeProps {
   repositoryPath: string;
-  /** 仓库默认执行引擎；AI 生成提交信息时使用。 */
+  /** 当前仓库选中的执行引擎；AI 生成提交信息时作为默认执行环境失败后的回退。 */
   executionEngine?: SessionExecutionEngine;
   status: GitStatusResponse;
   loading: Record<string, boolean>;
@@ -70,6 +64,8 @@ interface DiffModeProps {
   onDiscardAll: () => void | Promise<void>;
   onCommit: (msg: string) => void;
   onCommitAndPush: (msg: string) => void;
+  /** 顶栏推送复用当前输入框草稿；未填写时弹窗手填。 */
+  commitDraftHandleRef?: MutableRefObject<GitCommitDraftHandle | null>;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
   onBranchChanged?: () => void;
   /** 用户主动关闭某个 error banner；key 与 errors 字典的键一致（如 "commit"）。 */
@@ -90,6 +86,7 @@ function DiffModeInner({
   onDiscardAll,
   onCommit,
   onCommitAndPush,
+  commitDraftHandleRef,
   onOpenFile,
   onBranchChanged,
   onDismissError,
@@ -105,6 +102,18 @@ function DiffModeInner({
   const aiInvocationKeyRef = useRef<string | null>(null);
   const aiGenerationCancelledRef = useRef(false);
   commitMsgRef.current = commitMsg;
+
+  useEffect(() => {
+    if (!commitDraftHandleRef) return;
+    commitDraftHandleRef.current = {
+      getMessage: () => commitMsgRef.current,
+      clear: () => setCommitMsg(""),
+    };
+    return () => {
+      commitDraftHandleRef.current = null;
+    };
+  }, [commitDraftHandleRef]);
+
   const hasStaged = status.staged.length > 0;
   const hasUnstaged = status.unstaged.length > 0;
   const hasChanges = hasStaged || hasUnstaged;
@@ -196,85 +205,16 @@ function DiffModeInner({
     aiFailed: boolean;
     failureReason?: string;
   }> => {
-    const fallback = buildCommitDraftFromStatus(status);
-    if (aiGenerationCancelledRef.current) {
-      return { message: fallback, aiFailed: true };
-    }
-    const allFiles = [...status.staged, ...status.unstaged];
-    const previewLimit = 40;
-    const filesPreview = allFiles
-      .slice(0, previewLimit)
-      .map((f) => `- ${f.path} (${f.status}, +${f.additions}, -${f.deletions})`)
-      .join("\n");
-    const files =
-      allFiles.length > previewLimit
-        ? `${filesPreview}\n- ... 另有 ${allFiles.length - previewLimit} 个文件未列出`
-        : filesPreview;
-    try {
-      const engine = executionEngine ?? "claude";
-      const model = engine === "claude" ? await getClaudeConfigModel(repositoryPath) : undefined;
-      let diffContext = "";
-      try {
-        diffContext = await gitCommitMessageContext(repositoryPath);
-      } catch {
-        // 保留文件清单降级路径；AI 调用仍可继续。
-      }
-      const result = await executeSessionEngineAndWait({
-        executionEngine: engine,
-        repositoryPath,
-        prompt: [
-          ...conventionalCommitPromptLines(),
-          "",
-          `分支: ${status.branch ?? "unknown"}`,
-          `统计: +${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`,
-          `暂存数量: ${status.staged.length}, 未暂存数量: ${status.unstaged.length}`,
-          ahead > 0 ? `待推送提交数: ${ahead}` : "",
-          "文件列表：",
-          files || "- 无",
-          "",
-          "实际变更 diff（可能截断；以此判断改动目的）：",
-          diffContext || "（diff 不可用，请基于文件清单生成）",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-        model: model ?? undefined,
-        timeoutMs: 45_000,
-        onInvocationKey: (invocationKey) => {
-          aiInvocationKeyRef.current = invocationKey;
-        },
-      });
-      if (aiGenerationCancelledRef.current) {
-        return { message: fallback, aiFailed: true };
-      }
-      if (!result.success) {
-        const reason = result.errorLines
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .slice(-3)
-          .join(" · ");
-        return { message: fallback, aiFailed: true, failureReason: reason || `${engine} 调用失败` };
-      }
-      const text = extractClaudeInvocationFinalText(result.outputLines);
-      const parsed = parseAiConventionalCommitMessage(text);
-      if (!parsed) {
-        return {
-          message: fallback,
-          aiFailed: true,
-          failureReason: "AI 返回内容不符合 type: 中文摘要 格式",
-        };
-      }
-      return {
-        message: parsed,
-        aiFailed: false,
-      };
-    } catch (error) {
-      return {
-        message: fallback,
-        aiFailed: true,
-        failureReason: error instanceof Error ? error.message : String(error),
-      };
-    }
-  }, [ahead, executionEngine, repositoryPath, status]);
+    return generateGitCommitMessageByAi({
+      repositoryPath,
+      status,
+      repositoryEngine: executionEngine,
+      onInvocationKey: (invocationKey) => {
+        aiInvocationKeyRef.current = invocationKey;
+      },
+      isCancelled: () => aiGenerationCancelledRef.current,
+    });
+  }, [executionEngine, repositoryPath, status]);
 
   const handleGenerateCommitByAi = useCallback(async () => {
     if (aiSummaryLoading) return;
@@ -337,23 +277,17 @@ function DiffModeInner({
     const rawMsg = commitMsgRef.current.trim();
     let trimmed = rawMsg ? normalizeConventionalCommitMessage(rawMsg) : "";
     try {
-      if (!rawMsg) {
+      if (!trimmed && hasChangesRef.current) {
         aiGenerationCancelledRef.current = false;
         aiInvocationKeyRef.current = null;
         setPushPreparing(true);
         setAiSummaryLoading(true);
+        let generated: Awaited<ReturnType<typeof generateCommitMessageByAi>>;
         try {
-          const generated = await generateCommitMessageByAi();
+          generated = await generateCommitMessageByAi();
           if (aiGenerationCancelledRef.current) {
             commitSubmitLockRef.current = false;
             return;
-          }
-          trimmed = generated.message;
-          setCommitMsg(trimmed);
-          if (generated.aiFailed) {
-            message.warning(
-              `AI 生成失败，已使用默认提交信息继续推送：${generated.failureReason ?? "未知原因"}`,
-            );
           }
         } finally {
           if (!aiGenerationCancelledRef.current) {
@@ -362,12 +296,30 @@ function DiffModeInner({
           }
           aiInvocationKeyRef.current = null;
         }
+        if (aiGenerationCancelledRef.current) {
+          commitSubmitLockRef.current = false;
+          return;
+        }
+        const afterAi = resolvePushMessageAfterAi(generated);
+        if (afterAi.kind === "push") {
+          trimmed = afterAi.message;
+          setCommitMsg(trimmed);
+        } else {
+          const entered = await promptGitCommitMessage({
+            initialValue: afterAi.initialValue,
+            hint: generated.failureReason
+              ? `AI 未能生成提交信息（${generated.failureReason}），请确认或修改后推送。`
+              : "AI 未能生成提交信息，请确认或修改后推送。",
+          });
+          if (!entered) {
+            commitSubmitLockRef.current = false;
+            return;
+          }
+          trimmed = entered;
+          setCommitMsg(trimmed);
+        }
       }
-      if (aiGenerationCancelledRef.current) {
-        commitSubmitLockRef.current = false;
-        return;
-      }
-      if (!trimmed) {
+      if (!trimmed && hasChangesRef.current) {
         message.warning("请先填写或生成提交信息");
         commitSubmitLockRef.current = false;
         return;
@@ -568,7 +520,7 @@ function DiffModeInner({
                   title={
                     needsPublish && !hasChanges && ahead <= 0
                       ? "将本地分支同步（发布）到远端"
-                      : "AI 生成提交信息并提交、拉取、推送（可开启推送前审查）"
+                      : "AI 生成提交信息并提交、拉取、推送；失败时可手填（可开启推送前审查）"
                   }
                   disabled={!canPush}
                   icon={<CloudUploadOutlined />}

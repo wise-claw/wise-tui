@@ -45,6 +45,23 @@ describe("conventionalCommitMessage", () => {
     );
   });
 
+  it("accepts fullwidth colon, markdown wrapping, and plain Chinese summaries", () => {
+    expect(parseAiConventionalCommitMessage("feat：优化推送弹窗")).toBe("feat: 优化推送弹窗");
+    expect(parseAiConventionalCommitMessage("**feat: 优化推送弹窗**")).toBe("feat: 优化推送弹窗");
+    expect(parseAiConventionalCommitMessage("`fix: 修复提交信息解析`")).toBe(
+      "fix: 修复提交信息解析",
+    );
+    expect(parseAiConventionalCommitMessage("提交信息：feat: 优化 Git 面板推送")).toBe(
+      "feat: 优化 Git 面板推送",
+    );
+    expect(parseAiConventionalCommitMessage("优化 Git 面板推送流程")).toBe(
+      "feat: 优化 Git 面板推送流程",
+    );
+    expect(
+      parseAiConventionalCommitMessage("Here's the commit message:\n\nfeat: 优化推送弹窗"),
+    ).toBe("feat: 优化推送弹窗");
+  });
+
   it("builds single-line Chinese fallback from git status", () => {
     const status: GitStatusResponse = {
       branch: "main",

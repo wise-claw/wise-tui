@@ -113,6 +113,23 @@ export interface GitStatusHeaderSnapshot {
   upstream: string | null;
 }
 
+/**
+ * 顶栏「推送」在有工作区改动时需要提交信息。
+ * 完整 status 优先；折叠多仓只看 header 计数；两者都没有时保守视为需要填写。
+ */
+export function workingTreeNeedsCommitMessage(
+  status?: Pick<GitStatusResponse, "staged" | "unstaged"> | null,
+  header?: Pick<GitStatusHeaderSnapshot, "stagedCount" | "unstagedCount"> | null,
+): boolean {
+  if (status) {
+    return status.staged.length > 0 || status.unstaged.length > 0;
+  }
+  if (header) {
+    return header.stagedCount > 0 || header.unstagedCount > 0;
+  }
+  return true;
+}
+
 /** 比较多仓折叠 header 快照，避免 watcher 刷新触发无效重渲染。 */
 export function gitStatusHeaderSnapshotEqual(
   prev: GitStatusHeaderSnapshot | null,

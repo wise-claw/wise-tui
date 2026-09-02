@@ -7,6 +7,7 @@ import {
   gitStatusHeaderSnapshotEqual,
   gitStatusSnapshotEqual,
   shouldUseGitVirtualFileList,
+  workingTreeNeedsCommitMessage,
 } from "./gitPanelUtils";
 
 describe("shouldUseGitVirtualFileList", () => {
@@ -90,5 +91,30 @@ describe("formatGitGraphDate", () => {
   it("formats like Git Graph absolute timestamps", () => {
     const stamp = Math.floor(new Date(2026, 7, 4, 16, 48, 0).getTime() / 1000);
     expect(formatGitGraphDate(stamp)).toBe("4 Aug 2026 16:48");
+  });
+});
+
+describe("workingTreeNeedsCommitMessage", () => {
+  it("uses full status when present", () => {
+    expect(
+      workingTreeNeedsCommitMessage({
+        staged: [{ path: "a.ts", status: "M", additions: 1, deletions: 0 }],
+        unstaged: [],
+      }),
+    ).toBe(true);
+    expect(workingTreeNeedsCommitMessage({ staged: [], unstaged: [] })).toBe(false);
+  });
+
+  it("falls back to header counts when status is missing", () => {
+    expect(
+      workingTreeNeedsCommitMessage(null, { stagedCount: 1, unstagedCount: 0 }),
+    ).toBe(true);
+    expect(
+      workingTreeNeedsCommitMessage(null, { stagedCount: 0, unstagedCount: 0 }),
+    ).toBe(false);
+  });
+
+  it("prompts when neither status nor header is available", () => {
+    expect(workingTreeNeedsCommitMessage(null, null)).toBe(true);
   });
 });

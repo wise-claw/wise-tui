@@ -28,9 +28,11 @@ const TYPE_ALIASES: Record<string, ConventionalCommitType> = {
 };
 
 const CONVENTIONAL_HEADER_RE =
-  /^(feat|fix|fixed|refactor|docs|doc|chore|test|feature)(\([a-z0-9._-]+\))?!?:\s*(.+)$/i;
+  /^(feat|fix|fixed|refactor|docs|doc|chore|test|feature)(\([a-z0-9._-]+\))?!?\s*[:：]\s*(.+)$/i;
 
 const HAS_CJK_RE = /[\u3400-\u9fff]/;
+const AI_FAILURE_TEXT_RE =
+  /API Error|Invocation timeout|尚未支持|连接失败|请重新登录|traceback|ECONNREFUSED|unavailable/i;
 
 export function conventionalCommitPromptLines(): string[] {
   return [
@@ -70,6 +72,22 @@ export function isConventionalCommitPromptHistorySession(
   return Boolean(diskPreview && isConventionalCommitPromptText(diskPreview));
 }
 
+function unwrapCommitCandidateLine(line: string): string {
+  let text = line.trim();
+  text = text.replace(/^[>*\s]+/, "").trim();
+  text = text.replace(/^[*_`"'「『]+/, "").replace(/[*_`"'」』]+$/, "").trim();
+  text = text.replace(/^(提交信息|commit(?:\s*message)?|message)\s*[:：]\s*/i, "").trim();
+  text = text.replace(
+    /^(feat|fix|fixed|refactor|docs|doc|chore|test|feature)(\([a-z0-9._-]+\))?!?\s*：\s*/i,
+    (_match, type: string, scope?: string) => `${type}${scope ?? ""}: `,
+  );
+  return text;
+}
+
+function looksLikeAiFailureText(text: string): boolean {
+  return AI_FAILURE_TEXT_RE.test(text.trim());
+}
+
 function stripCodeFences(raw: string): string {
   return raw
     .replace(/^```[\w-]*\n?/gm, "")
@@ -83,8 +101,8 @@ function normalizeCommitType(rawType: string): ConventionalCommitType {
 }
 
 function normalizeHeaderLine(header: string): string {
-  const match = header.trim().match(/^(\w+)(\([^)]+\))?!?:\s*(.+)$/i);
-  if (!match) return header.trim();
+  const match = unwrapCommitCandidateLine(header).match(/^(\w+)(\([^)]+\))?!?:\s*(.+)$/i);
+  if (!match) return unwrapCommitCandidateLine(header);
   const [, rawType, , subject] = match;
   const type = normalizeCommitType(rawType!);
   const normalizedSubject = subject!.trim().replace(/[。．.!！?？]+$/, "");
@@ -97,7 +115,7 @@ function pickHeaderLine(raw: string): string {
 
   const lines = cleaned
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => unwrapCommitCandidateLine(line))
     .filter(Boolean);
 
   const conventional = lines.find((line) => CONVENTIONAL_HEADER_RE.test(line));
@@ -135,21 +153,43 @@ function pickHeaderLine(raw: string): string {
 }
 
 /**
- * 严格校验 AI 返回值。仅接受包含中文摘要的 Conventional Commit 单行，
- * 避免把错误提示、数字、日志或空输出误当成 AI 生成成功。
+ * 严格校验 AI 返回值。接受中文 Conventional Commit 行（含全角冒号、markdown 包裹），
+ * 以及短中文摘要；拒绝错误提示、数字、纯英文 header。
  */
 export function parseAiConventionalCommitMessage(raw: string): string | null {
   const cleaned = stripCodeFences(raw).trim();
   if (!cleaned) return null;
   const lines = cleaned
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => unwrapCommitCandidateLine(line))
     .filter(Boolean);
+
   const conventional = lines.find((line) => CONVENTIONAL_HEADER_RE.test(line));
-  if (!conventional) return null;
-  const normalized = normalizeHeaderLine(conventional);
-  const subject = normalized.replace(/^[^:]+:\s*/, "");
-  return HAS_CJK_RE.test(subject) ? normalized : null;
+  if (conventional) {
+    const normalized = normalizeHeaderLine(conventional);
+    const subject = normalized.replace(/^[^:]+:\s*/, "");
+    if (HAS_CJK_RE.test(subject) && !looksLikeAiFailureText(normalized)) {
+      return normalized;
+    }
+  }
+
+  const chineseSubjectLine = lines.find(
+    (line) =>
+      HAS_CJK_RE.test(line) &&
+      line.length >= 4 &&
+      line.length <= 80 &&
+      !line.startsWith("-") &&
+      !looksLikeAiFailureText(line) &&
+      !/^涉及文件|^变更统计|^文件|^统计|^仓库|^分支/.test(line),
+  );
+  if (chineseSubjectLine) {
+    if (CONVENTIONAL_HEADER_RE.test(chineseSubjectLine)) {
+      return normalizeHeaderLine(chineseSubjectLine);
+    }
+    return normalizeHeaderLine(`feat: ${chineseSubjectLine}`);
+  }
+
+  return null;
 }
 
 /** 规范化 AI/用户输入，输出单行 `type: 中文摘要`。 */
