@@ -69,6 +69,7 @@ export function claudeChatComposerTrayPropsEqual(
   const callbackKeys = [
     "onExecute",
     "onDispatchExecutionEnvironment",
+    "onDispatchRepositoryMention",
     "onSessionModelChange",
     "onSessionConnectionKindChange",
     "onUpdateSessionUltracode",

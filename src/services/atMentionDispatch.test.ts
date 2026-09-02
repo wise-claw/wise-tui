@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { ClaudeInvocationResult } from "./claude";
 import type { ProjectItem, Repository } from "../types";
 import {
   dispatchAtMentionPromptToRepos,
@@ -7,6 +6,7 @@ import {
   planAtMentionDispatch,
   resolveReposByMention,
   resolveReposByTag,
+  stripMentionTags,
 } from "./atMentionDispatch";
 
 function repo(input: Partial<Repository> & Pick<Repository, "id" | "path">): Repository {
@@ -31,28 +31,6 @@ function project(input: Partial<ProjectItem> & Pick<ProjectItem, "id">): Project
     sddMode: input.sddMode,
     rootPath: input.rootPath,
   };
-}
-
-function okInvocation(): ClaudeInvocationResult {
-  return {
-    success: true,
-    exitCode: 0,
-    outputLines: [],
-    errorLines: [],
-    durationMs: 1,
-    invocationKey: "k",
-  } as unknown as ClaudeInvocationResult;
-}
-
-function failedInvocation(message: string): ClaudeInvocationResult {
-  return {
-    success: false,
-    exitCode: 1,
-    outputLines: [],
-    errorLines: [message],
-    durationMs: 1,
-    invocationKey: "k",
-  } as unknown as ClaudeInvocationResult;
 }
 
 describe("parseAtMentions", () => {
@@ -279,13 +257,17 @@ describe("planAtMentionDispatch", () => {
     expect(plan).toEqual({ kind: "fallthrough", reason: "no_mentions" });
   });
 
-  test("fallthrough when body is empty", () => {
+  test("dispatches empty body when mention matches a repository", () => {
     const plan = planAtMentionDispatch({
       activeProject: wiseProject,
       repositories: [r1],
       prompt: "@frontend",
     });
-    expect(plan).toEqual({ kind: "fallthrough", reason: "empty_body" });
+    expect(plan.kind).toBe("dispatch");
+    if (plan.kind === "dispatch") {
+      expect(plan.matchedRepos.map((item) => item.id)).toEqual([1]);
+      expect(plan.body).toBe("");
+    }
   });
 
   test("warn_then_fallthrough when mention unmatched", () => {
@@ -311,93 +293,149 @@ describe("planAtMentionDispatch", () => {
   });
 });
 
-describe("dispatchAtMentionPromptToRepos", () => {
-  const r1 = repo({ id: 1, path: "/r1", roleTags: ["frontend"] });
-  const r2 = repo({ id: 2, path: "/r2", roleTags: ["backend"] });
-  const wiseProject = project({
-    id: "p",
-    repositoryIds: [1, 2],
-    rootPath: "/p",
-    sddMode: "wise_trellis",
+describe("stripMentionTags", () => {
+  test("strips only matched repository tags and keeps other @ tokens", () => {
+    expect(stripMentionTags("@codex 修登录 @src/app.tsx", ["codex"])).toBe("修登录 @src/app.tsx");
   });
 
-  test("per-repo invocation succeeds when invokeClaude returns success", async () => {
-    const invokeCalls: Array<{ cwd: string; prompt: string }> = [];
+  test("returns empty when prompt is only the repository mention", () => {
+    expect(stripMentionTags("@codex", ["codex"])).toBe("");
+  });
+});
+
+describe("dispatchAtMentionPromptToRepos", () => {
+  const r1 = repo({ id: 1, path: "/p/frontend-app", name: "frontend-app", roleTags: ["frontend"] });
+  const r2 = repo({ id: 2, path: "/p/backend-app", name: "backend-app", roleTags: ["backend"] });
+
+  test("creates a new session under each matched repository and executes the body", async () => {
+    const created: Array<{ path: string; name: string; skipActivate?: boolean }> = [];
+    const executed: Array<{ sessionId: string; prompt: string; bubble?: string }> = [];
+    const activated: string[] = [];
+
     const results = await dispatchAtMentionPromptToRepos({
-      project: wiseProject,
       matchedRepos: [r1, r2],
-      body: "改按钮",
-      sessionId: "sess-1",
-      invokeClaude: async ({ repositoryPath, prompt }) => {
-        invokeCalls.push({ cwd: repositoryPath, prompt });
-        return okInvocation();
+      mentionedTags: ["frontend", "backend"],
+      body: "改按钮 加接口",
+      prompt: "@frontend 改按钮 @backend 加接口",
+      createSession: async (path, name, opts) => {
+        created.push({ path, name, skipActivate: opts?.skipActivate });
+        return `sess-${path}`;
       },
-      prepareWorktree: async (repoPath, taskId) => ({
-        worktreePath: `${repoPath}-wt-${taskId}`,
-        branchName: "wt",
-      }),
-      nowMs: () => 1000,
+      executeSession: (sessionId, prompt, opts) => {
+        executed.push({ sessionId, prompt, bubble: opts?.userBubblePrompt });
+        return true;
+      },
+      activateSession: (sessionId) => {
+        activated.push(sessionId);
+      },
     });
 
-    expect(results.map((r) => r.status)).toEqual(["succeeded", "succeeded"]);
-    expect(results.map((r) => r.repositoryId).sort()).toEqual([1, 2]);
-    expect(invokeCalls).toHaveLength(2);
-    expect(invokeCalls.every((c) => c.prompt.includes("改按钮"))).toBe(true);
-    expect(invokeCalls.every((c) => c.prompt.includes("Active project: Demo"))).toBe(true);
+    expect(results.map((item) => item.status)).toEqual(["succeeded", "succeeded"]);
+    expect(created).toEqual([
+      { path: "/p/frontend-app", name: "frontend-app", skipActivate: true },
+      { path: "/p/backend-app", name: "backend-app", skipActivate: true },
+    ]);
+    expect(executed).toEqual([
+      { sessionId: "sess-/p/frontend-app", prompt: "改按钮 加接口", bubble: "改按钮 加接口" },
+      { sessionId: "sess-/p/backend-app", prompt: "改按钮 加接口", bubble: "改按钮 加接口" },
+    ]);
+    expect(activated).toEqual(["sess-/p/frontend-app"]);
+  });
+
+  test("does not switch the current session when activateSession is omitted", async () => {
+    const activated: string[] = [];
+    await dispatchAtMentionPromptToRepos({
+      matchedRepos: [r1],
+      mentionedTags: ["frontend"],
+      body: "改按钮",
+      createSession: async () => "sess-1",
+      executeSession: () => true,
+    });
+    expect(activated).toEqual([]);
+  });
+
+  test("keeps non-repository @ tokens in the executed prompt", async () => {
+    const executed: Array<{ prompt: string; bubble?: string }> = [];
+    await dispatchAtMentionPromptToRepos({
+      matchedRepos: [r1],
+      mentionedTags: ["frontend-app"],
+      body: "看看 @src/app.tsx",
+      prompt: "@frontend-app 看看 @src/app.tsx",
+      createSession: async () => "sess-1",
+      executeSession: (_sessionId, prompt, opts) => {
+        executed.push({ prompt, bubble: opts?.userBubblePrompt });
+        return true;
+      },
+    });
+    expect(executed).toEqual([
+      { prompt: "看看 @src/app.tsx", bubble: "看看 @src/app.tsx" },
+    ]);
+  });
+
+  test("empty body still creates a session under the target repository without executing", async () => {
+    const executed: string[] = [];
+    const results = await dispatchAtMentionPromptToRepos({
+      matchedRepos: [r1],
+      mentionedTags: ["frontend"],
+      body: "",
+      prompt: "@frontend",
+      createSession: async (path) => `sess-${path}`,
+      executeSession: (sessionId) => {
+        executed.push(sessionId);
+        return true;
+      },
+    });
+
+    expect(results).toEqual([
+      {
+        repositoryId: 1,
+        repositoryPath: "/p/frontend-app",
+        status: "succeeded",
+        sessionId: "sess-/p/frontend-app",
+        summary: "在 frontend-app 下新建会话",
+      },
+    ]);
+    expect(executed).toEqual([]);
   });
 
   test("repo failure does not abort other repos", async () => {
+    const closed: string[] = [];
     const results = await dispatchAtMentionPromptToRepos({
-      project: wiseProject,
       matchedRepos: [r1, r2],
+      mentionedTags: ["frontend"],
       body: "改按钮",
-      sessionId: "sess-1",
-      invokeClaude: async ({ repositoryPath }) => {
-        if (repositoryPath.startsWith("/r1")) return failedInvocation("boom");
-        return okInvocation();
+      createSession: async (path) => {
+        if (path === "/p/frontend-app") throw new Error("create failed");
+        return "sess-ok";
       },
-      prepareWorktree: async (repoPath, taskId) => ({
-        worktreePath: repoPath,
-        branchName: "wt-" + taskId,
-      }),
-      nowMs: () => 2000,
+      executeSession: () => true,
+      closeSession: (sessionId) => {
+        closed.push(sessionId);
+      },
     });
 
-    const byId = new Map(results.map((r) => [r.repositoryId, r]));
+    const byId = new Map(results.map((item) => [item.repositoryId, item]));
     expect(byId.get(1)?.status).toBe("failed");
-    expect(byId.get(1)?.errorMessage).toContain("boom");
+    expect(byId.get(1)?.errorMessage).toContain("create failed");
     expect(byId.get(2)?.status).toBe("succeeded");
+    expect(byId.get(2)?.sessionId).toBe("sess-ok");
+    expect(closed).toEqual([]);
   });
 
-  test("worktree preparation failure surfaces as failed result", async () => {
+  test("executeSession returning false closes the empty session", async () => {
+    const closed: string[] = [];
     const results = await dispatchAtMentionPromptToRepos({
-      project: wiseProject,
       matchedRepos: [r1],
+      mentionedTags: ["frontend"],
       body: "改按钮",
-      sessionId: "sess-1",
-      prepareWorktree: async () => {
-        throw new Error("worktree busy");
+      createSession: async () => "sess-1",
+      executeSession: () => false,
+      closeSession: (sessionId) => {
+        closed.push(sessionId);
       },
-      invokeClaude: async () => okInvocation(),
-      nowMs: () => 3000,
     });
     expect(results[0]?.status).toBe("failed");
-    expect(results[0]?.errorMessage).toContain("worktree busy");
-  });
-
-  test("synthesized taskId is stable for given nowMs + repo", async () => {
-    const results = await dispatchAtMentionPromptToRepos({
-      project: wiseProject,
-      matchedRepos: [r1],
-      body: "改按钮",
-      sessionId: "sess-1",
-      invokeClaude: async () => okInvocation(),
-      prepareWorktree: async (rp, taskId) => ({
-        worktreePath: rp,
-        branchName: taskId,
-      }),
-      nowMs: () => 4242,
-    });
-    expect(results[0]?.taskId).toBe("at-mention-4242-1");
+    expect(results[0]?.errorMessage).toContain("并发上限");
+    expect(closed).toEqual(["sess-1"]);
   });
 });

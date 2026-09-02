@@ -1,9 +1,7 @@
+import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import type { ProjectItem, Repository } from "../types";
-import type { TrellisExecutionMetadata } from "../types/workflow";
-import { repositoryFolderBasename } from "../utils/repositoryType";
-import { getProjectSddMode, getRoleTags } from "../utils/projectRepositoryRoles";
-import { executeClaudeCodeAndWait, type ClaudeInvocationResult } from "./claude";
-import { gitWorktreeAddOmcBatch } from "./git";
+import { getRoleTags } from "../utils/projectRepositoryRoles";
+import { repositoryFolderBasename, repositorySessionTabDisplayName } from "../utils/repositoryType";
 
 export interface AtMention {
   tag: string;
@@ -19,7 +17,7 @@ export interface ParseAtMentionsResult {
  * 解析 `@<tag>` 提及。`<tag>` 为连续非空白、非分隔符字符（含仓库目录名如 `vocs-web`）。
  * `\@tag` 转义成纯文本，不计入 mentions。
  *
- * `strippedBody` 是删除合法 @-mention 段后的正文（前后空白合并），用于子代理派发。
+ * `strippedBody` 是删除合法 @-mention 段后的正文（前后空白合并）。
  */
 export function parseAtMentions(input: string): ParseAtMentionsResult {
   const mentions: AtMention[] = [];
@@ -112,17 +110,16 @@ export function resolveReposByMention(
 
 export type AtMentionDispatchPlan =
   | { kind: "dispatch"; mentionedTags: string[]; matchedRepos: Repository[]; body: string }
-  | { kind: "fallthrough"; reason: "no_mentions" | "empty_body" }
+  | { kind: "fallthrough"; reason: "no_mentions" }
   | { kind: "warn_then_fallthrough"; mentionedTags: string[]; body: string };
 
 /**
  * 计算给定 prompt 在当前项目下应该走哪条路径：派发、回退、或先提示再回退。
  *
  * - 无合法 mention → fallthrough
- * - 有 mention 但 strippedBody 为空 → fallthrough（视为单纯 `@frontend` 无指令）
  * - 工作区内有 mention 但无任何匹配仓库 → warn_then_fallthrough
  * - 独立仓库语境中无匹配仓库 → 静默 fallthrough（可能是 @终端 / @文件）
- * - 至少一条 mention 匹配 → dispatch
+ * - 至少一条 mention 匹配仓库名或角色标签 → dispatch（正文可为空：只在目标仓新建会话）
  */
 export function planAtMentionDispatch(args: {
   activeProject: ProjectItem | null | undefined;
@@ -133,9 +130,6 @@ export function planAtMentionDispatch(args: {
   const parsed = parseAtMentions(prompt);
   if (parsed.mentions.length === 0) {
     return { kind: "fallthrough", reason: "no_mentions" };
-  }
-  if (parsed.strippedBody.length === 0) {
-    return { kind: "fallthrough", reason: "empty_body" };
   }
   const seenTags = new Set<string>();
   const mentionedTags: string[] = [];
@@ -175,129 +169,159 @@ export interface DispatchResult {
   repositoryId: number;
   repositoryPath: string;
   status: "succeeded" | "failed";
-  taskId: string;
+  sessionId?: string;
   summary?: string;
   errorMessage?: string;
 }
 
-export type ClaudeInvokeFn = (params: {
-  repositoryPath: string;
-  prompt: string;
-  connectionMode?: Parameters<typeof executeClaudeCodeAndWait>[0]["connectionMode"];
-  bare?: boolean;
-  timeoutMs?: number;
-  streamUi?: Parameters<typeof executeClaudeCodeAndWait>[0]["streamUi"];
-}) => Promise<ClaudeInvocationResult>;
-
-export type WorktreeFn = (
-  repoPath: string,
-  taskId: string,
-  attempt: number,
-) => Promise<{ worktreePath: string; branchName: string }>;
-
 export interface DispatchAtMentionPromptArgs {
-  project?: ProjectItem | null;
   matchedRepos: ReadonlyArray<Repository>;
+  mentionedTags?: ReadonlyArray<string>;
   body: string;
-  sessionId: string;
-  attempt?: number;
-  /** 测试可注入；默认 `executeClaudeCodeAndWait`。 */
-  invokeClaude?: ClaudeInvokeFn;
-  /** 测试可注入；默认 `gitWorktreeAddOmcBatch`。 */
-  prepareWorktree?: WorktreeFn;
-  /** 调用方可注入自定义时间戳工厂，便于测试稳定 taskId。 */
-  nowMs?: () => number;
+  /** 原始 composer 文本；用于从气泡中剥掉 @仓库 标签。 */
+  prompt?: string;
+  userBubblePrompt?: string;
+  defaultInstructionApplied?: string;
+  createSession: (
+    repositoryPath: string,
+    repositoryName: string,
+    opts?: {
+      skipActivate?: boolean;
+      connectionKind?: "oneshot" | "streaming";
+      initialExecutionEngine?: SessionExecutionEngine;
+    },
+  ) => Promise<string>;
+  executeSession: (
+    sessionId: string,
+    prompt: string,
+    opts?: { userBubblePrompt?: string; defaultInstructionApplied?: string },
+  ) => boolean;
+  /**
+   * 创建成功后切到新建会话。@仓库 派发默认不传：任务在目标仓后台跑，当前会话保持不动。
+   */
+  activateSession?: (sessionId: string) => void;
+  /** executeSession 返回 false 或创建失败时清理空壳会话。 */
+  closeSession?: (sessionId: string) => void | Promise<void>;
 }
 
-const DEFAULT_DISPATCH_TIMEOUT_MS = 300_000;
-
-function buildSubagentPrompt(
-  project: ProjectItem | null | undefined,
-  repo: Repository,
-  body: string,
-): string {
-  const projectLine = project
-    ? `Active project: ${project.name} (rootPath: ${project.rootPath ?? "(unset)"}).`
-    : "Active project: standalone repository context.";
-  const repoLine = `Target repository: ${repo.name} at ${repo.path}.`;
-  const roleLine = `Role tags: ${getRoleTags(repo).join(", ") || "(none)"}.`;
-  return `${projectLine}\n${repoLine}\n${roleLine}\n\nInstruction:\n${body}`;
+function connectionKindForRepository(repo: Repository): "oneshot" | "streaming" {
+  const engine = (repo.executionEngine ?? "claude").trim().toLowerCase();
+  return engine === "claude" || engine === "" ? "streaming" : "oneshot";
 }
 
 /**
- * 对每个匹配仓库并发派发 trellis-implement 子代理；一条失败不影响其他。
- *
- * 不经过 `TrellisWorkflowAdapter`，因为 @-mention 派发需要把用户的原始指令送达
- * 子代理（适配器内部固定写死的提示词不符合该语义）。`streamUi` 字段透传仓库归属
- * 元数据，确保现有 `RepositoryMember` 监控面板正确归类。
+ * 只剥掉指定 @标签（仓库名 / roleTag），保留文件路径等其它 @ 引用。
+ */
+export function stripMentionTags(input: string, tags: ReadonlyArray<string>): string {
+  const tagSet = new Set(tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean));
+  if (tagSet.size === 0) {
+    return input.replace(/\s+/g, " ").trim();
+  }
+  const segments: string[] = [];
+  let i = 0;
+  while (i < input.length) {
+    const ch = input[i];
+    if (ch === "\\" && input[i + 1] === "@") {
+      segments.push("@");
+      i += 2;
+      continue;
+    }
+    if (ch === "@") {
+      const left = input[i - 1];
+      const isBoundary = i === 0 || /\s/.test(left ?? "") || /[\(\[\{,;:]/.test(left ?? "");
+      if (isBoundary) {
+        let j = i + 1;
+        while (j < input.length) {
+          const chAt = input[j]!;
+          if (/\s/.test(chAt)) break;
+          if (/[@#()[\]{}<>,"'`，。！？；：、]/.test(chAt)) break;
+          j += 1;
+        }
+        if (j > i + 1) {
+          const tag = input.slice(i + 1, j);
+          if (tagSet.has(tag.toLowerCase())) {
+            i = j;
+            continue;
+          }
+        }
+      }
+    }
+    segments.push(ch);
+    i += 1;
+  }
+  return segments.join("").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * 在每个匹配仓库下新建会话并执行正文（正文为空则只建会话）。
+ * 一条失败不影响其他仓库。
  */
 export async function dispatchAtMentionPromptToRepos(
   args: DispatchAtMentionPromptArgs,
 ): Promise<DispatchResult[]> {
-  const invokeClaude = args.invokeClaude ?? executeClaudeCodeAndWait;
-  const prepareWorktree = args.prepareWorktree ?? gitWorktreeAddOmcBatch;
-  const attempt = args.attempt ?? 1;
-  const baseTs = (args.nowMs ?? Date.now)();
+  const commandSource = args.prompt?.trim() || args.body;
+  const commandText =
+    stripMentionTags(commandSource, args.mentionedTags ?? []) || args.body.trim();
+  const bubbleSource = args.userBubblePrompt?.trim() || commandSource;
+  const bubble = stripMentionTags(bubbleSource, args.mentionedTags ?? []) || commandText;
+  const executePrompt = commandText;
+  const defaultInstructionApplied = args.defaultInstructionApplied?.trim() || "";
+
   const results = await Promise.all(
-    args.matchedRepos.map(async (repo) => {
-      const taskId = `at-mention-${baseTs}-${repo.id}`;
-      const trellisDispatch = Boolean(
-        args.project && getProjectSddMode(args.project) === "wise_trellis",
-      );
-      const executionMetadata: TrellisExecutionMetadata = {
-        ownerKind: "repository",
-        ownerRepositoryId: repo.id,
-        ownerRepositoryName: repo.name,
-        ownerRepositoryPath: repo.path,
-        repositoryType: repo.repositoryType,
-        stage: "implement",
-        subagentType: trellisDispatch ? "trellis-implement" : "executor",
-        taskId,
-      };
-      const prompt = buildSubagentPrompt(args.project, repo, args.body);
+    args.matchedRepos.map(async (repo): Promise<DispatchResult> => {
+      let sessionId: string | null = null;
       try {
-        const wt = await prepareWorktree(repo.path, taskId, attempt);
-        const invocation = await invokeClaude({
-          repositoryPath: wt.worktreePath,
-          prompt,
-          connectionMode: "oneshot",
-          bare: true,
-          timeoutMs: DEFAULT_DISPATCH_TIMEOUT_MS,
-          streamUi: {
-            sessionId: args.sessionId,
-            repositoryPath: repo.path,
-            templateId: trellisDispatch ? "trellis" : "repository-dispatch",
-            attempt,
-            omcInvocationSource: "workflow",
-            ...executionMetadata,
-          },
+        sessionId = await args.createSession(repo.path, repositorySessionTabDisplayName(repo), {
+          skipActivate: true,
+          connectionKind: connectionKindForRepository(repo),
+          ...(repo.executionEngine ? { initialExecutionEngine: repo.executionEngine } : {}),
         });
-        if (invocation.success) {
+        if (!executePrompt) {
           return {
             repositoryId: repo.id,
             repositoryPath: repo.path,
-            status: "succeeded" as const,
-            taskId,
-            summary: `Dispatched trellis-implement to ${repo.name}`,
+            status: "succeeded",
+            sessionId,
+            summary: `在 ${repo.name} 下新建会话`,
+          };
+        }
+        const spawnOk = args.executeSession(sessionId, executePrompt, {
+          ...(bubble ? { userBubblePrompt: bubble } : {}),
+          ...(defaultInstructionApplied ? { defaultInstructionApplied } : {}),
+        });
+        if (spawnOk === false) {
+          void args.closeSession?.(sessionId);
+          return {
+            repositoryId: repo.id,
+            repositoryPath: repo.path,
+            status: "failed",
+            sessionId,
+            errorMessage: "新建会话未启动：可能已达并发上限",
           };
         }
         return {
           repositoryId: repo.id,
           repositoryPath: repo.path,
-          status: "failed" as const,
-          taskId,
-          errorMessage: invocation.errorLines.join("\n").trim() || "Claude invocation failed",
+          status: "succeeded",
+          sessionId,
+          summary: `在 ${repo.name} 下新建会话并执行`,
         };
       } catch (err) {
+        if (sessionId) void args.closeSession?.(sessionId);
         return {
           repositoryId: repo.id,
           repositoryPath: repo.path,
-          status: "failed" as const,
-          taskId,
+          status: "failed",
           errorMessage: err instanceof Error ? err.message : String(err),
         };
       }
     }),
   );
+
+  const firstStartedSessionId =
+    results.find((item) => item.status === "succeeded")?.sessionId ?? null;
+  if (firstStartedSessionId) {
+    args.activateSession?.(firstStartedSessionId);
+  }
   return results;
 }

@@ -130,6 +130,11 @@ export interface ClaudeSessionsProps {
     requirementId?: string;
     requirementRepositoryId?: string | null;
   }) => void | Promise<void>;
+  onDispatchRepositoryMention?: (input: {
+    prompt: string;
+    userBubblePrompt?: string;
+    defaultInstructionApplied?: string;
+  }) => boolean;
   onDispatchSessionFeedbackLoop?: (input: {
     anchorSessionId: string;
     prompt: string;
@@ -311,6 +316,7 @@ function ClaudeSessionsShell({
   onResumeSessionFromMonitorDrawer,
   onPrepareSessionForMonitorDrawer,
   onDispatchExecutionEnvironment,
+  onDispatchRepositoryMention,
   onDispatchSessionFeedbackLoop,
   onSendMessage,
   onCancelSession,
@@ -921,6 +927,7 @@ function ClaudeSessionsShell({
           onResumeSessionFromMonitorDrawer={onResumeSessionFromMonitorDrawer}
           onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
           onDispatchExecutionEnvironment={onDispatchExecutionEnvironment}
+          onDispatchRepositoryMention={onDispatchRepositoryMention}
           onSendMessage={onSendMessage}
           onCancelSession={onCancelSession}
           onSwitchSession={onSwitchSession}

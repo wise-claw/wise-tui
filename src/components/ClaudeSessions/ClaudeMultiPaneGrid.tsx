@@ -250,6 +250,11 @@ export interface MultiPaneSharedChatProps {
     requirementId?: string;
     requirementRepositoryId?: string | null;
   }) => void | Promise<void>;
+  onDispatchRepositoryMention?: (input: {
+    prompt: string;
+    userBubblePrompt?: string;
+    defaultInstructionApplied?: string;
+  }) => boolean;
   onUpdateSessionModel: (sessionId: string, model: string) => void;
   onUpdateSessionConnectionKind: (sessionId: string, kind: ClaudeSessionConnectionKind) => void | Promise<void>;
   /** Per-session ultracode setter；多屏下每屏各自 toggle 自己的标签。 */
@@ -489,6 +494,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onSend={shared.onSend}
         onExecute={shared.onExecute}
         onDispatchExecutionEnvironment={shared.onDispatchExecutionEnvironment}
+        onDispatchRepositoryMention={shared.onDispatchRepositoryMention}
         onSessionModelChange={onSessionModelChange}
         onSessionConnectionKindChange={onSessionConnectionKindChange}
         onUpdateSessionUltracode={shared.onUpdateSessionUltracode}
@@ -877,6 +883,7 @@ const MultiPaneExtraPaneCell = memo(
             onSend={shared.onSend}
             onExecute={shared.onExecute}
             onDispatchExecutionEnvironment={shared.onDispatchExecutionEnvironment}
+        onDispatchRepositoryMention={shared.onDispatchRepositoryMention}
             onSessionModelChange={(model) => shared.onUpdateSessionModel(sessionId, model)}
             onSessionConnectionKindChange={(kind) => void shared.onUpdateSessionConnectionKind(sessionId, kind)}
             onUpdateSessionUltracode={shared.onUpdateSessionUltracode}

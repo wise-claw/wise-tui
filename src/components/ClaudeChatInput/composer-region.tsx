@@ -338,6 +338,12 @@ interface ComposerInnerProps {
     userBubblePrompt?: string;
     defaultInstructionApplied?: string;
   }) => void | Promise<void>;
+  /** `@仓库` 派发：命中时在目标仓库下新建会话。返回 true 表示已接管。 */
+  onDispatchRepositoryMention?: (input: {
+    prompt: string;
+    userBubblePrompt?: string;
+    defaultInstructionApplied?: string;
+  }) => boolean;
   onEnqueueAsPendingTask?: (payload: {
     promptText: string;
     executorLabel: string;
@@ -672,6 +678,7 @@ function ComposerInner({
   onRestoreRevert,
   onClearRevertItems,
   onDispatchExecutionEnvironment,
+  onDispatchRepositoryMention,
   onEnqueueAsPendingTask,
   employeeMentions = [],
   teamMentions = [],
@@ -2033,6 +2040,18 @@ function ComposerInner({
             });
             const built = payload.outbound.replace(/\u200B/g, "").trim();
             if (built) {
+              if (
+                onDispatchRepositoryMention?.({
+                  prompt: built,
+                  userBubblePrompt: logicalSnap,
+                })
+              ) {
+                recordMissionMessage(logicalSnap);
+                lastSentDraftRef.current = null;
+                postSendEscUndoRef.current = rollbackDraft;
+                finalizeTranscriptBaselineAfterSend();
+                return;
+              }
               onExecute(session.id, built);
               return;
             }
@@ -2043,6 +2062,18 @@ function ComposerInner({
         }
         if (!outbound) {
           restoreComposerDraft(rollbackDraft);
+          return;
+        }
+        if (
+          onDispatchRepositoryMention?.({
+            prompt: outbound,
+            userBubblePrompt: logicalSnap,
+          })
+        ) {
+          recordMissionMessage(logicalSnap);
+          lastSentDraftRef.current = null;
+          postSendEscUndoRef.current = rollbackDraft;
+          finalizeTranscriptBaselineAfterSend();
           return;
         }
         onExecute(session.id, outbound);
@@ -2128,6 +2159,35 @@ function ComposerInner({
           userBubblePrompt,
           ...(appliedDefaultInstruction ? { defaultInstructionApplied: appliedDefaultInstruction } : {}),
         });
+        return;
+      }
+
+      if (
+        imagesSnap.length === 0 &&
+        contextSnap.length === 0 &&
+        onDispatchRepositoryMention?.({ prompt: logicalSnap })
+      ) {
+        onTrackSendFlow?.({
+          sessionId: session.id,
+          composerText: logicalSnap.trim(),
+          outboundText: logicalSnap.trim(),
+          nodes: [
+            {
+              label: "点击确认发送",
+              timestamp: Date.now(),
+              detail: "用户点击发送按钮或按下 Enter 触发发送。",
+            },
+            {
+              label: "仓库派发",
+              timestamp: Date.now(),
+              detail: "在目标仓库下新建会话执行",
+            },
+          ],
+        });
+        recordMissionMessage(logicalSnap);
+        lastSentDraftRef.current = null;
+        postSendEscUndoRef.current = rollbackDraft;
+        finalizeTranscriptBaselineAfterSend();
         return;
       }
 
@@ -2251,6 +2311,32 @@ function ComposerInner({
             userBubblePrompt,
             ...(appliedDefaultInstruction ? { defaultInstructionApplied: appliedDefaultInstruction } : {}),
           });
+          return;
+        }
+
+        if (
+          onDispatchRepositoryMention?.({
+            prompt: logicalSnap,
+            userBubblePrompt,
+            ...(appliedDefaultInstruction ? { defaultInstructionApplied: appliedDefaultInstruction } : {}),
+          })
+        ) {
+          onTrackSendFlow?.({
+            sessionId: session.id,
+            composerText: logicalSnap.trim(),
+            outboundText: outbound,
+            nodes: [
+              ...sendFlowNodes,
+              {
+                label: "仓库派发",
+                timestamp: Date.now(),
+                detail: "在目标仓库下新建会话执行",
+              },
+            ],
+          });
+          recordMissionMessage(logicalSnap);
+          postSendEscUndoRef.current = rollbackDraft;
+          finalizeTranscriptBaselineAfterSend();
           return;
         }
 
@@ -2429,6 +2515,31 @@ function ComposerInner({
         return;
       }
 
+      if (
+        onDispatchRepositoryMention?.({
+          prompt: logicalSnap,
+          userBubblePrompt,
+          ...(appliedDefaultInstruction ? { defaultInstructionApplied: appliedDefaultInstruction } : {}),
+        })
+      ) {
+        sendFlowNodes.push({
+          label: "仓库派发",
+          timestamp: Date.now(),
+          detail: "在目标仓库下新建会话执行",
+        });
+        onTrackSendFlow?.({
+          sessionId: session.id,
+          composerText: logicalSnap.trim(),
+          outboundText: outbound,
+          nodes: sendFlowNodes,
+        });
+        recordMissionMessage(logicalSnap);
+        lastSentDraftRef.current = null;
+        postSendEscUndoRef.current = rollbackDraft;
+        finalizeTranscriptBaselineAfterSend();
+        return;
+      }
+
       addToHistory(historyPrompt, "normal", undefined, rollbackDraft.images);
       setHistoryIndex(-1);
 
@@ -2563,6 +2674,7 @@ function ComposerInner({
       session,
       setImages,
       onDispatchExecutionEnvironment,
+      onDispatchRepositoryMention,
       onEnqueueAsPendingTask,
       pendingExecutionTaskCount,
       isCursorEngine,
@@ -3886,6 +3998,12 @@ export interface ComposerRegionProps {
     userBubblePrompt?: string;
     defaultInstructionApplied?: string;
   }) => void | Promise<void>;
+  /** `@仓库` 派发：命中时在目标仓库下新建会话。返回 true 表示已接管。 */
+  onDispatchRepositoryMention?: (input: {
+    prompt: string;
+    userBubblePrompt?: string;
+    defaultInstructionApplied?: string;
+  }) => boolean;
   onEnqueueAsPendingTask?: (payload: {
     promptText: string;
     executorLabel: string;

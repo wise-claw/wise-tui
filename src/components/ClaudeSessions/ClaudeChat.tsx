@@ -204,6 +204,11 @@ interface Props {
     requirementId?: string;
     requirementRepositoryId?: string | null;
   }) => void | Promise<void>;
+  onDispatchRepositoryMention?: (input: {
+    prompt: string;
+    userBubblePrompt?: string;
+    defaultInstructionApplied?: string;
+  }) => boolean;
   onSessionModelChange: (model: string) => void;
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
   /**
@@ -394,6 +399,7 @@ export function ClaudeChatInner({
   onResumeSessionFromMonitorDrawer,
   onPrepareSessionForMonitorDrawer,
   onDispatchExecutionEnvironment,
+  onDispatchRepositoryMention,
   onSessionModelChange,
   onSessionConnectionKindChange,
   onUpdateSessionUltracode,
@@ -2174,6 +2180,7 @@ export function ClaudeChatInner({
               pendingExecutionTaskCount={pendingTasks.length}
               onExecute={handleComposerExecute}
               onDispatchExecutionEnvironment={onDispatchExecutionEnvironment}
+              onDispatchRepositoryMention={onDispatchRepositoryMention}
               onSessionModelChange={onSessionModelChange}
               onSessionConnectionKindChange={onSessionConnectionKindChange}
               onUpdateSessionUltracode={onUpdateSessionUltracode}

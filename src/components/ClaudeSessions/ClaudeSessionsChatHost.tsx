@@ -138,6 +138,11 @@ export interface ClaudeSessionsChatHostProps {
     requirementId?: string;
     requirementRepositoryId?: string | null;
   }) => void | Promise<void>;
+  onDispatchRepositoryMention?: (input: {
+    prompt: string;
+    userBubblePrompt?: string;
+    defaultInstructionApplied?: string;
+  }) => boolean;
   onSendMessage: (prompt: string) => void;
   onCancelSession: (sessionId: string, opts?: { retractLastUserTurn?: boolean }) => void;
   onSwitchSession: (sessionId: string) => void;
@@ -273,6 +278,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   onResumeSessionFromMonitorDrawer,
   onPrepareSessionForMonitorDrawer,
   onDispatchExecutionEnvironment,
+  onDispatchRepositoryMention,
   onSendMessage,
   onCancelSession,
   onSwitchSession,
@@ -581,6 +587,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
     onSend: onSendMessage,
     onExecute: onExecuteSession,
     onDispatchExecutionEnvironment,
+    onDispatchRepositoryMention,
     onUpdateSessionModel,
     onUpdateSessionConnectionKind,
     onUpdateSessionUltracode,
@@ -752,6 +759,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
           onResumeSessionFromMonitorDrawer={onResumeSessionFromMonitorDrawer}
           onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
           onDispatchExecutionEnvironment={onDispatchExecutionEnvironment}
+          onDispatchRepositoryMention={onDispatchRepositoryMention}
           onSessionModelChange={(model) => onUpdateSessionModel(activeSession.id, model)}
           onSessionConnectionKindChange={(kind) =>
             void onUpdateSessionConnectionKind(activeSession.id, kind)

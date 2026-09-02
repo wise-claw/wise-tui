@@ -1545,37 +1545,91 @@ export default function App() {
       activeAssistantId: viewMode.view.kind === "cockpit" ? cockpitActiveAssistantId : null,
     });
 
-  /** @-mention 派发拦截：命中工作区成员或已接入仓库时直派；其他 @ 类型回退到原 send 路径。 */
-  const handleSendMessageWithAtMention = useCallback(
-    (prompt: string) => {
+  const handleDispatchRepositoryMention = useCallback(
+    (input: {
+      prompt: string;
+      userBubblePrompt?: string;
+      defaultInstructionApplied?: string;
+    }): boolean => {
       const activeProject = activeProjectId
-        ? projects.find((p) => p.id === activeProjectId) ?? null
+        ? projects.find((item) => item.id === activeProjectId) ?? null
         : null;
       const plan = planAtMentionDispatch({
         activeProject,
-        repositories,
-        prompt,
+        repositories: repositoriesLatestRef.current,
+        prompt: input.prompt,
       });
-      if (plan.kind === "dispatch" && activeSessionId) {
-        void dispatchAtMentionPromptToRepos({
-          project: activeProject,
-          matchedRepos: plan.matchedRepos,
-          body: plan.body,
-          sessionId: activeSessionId,
-        }).catch((err) => {
-          const text = err instanceof Error ? err.message : String(err);
-          message.error(`@-mention 派发失败: ${text}`);
-        });
-        return;
+      if (plan.kind !== "dispatch") {
+        return false;
       }
-      if (plan.kind === "warn_then_fallthrough") {
-        message.warning(
-          `${plan.mentionedTags.map((t) => `@${t}`).join(", ")} 未匹配项目仓库；按常规消息发送。`,
-        );
+      void dispatchAtMentionPromptToRepos({
+        matchedRepos: plan.matchedRepos,
+        mentionedTags: plan.mentionedTags,
+        body: plan.body,
+        prompt: input.prompt,
+        userBubblePrompt: input.userBubblePrompt,
+        defaultInstructionApplied: input.defaultInstructionApplied,
+        createSession,
+        executeSession: (sessionId, prompt, opts) => executeSession(sessionId, prompt, opts),
+        closeSession,
+      })
+        .then((results) => {
+          const succeeded = results.filter((item) => item.status === "succeeded").length;
+          const failed = results.length - succeeded;
+          if (succeeded === 0 && results.length > 0) {
+            message.warning("在目标仓库新建会话未启动：可能已达并发上限，请稍后重试。");
+            return;
+          }
+          if (failed > 0) {
+            message.warning(`已在 ${succeeded} 个仓库新建会话，${failed} 个仓库未能启动。`);
+          }
+        })
+        .catch((err) => {
+          const text = err instanceof Error ? err.message : String(err);
+          message.error(`@仓库 派发失败: ${text}`);
+        });
+      return true;
+    },
+    [
+      activeProjectId,
+      closeSession,
+      createSession,
+      executeSession,
+      projects,
+    ],
+  );
+
+  const handleComposerExecuteWithRepositoryMention = useCallback(
+    async (
+      sessionId: string,
+      prompt: string,
+      dispatchTarget?: Parameters<typeof handleComposerExecute>[2],
+      executeOptions?: Parameters<typeof handleComposerExecute>[3],
+    ) => {
+      if (
+        handleDispatchRepositoryMention({
+          prompt,
+          userBubblePrompt: executeOptions?.userBubblePrompt,
+          defaultInstructionApplied: executeOptions?.defaultInstructionApplied,
+        })
+      ) {
+        return true;
+      }
+      return handleComposerExecute(sessionId, prompt, dispatchTarget, executeOptions);
+    },
+    [handleComposerExecute, handleDispatchRepositoryMention],
+  );
+  handleComposerExecuteRef.current = handleComposerExecuteWithRepositoryMention;
+
+  /** @-mention 仓库派发：命中工作区成员或已接入仓库时，在对应仓库下新建会话执行。 */
+  const handleSendMessageWithAtMention = useCallback(
+    (prompt: string) => {
+      if (handleDispatchRepositoryMention({ prompt })) {
+        return;
       }
       handleSendMessageWithTask(prompt);
     },
-    [activeProjectId, activeSessionId, handleSendMessageWithTask, projects, repositories],
+    [handleDispatchRepositoryMention, handleSendMessageWithTask],
   );
 
   const { omcInstalled } = useOmcPluginInstalled(true);
@@ -1968,7 +2022,7 @@ export default function App() {
     repositories,
     employees,
     activeRepository,
-    executeSession: handleComposerExecute,
+    executeSession: handleComposerExecuteWithRepositoryMention,
     cancelSession,
     selectRepository: (repositoryId) => {
       hudSelectRepositoryRef.current(repositoryId);
@@ -3357,10 +3411,11 @@ export default function App() {
         opencodeAvailable,
         qoderAvailable,
         onOpenExecutionEnvironment: handleOpenExecutionEnvironment,
-        onExecuteSession: handleComposerExecute,
+        onExecuteSession: handleComposerExecuteWithRepositoryMention,
         onResumeSessionFromMonitorDrawer: resumeSessionFromMonitorDrawer,
         onPrepareSessionForMonitorDrawer: ensureSessionForMonitorDrawer,
         onDispatchExecutionEnvironment: handleDispatchExecutionEnvironment,
+        onDispatchRepositoryMention: handleDispatchRepositoryMention,
         onDispatchSessionFeedbackLoop: handleDispatchSessionFeedbackLoop,
         onSendMessage: handleSendMessageWithAtMention,
         onCancelSession: cancelSession,
