@@ -49,13 +49,11 @@ export function resolveGitCommitAiEngineChain(input: {
 }
 
 function parseCommitMessageFromInvocation(outputLines: readonly string[]): string | null {
-  const candidates = collectClaudeInvocationTextCandidates(outputLines);
-  for (const candidate of candidates) {
-    const parsed = parseAiConventionalCommitMessage(candidate);
-    if (parsed) return parsed;
-  }
-  if (candidates.length === 0) return null;
-  return parseAiConventionalCommitMessage(candidates.join("\n"));
+  const parsed = collectClaudeInvocationTextCandidates(outputLines)
+    .map((candidate) => parseAiConventionalCommitMessage(candidate))
+    .filter((message): message is string => Boolean(message));
+  if (parsed.length === 0) return null;
+  return parsed.reduce((best, current) => (current.length > best.length ? current : best));
 }
 
 function compactAiFailureReason(lines: readonly string[], fallback: string): string {

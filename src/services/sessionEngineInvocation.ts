@@ -146,7 +146,7 @@ export async function executeSessionEngineAndWait(params: {
   const errorLines: string[] = [];
   const MAX_CAPTURED_LINES = 8000;
   const MAX_SINGLE_LINE_CHARS = 24_000;
-  const INVOCATION_OUTPUT_DRAIN_MS = 80;
+  const INVOCATION_OUTPUT_DRAIN_MS = 120;
   const timeoutMs = params.timeoutMs ?? 120_000;
 
   const {
@@ -157,27 +157,13 @@ export async function executeSessionEngineAndWait(params: {
 
   let resolveDone: ((value: ClaudeInvocationResult) => void) | null = null;
   let drainHandle: ReturnType<typeof setTimeout> | null = null;
+  let completedSuccess: boolean | null = null;
   const donePromise = new Promise<ClaudeInvocationResult>((resolve) => {
     resolveDone = resolve;
   });
 
-  const unlistenOutput = await listen<string>(outputEvent, (event) => {
-    if (outputLines.length >= MAX_CAPTURED_LINES) return;
-    const raw = typeof event.payload === "string" ? event.payload : String(event.payload ?? "");
-    outputLines.push(
-      raw.length > MAX_SINGLE_LINE_CHARS ? `${raw.slice(0, MAX_SINGLE_LINE_CHARS)}…[truncated]` : raw,
-    );
-  });
-  const unlistenError = await listen<string>(errorEvent, (event) => {
-    if (errorLines.length >= MAX_CAPTURED_LINES) return;
-    const raw = typeof event.payload === "string" ? event.payload : String(event.payload ?? "");
-    errorLines.push(
-      raw.length > MAX_SINGLE_LINE_CHARS ? `${raw.slice(0, MAX_SINGLE_LINE_CHARS)}…[truncated]` : raw,
-    );
-  });
-  const unlistenComplete = await listen<{ success?: boolean }>(completeEvent, (event) => {
-    const success = resolveClaudeCompleteSuccess(event.payload);
-    // complete 与 output 走不同事件名，短 oneshot 可能先完成再送达最后一行正文。
+  const settle = (success: boolean) => {
+    if (drainHandle != null) globalThis.clearTimeout(drainHandle);
     drainHandle = globalThis.setTimeout(() => {
       drainHandle = null;
       resolveDone?.({
@@ -187,6 +173,27 @@ export async function executeSessionEngineAndWait(params: {
         invocationKey,
       });
     }, INVOCATION_OUTPUT_DRAIN_MS);
+  };
+
+  const unlistenOutput = await listen<string>(outputEvent, (event) => {
+    if (outputLines.length >= MAX_CAPTURED_LINES) return;
+    const raw = typeof event.payload === "string" ? event.payload : String(event.payload ?? "");
+    outputLines.push(
+      raw.length > MAX_SINGLE_LINE_CHARS ? `${raw.slice(0, MAX_SINGLE_LINE_CHARS)}…[truncated]` : raw,
+    );
+    if (completedSuccess !== null) settle(completedSuccess);
+  });
+  const unlistenError = await listen<string>(errorEvent, (event) => {
+    if (errorLines.length >= MAX_CAPTURED_LINES) return;
+    const raw = typeof event.payload === "string" ? event.payload : String(event.payload ?? "");
+    errorLines.push(
+      raw.length > MAX_SINGLE_LINE_CHARS ? `${raw.slice(0, MAX_SINGLE_LINE_CHARS)}…[truncated]` : raw,
+    );
+    if (completedSuccess !== null) settle(completedSuccess);
+  });
+  const unlistenComplete = await listen<{ success?: boolean }>(completeEvent, (event) => {
+    completedSuccess = resolveClaudeCompleteSuccess(event.payload);
+    settle(completedSuccess);
   });
 
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null;

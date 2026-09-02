@@ -28,7 +28,7 @@ function extractTextFromAssistantMessage(payload: Record<string, unknown>): stri
     }
     if (!isRecord(item)) continue;
     if (item.type !== "text") continue;
-    const text = typeof item.text === "string" ? item.text.trim() : "";
+    const text = typeof item.text === "string" ? item.text : "";
     if (text) texts.push(text);
   }
   return texts;
@@ -46,8 +46,9 @@ function extractResultText(parsed: Record<string, unknown>): string {
 }
 
 /**
- * 从 invocation 输出中收集可能含提交信息的正文候选（result / assistant / 纯文本）。
- * 顺序：权威 result → 拼接后的助手正文 → 各段助手正文 → 非 JSON 纯文本。
+ * 从 invocation 输出中收集可能含提交信息的正文候选。
+ * 顺序：权威 result → 流式 token 直接拼接 → 按段换行拼接 → 非 JSON 纯文本。
+ * 不把单个 token 当分条候选，否则会把 `feat: 推送支持复` 这种半截当作成稿。
  */
 export function collectClaudeInvocationTextCandidates(lines: readonly string[]): string[] {
   const fallbackPlain = lines
@@ -85,8 +86,8 @@ export function collectClaudeInvocationTextCandidates(lines: readonly string[]):
   };
   push(resultText);
   if (assistantTexts.length > 0) {
+    push(assistantTexts.join(""));
     push(assistantTexts.join("\n"));
-    for (const text of assistantTexts) push(text);
   }
   push(fallbackPlain);
   return candidates;

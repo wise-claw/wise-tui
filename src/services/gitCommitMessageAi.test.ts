@@ -126,6 +126,64 @@ describe("generateGitCommitMessageByAi", () => {
     expect(invokeEngine).toHaveBeenCalledTimes(1);
   });
 
+  it("concatenates streamed assistant tokens instead of keeping a truncated prefix", async () => {
+    const invokeEngine = mock(async () => ({
+      success: true,
+      outputLines: [
+        JSON.stringify({
+          type: "assistant",
+          message: { role: "assistant", content: [{ type: "text", text: "feat: 推送支持复" }] },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          message: { role: "assistant", content: [{ type: "text", text: "用草稿并在失败后弹窗" }] },
+        }),
+      ],
+      errorLines: [],
+    }));
+
+    const result = await generateGitCommitMessageByAi({
+      repositoryPath: "/repo",
+      status: makeStatus(),
+      getDefaultEngine: () => "claude",
+      getDiffContext: async () => "",
+      getClaudeModel: async () => null,
+      invokeEngine: invokeEngine as never,
+    });
+
+    expect(result.aiFailed).toBe(false);
+    expect(result.message).toBe("feat: 推送支持复用草稿并在失败后弹窗");
+  });
+
+  it("prefers the concatenated stream over a truncated result snapshot", async () => {
+    const invokeEngine = mock(async () => ({
+      success: true,
+      outputLines: [
+        JSON.stringify({ type: "result", result: "feat: 推送支持复" }),
+        JSON.stringify({
+          type: "assistant",
+          message: { role: "assistant", content: [{ type: "text", text: "feat: 推送支持复" }] },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          message: { role: "assistant", content: [{ type: "text", text: "用草稿并在失败后弹窗" }] },
+        }),
+      ],
+      errorLines: [],
+    }));
+
+    const result = await generateGitCommitMessageByAi({
+      repositoryPath: "/repo",
+      status: makeStatus(),
+      getDefaultEngine: () => "claude",
+      getDiffContext: async () => "",
+      getClaudeModel: async () => null,
+      invokeEngine: invokeEngine as never,
+    });
+
+    expect(result.message).toBe("feat: 推送支持复用草稿并在失败后弹窗");
+  });
+
   it("parses Codex assistant envelopes and fullwidth-colon summaries", async () => {
     const invokeEngine = mock(async () => ({
       success: true,
