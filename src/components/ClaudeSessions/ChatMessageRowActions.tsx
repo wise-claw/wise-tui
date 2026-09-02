@@ -35,6 +35,7 @@ function ChatMessageRowActionsInner({
   );
   const showInsert = Boolean(insertPayload);
   const showReplay = msg.role === "user" && !_toolUser && Boolean(insertPayload) && Boolean(onReplayUserMessage);
+  const showCopy = msg.role !== "assistant" && !_toolUser && Boolean(copyText.trim());
   const handleReplay = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
@@ -42,6 +43,8 @@ function ChatMessageRowActionsInner({
     },
     [insertPayload, onReplayUserMessage],
   );
+
+  if (!showInsert && !showReplay && !showCopy) return null;
 
   const actions = (
     <>
@@ -57,7 +60,7 @@ function ChatMessageRowActionsInner({
           onClick={handleReplay}
         />
       ) : null}
-      <ChatMessageCopyButton text={copyText} />
+      {showCopy ? <ChatMessageCopyButton text={copyText} /> : null}
     </>
   );
 
