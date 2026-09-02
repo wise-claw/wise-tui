@@ -50,6 +50,18 @@ export function subscribeCodexRpcReasoningEffort(listener: Listener): () => void
   };
 }
 
+/** 会话关闭/裁剪时丢弃 tab 级临时偏好，避免历史 session id 常驻。 */
+export function pruneCodexRpcReasoningEffortSessions(liveSessionIds: ReadonlySet<string>): boolean {
+  let changed = false;
+  for (const key of effortBySession.keys()) {
+    if (liveSessionIds.has(key)) continue;
+    effortBySession.delete(key);
+    changed = true;
+  }
+  if (changed) notify();
+  return changed;
+}
+
 /** 测试用：清空会话记忆。 */
 export function clearCodexRpcReasoningEffortStoreForTests(): void {
   effortBySession.clear();

@@ -1,4 +1,4 @@
-import { memo, useRef, type CSSProperties } from "react";
+import { lazy, memo, Suspense, useRef, type CSSProperties } from "react";
 import type { LeftSidebarProps } from "./types";
 import type { ClaudeSession } from "../../types";
 import {
@@ -8,8 +8,11 @@ import {
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { useMonitorPanelVisibleRows } from "../../hooks/useMonitorPanelVisibleRows";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
-import { ProgressMonitorPanel } from "../ProgressMonitorPanel";
 import { prefetchModule } from "../../utils/prefetchModule";
+
+const ProgressMonitorPanel = lazy(() =>
+  import("../ProgressMonitorPanel").then((module) => ({ default: module.ProgressMonitorPanel })),
+);
 
 export type LeftSidebarMonitorPanelSlotProps = {
   visible?: boolean;
@@ -200,57 +203,59 @@ export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanel
       hidden={!visible ? true : undefined}
       aria-hidden={!visible ? true : undefined}
     >
-      <ProgressMonitorPanel
-        compactSidebarScrollRootRef={scrollRootRef}
-        monitorPanelVisibleRows={monitorPanelVisibleRows}
-        sectionCollapsed={monitorPanelSectionCollapsed}
-        onSectionCollapsedChange={onMonitorPanelSectionCollapsedChange}
-        sessions={monitorPanelSessions}
-        transcriptSourceSessions={transcriptSourceSessions}
-        sessionConversationTaskItems={sessionConversationTaskItems ?? []}
-        showSessionConversationTasks={showSessionConversationTasks}
-        executionEnvironmentDispatchHistoryDays={executionEnvironmentDispatchHistoryDays}
-        onExecutionEnvironmentDispatchHistoryDaysChange={
-          onExecutionEnvironmentDispatchHistoryDaysChange
-        }
-        executionEnvironmentDispatchHistoryDaysSaving={executionEnvironmentDispatchHistoryDaysSaving}
-        employeeItems={employeeMonitorItems ?? []}
-        repositoryMemberItems={repositoryMemberMonitorItems ?? []}
-        teamItems={teamMonitorItems ?? []}
-        activeSessionId={activeSessionId}
-        activeTarget={monitorActiveTarget}
-        onOpenTeamDetail={onOpenTeamMonitorDetail}
-        onOpenEmployeeConfig={onOpenEmployeeConfig}
-        onOpenWorkflowConfig={onOpenWorkflowConfig}
-        onStopEmployee={onStopEmployeeMonitor}
-        onStopTeam={onStopTeamMonitor}
-        hideEmployeeUi={hideEmployeeUi}
-        onCancelSession={onCancelSessionFromMonitor}
-        onOpenTaskDetail={onOpenTaskDetailFromMonitor}
-        onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
-        onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
-        onStopSessionConversationTask={onStopSessionConversationTask}
-        onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-        onRefreshHistorySessions={onRefreshHistorySessions}
-        onCompactSessionHistory={onCompactSessionHistory}
-        projectId={projectId}
-        historyDrawerSessionId={historyDrawerSessionId}
-        onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
-        onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
-        onCreateTerminalEmployeeSession={onCreateTerminalEmployeeSession}
-        onResumeSession={onResumeSession}
-        onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
-        onRespondToQuestion={onRespondToQuestion}
-        onDismissQuestion={onDismissQuestion}
-        onRespondToPermission={onRespondToPermission}
-        onToggleTodo={onToggleTodo}
-        onSendFollowup={onSendFollowup}
-        onRestoreRevert={onRestoreRevert}
-        onClearFollowups={onClearFollowups}
-        onClearRevertItems={onClearRevertItems}
-        repositoryMainBindings={repositoryMainSessionBindings}
-        repositories={repositories}
-      />
+      <Suspense fallback={<div role="status">正在加载运行面板…</div>}>
+        <ProgressMonitorPanel
+          compactSidebarScrollRootRef={scrollRootRef}
+          monitorPanelVisibleRows={monitorPanelVisibleRows}
+          sectionCollapsed={monitorPanelSectionCollapsed}
+          onSectionCollapsedChange={onMonitorPanelSectionCollapsedChange}
+          sessions={monitorPanelSessions}
+          transcriptSourceSessions={transcriptSourceSessions}
+          sessionConversationTaskItems={sessionConversationTaskItems ?? []}
+          showSessionConversationTasks={showSessionConversationTasks}
+          executionEnvironmentDispatchHistoryDays={executionEnvironmentDispatchHistoryDays}
+          onExecutionEnvironmentDispatchHistoryDaysChange={
+            onExecutionEnvironmentDispatchHistoryDaysChange
+          }
+          executionEnvironmentDispatchHistoryDaysSaving={executionEnvironmentDispatchHistoryDaysSaving}
+          employeeItems={employeeMonitorItems ?? []}
+          repositoryMemberItems={repositoryMemberMonitorItems ?? []}
+          teamItems={teamMonitorItems ?? []}
+          activeSessionId={activeSessionId}
+          activeTarget={monitorActiveTarget}
+          onOpenTeamDetail={onOpenTeamMonitorDetail}
+          onOpenEmployeeConfig={onOpenEmployeeConfig}
+          onOpenWorkflowConfig={onOpenWorkflowConfig}
+          onStopEmployee={onStopEmployeeMonitor}
+          onStopTeam={onStopTeamMonitor}
+          hideEmployeeUi={hideEmployeeUi}
+          onCancelSession={onCancelSessionFromMonitor}
+          onOpenTaskDetail={onOpenTaskDetailFromMonitor}
+          onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
+          onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+          onStopSessionConversationTask={onStopSessionConversationTask}
+          onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+          onRefreshHistorySessions={onRefreshHistorySessions}
+          onCompactSessionHistory={onCompactSessionHistory}
+          projectId={projectId}
+          historyDrawerSessionId={historyDrawerSessionId}
+          onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
+          onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+          onCreateTerminalEmployeeSession={onCreateTerminalEmployeeSession}
+          onResumeSession={onResumeSession}
+          onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
+          onRespondToQuestion={onRespondToQuestion}
+          onDismissQuestion={onDismissQuestion}
+          onRespondToPermission={onRespondToPermission}
+          onToggleTodo={onToggleTodo}
+          onSendFollowup={onSendFollowup}
+          onRestoreRevert={onRestoreRevert}
+          onClearFollowups={onClearFollowups}
+          onClearRevertItems={onClearRevertItems}
+          repositoryMainBindings={repositoryMainSessionBindings}
+          repositories={repositories}
+        />
+      </Suspense>
     </div>
   );
 }, monitorPanelPropsEqual);

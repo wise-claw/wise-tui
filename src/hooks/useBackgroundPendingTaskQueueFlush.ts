@@ -8,6 +8,7 @@ import type {
 } from "../types";
 import {
   flushBackgroundPendingTaskQueueForSession,
+  pruneBackgroundPendingTaskQueueFlushState,
   scheduleBackgroundPendingFlushAfterIdle,
   type BackgroundPendingFlushContext,
 } from "../services/backgroundPendingTaskQueueFlush";
@@ -78,12 +79,18 @@ export function useBackgroundPendingTaskQueueFlush({
     onExecute: (...args) => onExecuteRef.current(...args),
   });
 
+  const flushSafely = (session: ClaudeSession, ctx: BackgroundPendingFlushContext) => {
+    void flushBackgroundPendingTaskQueueForSession(session, ctx).catch((error) => {
+      console.error("Background pending task queue flush failed:", error);
+    });
+  };
+
   useEffect(() => {
     // 挂载时回收：应用重启 / 切仓后已空闲但仍有积压队列的会话。
     const ctx = buildCtx();
     for (const session of sessionsRef.current) {
       if (isSessionActiveStatus(session.status)) continue;
-      void flushBackgroundPendingTaskQueueForSession(session, ctx);
+      flushSafely(session, ctx);
     }
   }, []);
 
@@ -91,6 +98,7 @@ export function useBackgroundPendingTaskQueueFlush({
     const prev = prevActiveByIdRef.current;
     const next = new Map<string, boolean>();
     const ctx = buildCtx();
+    pruneBackgroundPendingTaskQueueFlushState(new Set(sessions.map((session) => session.id)));
 
     for (const session of sessions) {
       const active = isSessionActiveStatus(session.status);
@@ -119,7 +127,7 @@ export function useBackgroundPendingTaskQueueFlush({
       for (const id of ended) {
         const session = byId.get(id);
         if (!session || isSessionActiveStatus(session.status)) continue;
-        void flushBackgroundPendingTaskQueueForSession(session, ctx);
+        flushSafely(session, ctx);
       }
     });
   }, []);
@@ -129,7 +137,7 @@ export function useBackgroundPendingTaskQueueFlush({
       const ctx = buildCtx();
       for (const session of sessionsRef.current) {
         if (isSessionActiveStatus(session.status)) continue;
-        void flushBackgroundPendingTaskQueueForSession(session, ctx);
+        flushSafely(session, ctx);
       }
     });
   }, []);

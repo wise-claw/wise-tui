@@ -2,7 +2,10 @@ import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test";
 import {
   canBackgroundDispatchPendingTask,
   flushBackgroundPendingTaskQueueForSession,
+  getBackgroundPendingTaskQueueFlushStateForTests,
+  pruneBackgroundPendingTaskQueueFlushState,
   resetBackgroundPendingTaskQueueFlushForTests,
+  scheduleBackgroundPendingFlushAfterIdle,
   shouldSkipBackgroundPendingFlush,
   type BackgroundPendingFlushContext,
 } from "../services/backgroundPendingTaskQueueFlush";
@@ -135,6 +138,15 @@ describe("backgroundPendingTaskQueueFlush", () => {
 
     expect(executed).toEqual(["s1:one"]);
     expect(queueByKey.get(storageKey("s1", "/repo"))?.map((t) => t.id)).toEqual(["t2"]);
+    expect(getBackgroundPendingTaskQueueFlushStateForTests()).toEqual({
+      inFlightLaneSessions: 0,
+      failureTrackers: 0,
+      holdDeadlines: 0,
+      holdTimers: 0,
+      flushChains: 0,
+      retryCount: 0,
+      lifecycleTokens: 0,
+    });
   });
 
   test("flush is no-op when session has UI owner", async () => {
@@ -159,5 +171,94 @@ describe("backgroundPendingTaskQueueFlush", () => {
     expect(executed).toEqual([]);
     expect(queueByKey.get(storageKey("s1", "/repo"))?.map((t) => t.id)).toEqual(["t1"]);
     release();
+  });
+
+  test("prune cancels delayed idle flush state for a closed session", () => {
+    const s = session({ id: "closed", status: "idle" });
+    const ctx: BackgroundPendingFlushContext = {
+      sessions: [s],
+      employees: [],
+      workflowTasks: [],
+      taskPendingEmployeesByTaskId: {},
+      workflowGraphStatusByWorkflowId: {},
+      omcMonitorPipelineBusy: false,
+      onExecute: () => true,
+    };
+    scheduleBackgroundPendingFlushAfterIdle(s, ctx);
+    expect(getBackgroundPendingTaskQueueFlushStateForTests().holdTimers).toBe(1);
+
+    pruneBackgroundPendingTaskQueueFlushState(new Set());
+    expect(getBackgroundPendingTaskQueueFlushStateForTests()).toEqual({
+      inFlightLaneSessions: 0,
+      failureTrackers: 0,
+      holdDeadlines: 0,
+      holdTimers: 0,
+      flushChains: 0,
+      retryCount: 0,
+      lifecycleTokens: 0,
+    });
+  });
+
+  test("failed dispatch remains durable while its retry is tracked and cancellable", async () => {
+    const s = session({ id: "closed", status: "idle" });
+    queueByKey.set(storageKey("closed", "/repo"), [task({ id: "t1", promptText: "one" })]);
+    await flushBackgroundPendingTaskQueueForSession(s, {
+      sessions: [s],
+      employees: [],
+      workflowTasks: [],
+      taskPendingEmployeesByTaskId: {},
+      workflowGraphStatusByWorkflowId: {},
+      omcMonitorPipelineBusy: false,
+      onExecute: () => {
+        throw new Error("engine unavailable");
+      },
+    });
+
+    expect(getBackgroundPendingTaskQueueFlushStateForTests().retryCount).toBe(1);
+    expect(queueByKey.get(storageKey("closed", "/repo"))?.map((row) => row.id)).toEqual(["t1"]);
+    pruneBackgroundPendingTaskQueueFlushState(new Set());
+    expect(getBackgroundPendingTaskQueueFlushStateForTests().retryCount).toBe(0);
+    expect(getBackgroundPendingTaskQueueFlushStateForTests().lifecycleTokens).toBe(0);
+  });
+
+  test("prune invalidates an onExecute rejection that arrives after the session closed", async () => {
+    const s = session({ id: "closed-in-flight", status: "idle" });
+    const key = storageKey(s.id, s.repositoryPath);
+    queueByKey.set(key, [task({ id: "t1", promptText: "one" })]);
+    let rejectExecute!: (reason: Error) => void;
+    let markInvoked!: () => void;
+    const invoked = new Promise<void>((resolve) => {
+      markInvoked = resolve;
+    });
+    const flush = flushBackgroundPendingTaskQueueForSession(s, {
+      sessions: [s],
+      employees: [],
+      workflowTasks: [],
+      taskPendingEmployeesByTaskId: {},
+      workflowGraphStatusByWorkflowId: {},
+      omcMonitorPipelineBusy: false,
+      onExecute: () => {
+        markInvoked();
+        return new Promise((_resolve, reject) => {
+          rejectExecute = reject;
+        });
+      },
+    });
+    await invoked;
+
+    pruneBackgroundPendingTaskQueueFlushState(new Set());
+    rejectExecute(new Error("closed while starting"));
+    await flush;
+
+    expect(queueByKey.get(key)?.map((row) => row.id)).toEqual(["t1"]);
+    expect(getBackgroundPendingTaskQueueFlushStateForTests()).toEqual({
+      inFlightLaneSessions: 0,
+      failureTrackers: 0,
+      holdDeadlines: 0,
+      holdTimers: 0,
+      flushChains: 0,
+      retryCount: 0,
+      lifecycleTokens: 0,
+    });
   });
 });

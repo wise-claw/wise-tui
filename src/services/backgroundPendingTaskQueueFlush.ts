@@ -65,6 +65,51 @@ const failureTrackersBySession = new Map<string, ReturnType<typeof createDispatc
 const holdUntilBySession = new Map<string, number>();
 const holdTimersBySession = new Map<string, ReturnType<typeof setTimeout>>();
 const sessionFlushChain = new Map<string, Promise<void>>();
+type RetryHandle = {
+  timer: ReturnType<typeof setTimeout>;
+  cancelled: boolean;
+};
+const retryHandlesBySession = new Map<string, Set<RetryHandle>>();
+const lifecycleTokensBySession = new Map<string, object>();
+
+function lifecycleTokenFor(sessionId: string): object {
+  let token = lifecycleTokensBySession.get(sessionId);
+  if (!token) {
+    token = {};
+    lifecycleTokensBySession.set(sessionId, token);
+  }
+  return token;
+}
+
+function isLifecycleCurrent(sessionId: string, token: object): boolean {
+  return lifecycleTokensBySession.get(sessionId) === token;
+}
+
+function retryHandlesFor(sessionId: string): Set<RetryHandle> {
+  let handles = retryHandlesBySession.get(sessionId);
+  if (!handles) {
+    handles = new Set();
+    retryHandlesBySession.set(sessionId, handles);
+  }
+  return handles;
+}
+
+function releaseRetryHandle(sessionId: string, handle: RetryHandle): void {
+  const handles = retryHandlesBySession.get(sessionId);
+  if (!handles) return;
+  handles.delete(handle);
+  if (handles.size > 0) return;
+  retryHandlesBySession.delete(sessionId);
+  if (
+    !holdTimersBySession.has(sessionId) &&
+    !sessionFlushChain.has(sessionId) &&
+    (inFlightLanesBySession.get(sessionId)?.size ?? 0) === 0
+  ) {
+    failureTrackersBySession.delete(sessionId);
+    holdUntilBySession.delete(sessionId);
+    lifecycleTokensBySession.delete(sessionId);
+  }
+}
 
 function failureTrackerFor(sessionId: string) {
   let tracker = failureTrackersBySession.get(sessionId);
@@ -170,7 +215,9 @@ async function dispatchOne(
   task: PendingExecutionTask,
   ctx: BackgroundPendingFlushContext,
   queueSnapshot: PendingExecutionTask[],
+  lifecycleToken: object,
 ): Promise<PendingExecutionTask[]> {
+  if (!isLifecycleCurrent(session.id, lifecycleToken)) return queueSnapshot;
   const laneKey = pendingTaskExecutorLaneKey(task);
   const lanes = inFlightLanesFor(session.id);
   if (lanes.has(laneKey)) return queueSnapshot;
@@ -180,6 +227,7 @@ async function dispatchOne(
   let nextQueue = queueSnapshot.filter((row) => row.id !== task.id);
 
   try {
+    if (!isLifecycleCurrent(session.id, lifecycleToken)) return queueSnapshot;
     const started = await Promise.resolve(
       ctx.onExecute(
         session.id,
@@ -198,37 +246,49 @@ async function dispatchOne(
       nextQueue = queueSnapshot;
       return nextQueue;
     }
-    failureTrackerFor(session.id).onSuccess(failureFp);
+    if (!isLifecycleCurrent(session.id, lifecycleToken)) return nextQueue;
+    // 没有失败历史时无需为了 success 创建一个空 tracker 并常驻 Map。
+    failureTrackersBySession.get(session.id)?.onSuccess(failureFp);
     await persistQueue(session.id, session.repositoryPath, nextQueue);
     return nextQueue;
   } catch (error) {
+    // 会话可能在 onExecute 等待期间已关闭；此时不再改写其持久队列或创建重试器。
+    if (!isLifecycleCurrent(session.id, lifecycleToken)) return queueSnapshot;
     console.error("Background pending task dispatch failed:", error);
     const outcome = failureTrackerFor(session.id).onFailure(failureFp);
     if (outcome.action === "drop") {
       await persistQueue(session.id, session.repositoryPath, nextQueue);
+      if (!isLifecycleCurrent(session.id, lifecycleToken)) return nextQueue;
       void message.error(
         `后台会话任务连续分发失败 ${outcome.count} 次，已从队列移除，请检查执行环境后重试。`,
       );
       return nextQueue;
     }
-    // 退避重入队：先落盘去掉旧 id，再延迟写回新条目（由调用方 schedule）。
-    await persistQueue(session.id, session.repositoryPath, nextQueue);
-    window.setTimeout(() => {
+    // 保留原任务的持久化记录，只延迟再次消费。旧实现会先删、延迟后再写回，
+    // 应用退出或前台 owner 在退避期接管时会留下任务丢失窗口。
+    const retryAt = Date.now() + outcome.backoffMs;
+    holdUntilBySession.set(session.id, retryAt);
+    const handle = { timer: 0 as unknown as ReturnType<typeof setTimeout>, cancelled: false };
+    retryHandlesFor(session.id).add(handle);
+    handle.timer = globalThis.setTimeout(() => {
       void (async () => {
-        if (hasPendingTaskQueueOwner(session.id)) return;
-        const latest = await readPendingTaskQueue(session.id, session.repositoryPath);
-        const requeued: PendingExecutionTask = {
-          ...task,
-          id: `ptq_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-          createdAt: Date.now(),
-        };
-        await persistQueue(session.id, session.repositoryPath, [...latest, requeued]);
-        void flushBackgroundPendingTaskQueueForSession(session, ctx);
+        try {
+          if (handle.cancelled || !isLifecycleCurrent(session.id, lifecycleToken)) return;
+          clearHoldTimer(session.id);
+          holdUntilBySession.delete(session.id);
+          if (hasPendingTaskQueueOwner(session.id)) return;
+          await flushBackgroundPendingTaskQueueForSession(session, ctx);
+        } catch (retryError) {
+          console.error("Background pending task retry failed:", retryError);
+        } finally {
+          releaseRetryHandle(session.id, handle);
+        }
       })();
     }, outcome.backoffMs);
-    return nextQueue;
+    return queueSnapshot;
   } finally {
     lanes.delete(laneKey);
+    if (lanes.size === 0) inFlightLanesBySession.delete(session.id);
   }
 }
 
@@ -242,11 +302,14 @@ export async function flushBackgroundPendingTaskQueueForSession(
 ): Promise<void> {
   const sessionId = session.id.trim();
   if (!sessionId) return;
+  const lifecycleToken = lifecycleTokenFor(sessionId);
+  let queueDrained = false;
 
   const prev = sessionFlushChain.get(sessionId) ?? Promise.resolve();
   const next = prev
     .catch(() => {})
     .then(async () => {
+      if (!isLifecycleCurrent(sessionId, lifecycleToken)) return;
       if (shouldSkipBackgroundPendingFlush(session)) return;
 
       if (session.status === "error" || session.status === "cancelled") {
@@ -259,7 +322,9 @@ export async function flushBackgroundPendingTaskQueueForSession(
 
       const deferred = await readDeferredSendNext(sessionId, session.repositoryPath);
       let tasks = await readPendingTaskQueue(sessionId, session.repositoryPath);
+      if (!isLifecycleCurrent(sessionId, lifecycleToken)) return;
       if (tasks.length === 0) {
+        queueDrained = true;
         if (deferred) {
           await writeDeferredSendNext(sessionId, session.repositoryPath, false);
         }
@@ -278,11 +343,15 @@ export async function flushBackgroundPendingTaskQueueForSession(
           sessionId,
           setTimeout(() => {
             holdTimersBySession.delete(sessionId);
-            void flushBackgroundPendingTaskQueueForSession(session, ctx);
+            if (!isLifecycleCurrent(sessionId, lifecycleToken)) return;
+            void flushBackgroundPendingTaskQueueForSession(session, ctx).catch((error) => {
+              console.error("Background pending task delayed flush failed:", error);
+            });
           }, holdDelay),
         );
         return;
       }
+      holdUntilBySession.delete(sessionId);
       clearHoldTimer(sessionId);
 
       const dispatchable = findDispatchableHeadTasksPerLane(tasks, (task) =>
@@ -291,14 +360,32 @@ export async function flushBackgroundPendingTaskQueueForSession(
       if (dispatchable.length === 0) return;
 
       for (const task of dispatchable) {
+        if (!isLifecycleCurrent(sessionId, lifecycleToken)) return;
         if (shouldSkipBackgroundPendingFlush(session)) return;
         if (hasActiveSessionTurn(sessionId)) return;
-        tasks = await dispatchOne(session, task, ctx, tasks);
+        tasks = await dispatchOne(session, task, ctx, tasks, lifecycleToken);
       }
+      queueDrained = tasks.length === 0;
     });
 
   sessionFlushChain.set(sessionId, next);
-  await next;
+  try {
+    await next;
+  } finally {
+    if (sessionFlushChain.get(sessionId) === next) {
+      sessionFlushChain.delete(sessionId);
+    }
+    const hasRetries = (retryHandlesBySession.get(sessionId)?.size ?? 0) > 0;
+    const hasHold = holdTimersBySession.has(sessionId);
+    const hasLanes = (inFlightLanesBySession.get(sessionId)?.size ?? 0) > 0;
+    if (queueDrained && !hasRetries) failureTrackersBySession.delete(sessionId);
+    if (!hasRetries && !hasHold && !hasLanes && !sessionFlushChain.has(sessionId)) {
+      holdUntilBySession.delete(sessionId);
+      if (lifecycleTokensBySession.get(sessionId) === lifecycleToken) {
+        lifecycleTokensBySession.delete(sessionId);
+      }
+    }
+  }
 }
 
 /** 会话刚从 running/connecting 进入空闲时调用，启动短延迟后再 flush。 */
@@ -307,15 +394,67 @@ export function scheduleBackgroundPendingFlushAfterIdle(
   ctx: BackgroundPendingFlushContext,
 ): void {
   if (shouldSkipBackgroundPendingFlush(session)) return;
+  const lifecycleToken = lifecycleTokenFor(session.id);
   holdUntilBySession.set(session.id, Date.now() + POST_IDLE_BACKGROUND_PENDING_DISPATCH_DELAY_MS);
   clearHoldTimer(session.id);
   holdTimersBySession.set(
     session.id,
     setTimeout(() => {
       holdTimersBySession.delete(session.id);
-      void flushBackgroundPendingTaskQueueForSession(session, ctx);
+      if (!isLifecycleCurrent(session.id, lifecycleToken)) return;
+      void flushBackgroundPendingTaskQueueForSession(session, ctx).catch((error) => {
+        console.error("Background pending task idle flush failed:", error);
+      });
     }, POST_IDLE_BACKGROUND_PENDING_DISPATCH_DELAY_MS),
   );
+}
+
+/**
+ * 会话列表裁剪时取消其等待中的 hold/retry，并让已在途的异步步骤失效。
+ * 底层 onExecute 若已经开始无法撤销，但之后不会再写回已关闭会话的队列。
+ */
+export function pruneBackgroundPendingTaskQueueFlushState(liveSessionIds: ReadonlySet<string>): void {
+  const knownSessionIds = new Set<string>([
+    ...inFlightLanesBySession.keys(),
+    ...failureTrackersBySession.keys(),
+    ...holdUntilBySession.keys(),
+    ...holdTimersBySession.keys(),
+    ...sessionFlushChain.keys(),
+    ...retryHandlesBySession.keys(),
+    ...lifecycleTokensBySession.keys(),
+  ]);
+  for (const sessionId of knownSessionIds) {
+    if (liveSessionIds.has(sessionId)) continue;
+    lifecycleTokensBySession.delete(sessionId);
+    clearHoldTimer(sessionId);
+    holdUntilBySession.delete(sessionId);
+    const retries = retryHandlesBySession.get(sessionId);
+    if (retries) {
+      for (const handle of retries) {
+        handle.cancelled = true;
+        clearTimeout(handle.timer);
+      }
+      retryHandlesBySession.delete(sessionId);
+    }
+    inFlightLanesBySession.delete(sessionId);
+    failureTrackersBySession.delete(sessionId);
+    sessionFlushChain.delete(sessionId);
+  }
+}
+
+/** @internal test helper */
+export function getBackgroundPendingTaskQueueFlushStateForTests() {
+  let retryCount = 0;
+  for (const handles of retryHandlesBySession.values()) retryCount += handles.size;
+  return {
+    inFlightLaneSessions: inFlightLanesBySession.size,
+    failureTrackers: failureTrackersBySession.size,
+    holdDeadlines: holdUntilBySession.size,
+    holdTimers: holdTimersBySession.size,
+    flushChains: sessionFlushChain.size,
+    retryCount,
+    lifecycleTokens: lifecycleTokensBySession.size,
+  };
 }
 
 /** @internal test helper */
@@ -327,5 +466,13 @@ export function resetBackgroundPendingTaskQueueFlushForTests(): void {
     clearTimeout(timer);
   }
   holdTimersBySession.clear();
+  for (const handles of retryHandlesBySession.values()) {
+    for (const handle of handles) {
+      handle.cancelled = true;
+      clearTimeout(handle.timer);
+    }
+  }
+  retryHandlesBySession.clear();
   sessionFlushChain.clear();
+  lifecycleTokensBySession.clear();
 }

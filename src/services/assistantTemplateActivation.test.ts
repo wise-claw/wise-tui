@@ -33,7 +33,10 @@ mock.module("./claudeComposerPrompt", () => ({
 }));
 
 import { activateAssistantTemplate } from "./assistantTemplateActivation";
-import { getExecutionEnvironmentDispatchesSnapshotForAnchor } from "../stores/executionEnvironmentDispatchStore";
+import {
+  getExecutionEnvironmentDispatchesSnapshotForAnchor,
+  resetExecutionEnvironmentDispatchStore,
+} from "../stores/executionEnvironmentDispatchStore";
 
 function customAssistant(partial: Partial<AssistantEntry>): AssistantEntry {
   return {
@@ -132,6 +135,7 @@ function repoBinding(repositoryPath: string): {
 }
 
 beforeEach(() => {
+  resetExecutionEnvironmentDispatchStore();
   openExternalUrlMock.mockReset();
   runShellCommandMock.mockReset();
   openBackgroundScriptMock.mockReset();

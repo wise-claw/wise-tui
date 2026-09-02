@@ -86,22 +86,66 @@ export interface ClaudeCodeUsageSnapshotOptions {
 }
 
 const USAGE_SNAPSHOT_CACHE_TTL_MS = 60_000;
+const USAGE_SNAPSHOT_CACHE_MAX_ENTRIES = 12;
 
-type UsageSnapshotCacheEntry = {
+type SnapshotCacheEntry<T> = {
   at: number;
-  value: ClaudeUsageSnapshotResponse | null;
+  value?: T | null;
+  promise: Promise<T | null> | null;
 };
 
-type LineEditsSnapshotCacheEntry = {
-  at: number;
-  value: ClaudeLineEditsSnapshotResponse | null;
-};
-
-const usageSnapshotCache = new Map<string, UsageSnapshotCacheEntry>();
-const lineEditsSnapshotCache = new Map<string, LineEditsSnapshotCacheEntry>();
+const usageSnapshotCache = new Map<string, SnapshotCacheEntry<ClaudeUsageSnapshotResponse>>();
+const lineEditsSnapshotCache = new Map<string, SnapshotCacheEntry<ClaudeLineEditsSnapshotResponse>>();
 
 function usageSnapshotCacheKey(projectPath: string | null): string {
   return projectPath ?? "__all__";
+}
+
+function touchSnapshotCacheEntry<T>(
+  cache: Map<string, SnapshotCacheEntry<T>>,
+  key: string,
+  entry: SnapshotCacheEntry<T>,
+): void {
+  cache.delete(key);
+  cache.set(key, entry);
+  while (cache.size > USAGE_SNAPSHOT_CACHE_MAX_ENTRIES) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+}
+
+function readOrLoadSnapshot<T>(
+  cache: Map<string, SnapshotCacheEntry<T>>,
+  key: string,
+  loader: () => Promise<T | null>,
+): Promise<T | null> {
+  const now = Date.now();
+  const cached = cache.get(key);
+  if (cached && now - cached.at < USAGE_SNAPSHOT_CACHE_TTL_MS) {
+    touchSnapshotCacheEntry(cache, key, cached);
+    if (cached.promise) return cached.promise;
+    return Promise.resolve(cached.value ?? null);
+  }
+  if (cached) cache.delete(key);
+
+  const promise = Promise.resolve().then(loader);
+  const entry: SnapshotCacheEntry<T> = { at: now, promise };
+  touchSnapshotCacheEntry(cache, key, entry);
+  // 同 key 并发调用复用同一 promise；失效/淘汰后的旧请求不得回填新缓存。
+  void promise.then(
+    (value) => {
+      if (cache.get(key) !== entry) return;
+      entry.at = Date.now();
+      entry.value = value;
+      entry.promise = null;
+      touchSnapshotCacheEntry(cache, key, entry);
+    },
+    () => {
+      if (cache.get(key) === entry) cache.delete(key);
+    },
+  );
+  return promise;
 }
 
 /** 清除用量快照缓存；省略 projectPath 时清空全部。 */
@@ -126,15 +170,9 @@ export async function getClaudeCodeUsageSnapshot(
   }
   const projectPath = options?.projectPath?.trim() || null;
   const cacheKey = usageSnapshotCacheKey(projectPath);
-  const cached = usageSnapshotCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < USAGE_SNAPSHOT_CACHE_TTL_MS) {
-    return cached.value;
-  }
-  const value = await invoke<ClaudeUsageSnapshotResponse>("get_claude_code_usage_snapshot", {
-    projectPath,
-  });
-  usageSnapshotCache.set(cacheKey, { at: Date.now(), value });
-  return value;
+  return await readOrLoadSnapshot(usageSnapshotCache, cacheKey, () =>
+    invoke<ClaudeUsageSnapshotResponse>("get_claude_code_usage_snapshot", { projectPath }),
+  );
 }
 
 /** 异步：扫描 Claude / Cursor / OpenCode / Codex 编辑记录，返回近一年代码编辑量热力图数据。 */
@@ -146,13 +184,13 @@ export async function getClaudeCodeLineEditsSnapshot(
   }
   const projectPath = options?.projectPath?.trim() || null;
   const cacheKey = usageSnapshotCacheKey(projectPath);
-  const cached = lineEditsSnapshotCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < USAGE_SNAPSHOT_CACHE_TTL_MS) {
-    return cached.value;
-  }
-  const value = await invoke<ClaudeLineEditsSnapshotResponse>("get_claude_code_line_edits_snapshot", {
-    projectPath,
-  });
-  lineEditsSnapshotCache.set(cacheKey, { at: Date.now(), value });
-  return value;
+  return await readOrLoadSnapshot(lineEditsSnapshotCache, cacheKey, () =>
+    invoke<ClaudeLineEditsSnapshotResponse>("get_claude_code_line_edits_snapshot", { projectPath }),
+  );
+}
+
+/** @internal test helper */
+export function resetClaudeCodeUsageSnapshotCacheForTests(): void {
+  usageSnapshotCache.clear();
+  lineEditsSnapshotCache.clear();
 }

@@ -94,6 +94,8 @@ describe("workflow graph execution flow simulation", () => {
     knowledge.data.knowledgeQuery = "query";
     const code = node("code-1", "code", "Code");
     code.data.codeSource = "echo hi";
+    // 非 Shell 代码节点作为说明注入下一员工；Shell 节点会由运行时真实执行。
+    code.data.codeLanguage = "typescript";
     const agent = node("agent-1", "approval", "Agent");
     agent.data.employeeId = "emp-1";
     const end = node("end", "end");

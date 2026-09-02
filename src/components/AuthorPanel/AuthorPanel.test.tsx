@@ -419,15 +419,16 @@ describe("AuthorPanel", () => {
     expect(html).toContain("会话处理方式");
     expect(html).toContain("运行项");
     expect(html).toContain("左栏");
-    expect(html).toContain("右栏");
+    expect(html).toContain("栏位");
     expect(html).toContain("右侧面板");
-    expect(html).toContain("FCC 顶栏图标");
-    expect(html).toContain("FCC 请求流量");
-    expect(html).toContain("LLM 代理图标");
-    expect(html).toContain("全链路分析");
-    expect(html).toContain("左栏快捷入口");
-    expect(html).toContain("长驻会话");
-    expect(html).toContain("逐轮处理");
+    expect(html).toContain("图标与按钮");
+    expect(html).toContain("FCC 流量");
+    expect(html).toContain("LLM 代理");
+    expect(html).toContain("全链路");
+    expect(html).toContain("快捷入口");
+    expect(html).toContain("左栏顶部图标");
+    expect(html).toContain("长驻");
+    expect(html).toContain("逐轮");
   });
 
   test("data-cleanup pane renders wise cache cleanup", () => {

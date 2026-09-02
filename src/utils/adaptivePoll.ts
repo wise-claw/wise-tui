@@ -72,6 +72,9 @@ export function startAdaptiveInterval(
 
   const restart = () => {
     if (timer) clearInterval(timer);
+    timer = null;
+    // tick 本就不会在后台执行；隐藏时彻底停表，避免每个轮询器继续产生无效 wake-up。
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
     timer = setInterval(tick, readVisiblePollIntervalMs(visibleMs, hiddenMs));
   };
 

@@ -124,9 +124,16 @@ export async function activateAssistantTemplate(
       // 注册到 dispatch store，运行面板「派发」一栏会显示这条后台脚本，
       // 支持结束（kill PTY 子进程）。anchor 解析复用 dispatch helper：
       // 多 pane / 多仓库场景下以当前主会话为锚，回退到 repoPath。
+      const mainOwner = resolveMainOwnerAgentNameForRepositoryPath(input.repositories, repoPath);
+      const boundMainSessionId = resolveBoundMainSessionId(
+        repoPath,
+        input.repositoryMainBindings,
+        input.sessions,
+        mainOwner,
+      );
       const anchorSessionId =
         resolveExecutionEnvironmentDispatchAnchorSessionId({
-          activeSessionId: input.preferredSessionId ?? null,
+          activeSessionId: input.preferredSessionId ?? boundMainSessionId,
           sessions: input.sessions,
           repositoryMainSessionBindings: input.repositoryMainBindings,
           repositories: input.repositories,

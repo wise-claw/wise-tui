@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 const invoke = mock(async () => undefined);
 
-mock.module("@tauri-apps/api/core", () => ({ invoke }));
+mock.module("@tauri-apps/api/core", () => ({ invoke, isTauri: () => true }));
 mock.module("@tauri-apps/api/event", () => ({ listen: mock(async () => () => {}) }));
 mock.module("../utils/safeTauriUnlisten", () => ({ safeUnlisten: mock(() => undefined) }));
 

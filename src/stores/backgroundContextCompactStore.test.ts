@@ -3,6 +3,7 @@ import {
   COMPACT_GRACE_WINDOW_MS,
   isBackgroundContextCompactInFlight,
   isWithinBackgroundCompactGraceWindow,
+  pruneBackgroundContextCompactSessions,
   resetBackgroundContextCompactStoreForTests,
   setBackgroundContextCompactInFlight,
 } from "./backgroundContextCompactStore";
@@ -74,5 +75,28 @@ describe("backgroundContextCompactStore", () => {
     resetBackgroundContextCompactStoreForTests();
     expect(isWithinBackgroundCompactGraceWindow("")).toBe(false);
     expect(isWithinBackgroundCompactGraceWindow("   ")).toBe(false);
+  });
+
+  test("prune removes closed-session in-flight and grace state", () => {
+    resetBackgroundContextCompactStoreForTests();
+    setBackgroundContextCompactInFlight("closed", true);
+    setBackgroundContextCompactInFlight("live", true);
+    setBackgroundContextCompactInFlight("finished", true);
+    setBackgroundContextCompactInFlight("finished", false);
+
+    expect(pruneBackgroundContextCompactSessions(new Set(["live"]))).toBe(true);
+    expect(isBackgroundContextCompactInFlight("closed")).toBe(false);
+    expect(isBackgroundContextCompactInFlight("live")).toBe(true);
+    expect(isWithinBackgroundCompactGraceWindow("finished")).toBe(false);
+  });
+
+  test("expired grace entry is removed lazily", () => {
+    resetBackgroundContextCompactStoreForTests();
+    setBackgroundContextCompactInFlight("s1", true);
+    setBackgroundContextCompactInFlight("s1", false);
+    const farFuture = Date.now() + COMPACT_GRACE_WINDOW_MS + 1;
+
+    expect(isWithinBackgroundCompactGraceWindow("s1", farFuture)).toBe(false);
+    expect(pruneBackgroundContextCompactSessions(new Set())).toBe(false);
   });
 });

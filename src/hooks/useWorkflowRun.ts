@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { WorkflowRunDTO } from "../types/workflow";
 import { getWorkflowFacade } from "../services/workflow";
+import { promiseWithTimeout } from "../utils/promiseWithTimeout";
 
 interface WorkflowRunSnapshot {
   run: WorkflowRunDTO | null;
@@ -17,6 +18,8 @@ interface Entry {
   refCount: number;
   requestSeq: number;
   inFlight: boolean;
+  inFlightPromise: Promise<void> | null;
+  refreshQueued: boolean;
   backoffMs: number;
   stopped: boolean;
 }
@@ -34,6 +37,7 @@ export function invalidateWorkflowRunCacheForRepository(repositoryPath: string):
   for (const key of [...cache.keys()]) {
     if (!key.endsWith(suffix)) continue;
     const entry = cache.get(key);
+    if (entry) entry.stopped = true;
     if (entry?.timer != null) {
       window.clearTimeout(entry.timer);
     }
@@ -47,7 +51,13 @@ function emitEntry(entry: Entry): void {
     pollIntervalMs: entry.backoffMs,
     inFlight: entry.inFlight,
   };
-  for (const listener of entry.listeners) listener(snapshot);
+  for (const listener of entry.listeners) {
+    try {
+      listener(snapshot);
+    } catch (error) {
+      console.warn("[wise:workflow-run] listener threw", error);
+    }
+  }
 }
 
 function keyOf(sessionId: string, repositoryPath: string): string {
@@ -65,35 +75,51 @@ async function fetchRun(sessionId: string, repositoryPath: string): Promise<Work
 }
 
 async function fetchRunWithTimeout(sessionId: string, repositoryPath: string): Promise<WorkflowRunDTO | null> {
-  return await Promise.race([
+  // promiseWithTimeout 会在请求提前完成时清理 timeout；旧实现每次轮询都让 10s timer 留到触发。
+  return await promiseWithTimeout(
     fetchRun(sessionId, repositoryPath),
-    new Promise<null>((resolve) => {
-      window.setTimeout(() => resolve(null), FETCH_TIMEOUT_MS);
-    }),
-  ]);
+    FETCH_TIMEOUT_MS,
+    "加载工作流运行状态",
+  );
 }
 
-async function refreshEntry(sessionId: string, repositoryPath: string): Promise<void> {
+function refreshEntry(sessionId: string, repositoryPath: string): Promise<void> {
   const key = keyOf(sessionId, repositoryPath);
   const entry = cache.get(key);
-  if (!entry) return;
-  /** 允许与轮询重叠；以 `requestSeq` 丢弃过时响应，避免应用内写入 DB 后无法立即拉新快照 */
-  entry.inFlight = true;
-  const nextSeq = entry.requestSeq + 1;
-  entry.requestSeq = nextSeq;
-  try {
-    const run = await fetchRunWithTimeout(sessionId, repositoryPath);
-    const latest = cache.get(key);
-    if (!latest || latest.requestSeq !== nextSeq) return;
-    latest.run = run;
-    emitEntry(latest);
-  } finally {
-    const latest = cache.get(key);
-    if (latest) {
-      latest.inFlight = false;
-      emitEntry(latest);
-    }
+  if (!entry || entry.stopped) return Promise.resolve();
+  if (entry.inFlightPromise) {
+    // 高频 DB 写事件只合并为一次补拉，避免同 session 的 listRuns/getRun 重叠堆积。
+    entry.refreshQueued = true;
+    return entry.inFlightPromise;
   }
+
+  const task = (async () => {
+    entry.inFlight = true;
+    emitEntry(entry);
+    try {
+      do {
+        entry.refreshQueued = false;
+        const nextSeq = entry.requestSeq + 1;
+        entry.requestSeq = nextSeq;
+        const run = await fetchRunWithTimeout(sessionId, repositoryPath);
+        const latest = cache.get(key);
+        if (!latest || latest !== entry || latest.stopped) return;
+        if (latest.requestSeq === nextSeq) {
+          latest.run = run;
+          emitEntry(latest);
+        }
+      } while (entry.refreshQueued && !entry.stopped && cache.get(key) === entry);
+    } finally {
+      const latest = cache.get(key);
+      if (latest === entry) {
+        latest.inFlight = false;
+        latest.inFlightPromise = null;
+        emitEntry(latest);
+      }
+    }
+  })();
+  entry.inFlightPromise = task;
+  return task;
 }
 
 function scheduleNextRefresh(sessionId: string, repositoryPath: string): void {
@@ -106,6 +132,13 @@ function scheduleNextRefresh(sessionId: string, repositoryPath: string): void {
   entry.timer = window.setTimeout(() => {
     const current = cache.get(key);
     if (!current || current.stopped) return;
+    current.timer = null;
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+      // 隐藏窗口不访问 DB；保留低频唤醒以便无 visibility 事件的 WebView 也能自愈。
+      current.backoffMs = MAX_BACKOFF_MS;
+      scheduleNextRefresh(sessionId, repositoryPath);
+      return;
+    }
     void refreshEntry(sessionId, repositoryPath)
       .then(() => {
         const latest = cache.get(key);
@@ -136,6 +169,8 @@ function ensureEntry(sessionId: string, repositoryPath: string): Entry {
     refCount: 0,
     requestSeq: 0,
     inFlight: false,
+    inFlightPromise: null,
+    refreshQueued: false,
     backoffMs: POLL_MS,
     stopped: false,
   };
@@ -197,6 +232,7 @@ export function useWorkflowRun(sessionId: string, repositoryPath: string) {
       current.refCount -= 1;
       if (current.refCount <= 0) {
         current.stopped = true;
+        current.refreshQueued = false;
         if (current.timer != null) window.clearTimeout(current.timer);
         cache.delete(key);
       }
@@ -223,6 +259,7 @@ export function requestWorkflowRunRefresh(sessionId: string, repositoryPath: str
   const sid = sessionId.trim();
   const rp = repositoryPath.trim();
   if (!sid || !rp) return;
-  void refreshEntry(sid, rp);
+  void refreshEntry(sid, rp).catch((error) => {
+    console.warn("[wise:workflow-run] immediate refresh failed", error);
+  });
 }
-

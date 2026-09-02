@@ -9,7 +9,7 @@
     "postinstall": "bun run scripts/patch-antd-modal-confirm-mask-closable.mjs && bun run scripts/patch-antd-scroll-into-view-if-needed.mjs",
     "dev": "vite",
     "build": "tsc -p tsconfig.app.json && vite build",
-    "test": "bun test",
+    "test": "bun test --parallel=4 ./src",
     "preview": "vite preview",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

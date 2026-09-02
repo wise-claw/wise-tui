@@ -46,48 +46,70 @@ const DEFAULT_STATE: StagehandBrowseRuntimeState = {
 const stateBySessionId = new Map<string, StagehandBrowseRuntimeState>();
 const listenersBySessionId = new Map<string, Set<() => void>>();
 
-function getOrCreate(sessionId: string): StagehandBrowseRuntimeState {
-  const existing = stateBySessionId.get(sessionId);
-  if (existing) return existing;
-  const next = {
+function normalizeSessionId(sessionId: string): string {
+  return sessionId.trim();
+}
+
+function createDefaultState(): StagehandBrowseRuntimeState {
+  return {
     ...DEFAULT_STATE,
     logs: [] as StagehandBrowseLogLine[],
     observeActions: [] as StagehandObserveAction[],
   };
-  stateBySessionId.set(sessionId, next);
-  return next;
 }
 
 function emit(sessionId: string) {
   const listeners = listenersBySessionId.get(sessionId);
   if (!listeners) return;
-  for (const listener of listeners) listener();
+  for (const listener of listeners) {
+    try {
+      listener();
+    } catch (error) {
+      console.warn("[wise:stagehand-runtime] listener threw", error);
+    }
+  }
+}
+
+function updateState(
+  sessionId: string,
+  updater: (current: StagehandBrowseRuntimeState) => StagehandBrowseRuntimeState,
+): void {
+  const key = normalizeSessionId(sessionId);
+  if (!key) return;
+  const current = stateBySessionId.get(key) ?? createDefaultState();
+  const next = updater(current);
+  if (next === current) return;
+  stateBySessionId.set(key, next);
+  emit(key);
 }
 
 export function getStagehandBrowseRuntimeSnapshot(sessionId: string): StagehandBrowseRuntimeState {
-  return getOrCreate(sessionId);
+  const key = normalizeSessionId(sessionId);
+  return (key && stateBySessionId.get(key)) || DEFAULT_STATE;
 }
 
 export function subscribeStagehandBrowseRuntime(
   sessionId: string,
   listener: () => void,
 ): () => void {
-  let set = listenersBySessionId.get(sessionId);
+  const key = normalizeSessionId(sessionId);
+  if (!key) return () => {};
+  let set = listenersBySessionId.get(key);
   if (!set) {
     set = new Set();
-    listenersBySessionId.set(sessionId, set);
+    listenersBySessionId.set(key, set);
   }
   set.add(listener);
   return () => {
     set?.delete(listener);
-    if (set && set.size === 0) listenersBySessionId.delete(sessionId);
+    if (set && set.size === 0) listenersBySessionId.delete(key);
   };
 }
 
 export function setStagehandBrowseProbe(sessionId: string, probe: StagehandBrowseProbe | null) {
-  const state = getOrCreate(sessionId);
-  state.probe = probe;
-  emit(sessionId);
+  updateState(sessionId, (state) =>
+    state.probe === probe ? state : { ...state, probe },
+  );
 }
 
 export function setStagehandBrowseStatus(
@@ -95,43 +117,79 @@ export function setStagehandBrowseStatus(
   status: StagehandBrowseStatus,
   statusHint: string,
 ) {
-  const state = getOrCreate(sessionId);
-  state.status = status;
-  state.statusHint = statusHint;
-  if (status === "idle") {
-    state.pageUrl = null;
-    state.pageTitle = null;
-    state.pageCount = 0;
-    state.authSummary = null;
-    state.cookieCount = 0;
-    state.observeActions = [];
-  }
-  emit(sessionId);
+  updateState(sessionId, (state) => {
+    const next = {
+      ...state,
+      status,
+      statusHint,
+      ...(status === "idle"
+        ? {
+            pageUrl: null,
+            pageTitle: null,
+            pageCount: 0,
+            authSummary: null,
+            cookieCount: 0,
+            observeActions:
+              state.observeActions.length > 0
+                ? ([] as StagehandObserveAction[])
+                : state.observeActions,
+          }
+        : {}),
+    };
+    if (
+      state.status === next.status &&
+      state.statusHint === next.statusHint &&
+      state.pageUrl === next.pageUrl &&
+      state.pageTitle === next.pageTitle &&
+      state.pageCount === next.pageCount &&
+      state.authSummary === next.authSummary &&
+      state.cookieCount === next.cookieCount &&
+      state.observeActions === next.observeActions
+    ) {
+      return state;
+    }
+    return next;
+  });
 }
 
 export function setStagehandBrowsePage(sessionId: string, page: StagehandPageStatus) {
-  const state = getOrCreate(sessionId);
-  state.pageUrl = page.url;
-  state.pageTitle = page.title;
-  state.pageCount = page.pageCount;
-  state.authSummary = page.authSummary;
-  state.cookieCount = page.cookieCount;
-  if (page.running && state.status === "idle") {
-    state.status = "running";
-    state.statusHint = page.title || page.url || "运行中";
-  } else if (page.title || page.url) {
-    state.statusHint = page.title || page.url || state.statusHint;
-  }
-  emit(sessionId);
+  updateState(sessionId, (state) => {
+    const status = page.running && state.status === "idle" ? "running" : state.status;
+    const statusHint =
+      page.running && state.status === "idle"
+        ? page.title || page.url || "运行中"
+        : page.title || page.url || state.statusHint;
+    if (
+      state.pageUrl === page.url &&
+      state.pageTitle === page.title &&
+      state.pageCount === page.pageCount &&
+      state.authSummary === page.authSummary &&
+      state.cookieCount === page.cookieCount &&
+      state.status === status &&
+      state.statusHint === statusHint
+    ) {
+      return state;
+    }
+    return {
+      ...state,
+      pageUrl: page.url,
+      pageTitle: page.title,
+      pageCount: page.pageCount,
+      authSummary: page.authSummary,
+      cookieCount: page.cookieCount,
+      status,
+      statusHint,
+    };
+  });
 }
 
 export function setStagehandBrowseObserveActions(
   sessionId: string,
   actions: StagehandObserveAction[],
 ) {
-  const state = getOrCreate(sessionId);
-  state.observeActions = actions;
-  emit(sessionId);
+  updateState(sessionId, (state) =>
+    state.observeActions === actions ? state : { ...state, observeActions: actions },
+  );
 }
 
 export function appendStagehandBrowseLog(
@@ -139,16 +197,22 @@ export function appendStagehandBrowseLog(
   kind: StagehandBrowseLogLine["kind"],
   text: string,
 ) {
-  const state = getOrCreate(sessionId);
-  const line = { at: Date.now(), kind, text };
-  state.logs = [...state.logs.slice(-79), line];
-  emit(sessionId);
+  updateState(sessionId, (state) => {
+    const line = { at: Date.now(), kind, text };
+    return { ...state, logs: [...state.logs.slice(-79), line] };
+  });
 }
 
 export function setStagehandBrowseScreenshot(sessionId: string, path: string | null) {
-  const state = getOrCreate(sessionId);
-  state.screenshotPath = path;
-  emit(sessionId);
+  updateState(sessionId, (state) =>
+    state.screenshotPath === path ? state : { ...state, screenshotPath: path },
+  );
+}
+
+/** @internal test helper */
+export function resetStagehandBrowseRuntimeForTests(): void {
+  stateBySessionId.clear();
+  listenersBySessionId.clear();
 }
 
 export function recordStagehandBrowseResult(sessionId: string, label: string, result: unknown) {

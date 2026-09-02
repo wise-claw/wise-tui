@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 mock.module("../../services/agentRegistry", () => ({
+  checkAllBuiltinAgentUpdates: mock(async () => []),
   deleteCustomAgent: mock(async () => undefined),
   installBuiltinAgent: mock(async () => []),
   updateBuiltinAgent: mock(async () => []),

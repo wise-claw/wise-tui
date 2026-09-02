@@ -12,7 +12,7 @@ import {
   normalizeSearchKeyword,
   sessionUpdatedAt,
 } from "../ProgressMonitorPanel/progressMonitorSearch";
-import { getSessionPreview } from "../ProgressMonitorPanel";
+import { getSessionPreview } from "../ProgressMonitorPanel/historySessionDrawerChrome";
 import {
   buildHostClaudeProcessSession,
   buildRegistryOrphanClaudeSession,

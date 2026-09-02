@@ -136,6 +136,8 @@ import {
   collectLiveSessionSidecarKeys,
   pruneOrphanClaudeSessionSidecarMaps,
 } from "../utils/claudeSessionSidecarMaps";
+import { pruneBackgroundContextCompactSessions } from "../stores/backgroundContextCompactStore";
+import { pruneCodexRpcReasoningEffortSessions } from "../stores/codexRpcReasoningEffortStore";
 import {
   resolveCompanionSessionMessagesMax,
   resolveGlobalMessagesBudget,
@@ -890,6 +892,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     }
     const liveTabIds = new Set(liveSessions.map((session) => session.id));
     if (pruneSessionTurns(liveTabIds)) {
+      sidecarChanged = true;
+    }
+    if (pruneBackgroundContextCompactSessions(liveTabIds)) {
+      sidecarChanged = true;
+    }
+    if (pruneCodexRpcReasoningEffortSessions(liveTabIds)) {
       sidecarChanged = true;
     }
     notificationHub.pruneOrphanSessions(liveTabIds);

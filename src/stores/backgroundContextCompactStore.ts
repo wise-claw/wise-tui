@@ -13,6 +13,7 @@ const inFlightSessionIds = new Set<string>();
  */
 const recentlyFinishedAt = new Map<string, number>();
 const listeners = new Set<() => void>();
+const MAX_RECENTLY_FINISHED_SESSIONS = 128;
 
 /**
  * 后台压缩结束后的节流窗口（ms）。取值参考既有
@@ -20,6 +21,16 @@ const listeners = new Set<() => void>();
  * 留 3× 余量以覆盖慢机器 + transcript 重载耗时。
  */
 export const COMPACT_GRACE_WINDOW_MS = 1500;
+
+function rememberRecentlyFinished(sessionId: string, at: number): void {
+  recentlyFinishedAt.delete(sessionId);
+  recentlyFinishedAt.set(sessionId, at);
+  while (recentlyFinishedAt.size > MAX_RECENTLY_FINISHED_SESSIONS) {
+    const oldest = recentlyFinishedAt.keys().next().value;
+    if (oldest === undefined) break;
+    recentlyFinishedAt.delete(oldest);
+  }
+}
 
 function emit(): void {
   for (const listener of listeners) {
@@ -38,7 +49,7 @@ export function setBackgroundContextCompactInFlight(sessionId: string, active: b
   } else {
     if (!inFlightSessionIds.delete(key)) return;
     // 记录压缩刚结束的锚点，供 flush 节流使用（不触发额外 React 订阅）。
-    recentlyFinishedAt.set(key, Date.now());
+    rememberRecentlyFinished(key, Date.now());
   }
   emit();
 }
@@ -61,7 +72,32 @@ export function isWithinBackgroundCompactGraceWindow(
   if (!key) return false;
   const finishedAt = recentlyFinishedAt.get(key);
   if (finishedAt == null) return false;
-  return nowMs - finishedAt <= COMPACT_GRACE_WINDOW_MS;
+  const elapsed = nowMs - finishedAt;
+  // 系统时钟回拨时重新锚定，避免负 elapsed 让历史会话永久留在 grace window。
+  if (elapsed < 0) {
+    rememberRecentlyFinished(key, nowMs);
+    return true;
+  }
+  if (elapsed <= COMPACT_GRACE_WINDOW_MS) return true;
+  recentlyFinishedAt.delete(key);
+  return false;
+}
+
+/** 会话关闭/裁剪时同步清理压缩信号，避免历史 tab id 常驻内存。 */
+export function pruneBackgroundContextCompactSessions(liveSessionIds: ReadonlySet<string>): boolean {
+  let changed = false;
+  for (const key of inFlightSessionIds) {
+    if (liveSessionIds.has(key)) continue;
+    inFlightSessionIds.delete(key);
+    changed = true;
+  }
+  for (const key of recentlyFinishedAt.keys()) {
+    if (liveSessionIds.has(key)) continue;
+    recentlyFinishedAt.delete(key);
+    changed = true;
+  }
+  if (changed) emit();
+  return changed;
 }
 
 export function useBackgroundContextCompactInFlight(sessionId: string): boolean {
