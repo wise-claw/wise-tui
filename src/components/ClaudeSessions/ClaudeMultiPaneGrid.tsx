@@ -169,7 +169,7 @@ function IconNewSession() {
   );
 }
 
-/** 空窗格 / 仅文件窗格没有顶栏，右上角悬浮「关闭本屏」按钮作为独立入口。 */
+/** 多屏额外窗格右上角「关闭本屏」：固定悬浮入口，第一屏不提供。 */
 function PaneCornerCloseButton({ onClose }: { onClose: () => void }) {
   return (
     <button
@@ -730,11 +730,13 @@ const MultiPaneExtraPaneCell = memo(
       markPaneActive(absolutePaneIndex);
       toggleTerminalCenterPanel(absolutePaneIndex);
     }, [absolutePaneIndex]);
-    /** 关闭本 extra pane：会话态走顶栏按钮，空态/仅文件态走右上角悬浮按钮。 */
+    /** 关闭本 extra pane：各态统一走右上角悬浮按钮。 */
     const handleClosePane = useCallback(() => {
       if (!onClosePaneSlot) return;
       void onClosePaneSlot(paneIdx);
     }, [onClosePaneSlot, paneIdx]);
+    const paneCloseButton =
+      onClosePaneSlot != null ? <PaneCornerCloseButton onClose={handleClosePane} /> : null;
 
     // 把本 extra pane 的 requestCenterView 注册到跨层控制通道，供打开文件时切到「文件」视图。
     // 必须用绝对 pane 索引（slot 0 → pane 1），与 PaneEditorHost / markPaneActive 对齐。
@@ -796,6 +798,7 @@ const MultiPaneExtraPaneCell = memo(
             className="app-claude-sessions__pane app-claude-sessions__pane--offscreen-running-host"
             data-pane-session-id={sessionId}
           >
+            {paneCloseButton}
             <MultiPaneOffscreenRunningPane
               session={paneSession}
               permissionRequest={offscreenDock.permissionRequest}
@@ -812,6 +815,7 @@ const MultiPaneExtraPaneCell = memo(
             className="app-claude-sessions__pane app-claude-sessions__pane--lazy-placeholder"
             data-pane-session-id={sessionId}
           >
+            {paneCloseButton}
             <div className="app-claude-sessions__pane-lazy-copy">
               <span className="app-claude-sessions__pane-lazy-title">
                 {paneSession.repositoryName?.trim() || resolvedRepo.name || "执行会话"}
@@ -827,6 +831,7 @@ const MultiPaneExtraPaneCell = memo(
           className="app-claude-sessions__pane"
           onMouseDownCapture={() => markPaneActive(paneIdx + 1)}
         >
+          {paneCloseButton}
           {shared.paneTopbarShared ? (
             <Topbar
               {...shared.paneTopbarShared}
@@ -847,7 +852,7 @@ const MultiPaneExtraPaneCell = memo(
               onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(resolvedRepo?.path ?? "")}
               centerView={centerView}
               onCenterViewChange={handleCenterViewChange}
-              onClosePane={onClosePaneSlot ? handleClosePane : undefined}
+              showWindowTopbarControls={false}
             />
           ) : null}
           <CenterViewControlContext.Provider value={requestCenterView}>
@@ -957,7 +962,7 @@ const MultiPaneExtraPaneCell = memo(
     if (panelBelowMessages) {
       return (
         <div className="app-claude-sessions__pane app-claude-sessions__pane--file-only">
-          {onClosePaneSlot ? <PaneCornerCloseButton onClose={handleClosePane} /> : null}
+          {paneCloseButton}
           {panelBelowMessages}
         </div>
       );
@@ -965,7 +970,7 @@ const MultiPaneExtraPaneCell = memo(
 
     return (
       <div className="app-claude-sessions__pane">
-        {onClosePaneSlot ? <PaneCornerCloseButton onClose={handleClosePane} /> : null}
+        {paneCloseButton}
         <SessionEmptyState
           title="窗格执行会话尚未就绪"
           hint="选择仓库后自动创建隔离会话，或点击下方按钮新建。"

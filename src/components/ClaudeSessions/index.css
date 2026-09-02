@@ -234,8 +234,8 @@
   justify-content: stretch;
 }
 
-/* 空窗格 / 仅文件窗格的右上角悬浮「关闭本屏」按钮：这些窗格没有顶栏，
-   需要独立的固定入口才能移除并行窗格（与有会话窗格顶栏按钮同一语义）。 */
+/* 多屏额外窗格（非第一屏）右上角悬浮「关闭本屏」按钮：各态统一入口，
+   移除该并行窗格并把屏数收敛到上一档。 */
 .app-claude-sessions__pane-corner-close {
   position: absolute;
   top: 8px;

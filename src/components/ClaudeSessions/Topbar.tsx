@@ -193,6 +193,8 @@ export interface TopbarProps {
   onChangePaneCount?: (count: PaneCount) => void;
   /** 关闭当前窗格（仅多屏额外窗格提供）。 */
   onClosePane?: () => void;
+  /** 窗口级顶栏控件（HUD / 外观）；多屏时仅第一屏展示。默认 true。 */
+  showWindowTopbarControls?: boolean;
   /** 打开创作台「远程入口」配置页 */
   onOpenRemoteChannels?: () => void;
   /** 中栏「消息/文件/终端」切换器当前视图。 */
@@ -257,6 +259,7 @@ export const Topbar = memo(function Topbar({
   paneChangeInFlight = false,
   onChangePaneCount,
   onClosePane,
+  showWindowTopbarControls = true,
   onOpenRemoteChannels,
 }: TopbarProps) {
   const topbarChrome = useWiseTopbarChromeVisibility();
@@ -573,15 +576,17 @@ export const Topbar = memo(function Topbar({
             className="app-topbar-btn--close-pane"
           />
         ) : null}
-        <TopbarBtn
-          icon={<IconHud />}
-          label="HUD 模式：⌥H · Alt+H"
-          onClick={() => {
-            void wiseHudToggle();
-          }}
-          active={hudActive}
-        />
-        <AppearanceThemeToggle />
+        {showWindowTopbarControls ? (
+          <TopbarBtn
+            icon={<IconHud />}
+            label="HUD 模式：⌥H · Alt+H"
+            onClick={() => {
+              void wiseHudToggle();
+            }}
+            active={hudActive}
+          />
+        ) : null}
+        {showWindowTopbarControls ? <AppearanceThemeToggle /> : null}
         <div className="app-topbar-divider" />
         {topbarToolsReady || onChangePaneCount || onToggleTerminal ? (
           <ClaudeChatSessionTopbarOverflow
