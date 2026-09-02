@@ -106,6 +106,36 @@ describe("normalizeInlineMarkdownStructures", () => {
     expect(out).toContain("确认完毕。\n\n## 纠正如下");
   });
 
+  test("does not promote inline hash examples into headings", () => {
+    const raw =
+      "本意是隐藏与标题重复的 `# 文章标题`。但若正文本身以 `# 额问问` 开头，就会把真正的内容藏掉。";
+    const out = normalizeInlineMarkdownStructures(raw);
+    expect(out).toBe(raw);
+    expect(out).not.toMatch(/^# 文章标题/m);
+    expect(out).not.toMatch(/^# 额问问/m);
+  });
+
+  test("does not promote unquoted inline hash mentions into headings", () => {
+    const raw = "展示时自动剥掉与标题重复的 # 标题，避免再误伤正文。";
+    const out = normalizeInlineMarkdownStructures(raw);
+    expect(out).toBe(raw);
+    expect(out).not.toMatch(/^# 标题/m);
+  });
+
+  test("does not split hash headings inside inline code spans", () => {
+    const raw = "进入编辑时去掉重复的 `## 标题`，编辑器只处理正文。";
+    const out = normalizeInlineMarkdownStructures(raw);
+    expect(out).toBe(raw);
+    expect(out).not.toMatch(/^## 标题/m);
+  });
+
+  test("does not split glued hashes inside fenced code", () => {
+    const raw = ["```bash", "echo done ## not a heading", "```"].join("\n");
+    const out = normalizeInlineMarkdownStructures(raw);
+    expect(out).toBe(raw);
+    expect(out).not.toMatch(/^## not a heading/m);
+  });
+
   test("renders heading + emphasis as h2 + paragraph after split", async () => {
     const { marked } = await import("marked");
     marked.use({ gfm: true, breaks: true });

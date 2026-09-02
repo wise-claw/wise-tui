@@ -178,19 +178,120 @@ export function wrapBareShellCommandLines(text: string): string {
 /** 目录树分支行（含行内 `# 注释` 时不得拆成 Markdown 标题）。 */
 const DIR_TREE_LINE_RE = /(?:├──|└──|│|┃|┣|┗)/;
 
+/** 行内粘连的 `##`–`######` 标题（不含单 `#`，避免把 `` `# 标题` `` 示例拆成 h1）。 */
+const GLUED_ATX_HEADING_RE = /([^#\s])([ \t]?)(#{2,6}[ \t])/g;
+
+/** 标识每个 index 是否落在 inline code span 或被 `\\` 转义的位置上。 */
+function buildInlineCodeOrEscapeMask(text: string): boolean[] {
+  const mask = new Array(text.length).fill(false);
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i]!;
+    if (ch === "\\" && i + 1 < text.length) {
+      mask[i] = true;
+      mask[i + 1] = true;
+      i += 2;
+      continue;
+    }
+    if (ch === "`") {
+      const close = text.indexOf("`", i + 1);
+      const end = close === -1 ? text.length : close + 1;
+      for (let j = i; j < end; j++) mask[j] = true;
+      i = end;
+      continue;
+    }
+    i += 1;
+  }
+  return mask;
+}
+
+/**
+ * 围栏体 + 行内 code / 转义。闭合围栏同一行的后续正文不屏蔽，
+ * 以便 ` ``` 接入后会出现。 ## 标题` 仍能拆出粘连标题。
+ */
+function buildCodeAndFenceMask(text: string): boolean[] {
+  const mask = new Array(text.length).fill(false);
+  let i = 0;
+  let inFence = false;
+  while (i < text.length) {
+    if (text.startsWith("```", i)) {
+      if (!inFence) {
+        inFence = true;
+        const markerStart = i;
+        i += 3;
+        while (i < text.length && text[i] !== "\n") i += 1;
+        for (let j = markerStart; j < i; j++) mask[j] = true;
+        continue;
+      }
+      inFence = false;
+      i += 3;
+      continue;
+    }
+    if (inFence) {
+      mask[i] = true;
+      i += 1;
+      continue;
+    }
+    const ch = text[i]!;
+    if (ch === "\\" && i + 1 < text.length) {
+      mask[i] = true;
+      mask[i + 1] = true;
+      i += 2;
+      continue;
+    }
+    if (ch === "`") {
+      const close = text.indexOf("`", i + 1);
+      const newline = text.indexOf("\n", i + 1);
+      const end =
+        close === -1
+          ? (newline === -1 ? text.length : newline)
+          : newline !== -1 && newline < close
+            ? i + 1
+            : close + 1;
+      for (let j = i; j < end; j++) mask[j] = true;
+      i = end;
+      continue;
+    }
+    i += 1;
+  }
+  return mask;
+}
+
+function splitGluedMarkdownHeadingsOnLine(line: string, mask: boolean[]): string {
+  GLUED_ATX_HEADING_RE.lastIndex = 0;
+  let out = "";
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = GLUED_ATX_HEADING_RE.exec(line)) !== null) {
+    const hashStart = match.index + match[1]!.length + (match[2]?.length ?? 0);
+    if (mask[hashStart]) continue;
+    out += `${line.slice(lastIndex, match.index)}${match[1]}\n\n${match[3]}`;
+    lastIndex = match.index + match[0].length;
+  }
+  return lastIndex === 0 ? line : out + line.slice(lastIndex);
+}
+
 /**
  * 行内混入的 `## 标题` 前补空行。
  * - 跳过 ASCII/Unicode 目录树行（`├── path/    # 注释`）
+ * - 跳过围栏代码块与行内 code span（`` `# 文章标题` `` 不得变成 h1）
+ * - 不拆单 `#`：句中 `# 标题` 是示例/注释，不是粘连的章节标题
  * - 仅在「非 # 字符后最多一个空白」时拆分，避免把多空格对齐注释拆成标题
  */
 function breakInlineMarkdownHeadings(text: string): string {
-  return text
-    .split("\n")
-    .map((line) => {
-      if (DIR_TREE_LINE_RE.test(line)) return line;
-      return line.replace(/([^#\s])([ \t]?)(#{1,6}[ \t])/g, "$1\n\n$3");
-    })
-    .join("\n");
+  const mask = buildCodeAndFenceMask(text);
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let offset = 0;
+  for (const line of lines) {
+    if (DIR_TREE_LINE_RE.test(line)) {
+      out.push(line);
+    } else {
+      out.push(splitGluedMarkdownHeadingsOnLine(line, mask.slice(offset, offset + line.length)));
+    }
+    offset += line.length + 1;
+  }
+  return out.join("\n");
 }
 
 /**
@@ -202,30 +303,6 @@ function breakTrailingInlineAfterHeadings(text: string): string {
   const lines = text.split("\n");
   const out: string[] = [];
   const headingRe = /^(#{1,6})\s+(.*)$/;
-
-  // 标识 rest 中每个 index 是否落在 inline code span `` `...` `` 或被 `\\` 转义的位置上。
-  function buildMask(rest: string): boolean[] {
-    const mask = new Array(rest.length).fill(false);
-    let i = 0;
-    while (i < rest.length) {
-      const ch = rest[i]!;
-      if (ch === "\\" && i + 1 < rest.length) {
-        mask[i] = true;
-        mask[i + 1] = true;
-        i += 2;
-        continue;
-      }
-      if (ch === "`") {
-        const close = rest.indexOf("`", i + 1);
-        const end = close === -1 ? rest.length : close + 1;
-        for (let j = i; j < end; j++) mask[j] = true;
-        i = end;
-        continue;
-      }
-      i += 1;
-    }
-    return mask;
-  }
 
   // 在 rest 中查找第一个未被 mask 标记、且后续字符能闭合的强调 token 起首。
   function firstEmphasisStart(rest: string, mask: boolean[]): number {
@@ -262,7 +339,7 @@ function breakTrailingInlineAfterHeadings(text: string): string {
       continue;
     }
 
-    const mask = buildMask(rest);
+    const mask = buildInlineCodeOrEscapeMask(rest);
     const splitAt = firstEmphasisStart(rest, mask);
     if (splitAt === -1) {
       out.push(line);

@@ -4727,6 +4727,18 @@
   margin-bottom: 0;
 }
 
+/* 总结/长文里的 h1 必须压到接近 h2：句中误解析的 `# 标题` 不能沿用全局 18px + 20px 段距。 */
+.app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown--chat-prose h1,
+.app-claude-messages .app-claude-message--assistant .app-message-part--completion-summary .app-markdown h1,
+.app-claude-messages .app-claude-message--assistant .app-message-part--long-prose .app-markdown h1 {
+  font-size: 15px;
+  font-weight: 650;
+  margin: 1.15em 0 0.5em;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 68%, transparent);
+  line-height: 1.35;
+}
+
 .app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown--chat-prose h2,
 .app-claude-messages .app-claude-message--assistant .app-message-part--completion-summary .app-markdown h2,
 .app-claude-messages .app-claude-message--assistant .app-message-part--long-prose .app-markdown h2 {
@@ -4747,10 +4759,13 @@
   line-height: 1.4;
 }
 
+.app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown--chat-prose h1:first-child,
 .app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown--chat-prose h2:first-child,
 .app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown--chat-prose h3:first-child,
+.app-claude-messages .app-claude-message--assistant .app-message-part--completion-summary .app-markdown h1:first-child,
 .app-claude-messages .app-claude-message--assistant .app-message-part--completion-summary .app-markdown h2:first-child,
 .app-claude-messages .app-claude-message--assistant .app-message-part--completion-summary .app-markdown h3:first-child,
+.app-claude-messages .app-claude-message--assistant .app-message-part--long-prose .app-markdown h1:first-child,
 .app-claude-messages .app-claude-message--assistant .app-message-part--long-prose .app-markdown h2:first-child,
 .app-claude-messages .app-claude-message--assistant .app-message-part--long-prose .app-markdown h3:first-child {
   margin-top: 0;
