@@ -768,14 +768,14 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
 
 .app-hud-context-popover.ant-popover {
   z-index: 60;
-  padding: 8px 10px 10px;
+  padding: 4px 6px 6px;
 }
 
 .app-hud-context-popover .ant-popover-inner,
 .app-hud-context-popover .ant-popover-container {
-  min-width: 300px;
+  min-width: 260px;
   padding: 0 !important;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   background: #fff;
   box-shadow:
@@ -790,9 +790,9 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
 .app-hud-context-panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-width: 268px;
-  padding: 16px 24px 18px !important;
+  gap: 6px;
+  min-width: 248px;
+  padding: 8px 10px 10px !important;
   box-sizing: border-box;
   -webkit-app-region: no-drag;
 }
@@ -800,22 +800,22 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
 .app-hud-context-tabs {
   display: flex;
   gap: 2px;
-  padding: 4px;
-  border-radius: 10px;
+  padding: 2px;
+  border-radius: 8px;
   background: #f3f4f6;
 }
 
 .app-hud-context-tab {
   flex: 1 1 0;
-  height: 28px;
-  padding: 0 8px;
+  height: 24px;
+  padding: 0 6px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: #6b7280;
   font-size: 12px;
   font-weight: 500;
-  line-height: 28px;
+  line-height: 24px;
   cursor: pointer;
 }
 
@@ -834,24 +834,24 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
 }
 
 .app-hud-context-list {
-  max-height: 240px;
+  max-height: 220px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
   padding-right: 2px;
   scrollbar-width: thin;
 }
 
 .app-hud-context-item {
   width: 100%;
-  min-height: 34px;
-  padding: 8px 10px;
+  min-height: 24px;
+  padding: 3px 8px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: #111827;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 18px;
   text-align: left;
@@ -872,10 +872,10 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
 }
 
 .app-hud-context-empty {
-  min-height: 34px;
-  padding: 8px 12px;
+  min-height: 24px;
+  padding: 4px 8px;
   color: #8b8f98;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 :root[data-wise-theme="dark"] .app-hud-bar {

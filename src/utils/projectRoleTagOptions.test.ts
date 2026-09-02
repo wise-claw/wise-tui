@@ -192,4 +192,18 @@ describe("buildRepositoryMentionOptions", () => {
 
     expect(buildRepositoryMentionOptions(repositories)).toHaveLength(40);
   });
+
+  test("accepts HUD snapshot repos that only have id/name/path", () => {
+    const opts = buildRepositoryMentionOptions([
+      { id: 2, name: "codex", path: "/work/codex" },
+      { id: 1, name: "wise-tui", path: "/work/wise-tui" },
+    ]);
+    expect(opts.map((option) => option.mention)).toEqual(["codex", "wise-tui"]);
+    expect(opts[1]).toEqual({
+      mention: "wise-tui",
+      label: "wise-tui",
+      description: "仓库",
+      repositoryId: 1,
+    });
+  });
 });

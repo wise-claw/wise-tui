@@ -3858,7 +3858,7 @@ function ComposerInner({
                   extensions={SEMI_COMPOSER_TOKEN_HIGHLIGHT_EXTENSIONS}
                   placeholder={
                     hudChrome
-                      ? "@ 提及，/ 命令，Enter 发送"
+                      ? "@ 仓库/文件，/ 命令，Enter 发送"
                       : "@ 仓库/终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条"
                   }
                   keepSkillAfterSend={false}

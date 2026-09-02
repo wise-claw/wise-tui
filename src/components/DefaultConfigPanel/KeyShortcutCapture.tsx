@@ -1,6 +1,7 @@
 import { Button } from "antd";
 import { useEffect, useState } from "react";
 import { formatChordForDisplay, keyboardEventToChord } from "../../utils/atMentionShortcutChord";
+import { beginKeyShortcutCapture, endKeyShortcutCapture } from "../../utils/keyShortcutCaptureLock";
 import "./KeyShortcutCapture.css";
 
 export function KeyShortcutCapture({
@@ -25,6 +26,7 @@ export function KeyShortcutCapture({
 
   useEffect(() => {
     if (!listening) return;
+    beginKeyShortcutCapture();
     const onKeyDown = (event: KeyboardEvent) => {
       event.preventDefault();
       event.stopPropagation();
@@ -39,7 +41,10 @@ export function KeyShortcutCapture({
       }
     };
     window.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
+    return () => {
+      endKeyShortcutCapture();
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
+    };
   }, [listening, onChange]);
 
   const controls = (

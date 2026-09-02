@@ -16,6 +16,7 @@ import {
 } from "../../utils/wiseHudSnapshot";
 import type { HudCompletionToastView } from "../../utils/hudCompletionToast";
 import type { ImageAttachmentPart } from "../../types";
+import { buildRepositoryMentionOptions } from "../../utils/projectRoleTagOptions";
 import "./HudComposerBar.css";
 
 export type HudOverlayMode = "none" | "images" | "menu" | "details";
@@ -235,6 +236,11 @@ export function HudComposerBar({
     void wiseHudSubmit(text, sessionId || snapshot.sessionId);
   }, [snapshot.sessionId]);
 
+  const repositoryMentionOptions = useMemo(
+    () => buildRepositoryMentionOptions(snapshot.repositories),
+    [snapshot.repositories],
+  );
+
   const focusEditor = useCallback(() => {
     if (detailsOpenRef.current) return;
     const editor = shellRef.current?.querySelector<HTMLElement>(
@@ -359,6 +365,7 @@ export function HudComposerBar({
               sessionExecutionEngine={snapshot.engine}
               allowSendWhileBusy
               hudChrome
+              projectRepositoryMentionOptions={repositoryMentionOptions}
               hudLeadingActions={contextPicker}
               hudTrailingActions={
                 <>

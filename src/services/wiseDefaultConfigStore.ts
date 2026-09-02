@@ -300,9 +300,9 @@ export interface WiseDefaultConfigV1 {
   repoPanelSplitMode: boolean;
   /** Split 模式下 Git 面板高度（px）；由拖动把手调整并持久化。 */
   repoPanelSplitHeightPx: number;
-  /** 在仓库列表中「打开终端」的快捷键 chord（如 Mod+Shift+T）；空=未设置。 */
+  /** 系统级全局「打开终端」快捷键 chord（如 Alt+KeyT）；空=未设置。 */
   openInTerminalShortcut: string;
-  /** 在仓库列表中「打开编辑器」的快捷键 chord（如 Mod+Shift+E）；空=未设置。 */
+  /** 系统级全局「打开编辑器」快捷键 chord（如 Alt+KeyE）；空=未设置。 */
   openInEditorShortcut: string;
   /** 内置终端主题：跟随应用 / 浅色 / 深色；默认跟随应用。 */
   terminalThemeMode: TerminalThemeMode;
@@ -2577,4 +2577,19 @@ export async function registerAtMentionGlobalShortcuts(
   lastRegisteredAtMentionShortcutsJson = serialized;
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("cmd_register_at_mention_shortcuts", { bindings });
+}
+
+export const GLOBAL_REPOSITORY_ACTION_SHORTCUT_EVENT = "global-repository-action-shortcut";
+
+let lastRegisteredRepositoryActionShortcutsJson = "";
+
+export async function registerRepositoryActionGlobalShortcuts(bindings: {
+  terminalShortcut: string;
+  editorShortcut: string;
+}): Promise<void> {
+  const serialized = JSON.stringify(bindings);
+  if (serialized === lastRegisteredRepositoryActionShortcutsJson) return;
+  lastRegisteredRepositoryActionShortcutsJson = serialized;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("cmd_register_repository_action_shortcuts", { bindings });
 }

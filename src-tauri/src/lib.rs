@@ -66,6 +66,8 @@ pub(crate) mod macos_terminal_detect;
 mod macos_webview_wake_recovery;
 mod at_mention_shortcuts;
 mod in_app_shortcuts;
+mod repository_action_shortcuts;
+mod shortcut_chord;
 mod lib_impl;
 mod main_window;
 mod mcp;

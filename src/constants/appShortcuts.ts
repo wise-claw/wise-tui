@@ -41,6 +41,11 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
         keys: "⌘⇧G · Ctrl+Shift+G",
         description: "把 HUD 吸到当前指针位置；尚未打开时会先进入 HUD。",
       },
+      {
+        keys: "可配置",
+        description:
+          "「默认配置 → 仓库操作快捷键」打开当前选中仓库的终端或编辑器；应用未聚焦时也可触发。",
+      },
     ],
   },
   {

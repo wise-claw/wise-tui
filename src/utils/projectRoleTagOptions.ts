@@ -24,14 +24,23 @@ export interface RepositoryMentionOption {
 /**
  * 将给定仓库列表转成可插入输入框的 @ 候选。独立仓库会话使用此入口，
  * 让用户无需先切换到多仓工作区也能向其他仓库派发任务。
+ * HUD 快照只有 id/name/path，同样可用。
  */
 export function buildRepositoryMentionOptions(
-  repositories: ReadonlyArray<Repository>,
+  repositories: ReadonlyArray<
+    Pick<Repository, "id" | "name" | "path"> &
+      Partial<Pick<Repository, "roleTags" | "repositoryType">>
+  >,
 ): RepositoryMentionOption[] {
   const options = repositories.map((repo) => {
     const mention = repositoryFolderBasename(repo);
     const label = mention;
-    const tags = getRoleTags(repo);
+    const tags =
+      repo.roleTags && repo.roleTags.length > 0
+        ? repo.roleTags.map((tag) => tag.trim()).filter(Boolean)
+        : repo.repositoryType?.trim()
+          ? [repo.repositoryType.trim()]
+          : [];
     const description = tags.length > 0 ? `仓库 · ${tags.join(", ")}` : "仓库";
     return {
       mention,

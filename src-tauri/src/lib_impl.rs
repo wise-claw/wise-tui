@@ -1,6 +1,7 @@
 use crate::{
     agent_registry, agents_explorer, app_state_commands, assistants, at_mention_shortcuts, cc_switch_import,
     chrome_devtools_monitor, chrome_page_monitor_bridge, stagehand_browse, in_app_shortcuts,
+    repository_action_shortcuts,
     claude_code_line_edits, claude_code_usage, claude_commands, codex_commands, codex_models, codex_rpc_commands, codex_rpc_disk, opencode_commands, opencode_acp_commands,
     qoder_commands, claude_config_dir,
     claude_llm_proxy, claude_model_profiles,
@@ -230,6 +231,7 @@ pub fn run() {
             // 这里不再常驻注册，由主窗口 focused/unfocused 时动态开关，避免在别的 App 里误触。
 
             at_mention_shortcuts::init(app.handle());
+            repository_action_shortcuts::init(app.handle());
             in_app_shortcuts::init(app.handle());
             for (label, win) in app.webview_windows() {
                 if main_window::is_main_workspace_window_label(&label)
@@ -924,6 +926,7 @@ pub fn run() {
             mcp::commands::mcp_test_connection,
             mcp::commands::mcp_supported_transports,
             at_mention_shortcuts::cmd_register_at_mention_shortcuts,
+            repository_action_shortcuts::cmd_register_repository_action_shortcuts,
         ])
         .build(tauri::tauri_build_context!())
         .expect("error while building tauri application")

@@ -103,6 +103,7 @@ import { LeftSidebarRequirementsPanelSlot } from "./LeftSidebar/LeftSidebarRequi
 import { LeftSidebarSortableSection } from "./LeftSidebar/LeftSidebarSortableSection";
 import { prefetchClaudeCodeToolsSurface } from "./ClaudeSessions/prefetchClaudeCodeToolsSurface";
 import { useChromePanelHoverHandlers } from "../hooks/useChromePanelHoverHandlers";
+import { useRepositoryActionShortcuts } from "../hooks/useRepositoryActionShortcuts";
 import { useMonitorSidebarFingerprints } from "../hooks/useMonitorSessionsForOverview";
 import "./GitPanel/index.css";
 import "./LeftSidebar/leftSidebarListPerformance.css";
@@ -314,6 +315,13 @@ export function LeftSidebar({
     },
     [openPathInPreferredEditor],
   );
+
+  useRepositoryActionShortcuts({
+    activeRepositoryId,
+    repositories,
+    onOpenInTerminal,
+    openRepositoryInPreferredEditor,
+  });
 
   const openProjectInPreferredEditor = useCallback(
     (project: ProjectItem) => {

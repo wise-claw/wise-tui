@@ -77,7 +77,7 @@ function DefaultConfigSection({ title, children }: { title: string; children: Re
  * 弹窗按"用户能看到的视觉区域"分组：
  * - 启动 / CLI 默认：新建会话的运行模式与 CLI 注入配置
  * - 左栏 / 运行面板 / Git 文件树：屏幕上的栏位与显隐
- * - 输入框 / 顶栏 / 仓库列表快捷键：交互元素自身的默认
+ * - 输入框 / 顶栏 / 仓库操作快捷键：交互元素自身的默认
  * - 开发实验：反馈神经网（默认折叠态）
  */
 export function DefaultConfigPanel() {
@@ -1193,16 +1193,16 @@ export function DefaultConfigPanel() {
         />
       ),
     },
-    // 仓库列表快捷键：在仓库列表中快速打开终端/编辑器。
+    // 仓库操作快捷键：系统级全局，未聚焦时也可打开当前选中仓库的终端 / 编辑器。
     {
       key: "repoShortcuts",
-      title: "仓库列表快捷键",
+      title: "仓库操作快捷键",
       content: (
         <>
           <DefaultConfigRow
             title="打开终端"
-            hint="仓库列表"
-            detail="在仓库列表中快速打开当前选中仓库的终端"
+            hint="全局"
+            detail="即使应用未聚焦，也会打开当前选中仓库的终端"
             control={
               <KeyShortcutCapture
                 value={openInTerminalShortcut.shortcut}
@@ -1215,8 +1215,8 @@ export function DefaultConfigPanel() {
           />
           <DefaultConfigRow
             title="打开编辑器"
-            hint="仓库列表"
-            detail="在仓库列表中快速用编辑器打开当前选中仓库"
+            hint="全局"
+            detail="即使应用未聚焦，也会用编辑器打开当前选中仓库"
             control={
               <KeyShortcutCapture
                 value={openInEditorShortcut.shortcut}

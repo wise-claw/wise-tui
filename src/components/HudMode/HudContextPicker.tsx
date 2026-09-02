@@ -518,7 +518,6 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
   const panel = (
     <div
       className="app-hud-context-panel"
-      style={{ padding: "16px 24px 18px", boxSizing: "border-box" }}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
     >
