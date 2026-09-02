@@ -15,12 +15,14 @@ import {
 import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { cancelClaudeInvocation, getClaudeConfigModel } from "../../services/claude";
 import { needsPublishBranch } from "../../services/gitCommitPullPush";
+import { gitCommitMessageContext } from "../../services/git";
 import { executeSessionEngineAndWait } from "../../services/sessionEngineInvocation";
 import type { GitFileStatus, GitStatusResponse } from "../../types";
 import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
 import {
   conventionalCommitPromptLines,
   normalizeConventionalCommitMessage,
+  parseAiConventionalCommitMessage,
 } from "../../utils/conventionalCommitMessage";
 import { openCodeReviewDrawer } from "../../constants/workflowUiEvents";
 import {
@@ -189,7 +191,11 @@ function DiffModeInner({
     unstagedTreeDirPaths,
   ]);
 
-  const generateCommitMessageByAi = useCallback(async (): Promise<{ message: string; aiFailed: boolean }> => {
+  const generateCommitMessageByAi = useCallback(async (): Promise<{
+    message: string;
+    aiFailed: boolean;
+    failureReason?: string;
+  }> => {
     const fallback = buildCommitDraftFromStatus(status);
     if (aiGenerationCancelledRef.current) {
       return { message: fallback, aiFailed: true };
@@ -207,6 +213,12 @@ function DiffModeInner({
     try {
       const engine = executionEngine ?? "claude";
       const model = engine === "claude" ? await getClaudeConfigModel(repositoryPath) : undefined;
+      let diffContext = "";
+      try {
+        diffContext = await gitCommitMessageContext(repositoryPath);
+      } catch {
+        // 保留文件清单降级路径；AI 调用仍可继续。
+      }
       const result = await executeSessionEngineAndWait({
         executionEngine: engine,
         repositoryPath,
@@ -219,6 +231,9 @@ function DiffModeInner({
           ahead > 0 ? `待推送提交数: ${ahead}` : "",
           "文件列表：",
           files || "- 无",
+          "",
+          "实际变更 diff（可能截断；以此判断改动目的）：",
+          diffContext || "（diff 不可用，请基于文件清单生成）",
         ]
           .filter(Boolean)
           .join("\n"),
@@ -232,15 +247,32 @@ function DiffModeInner({
         return { message: fallback, aiFailed: true };
       }
       if (!result.success) {
-        return { message: fallback, aiFailed: true };
+        const reason = result.errorLines
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .slice(-3)
+          .join(" · ");
+        return { message: fallback, aiFailed: true, failureReason: reason || `${engine} 调用失败` };
       }
       const text = extractClaudeInvocationFinalText(result.outputLines);
+      const parsed = parseAiConventionalCommitMessage(text);
+      if (!parsed) {
+        return {
+          message: fallback,
+          aiFailed: true,
+          failureReason: "AI 返回内容不符合 type: 中文摘要 格式",
+        };
+      }
       return {
-        message: normalizeConventionalCommitMessage(text || fallback),
+        message: parsed,
         aiFailed: false,
       };
-    } catch {
-      return { message: fallback, aiFailed: true };
+    } catch (error) {
+      return {
+        message: fallback,
+        aiFailed: true,
+        failureReason: error instanceof Error ? error.message : String(error),
+      };
     }
   }, [ahead, executionEngine, repositoryPath, status]);
 
@@ -254,7 +286,7 @@ function DiffModeInner({
       if (aiGenerationCancelledRef.current) return;
       setCommitMsg(generated.message);
       if (generated.aiFailed) {
-        message.warning("AI 生成失败，已填充默认提交信息。");
+        message.warning(`AI 生成失败，已填充默认提交信息：${generated.failureReason ?? "未知原因"}`);
       }
     } finally {
       if (!aiGenerationCancelledRef.current) {
@@ -319,7 +351,9 @@ function DiffModeInner({
           trimmed = generated.message;
           setCommitMsg(trimmed);
           if (generated.aiFailed) {
-            message.warning("AI 生成失败，已使用默认提交信息继续推送。");
+            message.warning(
+              `AI 生成失败，已使用默认提交信息继续推送：${generated.failureReason ?? "未知原因"}`,
+            );
           }
         } finally {
           if (!aiGenerationCancelledRef.current) {

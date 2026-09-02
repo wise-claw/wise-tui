@@ -134,6 +134,24 @@ function pickHeaderLine(raw: string): string {
   return "feat: 更新代码变更";
 }
 
+/**
+ * 严格校验 AI 返回值。仅接受包含中文摘要的 Conventional Commit 单行，
+ * 避免把错误提示、数字、日志或空输出误当成 AI 生成成功。
+ */
+export function parseAiConventionalCommitMessage(raw: string): string | null {
+  const cleaned = stripCodeFences(raw).trim();
+  if (!cleaned) return null;
+  const lines = cleaned
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const conventional = lines.find((line) => CONVENTIONAL_HEADER_RE.test(line));
+  if (!conventional) return null;
+  const normalized = normalizeHeaderLine(conventional);
+  const subject = normalized.replace(/^[^:]+:\s*/, "");
+  return HAS_CJK_RE.test(subject) ? normalized : null;
+}
+
 /** 规范化 AI/用户输入，输出单行 `type: 中文摘要`。 */
 export function normalizeConventionalCommitMessage(raw: string): string {
   return pickHeaderLine(raw);

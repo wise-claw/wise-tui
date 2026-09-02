@@ -9,6 +9,8 @@ export async function executeCodexCode(
   tabSessionId?: string,
   codexResumeSessionId?: string,
   forceNewSession?: boolean,
+  /** 短任务可强制只读且禁用审批，避免生成文本时意外修改仓库或等待交互。 */
+  readOnly?: boolean,
 ): Promise<void> {
   const normalizedResumeId = codexResumeSessionId?.trim() || null;
   return invoke("execute_codex_code", {
@@ -19,6 +21,7 @@ export async function executeCodexCode(
     tabSessionId,
     codexResumeSessionId: normalizedResumeId,
     forceNewSession: forceNewSession === true,
+    readOnly: readOnly === true,
   });
 }
 
@@ -35,6 +38,8 @@ export async function executeCodexRpcCode(
   tabSessionId?: string,
   codexResumeSessionId?: string,
   effort?: string,
+  /** 短任务可强制只读且禁用审批，避免生成文本时意外修改仓库或等待交互。 */
+  readOnly?: boolean,
 ): Promise<void> {
   const normalizedResumeId = codexResumeSessionId?.trim() || null;
   const normalizedEffort = effort?.trim() || undefined;
@@ -47,6 +52,7 @@ export async function executeCodexRpcCode(
       invocationKey,
       tabSessionId,
       codexResumeSessionId: normalizedResumeId,
+      readOnly: readOnly === true,
     },
   });
 }

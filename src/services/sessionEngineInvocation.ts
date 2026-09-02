@@ -12,10 +12,10 @@ import {
   type ClaudeInvocationResult,
 } from "./claude";
 import { executeCodexCode, executeCodexRpcCode } from "./codex";
+import { shutdownCodexRpc } from "./codexRpc";
 import { executeCursorCode } from "./cursorAgentExecution";
 import { executeOpencodeCode } from "./opencode";
 import { executeQoderCode } from "./qoder";
-import { getCodexRpcReasoningEffort } from "../stores/codexRpcReasoningEffortStore";
 
 /** 支持 oneshot 等待的引擎；Gemini 主会话派发尚未落地。 */
 export function supportsSessionEngineOneshotWait(engine: SessionExecutionEngine): boolean {
@@ -48,6 +48,7 @@ async function spawnSessionEngineOneshot(input: {
         undefined,
         undefined,
         true,
+        true,
       );
       return;
     case "codex-rpc":
@@ -58,7 +59,8 @@ async function spawnSessionEngineOneshot(input: {
         invocationKey,
         tabSessionId,
         undefined,
-        tabSessionId ? getCodexRpcReasoningEffort(tabSessionId) : undefined,
+        "low",
+        true,
       );
       return;
     case "cursor":
@@ -93,7 +95,17 @@ async function spawnSessionEngineOneshot(input: {
       );
       return;
     case "claude":
-      await executeClaudeCode(repositoryPath, prompt, model, invocationKey, "oneshot");
+      // 提交信息等短任务不需要项目 hooks、记忆或 stdio 权限控制通道。
+      await executeClaudeCode(
+        repositoryPath,
+        prompt,
+        model,
+        invocationKey,
+        "oneshot",
+        undefined,
+        undefined,
+        true,
+      );
       return;
     case "gemini":
       throw new Error("Gemini CLI 尚未支持 oneshot 调用");
@@ -180,25 +192,30 @@ export async function executeSessionEngineAndWait(params: {
       prompt: params.prompt,
       model: params.model,
       invocationKey,
+      // Codex RPC 的取消以 session id 定位；短任务直接复用 invocation key，
+      // 其它引擎也因此获得独立且可追踪的运行槽位。
+      tabSessionId: invocationKey,
     });
 
     const timeoutPromise = new Promise<ClaudeInvocationResult>((resolve) => {
       timeoutHandle = globalThis.setTimeout(() => {
         void (async () => {
           let cancelledHost = false;
-          if (engine === "claude") {
-            try {
+          try {
+            if (engine === "codex-rpc") {
+              await shutdownCodexRpc(invocationKey);
+              cancelledHost = true;
+            } else {
+              // 此命令使用所有 CLI 引擎共享的 invocation 子进程注册表，
+              // 名称虽沿用 Claude，实际也可终止 Codex/Cursor/OpenCode/Qoder。
               cancelledHost = await cancelClaudeInvocation(invocationKey);
-            } catch {
-              /* 非 Tauri 或命令失败：仍以超时结果为准 */
             }
+          } catch {
+            /* 非 Tauri、已结束或命令失败：仍以超时结果为准 */
           }
-          const cancelHint =
-            engine === "claude"
-              ? cancelledHost
-                ? "host subprocess terminated"
-                : "host had no matching invocation child (IPC unavailable or already exited)"
-              : `${engine} timeout without host cancel`;
+          const cancelHint = cancelledHost
+            ? "execution terminated"
+            : "no matching execution found (IPC unavailable or already exited)";
           resolve({
             success: false,
             outputLines: [...outputLines],

@@ -602,6 +602,9 @@ function GitRepoSectionInner({
       async () => {
         const outcome = await aiCommitPullPushRepository(repositoryPath, {
           executionEngine: entry.executionEngine,
+          onAiFallback: ({ executionEngine: engine, reason }) => {
+            message.warning(`提交信息 AI（${engine}）不可用，已改用规则生成：${reason}`);
+          },
         });
         if (outcome === "noop") {
           message.info(gitCommitPullPushNoopMessage());

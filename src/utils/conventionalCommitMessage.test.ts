@@ -6,6 +6,7 @@ import {
   isConventionalCommitPromptHistorySession,
   isConventionalCommitPromptText,
   normalizeConventionalCommitMessage,
+  parseAiConventionalCommitMessage,
 } from "./conventionalCommitMessage";
 
 describe("conventionalCommitMessage", () => {
@@ -32,6 +33,15 @@ describe("conventionalCommitMessage", () => {
   it("prefixes plain Chinese line with feat", () => {
     expect(normalizeConventionalCommitMessage("阻止文件上传超时")).toBe(
       "feat: 阻止文件上传超时",
+    );
+  });
+
+  it("strictly rejects malformed AI output and error text", () => {
+    expect(parseAiConventionalCommitMessage("2")).toBeNull();
+    expect(parseAiConventionalCommitMessage("Cursor ACP 连接失败，请重新登录")).toBeNull();
+    expect(parseAiConventionalCommitMessage("feat: add git flow")).toBeNull();
+    expect(parseAiConventionalCommitMessage("```\nfix: 修复推送流程\n```")).toBe(
+      "fix: 修复推送流程",
     );
   });
 

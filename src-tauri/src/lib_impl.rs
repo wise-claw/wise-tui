@@ -529,6 +529,7 @@ pub fn run() {
             code_review_commands::code_review_list_runs,
             git_commands::git_status,
             git_commands::git_status_summary,
+            git_commands::git_commit_message_context,
             git_commands::git_stage,
             git_commands::git_stage_paths,
             git_commands::git_stage_all,

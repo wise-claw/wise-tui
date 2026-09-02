@@ -2,13 +2,22 @@ import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine
 import { normalizeSessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import type { GitStatusResponse, GitStatusSummaryResponse } from "../types";
 import { extractClaudeInvocationFinalText } from "../utils/claudeInvocationText";
+import { humanizeClaudeError } from "../utils/humanizeClaudeError";
 import {
   buildConventionalCommitFallback,
   conventionalCommitPromptLines,
   normalizeConventionalCommitMessage,
+  parseAiConventionalCommitMessage,
 } from "../utils/conventionalCommitMessage";
 import { getClaudeConfigModel } from "./claude";
-import { gitCommit, gitPull, gitPush, gitStageAll, gitStatus } from "./git";
+import {
+  gitCommit,
+  gitCommitMessageContext,
+  gitPull,
+  gitPush,
+  gitStageAll,
+  gitStatus,
+} from "./git";
 import { executeSessionEngineAndWait } from "./sessionEngineInvocation";
 
 export function hasWorkingTreeChanges(status: GitStatusResponse): boolean {
@@ -145,6 +154,21 @@ export interface AiCommitPullPushHooks {
   executionEngine?: SessionExecutionEngine | null;
   /** 测试可注入；默认 `executeSessionEngineAndWait`。 */
   invokeEngine?: typeof executeSessionEngineAndWait;
+  /** AI 不可用或输出不合格、改用规则提交信息时通知调用方。 */
+  onAiFallback?: (detail: { executionEngine: SessionExecutionEngine; reason: string }) => void;
+}
+
+function compactAiFailureReason(lines: readonly string[], fallback: string): string {
+  const text = lines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-3)
+    .join(" · ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return fallback;
+  const compact = text.length > 180 ? `${text.slice(0, 180)}…` : text;
+  return humanizeClaudeError(compact);
 }
 
 /**
@@ -172,6 +196,12 @@ export async function aiCommitPullPushRepository(
     const changedFileLines = changedFiles
       .map((item) => `- ${item.path} (${item.status}, +${item.additions}, -${item.deletions})`)
       .join("\n");
+    let diffContext = "";
+    try {
+      diffContext = await gitCommitMessageContext(path);
+    } catch {
+      // diff 读取失败仍可基于文件清单生成；不阻断后续提交与推送。
+    }
     const prompt = [
       ...conventionalCommitPromptLines(),
       "",
@@ -181,24 +211,57 @@ export async function aiCommitPullPushRepository(
       `暂存文件数: ${status.staged.length}, 未暂存文件数: ${status.unstaged.length}`,
       "文件清单：",
       changedFileLines || "- 无",
+      "",
+      "实际变更 diff（可能截断；以此判断改动目的）：",
+      diffContext || "（diff 不可用，请基于文件清单生成）",
     ].join("\n");
     // Claude 才读仓库配置模型；其它引擎交给各自 CLI 默认，避免把 ANTHROPIC_MODEL 误传给 Codex 等。
-    const configuredModel =
-      executionEngine === "claude" ? await getClaudeConfigModel(path) : undefined;
+    let configuredModel: string | undefined;
+    if (executionEngine === "claude") {
+      try {
+        configuredModel = (await getClaudeConfigModel(path)) ?? undefined;
+      } catch {
+        // 配置读取失败时仍让 Claude CLI 使用自身默认模型；不应因此中断推送。
+      }
+    }
 
     const invokeEngine = hooks?.invokeEngine ?? executeSessionEngineAndWait;
-    const result = await invokeEngine({
-      executionEngine,
-      repositoryPath: path,
-      prompt,
-      model: configuredModel ?? undefined,
-      timeoutMs: 20_000,
-    });
-    if (result.success) {
-      const cleaned = extractClaudeInvocationFinalText(result.outputLines);
-      commitMessage = normalizeConventionalCommitMessage(cleaned || fallback);
+    try {
+      const result = await invokeEngine({
+        executionEngine,
+        repositoryPath: path,
+        prompt,
+        model: configuredModel ?? undefined,
+        timeoutMs: 45_000,
+      });
+      if (result.success) {
+        const cleaned = extractClaudeInvocationFinalText(result.outputLines);
+        const parsed = parseAiConventionalCommitMessage(cleaned);
+        if (parsed) {
+          commitMessage = parsed;
+        } else {
+          hooks?.onAiFallback?.({
+            executionEngine,
+            reason: "AI 返回内容不符合提交信息格式",
+          });
+        }
+      } else {
+        const outputReason = extractClaudeInvocationFinalText(result.outputLines);
+        hooks?.onAiFallback?.({
+          executionEngine,
+          reason: compactAiFailureReason(
+            [...result.errorLines, outputReason],
+            "执行环境调用失败",
+          ),
+        });
+      }
+    } catch (error) {
+      hooks?.onAiFallback?.({
+        executionEngine,
+        reason: error instanceof Error ? error.message : String(error),
+      });
     }
-    // AI 失败/超时：commitMessage 保持 fallback，流程继续
+    // AI 失败/超时/输出不合格：commitMessage 保持 fallback，流程继续
   }
 
   return commitPullPushRepository(path, commitMessage, { onPhase });

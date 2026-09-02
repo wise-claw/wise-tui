@@ -8,6 +8,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+const COMMIT_MESSAGE_DIFF_MAX_CHARS: usize = 24_000;
+
 /// 在后台线程执行 Git 阻塞操作，避免 `git push` / `commit` 等卡住 WebView 主线程。
 async fn run_git_blocking<T, F>(label: &'static str, f: F) -> Result<T, String>
 where
@@ -675,6 +677,68 @@ fn parse_numstat(repo_path: &str, args: &[&str]) -> HashMap<String, (usize, usiz
         map.insert(path.to_string(), (adds, dels));
     }
     map
+}
+
+fn collect_commit_message_diff(
+    repo_path: &str,
+    args: &[&str],
+    label: &str,
+) -> Result<String, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(args)
+        .output()
+        .map_err(|e| format!("无法读取{label}: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            format!("读取{label}失败")
+        } else {
+            format!("读取{label}失败: {stderr}")
+        });
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn truncate_commit_message_diff(input: String) -> String {
+    if input.chars().count() <= COMMIT_MESSAGE_DIFF_MAX_CHARS {
+        return input;
+    }
+    let truncated: String = input.chars().take(COMMIT_MESSAGE_DIFF_MAX_CHARS).collect();
+    format!("{truncated}\n... [diff 已截断]")
+}
+
+/// AI 生成提交信息所需的实际变更上下文。分别读取 staged / unstaged，避免只凭文件名猜测。
+#[tauri::command]
+pub(crate) async fn git_commit_message_context(path: String) -> Result<String, String> {
+    run_git_blocking("git_commit_message_context", move || {
+        let staged = collect_commit_message_diff(
+            &path,
+            &["diff", "--no-ext-diff", "--unified=1", "--cached"],
+            "已暂存 diff",
+        )?;
+        let unstaged = collect_commit_message_diff(
+            &path,
+            &["diff", "--no-ext-diff", "--unified=1"],
+            "未暂存 diff",
+        )?;
+        let combined = format!(
+            "## 已暂存变更\n{}\n\n## 未暂存变更\n{}",
+            if staged.trim().is_empty() {
+                "（无）"
+            } else {
+                staged.trim()
+            },
+            if unstaged.trim().is_empty() {
+                "（无）"
+            } else {
+                unstaged.trim()
+            },
+        );
+        Ok(truncate_commit_message_diff(combined))
+    })
+    .await
 }
 
 fn collect_staged_line_stats(repo_path: &str) -> HashMap<String, (usize, usize)> {

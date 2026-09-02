@@ -3,11 +3,19 @@ import { beforeEach, describe, expect, it, mock } from "bun:test";
 const listeners = new Map<string, (event: { payload: unknown }) => void>();
 const invoke = mock(async (cmd: string, args?: Record<string, unknown>) => {
   if (cmd === "cancel_claude_invocation") return false;
-  const invocationKey =
-    typeof args?.invocationKey === "string" ? args.invocationKey : undefined;
+  if (cmd === "shutdown_codex_rpc") return undefined;
+  const rpcParams = args?.params as Record<string, unknown> | undefined;
+  const invocationKey = typeof args?.invocationKey === "string"
+    ? args.invocationKey
+    : typeof rpcParams?.invocationKey === "string"
+      ? rpcParams.invocationKey
+      : undefined;
   if (!invocationKey) return undefined;
+  if (args?.prompt === "never-complete" || rpcParams?.prompt === "never-complete") {
+    return undefined;
+  }
   queueMicrotask(() => {
-    if (cmd === "execute_codex_code") {
+    if (cmd === "execute_codex_code" || cmd === "execute_codex_rpc") {
       listeners.get(`claude-output:invocation:${invocationKey}`)?.({
         payload: JSON.stringify({
           type: "assistant",
@@ -80,6 +88,7 @@ describe("sessionEngineInvocation", () => {
     expect(codexCall?.[1]).toMatchObject({
       projectPath: "/tmp/repo",
       forceNewSession: true,
+      readOnly: true,
     });
     expect(result.success).toBe(true);
     expect(result.outputLines.some((line) => line.includes("fix: polish"))).toBe(true);
@@ -97,7 +106,44 @@ describe("sessionEngineInvocation", () => {
     expect(claudeCall?.[1]).toMatchObject({
       projectPath: "/tmp/repo",
       connectionMode: "oneshot",
+      bare: true,
     });
     expect(result.success).toBe(true);
+  });
+
+  it("spawns Codex RPC as an isolated low-effort read-only task", async () => {
+    const result = await executeSessionEngineAndWait({
+      executionEngine: "codex-rpc",
+      repositoryPath: "/tmp/repo",
+      prompt: "generate commit",
+      timeoutMs: 5_000,
+    });
+
+    const rpcCall = invoke.mock.calls.find((call) => call[0] === "execute_codex_rpc");
+    const params = rpcCall?.[1]?.params as Record<string, unknown> | undefined;
+    expect(params).toMatchObject({
+      projectPath: "/tmp/repo",
+      effort: "low",
+      readOnly: true,
+    });
+    expect(params?.tabSessionId).toBe(params?.invocationKey);
+    expect(result.success).toBe(true);
+  });
+
+  it("shuts down a timed-out Codex RPC task", async () => {
+    const result = await executeSessionEngineAndWait({
+      executionEngine: "codex-rpc",
+      repositoryPath: "/tmp/repo",
+      prompt: "never-complete",
+      timeoutMs: 5,
+    });
+
+    expect(result.success).toBe(false);
+    const rpcCall = invoke.mock.calls.find((call) => call[0] === "execute_codex_rpc");
+    const invocationKey = (rpcCall?.[1]?.params as Record<string, unknown>)?.invocationKey;
+    expect(invoke.mock.calls.some((call) =>
+      call[0] === "shutdown_codex_rpc"
+      && (call[1]?.params as Record<string, unknown>)?.sessionId === invocationKey
+    )).toBe(true);
   });
 });

@@ -36,6 +36,13 @@ pub(crate) struct CodexDefaultSettings {
     pub approval_policy: Option<String>, // untrusted | on-request | never
 }
 
+pub(crate) fn codex_read_only_settings() -> CodexDefaultSettings {
+    CodexDefaultSettings {
+        sandbox_mode: Some("read-only".to_string()),
+        approval_policy: Some("never".to_string()),
+    }
+}
+
 /// 从 DB 读取全局 Codex 默认沙箱/审批设置；缺省或非法时返回 None。
 pub(crate) fn load_codex_default_settings(db: &WiseDb) -> Option<CodexDefaultSettings> {
     db.get_setting(CODEX_DEFAULT_SETTINGS_KEY)
@@ -672,6 +679,7 @@ pub(crate) async fn execute_codex_code(
     tab_session_id: Option<String>,
     codex_resume_session_id: Option<String>,
     force_new_session: Option<bool>,
+    read_only: Option<bool>,
 ) -> Result<(), String> {
     let proxy_model = crate::opencode_go_proxy::apply_codex_bridge_for_spawn(&db)?;
     let use_wise_bridge = proxy_model.is_some();
@@ -715,7 +723,11 @@ pub(crate) async fn execute_codex_code(
     let path_env = codex_merged_path_env();
     let spawn_env_overrides = crate::opencode_go_proxy::codex_spawn_env_overrides(&db);
     // 全局默认配置：codex 启动沙箱/审批设置。DB 读失败或 JSON 非法时回退 None（现状）。
-    let default_settings = load_codex_default_settings(&db);
+    let default_settings = if read_only.unwrap_or(false) {
+        Some(codex_read_only_settings())
+    } else {
+        load_codex_default_settings(&db)
+    };
     let spawn_params = CodexSpawnParams {
         codex_path,
         project_path: project_path.clone(),

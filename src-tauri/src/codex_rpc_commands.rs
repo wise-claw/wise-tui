@@ -18,7 +18,9 @@ use crate::claude_events::{
 };
 use crate::claude_model_profiles::ensure_codex_profile_applied_for_model;
 use crate::codex_binary::find_codex_binary;
-use crate::codex_commands::{format_codex_rpc_error_line, load_codex_default_settings};
+use crate::codex_commands::{
+    codex_read_only_settings, format_codex_rpc_error_line, load_codex_default_settings,
+};
 use crate::codex_config_dir::{
     codex_provider_switched, ensure_codex_project_trusted, read_codex_profile_envelope,
 };
@@ -95,6 +97,9 @@ pub(crate) struct ExecuteCodexRpcParams {
     tab_session_id: Option<String>,
     #[serde(default)]
     codex_resume_session_id: Option<String>,
+    /// 提交信息等短任务强制 read-only + never，避免等待审批或修改仓库。
+    #[serde(default)]
+    read_only: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -331,7 +336,11 @@ pub(crate) async fn execute_codex_rpc(
         .filter(|s| !s.is_empty())
         .filter(|s| is_codex_rpc_thread_id(s));
 
-    let default_settings = load_codex_default_settings(&db);
+    let default_settings = if params.read_only {
+        Some(codex_read_only_settings())
+    } else {
+        load_codex_default_settings(&db)
+    };
     let thread_config = build_codex_rpc_thread_config(default_settings.as_ref());
 
     // Resolve effective model for vision vs path-only turn shaping.

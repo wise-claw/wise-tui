@@ -43,6 +43,11 @@ export async function gitStatusSummary(path: string): Promise<GitStatusSummaryRe
   );
 }
 
+/** 供 AI 提交信息生成使用的 staged / unstaged 实际 diff（后端限制最大长度）。 */
+export async function gitCommitMessageContext(path: string): Promise<string> {
+  return invoke<string>("git_commit_message_context", { path });
+}
+
 export async function gitStage(path: string, filePath: string): Promise<void> {
   return invoke("git_stage", { path, filePath });
 }
