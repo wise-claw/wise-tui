@@ -168,7 +168,10 @@ import {
   isMultiRepoProject,
 } from "./utils/workspaceMode";
 import { employeeInProjectScope, shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
-import { buildProjectRoleTagOptions, buildProjectRepositoryMentionOptions } from "./utils/projectRoleTagOptions";
+import {
+  buildProjectRoleTagOptions,
+  buildRepositoryMentionOptions,
+} from "./utils/projectRoleTagOptions";
 import {
   resolveTeamPanelEmployeeMonitorItems,
   filterRepositoryMemberMonitorItemsBySelection,
@@ -1542,7 +1545,7 @@ export default function App() {
       activeAssistantId: viewMode.view.kind === "cockpit" ? cockpitActiveAssistantId : null,
     });
 
-  /** @-mention 派发拦截：wise_trellis 项目下，`@<roleTag>` 命中项目仓库时改走多仓库 trellis-implement 直派；其他场景回退到原 send 路径。 */
+  /** @-mention 派发拦截：命中工作区成员或已接入仓库时直派；其他 @ 类型回退到原 send 路径。 */
   const handleSendMessageWithAtMention = useCallback(
     (prompt: string) => {
       const activeProject = activeProjectId
@@ -1553,7 +1556,7 @@ export default function App() {
         repositories,
         prompt,
       });
-      if (plan.kind === "dispatch" && activeProject && activeSessionId) {
+      if (plan.kind === "dispatch" && activeSessionId) {
         void dispatchAtMentionPromptToRepos({
           project: activeProject,
           matchedRepos: plan.matchedRepos,
@@ -1800,11 +1803,8 @@ export default function App() {
     return buildProjectRoleTagOptions(activeProject, repositories);
   }, [activeProject, repositories]);
   const composerProjectRepositoryMentionOptions = useMemo(() => {
-    if (!shouldHideEmployeeUi(activeProject)) {
-      return [];
-    }
-    return buildProjectRepositoryMentionOptions(activeProject, repositories);
-  }, [activeProject, repositories]);
+    return buildRepositoryMentionOptions(repositories);
+  }, [repositories]);
   const composerHideEmployeesInAtMode = false;
   const selectableWorkflowEmployeeIds = useMemo(
     () => employeeMonitorItems.map((item) => item.employeeId),

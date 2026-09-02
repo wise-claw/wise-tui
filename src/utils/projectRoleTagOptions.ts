@@ -21,18 +21,14 @@ export interface RepositoryMentionOption {
   repositoryId: number;
 }
 
-const MAX_REPO_OPTIONS = 32;
-
 /**
- * 活动项目成员仓库列表，供 @ 补全与按仓库名派发。
+ * 将给定仓库列表转成可插入输入框的 @ 候选。独立仓库会话使用此入口，
+ * 让用户无需先切换到多仓工作区也能向其他仓库派发任务。
  */
-export function buildProjectRepositoryMentionOptions(
-  project: ProjectItem | null | undefined,
+export function buildRepositoryMentionOptions(
   repositories: ReadonlyArray<Repository>,
 ): RepositoryMentionOption[] {
-  if (!project) return [];
-  const memberRepos = repositories.filter((repo) => project.repositoryIds.includes(repo.id));
-  const options = memberRepos.map((repo) => {
+  const options = repositories.map((repo) => {
     const mention = repositoryFolderBasename(repo);
     const label = mention;
     const tags = getRoleTags(repo);
@@ -45,7 +41,19 @@ export function buildProjectRepositoryMentionOptions(
     };
   });
   options.sort((a, b) => a.label.localeCompare(b.label, "en", { sensitivity: "base" }));
-  return options.slice(0, MAX_REPO_OPTIONS);
+  return options;
+}
+
+/**
+ * 活动项目成员仓库列表，供 @ 补全与按仓库名派发。
+ */
+export function buildProjectRepositoryMentionOptions(
+  project: ProjectItem | null | undefined,
+  repositories: ReadonlyArray<Repository>,
+): RepositoryMentionOption[] {
+  if (!project) return [];
+  const memberRepos = repositories.filter((repo) => project.repositoryIds.includes(repo.id));
+  return buildRepositoryMentionOptions(memberRepos);
 }
 
 const MAX_OPTIONS = 32;

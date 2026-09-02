@@ -3,7 +3,7 @@ import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine
 import { normalizeTerminalDispatchName } from "../services/terminalDispatch";
 
 export type AtMentionPopoverOption = {
-  type: "agent" | "team" | "file" | "command" | "execution_engine";
+  type: "agent" | "team" | "repository" | "file" | "command" | "execution_engine";
   name?: string;
   executionEngine?: SessionExecutionEngine;
 };

@@ -139,12 +139,17 @@ describe("resolveReposByMention", () => {
   const r2 = repo({ id: 2, path: "/p/hlhb-int", name: "hlhb-int", roleTags: ["backend"] });
   const p = project({ id: "p", repositoryIds: [1, 2] });
 
-  test("prefers roleTag match over repo name", () => {
+  test("prefers an exact workspace repo name over a project roleTag", () => {
     const byName = repo({ id: 3, path: "/p/frontend", name: "frontend", roleTags: ["api"] });
     const projectWithBoth = project({ id: "p2", repositoryIds: [1, 3] });
     expect(resolveReposByMention("frontend", projectWithBoth, [r1, byName]).map((r) => r.id)).toEqual([
-      1,
+      3,
     ]);
+  });
+
+  test("matches repositories outside the active project", () => {
+    const outside = repo({ id: 8, path: "/other/mobile", name: "mobile" });
+    expect(resolveReposByMention("mobile", p, [r1, r2, outside]).map((r) => r.id)).toEqual([8]);
   });
 
   test("matches repo folder basename when roleTag misses", () => {
@@ -197,6 +202,21 @@ describe("planAtMentionDispatch", () => {
     }
   });
 
+  test("dispatches for legacy projects whose missing sddMode defaults to wise_trellis", () => {
+    const legacyRepo = repo({ id: 4, path: "/p/legacy-web", name: "legacy-web" });
+    const plan = planAtMentionDispatch({
+      activeProject: project({ id: "legacy", repositoryIds: [4] }),
+      repositories: [legacyRepo],
+      prompt: "@legacy-web 修复登录页",
+    });
+
+    expect(plan.kind).toBe("dispatch");
+    if (plan.kind === "dispatch") {
+      expect(plan.matchedRepos.map((r) => r.id)).toEqual([4]);
+      expect(plan.body).toBe("修复登录页");
+    }
+  });
+
   test("dispatch fans out across multiple tags", () => {
     const plan = planAtMentionDispatch({
       activeProject: wiseProject,
@@ -209,13 +229,45 @@ describe("planAtMentionDispatch", () => {
     }
   });
 
-  test("fallthrough when project not wise_trellis", () => {
+  test("dispatches to a workspace repository outside the active project", () => {
+    const outside = repo({ id: 7, path: "/workspace/mobile", name: "mobile" });
+    const plan = planAtMentionDispatch({
+      activeProject: wiseProject,
+      repositories: [r1, r2, outside],
+      prompt: "@mobile 修复构建",
+    });
+
+    expect(plan.kind).toBe("dispatch");
+    if (plan.kind === "dispatch") {
+      expect(plan.matchedRepos.map((repo) => repo.id)).toEqual([7]);
+      expect(plan.body).toBe("修复构建");
+    }
+  });
+
+  test("dispatches repository mentions in project_owned workspaces", () => {
     const plan = planAtMentionDispatch({
       activeProject: project({ id: "p", sddMode: "project_owned", repositoryIds: [1] }),
       repositories: [r1],
-      prompt: "@frontend 改按钮",
+      prompt: "@r1 改按钮",
     });
-    expect(plan).toEqual({ kind: "fallthrough", reason: "not_wise_trellis" });
+    expect(plan.kind).toBe("dispatch");
+    if (plan.kind === "dispatch") {
+      expect(plan.matchedRepos.map((repo) => repo.id)).toEqual([1]);
+    }
+  });
+
+  test("dispatches repository mentions without an active project", () => {
+    const standalone = repo({ id: 9, path: "/work/standalone", name: "standalone" });
+    const plan = planAtMentionDispatch({
+      activeProject: null,
+      repositories: [standalone],
+      prompt: "@standalone 跑完整测试",
+    });
+    expect(plan.kind).toBe("dispatch");
+    if (plan.kind === "dispatch") {
+      expect(plan.matchedRepos.map((repo) => repo.id)).toEqual([9]);
+      expect(plan.body).toBe("跑完整测试");
+    }
   });
 
   test("fallthrough when no mentions", () => {
@@ -249,13 +301,13 @@ describe("planAtMentionDispatch", () => {
     }
   });
 
-  test("fallthrough when activeProject is null", () => {
+  test("silently falls through for non-repository mentions without an active project", () => {
     const plan = planAtMentionDispatch({
       activeProject: null,
       repositories: [r1],
       prompt: "@frontend 改按钮",
     });
-    expect(plan).toEqual({ kind: "fallthrough", reason: "not_wise_trellis" });
+    expect(plan).toEqual({ kind: "fallthrough", reason: "no_mentions" });
   });
 });
 

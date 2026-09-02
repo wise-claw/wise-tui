@@ -20,13 +20,14 @@ import {
 } from "./slashCommandMatch";
 
 export interface SlashOption {
-  type: "agent" | "team" | "file" | "command" | "execution_engine";
+  type: "agent" | "team" | "repository" | "file" | "command" | "execution_engine";
   label: string;
   description?: string;
   path?: string;
   isDir?: boolean;
   name?: string;
   workflowId?: string;
+  repositoryId?: number;
   group?: EngineSlashCatalogGroup | "skill" | "plugin" | "plugin-cmd";
   executionEngine?: SessionExecutionEngine;
   executionEngineAvailable?: boolean;
@@ -363,6 +364,12 @@ export function getFilteredAtOptions(
   fileResults: SlashOption[],
   employeeOptions: Array<{ id: string; name: string }>,
   teamOptions: Array<{ id: string; name: string }>,
+  repositoryOptions: ReadonlyArray<{
+    mention: string;
+    label: string;
+    description: string;
+    repositoryId: number;
+  }> = [],
   hideEmployeesInAtMode = false,
   codexAvailable = true,
   cursorAvailable = true,
@@ -375,6 +382,14 @@ export function getFilteredAtOptions(
     label: team.name,
     name: team.name,
     workflowId: team.id,
+  }));
+
+  const repositories: SlashOption[] = repositoryOptions.map((repository) => ({
+    type: "repository" as const,
+    label: repository.label,
+    name: repository.mention,
+    description: repository.description,
+    repositoryId: repository.repositoryId,
   }));
 
   const executionEngines: SlashOption[] = listExecutionEnvironmentEngineMentionOptions({
@@ -411,6 +426,15 @@ export function getFilteredAtOptions(
         "执行环境".includes(q) ||
         "派发".includes(q),
     ),
+    ...repositories.filter(
+      (row) =>
+        !q ||
+        row.label.toLowerCase().includes(q) ||
+        (row.name ?? "").toLowerCase().includes(q) ||
+        (row.description ?? "").toLowerCase().includes(q) ||
+        "仓库".includes(q) ||
+        "派发".includes(q),
+    ),
     ...agents.filter((a) => !q || a.label.toLowerCase().includes(q)),
     ...teams.filter((t) => !q || t.label.toLowerCase().includes(q)),
     ...fileResults.filter(
@@ -418,5 +442,5 @@ export function getFilteredAtOptions(
     ),
   ];
 
-  return filtered.slice(0, 20);
+  return filtered;
 }

@@ -63,7 +63,7 @@ interface SlashPopoverProps {
   teamOptions?: Array<{ id: string; name: string }>;
   /** wise_trellis 项目下注入的角色标签选项；当前 @ 面板暂不展示。 */
   projectRoleTagOptions?: ReadonlyArray<unknown>;
-  /** wise_trellis 项目下可 @ 的仓库列表（暂不在 @ 面板展示）。 */
+  /** wise_trellis 项目下可 @ 并直接派发任务的仓库列表。 */
   projectRepositoryMentionOptions?: ReadonlyArray<RepositoryMentionOption>;
   /** 当 wise_trellis 项目隐藏员工 UI 时，把 @-mode 的员工行一并去除。 */
   hideEmployeesInAtMode?: boolean;
@@ -161,7 +161,7 @@ export function SlashPopover({
   employeeOptions = [],
   teamOptions = [],
   projectRoleTagOptions: _projectRoleTagOptions = [],
-  projectRepositoryMentionOptions: _projectRepositoryMentionOptions = [],
+  projectRepositoryMentionOptions = [],
   hideEmployeesInAtMode = false,
   codexAvailable = true,
   cursorAvailable = true,
@@ -175,6 +175,7 @@ export function SlashPopover({
   layout = "anchored",
 }: SlashPopoverProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const popoverListRef = React.useRef<HTMLDivElement | null>(null);
   const [fileResults, setFileResults] = useState<SlashOption[]>([]);
   const [fileLoading, setFileLoading] = useState(false);
   const [slashCatalogOptions, setSlashCatalogOptions] = useState(EMPTY_SLASH_OPTIONS);
@@ -294,6 +295,13 @@ export function SlashPopover({
     () => teamOptions.map((t) => `${t.id}:${t.name}`).join("\n"),
     [teamOptions],
   );
+  const repositoryOptionsKey = useMemo(
+    () =>
+      projectRepositoryMentionOptions
+        .map((repository) => `${repository.repositoryId}:${repository.mention}:${repository.label}`)
+        .join("\n"),
+    [projectRepositoryMentionOptions],
+  );
   const fileResultsKey = useMemo(
     () => fileResults.map((f) => `${f.path ?? ""}:${f.label}`).join("\n"),
     [fileResults],
@@ -343,6 +351,7 @@ export function SlashPopover({
       fileResults,
       employeeOptions,
       teamOptions,
+      projectRepositoryMentionOptions,
       hideEmployeesInAtMode,
       codexAvailable,
       cursorAvailable,
@@ -360,6 +369,8 @@ export function SlashPopover({
     employeeOptionsKey,
     teamOptions,
     teamOptionsKey,
+    projectRepositoryMentionOptions,
+    repositoryOptionsKey,
     hideEmployeesInAtMode,
     codexAvailable,
     cursorAvailable,
@@ -407,6 +418,8 @@ export function SlashPopover({
           ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
         } else if (option.type === "team" && option.name) {
           ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
+        } else if (option.type === "repository" && option.name) {
+          ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
         } else if (option.type === "execution_engine" && option.name) {
           if (hasExecutionEnvironmentMention(plain)) {
             const { text: strippedText } = stripExecutionEnvironmentMention(plain);
@@ -443,7 +456,10 @@ export function SlashPopover({
     const handleKeyDown = (e: KeyboardEvent) => {
       const root = surfaceRef.current?.anchorEl?.();
       const target = e.target as Node | null;
-      if (!root || !target || !root.contains(target)) return;
+      const active = document.activeElement;
+      const eventComesFromSurface = Boolean(target && root?.contains(target));
+      const focusIsWithinSurface = Boolean(active && root?.contains(active));
+      if (!root || (!eventComesFromSurface && !focusIsWithinSurface)) return;
 
       if (e.key === "Tab" && !e.shiftKey) {
         e.preventDefault();
@@ -475,9 +491,18 @@ export function SlashPopover({
       }
     };
 
-    document.addEventListener("keydown", handleKeyDown, { capture: true });
-    return () => document.removeEventListener("keydown", handleKeyDown, { capture: true });
+    // 必须在 window 捕获阶段先于 Semi/Tiptap 处理方向键，否则编辑器可能移动光标并截断事件。
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
   }, [mode, options, optionsFingerprint, selectedIndex, handleSelect, onDismiss, surfaceRef]);
+
+  useEffect(() => {
+    if (!mode) return;
+    const selected = popoverListRef.current?.querySelector<HTMLElement>(
+      `[data-slash-option-index="${selectedIndex}"]`,
+    );
+    selected?.scrollIntoView({ block: "nearest" });
+  }, [mode, selectedIndex, optionsFingerprint]);
 
   if (!mode) return null;
   if (typeof document === "undefined") return null;
@@ -571,7 +596,10 @@ export function SlashPopover({
 
   return mountPopover(
     <div
+      ref={popoverListRef}
       className={popoverClassName}
+      role="listbox"
+      aria-label={mode === "at" ? "@ 提及选项" : "命令选项"}
       style={{
         ...popoverBaseStyle,
         maxHeight: inline ? 280 : "400px",
@@ -587,6 +615,9 @@ export function SlashPopover({
               {section.items.map(({ option, flatIndex }) => (
                 <div
                   key={`${option.type}-${option.group ?? ""}-${option.label}-${option.path ?? ""}-${option.workflowId ?? ""}`}
+                  data-slash-option-index={flatIndex}
+                  role="option"
+                  aria-selected={flatIndex === selectedIndex}
                   className={`app-claude-slash-popover-item ${flatIndex === selectedIndex ? "app-claude-slash-popover-item--active" : ""}`}
                   onClick={() => handleSelect(option)}
                   onMouseEnter={() => setSelectedIndex(flatIndex)}
@@ -615,15 +646,23 @@ export function SlashPopover({
             opt.type === "agent" &&
             (i === 0 || options[i - 1]?.type !== "execution_engine") &&
             options[i - 1]?.type !== "agent";
+          const showRepositoryTitle =
+            opt.type === "repository" && options[i - 1]?.type !== "repository";
           return (
-            <div key={`${opt.type}-${opt.group ?? ""}-${opt.label}-${opt.path ?? ""}-${opt.workflowId ?? ""}`}>
+            <div key={`${opt.type}-${opt.group ?? ""}-${opt.label}-${opt.path ?? ""}-${opt.workflowId ?? ""}-${opt.repositoryId ?? ""}`}>
               {showExecutionEngineTitle ? (
                 <div className="app-claude-slash-popover-group-title">执行环境</div>
               ) : null}
               {showEmployeeTitle ? (
                 <div className="app-claude-slash-popover-group-title">终端</div>
               ) : null}
+              {showRepositoryTitle ? (
+                <div className="app-claude-slash-popover-group-title">仓库 · 选择后派发任务</div>
+              ) : null}
               <div
+                data-slash-option-index={i}
+                role="option"
+                aria-selected={i === selectedIndex}
                 className={`app-claude-slash-popover-item-wrap${
                   i === selectedIndex ? " app-claude-slash-popover-item-wrap--active" : ""
                 }`}
@@ -730,6 +769,23 @@ function renderOptionContent(opt: SlashOption, isAtMentionDefault = false) {
               <path d="M2.5 17c0-2 2.5-3.5 4.5-3.5s4.5 1.5 4.5 3.5" />
               <path d="M16.5 17c0-1.5-1.27-2.73-3-3" />
             </svg>
+          ) : opt.type === "repository" ? (
+            <svg
+              className="app-claude-slash-popover__kind-svg"
+              width="16"
+              height="16"
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ display: "block" }}
+              aria-hidden
+            >
+              <path d="M3 5.5 10 2l7 3.5v9L10 18l-7-3.5v-9Z" />
+              <path d="m3 5.5 7 3.5 7-3.5M10 9v9" />
+            </svg>
           ) : (
             <svg
               className="app-claude-slash-popover__kind-svg"
@@ -799,7 +855,10 @@ function renderOptionContent(opt: SlashOption, isAtMentionDefault = false) {
             {opt.description ?? opt.path}
           </span>
         )}
-        {(opt.type === "command" || opt.type === "execution_engine") && opt.description && (
+        {(opt.type === "command" ||
+          opt.type === "execution_engine" ||
+          opt.type === "repository") &&
+          opt.description && (
           <span
             style={{
               color: "var(--ant-color-text-tertiary)",
@@ -826,6 +885,11 @@ function renderOptionContent(opt: SlashOption, isAtMentionDefault = false) {
         {opt.type === "team" && (
           <span className="app-claude-slash-popover__kind" title="工作流">
             <MentionKindTeamIcon />
+          </span>
+        )}
+        {opt.type === "repository" && (
+          <span className="app-claude-slash-popover__kind" title="仓库">
+            仓库
           </span>
         )}
       </span>

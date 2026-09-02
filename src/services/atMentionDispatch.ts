@@ -1,7 +1,7 @@
 import type { ProjectItem, Repository } from "../types";
 import type { TrellisExecutionMetadata } from "../types/workflow";
 import { repositoryFolderBasename } from "../utils/repositoryType";
-import { getRoleTags } from "../utils/projectRepositoryRoles";
+import { getProjectSddMode, getRoleTags } from "../utils/projectRepositoryRoles";
 import { executeClaudeCodeAndWait, type ClaudeInvocationResult } from "./claude";
 import { gitWorktreeAddOmcBatch } from "./git";
 
@@ -91,39 +91,37 @@ function repositoryMentionAliases(repo: Repository): string[] {
 }
 
 /**
- * 在项目成员仓库中查找匹配标签或仓库名的仓库（大小写不敏感）。
- * 先匹配 roleTag，再匹配目录名 / 展示名。
+ * 在工作区中查找匹配仓库名，或在当前项目中查找匹配角色标签（大小写不敏感）。
+ * 仓库目录名 / 展示名优先且覆盖整个工作区；没有仓库名命中时，再按当前项目 roleTag 匹配。
  */
 export function resolveReposByMention(
   tag: string,
   project: ProjectItem,
   repositories: ReadonlyArray<Repository>,
 ): Repository[] {
-  const byRole = resolveReposByTag(tag, project, repositories);
-  if (byRole.length > 0) return byRole;
-
   const needle = tag.trim().toLowerCase();
   if (!needle) return [];
 
-  const memberIds = new Set(project.repositoryIds);
-  return repositories.filter((repo) => {
-    if (!memberIds.has(repo.id)) return false;
-    return repositoryMentionAliases(repo).includes(needle);
-  });
+  const byRepositoryName = repositories.filter((repo) =>
+    repositoryMentionAliases(repo).includes(needle),
+  );
+  if (byRepositoryName.length > 0) return byRepositoryName;
+
+  return resolveReposByTag(tag, project, repositories);
 }
 
 export type AtMentionDispatchPlan =
   | { kind: "dispatch"; mentionedTags: string[]; matchedRepos: Repository[]; body: string }
-  | { kind: "fallthrough"; reason: "not_wise_trellis" | "no_mentions" | "empty_body" }
+  | { kind: "fallthrough"; reason: "no_mentions" | "empty_body" }
   | { kind: "warn_then_fallthrough"; mentionedTags: string[]; body: string };
 
 /**
  * 计算给定 prompt 在当前项目下应该走哪条路径：派发、回退、或先提示再回退。
  *
- * - 项目非 `wise_trellis` → fallthrough
  * - 无合法 mention → fallthrough
  * - 有 mention 但 strippedBody 为空 → fallthrough（视为单纯 `@frontend` 无指令）
- * - 有 mention 但无任何匹配仓库 → warn_then_fallthrough
+ * - 工作区内有 mention 但无任何匹配仓库 → warn_then_fallthrough
+ * - 独立仓库语境中无匹配仓库 → 静默 fallthrough（可能是 @终端 / @文件）
  * - 至少一条 mention 匹配 → dispatch
  */
 export function planAtMentionDispatch(args: {
@@ -132,9 +130,6 @@ export function planAtMentionDispatch(args: {
   prompt: string;
 }): AtMentionDispatchPlan {
   const { activeProject, repositories, prompt } = args;
-  if (!activeProject || activeProject.sddMode !== "wise_trellis") {
-    return { kind: "fallthrough", reason: "not_wise_trellis" };
-  }
   const parsed = parseAtMentions(prompt);
   if (parsed.mentions.length === 0) {
     return { kind: "fallthrough", reason: "no_mentions" };
@@ -153,11 +148,19 @@ export function planAtMentionDispatch(args: {
   }
   const matchedReposById = new Map<number, Repository>();
   for (const tag of mentionedTags) {
-    for (const repo of resolveReposByMention(tag, activeProject, repositories)) {
+    const matched = activeProject
+      ? resolveReposByMention(tag, activeProject, repositories)
+      : repositories.filter((repo) =>
+          repositoryMentionAliases(repo).includes(tag.trim().toLowerCase()),
+        );
+    for (const repo of matched) {
       matchedReposById.set(repo.id, repo);
     }
   }
   if (matchedReposById.size === 0) {
+    if (!activeProject) {
+      return { kind: "fallthrough", reason: "no_mentions" };
+    }
     return { kind: "warn_then_fallthrough", mentionedTags, body: parsed.strippedBody };
   }
   return {
@@ -193,7 +196,7 @@ export type WorktreeFn = (
 ) => Promise<{ worktreePath: string; branchName: string }>;
 
 export interface DispatchAtMentionPromptArgs {
-  project: ProjectItem;
+  project?: ProjectItem | null;
   matchedRepos: ReadonlyArray<Repository>;
   body: string;
   sessionId: string;
@@ -208,8 +211,14 @@ export interface DispatchAtMentionPromptArgs {
 
 const DEFAULT_DISPATCH_TIMEOUT_MS = 300_000;
 
-function buildSubagentPrompt(project: ProjectItem, repo: Repository, body: string): string {
-  const projectLine = `Active project: ${project.name} (rootPath: ${project.rootPath ?? "(unset)"}).`;
+function buildSubagentPrompt(
+  project: ProjectItem | null | undefined,
+  repo: Repository,
+  body: string,
+): string {
+  const projectLine = project
+    ? `Active project: ${project.name} (rootPath: ${project.rootPath ?? "(unset)"}).`
+    : "Active project: standalone repository context.";
   const repoLine = `Target repository: ${repo.name} at ${repo.path}.`;
   const roleLine = `Role tags: ${getRoleTags(repo).join(", ") || "(none)"}.`;
   return `${projectLine}\n${repoLine}\n${roleLine}\n\nInstruction:\n${body}`;
@@ -232,6 +241,9 @@ export async function dispatchAtMentionPromptToRepos(
   const results = await Promise.all(
     args.matchedRepos.map(async (repo) => {
       const taskId = `at-mention-${baseTs}-${repo.id}`;
+      const trellisDispatch = Boolean(
+        args.project && getProjectSddMode(args.project) === "wise_trellis",
+      );
       const executionMetadata: TrellisExecutionMetadata = {
         ownerKind: "repository",
         ownerRepositoryId: repo.id,
@@ -239,7 +251,7 @@ export async function dispatchAtMentionPromptToRepos(
         ownerRepositoryPath: repo.path,
         repositoryType: repo.repositoryType,
         stage: "implement",
-        subagentType: "trellis-implement",
+        subagentType: trellisDispatch ? "trellis-implement" : "executor",
         taskId,
       };
       const prompt = buildSubagentPrompt(args.project, repo, args.body);
@@ -254,7 +266,7 @@ export async function dispatchAtMentionPromptToRepos(
           streamUi: {
             sessionId: args.sessionId,
             repositoryPath: repo.path,
-            templateId: "trellis",
+            templateId: trellisDispatch ? "trellis" : "repository-dispatch",
             attempt,
             omcInvocationSource: "workflow",
             ...executionMetadata,

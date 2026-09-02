@@ -3747,7 +3747,7 @@ function ComposerInner({
                   placeholder={
                     hudChrome
                       ? "@ 提及，/ 命令，Enter 发送"
-                      : "@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条"
+                      : "@ 仓库/终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条"
                   }
                   keepSkillAfterSend={false}
                   // 必须挂载 Upload：Semi paste→manualUpload 依赖 uploadRef；纸夹按钮 CSS 隐藏，改走我们的 +

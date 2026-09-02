@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { ProjectItem, Repository } from "../types";
-import { buildProjectRoleTagOptions, buildProjectRepositoryMentionOptions } from "./projectRoleTagOptions";
+import {
+  buildProjectRoleTagOptions,
+  buildProjectRepositoryMentionOptions,
+  buildRepositoryMentionOptions,
+} from "./projectRoleTagOptions";
 
 function repo(input: Partial<Repository> & Pick<Repository, "id" | "path">): Repository {
   return {
@@ -162,5 +166,30 @@ describe("buildProjectRepositoryMentionOptions", () => {
     ]);
     expect(opts).toHaveLength(1);
     expect(opts[0]?.mention).toBe("a");
+  });
+});
+
+describe("buildRepositoryMentionOptions", () => {
+  test("lists repositories for standalone repository sessions", () => {
+    const opts = buildRepositoryMentionOptions([
+      repo({ id: 2, path: "/work/api", roleTags: ["backend"] }),
+      repo({ id: 1, path: "/work/web", roleTags: ["frontend"] }),
+    ]);
+
+    expect(opts.map((option) => option.mention)).toEqual(["api", "web"]);
+    expect(opts[1]).toEqual({
+      mention: "web",
+      label: "web",
+      description: "仓库 · frontend",
+      repositoryId: 1,
+    });
+  });
+
+  test("does not truncate large workspaces", () => {
+    const repositories = Array.from({ length: 40 }, (_, index) =>
+      repo({ id: index + 1, path: `/work/repo-${String(index + 1).padStart(2, "0")}` }),
+    );
+
+    expect(buildRepositoryMentionOptions(repositories)).toHaveLength(40);
   });
 });

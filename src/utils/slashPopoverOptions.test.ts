@@ -2,9 +2,64 @@ import { describe, expect, test } from "bun:test";
 import {
   buildRuntimeBuiltinCommands,
   buildSkillSlashOptionsFromList,
+  getFilteredAtOptions,
   getFilteredSlashOptions,
   SLASH_POPOVER_MAX_OPTIONS,
 } from "./slashPopoverOptions";
+
+describe("getFilteredAtOptions", () => {
+  test("includes project repositories as dispatch targets", () => {
+    const options = getFilteredAtOptions(
+      "vocs",
+      [],
+      [],
+      [],
+      [
+        {
+          mention: "vocs-web",
+          label: "vocs-web",
+          description: "仓库 · frontend",
+          repositoryId: 7,
+        },
+        {
+          mention: "api",
+          label: "api",
+          description: "仓库 · backend",
+          repositoryId: 8,
+        },
+      ],
+    );
+
+    expect(options).toEqual([
+      {
+        type: "repository",
+        name: "vocs-web",
+        label: "vocs-web",
+        description: "仓库 · frontend",
+        repositoryId: 7,
+      },
+    ]);
+  });
+
+  test("searches repository role descriptions and keeps repositories ahead of terminals", () => {
+    const options = getFilteredAtOptions(
+      "frontend",
+      [],
+      [{ id: "terminal-1", name: "frontend-terminal" }],
+      [],
+      [
+        {
+          mention: "web",
+          label: "web",
+          description: "仓库 · frontend",
+          repositoryId: 1,
+        },
+      ],
+    );
+
+    expect(options.map((option) => option.type)).toEqual(["repository", "agent"]);
+  });
+});
 
 describe("getFilteredSlashOptions", () => {
   test("empty query excludes the omc category entirely", () => {

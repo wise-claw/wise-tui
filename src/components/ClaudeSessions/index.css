@@ -8166,7 +8166,8 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-claude-slash-popover-item-wrap--active {
-  background: var(--ant-color-primary-bg);
+  background: var(--ant-color-primary-bg, rgba(22, 119, 255, 0.1));
+  box-shadow: inset 2px 0 0 var(--ant-color-primary, #1677ff);
 }
 
 .app-claude-slash-popover-item-wrap--active .app-claude-slash-popover-item {
@@ -8188,12 +8189,14 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-claude-slash-popover-item--active {
-  background: var(--ant-color-primary-bg);
-  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg, rgba(22, 119, 255, 0.1));
+  color: var(--ant-color-primary, #1677ff);
+  box-shadow: inset 2px 0 0 var(--ant-color-primary, #1677ff);
 }
 
 .app-claude-slash-popover-item-wrap--active .app-claude-slash-popover-item--active {
   background: transparent;
+  box-shadow: none;
 }
 
 .app-claude-slash-popover-item__default-btn {
