@@ -101,6 +101,11 @@ export default defineConfig(async () => ({
   },
   build: {
     modulePreload: {
+      /**
+       * Tauri 2 的受支持 WebView 均原生支持 modulepreload。关闭 Vite 的兼容 polyfill，
+       * 避免它被 Rollup 提升进某个大型动态 vendor（曾把入口绑到 3MB Mermaid chunk）。
+       */
+      polyfill: false,
       resolveDependencies: (_filename, deps) =>
         deps.filter((dep) => !DEFERRED_MODULE_PRELOAD_CHUNK.test(dep.replace(/\\/g, "/"))),
     },
@@ -114,6 +119,11 @@ export default defineConfig(async () => ({
       },
       output: {
         manualChunks(id) {
+          // 动态 import 的共享预加载 helper 必须留在独立小 chunk；如果交给 Rollup，
+          // 它可能落入首个大型动态 vendor，反向制造启动期静态依赖。
+          if (id === "\0vite/preload-helper.js") {
+            return "vite-runtime";
+          }
           if (!id.includes("node_modules")) {
             return undefined;
           }
@@ -161,6 +171,11 @@ export default defineConfig(async () => ({
           }
           if (id.includes("katex")) {
             return "katex-vendor";
+          }
+          // DOMPurify 是启动期与 Markdown/Mermaid 共用的小依赖；必须独立分块，
+          // 否则 Rollup 可能把入口对 DOMPurify 的静态引用并入巨型 Mermaid chunk。
+          if (id.includes("node_modules/dompurify/")) {
+            return "dompurify-vendor";
           }
           if (id.includes("node_modules/mermaid") || id.includes("/mermaid/")) {
             return "mermaid-vendor";

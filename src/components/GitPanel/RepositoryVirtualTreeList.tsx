@@ -88,10 +88,18 @@ function RepositoryVirtualTreeListInner({
       <div className="repo-tree-virtual-list__spacer" style={{ height: totalHeight }}>
         {slice.map((row, index) => {
           const top = (range.start + index) * rowHeight;
+          const path = "node" in row ? row.node.path : null;
+          const selected = path != null && selectedPath === path;
+          const pointerHover = path != null && hoverPath === path && !selected;
           return (
             <div
               key={row.key}
-              className="repo-tree-virtual-list__row"
+              className={
+                "repo-tree-virtual-list__row" +
+                (selected ? " repo-tree-virtual-list__row--selected" : "") +
+                (pointerHover ? " repo-tree-virtual-list__row--pointer-hover" : "")
+              }
+              data-repo-path={path ?? undefined}
               style={{ top, height: rowHeight }}
             >
               {row.kind === "dir" ? (

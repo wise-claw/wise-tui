@@ -120,7 +120,7 @@
 
 .git-files-explorer-tree,
 .repo-tree-list:not(:has(.repo-tree-virtual-list)) {
-  content-visibility: auto;
+  content-visibility: visible;
 }
 
 /* 虚拟文件树已由窗口裁切，容器与逐行 CV 在快速滑动时增加布局开销 */
@@ -130,7 +130,7 @@
 
 .repo-tree-virtual-list .repo-tree-node {
   content-visibility: visible;
-  contain: layout style;
+  contain: none;
   contain-intrinsic-size: unset;
 }
 
@@ -160,8 +160,20 @@
   cursor: pointer;
 }
 
+.repo-search-result-row:hover {
+  background: var(--wise-row-hover-bg);
+}
+
+.repo-search-result-row:active:not(.repo-search-result-row--selected) {
+  background: var(--wise-row-active-bg);
+}
+
 .repo-search-result-row--selected {
-  background: color-mix(in srgb, var(--ant-color-primary) 18%, var(--ant-color-bg-container));
+  background: var(--wise-row-selected-bg);
+}
+
+.repo-search-result-row--selected:hover {
+  background: color-mix(in srgb, var(--ant-color-primary) 24%, transparent);
 }
 
 .repo-search-result-row-text {
@@ -1477,8 +1489,12 @@
   box-sizing: border-box;
 }
 
+.git-virtual-file-list__row .git-file-row {
+  height: 100%;
+}
+
 .git-file-list {
-  padding: 0 8px;
+  padding: 0;
   overflow-x: hidden;
 }
 
@@ -1487,16 +1503,20 @@
   align-items: center;
   flex: 1;
   gap: 1px;
-  padding: 1px 1px;
-  border-radius: 6px;
+  padding: 1px 8px;
+  border-radius: 0;
   font-size: 12px;
   cursor: default;
   contain: layout style;
-  transition: background 0.12s;
+  transition: background 0.08s ease;
 }
 
 .git-file-row:hover {
-  background: var(--ant-color-fill-content);
+  background: var(--wise-row-hover-bg);
+}
+
+.git-file-row:active {
+  background: var(--wise-row-active-bg);
 }
 
 .git-file-row--clickable {
@@ -1706,7 +1726,7 @@
 }
 
 .git-tree-node--file--clickable:hover .git-file-row {
-  background: var(--ant-color-fill-content);
+  background: var(--wise-row-hover-bg);
 }
 
 .git-tree-node--file--clickable {
@@ -2419,8 +2439,12 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   left: 0;
   right: 0;
   box-sizing: border-box;
-  overflow: hidden;
-  contain: layout style;
+  contain: none;
+}
+
+.repo-tree-virtual-list__row > .repo-tree-node {
+  width: 100%;
+  height: 100%;
 }
 
 .repo-tree-virtual-list__hint {
@@ -2435,7 +2459,7 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 }
 
 .git-files-explorer-scroll-region--scrolling .repo-tree-virtual-list__row {
-  contain: layout style paint;
+  contain: none;
   content-visibility: visible !important;
 }
 
@@ -2500,21 +2524,24 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 }
 
 .repo-tree-node:hover,
-.repo-tree-node--pointer-hover {
-  background: color-mix(in srgb, var(--ant-color-fill-secondary) 72%, transparent);
+.repo-tree-node--pointer-hover,
+.repo-tree-virtual-list__row:hover > .repo-tree-node,
+.repo-tree-virtual-list__row--pointer-hover > .repo-tree-node {
+  background: var(--ant-color-fill-secondary);
+  background: color-mix(in srgb, var(--ant-color-primary) 16%, transparent);
 }
 
-.repo-tree-node--selected {
-  background: color-mix(in srgb, var(--ant-color-primary-bg) 92%, var(--ant-color-fill-content));
-  box-shadow: none;
+.repo-tree-node:active:not(.repo-tree-node--selected) {
+  background: var(--wise-row-active-bg);
 }
 
-.repo-tree-node--selected::after {
-  display: none;
-}
-
-.repo-tree-node--selected:hover {
-  background: color-mix(in srgb, var(--ant-color-primary-bg) 100%, var(--ant-color-fill-content));
+.repo-tree-node--selected,
+.repo-tree-node--selected:hover,
+.repo-tree-node--selected.repo-tree-node--pointer-hover,
+.repo-tree-virtual-list__row--selected > .repo-tree-node,
+.repo-tree-virtual-list__row--selected:hover > .repo-tree-node {
+  background: var(--ant-color-primary-bg);
+  box-shadow: inset 3px 0 0 var(--ant-color-primary);
 }
 
 .repo-tree-node--drop-target,

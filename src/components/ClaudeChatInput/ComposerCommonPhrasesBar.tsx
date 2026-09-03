@@ -1,6 +1,7 @@
 import { Button } from "antd";
 import { HoverHint } from "../shared/HoverHint";
-import { memo, useMemo, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useMemo } from "react";
+import { usePointerClickAction } from "../../hooks/usePointerClickAction";
 import {
   buildComposerCommonPhraseTooltipTitle,
   resolveComposerCommonPhraseAction,
@@ -27,6 +28,7 @@ const PhraseQuickLabel = memo(function PhraseQuickLabel({
   const ariaLabel = keys
     ? `${verb}常用语：${phrase.title}（${keys}）`
     : `${verb}常用语：${phrase.title}`;
+  const phraseClick = usePointerClickAction(() => onApplyPhrase(phrase), disabled);
 
   return (
     <HoverHint
@@ -43,11 +45,8 @@ const PhraseQuickLabel = memo(function PhraseQuickLabel({
         }`}
         disabled={disabled}
         aria-label={ariaLabel}
-        onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
-          if (event.button !== 0 || disabled) return;
-          event.preventDefault();
-          onApplyPhrase(phrase);
-        }}
+        onPointerDown={phraseClick.onPointerDown}
+        onClick={phraseClick.onClick}
       >
         {phrase.title}
       </button>

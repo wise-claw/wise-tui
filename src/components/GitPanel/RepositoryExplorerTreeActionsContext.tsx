@@ -5,6 +5,7 @@ import type { ExplorerInlineCreateState } from "./types";
 export interface RepositoryExplorerTreeActions {
   onToggleDir: (dirPath: string) => void;
   onSelectNode: (path: string, isDir: boolean) => void;
+  onHoverNode?: (path: string | null) => void;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
   onInlineValueChange: (value: string) => void;
   onInlineCommit: () => void;

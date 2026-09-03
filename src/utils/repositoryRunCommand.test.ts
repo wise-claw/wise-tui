@@ -10,9 +10,23 @@ import {
   lineHasRunLogIssue,
   normalizeRunLogOutputChunk,
   parseRunRestart,
+  resetRunErrorMonitorDedupForTests,
+  shouldSkipRunErrorMonitorSend,
   summarizeRunLogIssueKinds,
   wrapCommandWithAutoRestart,
 } from "./repositoryRunCommand";
+
+describe("run error monitor dedup cache", () => {
+  test("keeps a hard bound during a burst and retains recent fingerprints", () => {
+    resetRunErrorMonitorDedupForTests();
+    for (let i = 0; i < 300; i += 1) {
+      expect(shouldSkipRunErrorMonitorSend(`error-${i}`, 1_000)).toBe(false);
+    }
+    expect(shouldSkipRunErrorMonitorSend("error-0", 1_001)).toBe(false);
+    expect(shouldSkipRunErrorMonitorSend("error-299", 1_001)).toBe(true);
+    resetRunErrorMonitorDedupForTests();
+  });
+});
 
 describe("normalizeRunLogOutputChunk", () => {
   test("keeps only the last CR-overwritten segment on a line", () => {

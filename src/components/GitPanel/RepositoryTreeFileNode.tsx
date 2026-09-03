@@ -5,7 +5,11 @@ import { ExplorerTreeFileIcon } from "./explorerTreeChrome";
 import { RepoTreeGitFileDecoration } from "./repoTreeGitDecoration";
 import { repositoryTreeFileShouldUpdate } from "./repositoryTreeNodeMemo";
 import { repositoryTreeFileDepthIndentPx } from "./repositoryTreeLayout";
-import { setWiseRepositoryFileDragData } from "../../utils/repositoryFileDrag";
+import {
+  disableHtml5Drag,
+  enableHtml5DragOnPrimaryPointerDown,
+  setWiseRepositoryFileDragData,
+} from "../../utils/repositoryFileDrag";
 import type { RepositoryFileTreeNode } from "./types";
 
 interface RepositoryTreeFileNodeProps {
@@ -25,11 +29,11 @@ function RepositoryTreeFileNodeInner({
   gitStatusRevision: _gitStatusRevision,
   editorDirtyRevision: _editorDirtyRevision,
 }: RepositoryTreeFileNodeProps) {
-  const { onSelectNode, onOpenFile } = useRepositoryExplorerTreeActions();
+  const { onSelectNode, onOpenFile, onHoverNode } = useRepositoryExplorerTreeActions();
   const { getFileStatus, isEditorDirty } = useRepositoryExplorerGitStatus();
   const isEditorDirtyPath = isEditorDirty(node.path);
   const isSelected = selectedPath === node.path;
-  const isPointerHover = hoverPath === node.path;
+  const isPointerHover = hoverPath === node.path && !isSelected;
   const gitStatus = getFileStatus(node.path);
   const depthIndentPx = repositoryTreeFileDepthIndentPx(depth);
 
@@ -38,11 +42,15 @@ function RepositoryTreeFileNodeInner({
       className={`repo-tree-node repo-tree-node--file${onOpenFile ? " repo-tree-node--file--clickable" : ""}${isSelected ? " repo-tree-node--selected" : ""}${isPointerHover ? " repo-tree-node--pointer-hover" : ""}`}
       data-repo-path={node.path}
       data-repo-is-dir="0"
-      draggable
+      onPointerDown={enableHtml5DragOnPrimaryPointerDown}
+      onPointerUp={disableHtml5Drag}
+      onPointerCancel={disableHtml5Drag}
+      onPointerEnter={() => onHoverNode?.(node.path)}
       onDragStart={(e) => {
         e.stopPropagation();
         setWiseRepositoryFileDragData(e.dataTransfer, node.path, { isDir: false });
       }}
+      onDragEnd={disableHtml5Drag}
       tabIndex={-1}
     >
       <span className="repo-tree-node-indent" style={{ width: depthIndentPx }} aria-hidden />

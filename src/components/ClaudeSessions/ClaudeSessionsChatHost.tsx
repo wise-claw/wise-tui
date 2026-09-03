@@ -28,6 +28,7 @@ import type { ResolvePaneAuxLayout } from "./paneAuxLayout";
 import { claudeSessionsChatHostPropsEqual } from "./claudeSessionsChatHostPropsEqual";
 import { getClaudeSessionSnapshot } from "../../stores/claudeSessionsLiveStore";
 import { useBackgroundPendingTaskQueueFlush } from "../../hooks/useBackgroundPendingTaskQueueFlush";
+import { useBusyTimeout } from "../../hooks/useBusyTimeout";
 
 const ClaudeMultiPaneGridLazy = lazy(() =>
   import("./ClaudeMultiPaneGrid").then((module) => ({ default: module.ClaudeMultiPaneGrid })),
@@ -447,6 +448,10 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
 
   const [creatingPrimarySession, setCreatingPrimarySession] = useState(false);
   const creatingPrimarySessionRef = useRef(false);
+  useBusyTimeout(creatingPrimarySession, () => {
+    creatingPrimarySessionRef.current = false;
+    setCreatingPrimarySession(false);
+  });
 
   const resolveNewSessionRepository = useCallback((): Repository | null => {
     if (chatContextRepository) return chatContextRepository;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { releasePointerCaptureSafe } from "../../utils/releasePointerCapture";
 import "./index.css";
 
 interface Props {
@@ -41,6 +42,10 @@ export function RepoPanelSplitResizeHandle({
   // 仅用于触发 hover/active 视觉 class 的轻量 state：拖动时把 class 加上，结束时去掉。
   // 不参与高度数据流，避免任何父组件重渲。
   const [dragging, setDragging] = useState(false);
+  const onHeightChangeRef = useRef(onHeightChange);
+  onHeightChangeRef.current = onHeightChange;
+  const onHeightCommitRef = useRef(onHeightCommit);
+  onHeightCommitRef.current = onHeightCommit;
 
   /** 用 rAF 把「待提交的最新高度」合并到下一帧。 */
   const scheduleFlush = useCallback(() => {
@@ -54,38 +59,32 @@ export function RepoPanelSplitResizeHandle({
       if (cur.pendingNext == null) return;
       const next = cur.pendingNext;
       cur.pendingNext = null;
-      onHeightChange(next);
+      onHeightChangeRef.current(next);
     });
-  }, [onHeightChange]);
+  }, []);
 
   /** 收尾：释放 pointer capture、清理 rAF、去掉 dragging 视觉与 body class。 */
-  const endDrag = useCallback(
-    (event?: PointerEvent) => {
-      const drag = dragRef.current;
-      if (!drag) return;
-      const el = handleRef.current;
-      if (el && event && el.hasPointerCapture?.(event.pointerId)) {
-        el.releasePointerCapture(event.pointerId);
-      }
-      if (drag.rafId != null) {
-        window.cancelAnimationFrame(drag.rafId);
-      }
-      // flush 最后一帧的 pending，再回调 commit。
-      let committed = drag.startHeight;
-      if (drag.pendingNext != null) {
-        committed = drag.pendingNext;
-        drag.pendingNext = null;
-        onHeightChange(committed);
-      } else if (drag.latestNext !== undefined) {
-        committed = drag.latestNext;
-      }
-      dragRef.current = null;
-      setResizingBodyClass(false);
-      setDragging(false);
-      onHeightCommit?.(committed);
-    },
-    [onHeightChange, onHeightCommit],
-  );
+  const endDrag = useCallback((event?: PointerEvent) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    releasePointerCaptureSafe(handleRef.current, event?.pointerId ?? drag.pointerId);
+    if (drag.rafId != null) {
+      window.cancelAnimationFrame(drag.rafId);
+    }
+    // flush 最后一帧的 pending，再回调 commit。
+    let committed = drag.startHeight;
+    if (drag.pendingNext != null) {
+      committed = drag.pendingNext;
+      drag.pendingNext = null;
+      onHeightChangeRef.current(committed);
+    } else if (drag.latestNext !== undefined) {
+      committed = drag.latestNext;
+    }
+    dragRef.current = null;
+    setResizingBodyClass(false);
+    setDragging(false);
+    onHeightCommitRef.current?.(committed);
+  }, []);
 
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -139,7 +138,17 @@ export function RepoPanelSplitResizeHandle({
     [endDrag],
   );
 
-  // 兜底：window 失焦 / 切到后台 / 关闭页面 / 组件卸载时强制释放拖动状态。
+  const onLostPointerCapture = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!dragRef.current) return;
+      if (event.pointerId !== dragRef.current.pointerId) return;
+      endDrag(event.nativeEvent);
+    },
+    [endDrag],
+  );
+
+  // 兜底：window 失焦 / 切到后台 / 指针在捕获节点外松开 / 组件卸载时强制释放。
+  // endDrag 身份稳定，避免运行面板刷新导致 effect 清理误中断拖动。
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState !== "hidden") return;
@@ -150,11 +159,20 @@ export function RepoPanelSplitResizeHandle({
       if (!dragRef.current) return;
       endDrag();
     };
+    const onWindowPointerUp = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      endDrag(event);
+    };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("blur", onBlur);
+    window.addEventListener("pointerup", onWindowPointerUp);
+    window.addEventListener("pointercancel", onWindowPointerUp);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", onBlur);
+      window.removeEventListener("pointerup", onWindowPointerUp);
+      window.removeEventListener("pointercancel", onWindowPointerUp);
       if (dragRef.current) endDrag();
       setResizingBodyClass(false);
     };
@@ -174,6 +192,7 @@ export function RepoPanelSplitResizeHandle({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onLostPointerCapture={onLostPointerCapture}
     />
   );
 }

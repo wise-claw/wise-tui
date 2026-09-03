@@ -1,8 +1,9 @@
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
+use tokio::sync::Mutex as TokioMutex;
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +29,8 @@ pub struct SystemResourceSnapshot {
 
 /// Per-PID lsof enrichment cache (session_id + project_path). Avoids spawning lsof every poll tick.
 const LSOF_CACHE_TTL: Duration = Duration::from_secs(45);
+/// 多窗口的轮询通常会在同一秒抵达；短缓存可合并昂贵的 ps/vm_stat/lsof 扫描。
+const SNAPSHOT_CACHE_TTL: Duration = Duration::from_secs(2);
 
 struct LsofCacheEntry {
     at: Instant,
@@ -36,21 +39,18 @@ struct LsofCacheEntry {
 
 static LSOF_CACHE: Mutex<Option<HashMap<u32, LsofCacheEntry>>> = Mutex::new(None);
 
+struct CachedSystemResourceSnapshot {
+    at: Instant,
+    value: SystemResourceSnapshot,
+}
+
+/// 锁在刷新期间保持占用，使并发调用等待并复用同一份结果，而不是重复派生系统命令。
+static SNAPSHOT_CACHE: TokioMutex<Option<CachedSystemResourceSnapshot>> =
+    TokioMutex::const_new(None);
+
 fn parse_kb_to_bytes(input: &str) -> Option<u64> {
     let v = input.trim().parse::<u64>().ok()?;
     Some(v.saturating_mul(1024))
-}
-
-fn parse_ps_rss_kb_for_pid(pid: u32) -> Option<u64> {
-    let output = Command::new("ps")
-        .args(["-o", "rss=", "-p", &pid.to_string()])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    parse_kb_to_bytes(text.trim())
 }
 
 fn is_safe_claude_session_id(name: &str) -> bool {
@@ -122,60 +122,101 @@ fn session_from_claude_jsonl_path(path: &str) -> Option<(String, String)> {
 }
 
 #[cfg(unix)]
-fn enrich_session_from_lsof(pid: u32) -> Option<(String, String)> {
-    let output = Command::new("lsof")
-        .args(["-n", "-P", "-p", &pid.to_string()])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
+fn enrich_sessions_from_lsof(pids: &[u32]) -> HashMap<u32, (String, String)> {
+    if pids.is_empty() {
+        return HashMap::new();
     }
+    let pid_list = pids
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    let Ok(output) = Command::new("lsof")
+        // Field mode only emits PID/name records; avoids formatting and buffering the full table.
+        .args(["-n", "-P", "-Fpn", "-p", &pid_list])
+        .output()
+    else {
+        return HashMap::new();
+    };
     let text = String::from_utf8_lossy(&output.stdout);
+    parse_lsof_session_rows(&text, pids)
+}
+
+#[cfg(unix)]
+fn parse_lsof_session_rows(text: &str, pids: &[u32]) -> HashMap<u32, (String, String)> {
+    let expected = pids.iter().copied().collect::<HashSet<_>>();
+    let mut found = HashMap::new();
+    let mut current_pid = None;
     for line in text.lines() {
-        let trimmed = line.trim();
-        if !trimmed.ends_with(".jsonl") {
+        if let Some(raw_pid) = line.strip_prefix('p') {
+            current_pid = raw_pid
+                .trim()
+                .parse::<u32>()
+                .ok()
+                .filter(|pid| expected.contains(pid));
             continue;
         }
-        let path = trimmed.split_whitespace().last()?;
-        if let Some(pair) = session_from_claude_jsonl_path(path) {
-            return Some(pair);
+        let Some(path) = line.strip_prefix('n') else {
+            continue;
+        };
+        let Some(pid) = current_pid else {
+            continue;
+        };
+        if found.contains_key(&pid) || !path.trim().ends_with(".jsonl") {
+            continue;
+        }
+        if let Some(pair) = session_from_claude_jsonl_path(path.trim()) {
+            found.insert(pid, pair);
         }
     }
-    None
+    found
 }
 
 #[cfg(not(unix))]
-fn enrich_session_from_lsof(_pid: u32) -> Option<(String, String)> {
-    None
+fn enrich_sessions_from_lsof(_pids: &[u32]) -> HashMap<u32, (String, String)> {
+    HashMap::new()
 }
 
-/// Cached lsof enrichment. Skips spawn when a fresh cache entry exists for the PID.
-fn enrich_session_from_lsof_cached(pid: u32) -> Option<(String, String)> {
+/// Cached batch lsof enrichment. A snapshot pays for at most one lsof process even when several
+/// Claude hosts lack a resume argument; fresh positive and negative cache entries are both reused.
+fn enrich_sessions_from_lsof_cached(pids: &[u32]) -> HashMap<u32, Option<(String, String)>> {
     let now = Instant::now();
+    let mut values = HashMap::new();
+    let mut missing = Vec::new();
     if let Ok(guard) = LSOF_CACHE.lock() {
         if let Some(cache) = guard.as_ref() {
-            if let Some(entry) = cache.get(&pid) {
-                if now.duration_since(entry.at) < LSOF_CACHE_TTL {
-                    return entry.value.clone();
+            for &pid in pids {
+                if let Some(entry) = cache.get(&pid) {
+                    if now.duration_since(entry.at) < LSOF_CACHE_TTL {
+                        values.insert(pid, entry.value.clone());
+                        continue;
+                    }
                 }
+                missing.push(pid);
             }
+        } else {
+            missing.extend_from_slice(pids);
         }
+    } else {
+        missing.extend_from_slice(pids);
     }
+    missing.sort_unstable();
+    missing.dedup();
 
-    let value = enrich_session_from_lsof(pid);
+    let discovered = enrich_sessions_from_lsof(&missing);
+    for &pid in &missing {
+        values.insert(pid, discovered.get(&pid).cloned());
+    }
     if let Ok(mut guard) = LSOF_CACHE.lock() {
         let cache = guard.get_or_insert_with(HashMap::new);
-        cache.insert(
-            pid,
-            LsofCacheEntry {
-                at: now,
-                value: value.clone(),
-            },
-        );
+        for pid in missing {
+            let value = discovered.get(&pid).cloned();
+            cache.insert(pid, LsofCacheEntry { at: now, value });
+        }
         // Bound growth: drop entries older than 2× TTL.
         cache.retain(|_, entry| now.duration_since(entry.at) < LSOF_CACHE_TTL * 2);
     }
-    value
+    values
 }
 
 /// Read cached lsof enrichment without spawning a new process.
@@ -195,18 +236,11 @@ fn peek_lsof_cache(pid: u32) -> Option<(String, String)> {
 struct RawClaudePsRow {
     pid: u32,
     memory_bytes: u64,
-    args: String,
+    resume_session_id: Option<String>,
 }
 
-fn collect_raw_claude_ps_rows() -> Vec<RawClaudePsRow> {
-    let output = match Command::new("ps")
-        .args(["-axo", "pid=,rss=,comm=,args="])
-        .output()
-    {
-        Ok(o) if o.status.success() => o,
-        _ => return Vec::new(),
-    };
-    let text = String::from_utf8_lossy(&output.stdout);
+fn parse_process_snapshot(text: &str, app_pid: u32) -> (u64, Vec<RawClaudePsRow>) {
+    let mut app_memory_bytes = 0;
     let mut out = Vec::new();
     for line in text.lines() {
         let trimmed = line.trim();
@@ -223,37 +257,58 @@ fn collect_raw_claude_ps_rows() -> Vec<RawClaudePsRow> {
         let Some(comm) = cols.next() else {
             continue;
         };
-        let args = cols.collect::<Vec<_>>().join(" ");
-        let args_lower = args.to_lowercase();
-        if !is_claude_process_line(comm, &args_lower) {
-            continue;
-        }
         let Ok(pid) = pid_s.parse::<u32>() else {
             continue;
         };
         let Some(memory_bytes) = parse_kb_to_bytes(rss_kb) else {
             continue;
         };
+        if pid == app_pid {
+            app_memory_bytes = memory_bytes;
+        }
+
+        let args = cols.collect::<Vec<_>>().join(" ");
+        let args_lower = args.to_lowercase();
+        if !is_claude_process_line(comm, &args_lower) {
+            continue;
+        }
         out.push(RawClaudePsRow {
             pid,
             memory_bytes,
-            args,
+            resume_session_id: session_id_from_claude_args(&args),
         });
     }
-    out
+    (app_memory_bytes, out)
 }
 
-fn collect_claude_host_processes() -> Vec<ClaudeHostProcess> {
-    let rows = collect_raw_claude_ps_rows();
+/// 一次 ps 同时取得 Wise 自身 RSS 与 Claude 进程，避免每轮重复派生 ps。
+fn collect_process_snapshot() -> (u64, Vec<RawClaudePsRow>) {
+    let output = match Command::new("ps")
+        .args(["-axo", "pid=,rss=,comm=,args="])
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return (0, Vec::new()),
+    };
+    let text = String::from_utf8_lossy(&output.stdout);
+    parse_process_snapshot(&text, std::process::id())
+}
+
+fn collect_claude_host_processes(rows: Vec<RawClaudePsRow>) -> Vec<ClaudeHostProcess> {
+    let unresolved_pids = rows
+        .iter()
+        .filter(|row| row.resume_session_id.is_none())
+        .map(|row| row.pid)
+        .collect::<Vec<_>>();
+    let lsof_values = enrich_sessions_from_lsof_cached(&unresolved_pids);
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
-        let mut session_id = session_id_from_claude_args(&row.args);
+        let mut session_id = row.resume_session_id;
         let mut project_path = None;
         let mut session_source = session_id.as_ref().map(|_| "resume_arg".to_string());
 
         if session_id.is_none() {
-            // Need session discovery: pay for lsof (cached).
-            if let Some((lsof_sid, path)) = enrich_session_from_lsof_cached(row.pid) {
+            if let Some((lsof_sid, path)) = lsof_values.get(&row.pid).cloned().flatten() {
                 session_id = Some(lsof_sid);
                 session_source = Some("lsof_jsonl".to_string());
                 project_path = Some(path);
@@ -276,19 +331,22 @@ fn collect_claude_host_processes() -> Vec<ClaudeHostProcess> {
 
 #[cfg(target_os = "macos")]
 fn collect_system_memory_bytes() -> (u64, u64) {
-    let total = Command::new("sysctl")
-        .args(["-n", "hw.memsize"])
-        .output()
-        .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                String::from_utf8(o.stdout).ok()
-            } else {
-                None
-            }
-        })
-        .and_then(|s| s.trim().parse::<u64>().ok())
-        .unwrap_or(0);
+    static SYSTEM_TOTAL_BYTES: OnceLock<u64> = OnceLock::new();
+    let total = *SYSTEM_TOTAL_BYTES.get_or_init(|| {
+        Command::new("sysctl")
+            .args(["-n", "hw.memsize"])
+            .output()
+            .ok()
+            .and_then(|o| {
+                if o.status.success() {
+                    String::from_utf8(o.stdout).ok()
+                } else {
+                    None
+                }
+            })
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .unwrap_or(0)
+    });
 
     let vm_text = Command::new("vm_stat")
         .output()
@@ -377,8 +435,8 @@ pub fn kill_claude_host_process(pid: u32) -> Result<(), String> {
 
 fn get_system_resource_snapshot_blocking() -> SystemResourceSnapshot {
     let (system_total_bytes, system_used_bytes) = collect_system_memory_bytes();
-    let app_memory_bytes = parse_ps_rss_kb_for_pid(std::process::id()).unwrap_or(0);
-    let claude_processes = collect_claude_host_processes();
+    let (app_memory_bytes, raw_claude_processes) = collect_process_snapshot();
+    let claude_processes = collect_claude_host_processes(raw_claude_processes);
     let claude_process_count = claude_processes.len() as u64;
     let claude_memory_bytes = claude_processes
         .iter()
@@ -395,16 +453,34 @@ fn get_system_resource_snapshot_blocking() -> SystemResourceSnapshot {
 
 #[tauri::command]
 pub async fn get_system_resource_snapshot() -> SystemResourceSnapshot {
-    tokio::task::spawn_blocking(get_system_resource_snapshot_blocking)
-        .await
-        .unwrap_or_else(|_| SystemResourceSnapshot {
-            system_total_bytes: 0,
-            system_used_bytes: 0,
-            app_memory_bytes: 0,
-            claude_process_count: 0,
-            claude_memory_bytes: 0,
-            claude_processes: Vec::new(),
-        })
+    let mut cache = SNAPSHOT_CACHE.lock().await;
+    let now = Instant::now();
+    if let Some(cached) = cache.as_ref() {
+        if now.duration_since(cached.at) < SNAPSHOT_CACHE_TTL {
+            return cached.value.clone();
+        }
+    }
+
+    match tokio::task::spawn_blocking(get_system_resource_snapshot_blocking).await {
+        Ok(snapshot) => {
+            *cache = Some(CachedSystemResourceSnapshot {
+                at: Instant::now(),
+                value: snapshot.clone(),
+            });
+            snapshot
+        }
+        Err(_) => cache
+            .as_ref()
+            .map(|cached| cached.value.clone())
+            .unwrap_or_else(|| SystemResourceSnapshot {
+                system_total_bytes: 0,
+                system_used_bytes: 0,
+                app_memory_bytes: 0,
+                claude_process_count: 0,
+                claude_memory_bytes: 0,
+                claude_processes: Vec::new(),
+            }),
+    }
 }
 
 #[cfg(test)]
@@ -415,7 +491,10 @@ mod tests {
     fn session_id_from_resume_flag() {
         let sid = "a".repeat(36);
         let args = format!("claude -p hi -r {sid} --output-format stream-json");
-        assert_eq!(session_id_from_claude_args(&args).as_deref(), Some(sid.as_str()));
+        assert_eq!(
+            session_id_from_claude_args(&args).as_deref(),
+            Some(sid.as_str())
+        );
     }
 
     #[test]
@@ -440,5 +519,42 @@ mod tests {
     fn rejects_invalid_session_filename() {
         let path = "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise/short.jsonl";
         assert!(session_from_claude_jsonl_path(path).is_none());
+    }
+
+    #[test]
+    fn process_snapshot_reuses_one_ps_result_for_app_and_claude() {
+        let app_pid = 42;
+        let text = concat!(
+            "  42  1024 wise /Applications/Wise.app/Contents/MacOS/wise\n",
+            "  77  2048 claude claude -p hi --resume abcdabcd-abcd-abcd-abcd-abcdabcdabcd\n",
+            "  88   512 node node server.js\n",
+            "broken row\n",
+        );
+        let (app_memory, rows) = parse_process_snapshot(text, app_pid);
+        assert_eq!(app_memory, 1024 * 1024);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].pid, 77);
+        assert_eq!(rows[0].memory_bytes, 2048 * 1024);
+        assert_eq!(
+            rows[0].resume_session_id.as_deref(),
+            Some("abcdabcd-abcd-abcd-abcd-abcdabcdabcd")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn parses_batched_lsof_rows_by_pid() {
+        let text = concat!(
+            "p77\n",
+            "n/Users/me/.claude/projects/-tmp-repo/abcdabcdabcdabcdabcdabcdabcdabcd.jsonl\n",
+            "p88\n",
+            "n/tmp/unrelated.txt\n",
+            "p99\n",
+            "n/Users/me/.claude/projects/-tmp-other/dcbadcbadcbadcbadcbadcbadcba.jsonl\n",
+        );
+        let rows = parse_lsof_session_rows(text, &[77, 88]);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows.get(&77).map(|pair| pair.0.as_str()), Some("abcdabcdabcdabcdabcdabcdabcdabcd"));
+        assert!(!rows.contains_key(&99));
     }
 }

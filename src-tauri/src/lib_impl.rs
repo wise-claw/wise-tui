@@ -233,12 +233,16 @@ pub fn run() {
             at_mention_shortcuts::init(app.handle());
             repository_action_shortcuts::init(app.handle());
             in_app_shortcuts::init(app.handle());
+            let mut search_shortcuts_registered = false;
             for (label, win) in app.webview_windows() {
-                if main_window::is_main_workspace_window_label(&label)
-                    && win.is_focused().unwrap_or(false)
-                {
+                if !main_window::is_main_workspace_window_label(&label) {
+                    continue;
+                }
+                #[cfg(target_os = "macos")]
+                main_window::disable_native_overlay_titlebar_drag(&win);
+                if !search_shortcuts_registered && win.is_focused().unwrap_or(false) {
                     let _ = in_app_shortcuts::register_search_shortcuts(app.handle());
-                    break;
+                    search_shortcuts_registered = true;
                 }
             }
 
@@ -307,6 +311,11 @@ pub fn run() {
                             window.app_handle(),
                             *focused,
                         );
+                        // Overlay 样式可能在首次聚焦后才完全套上，再关一次原生标题栏拖动。
+                        #[cfg(target_os = "macos")]
+                        if let Some(win) = window.app_handle().get_webview_window(window.label()) {
+                            main_window::disable_native_overlay_titlebar_drag(&win);
+                        }
                     }
                     // macOS：主工作区窗口红点关闭 → 隐藏应用（主窗）或销毁（辅助窗）。
                     #[cfg(target_os = "macos")]
@@ -590,6 +599,7 @@ pub fn run() {
             repository_files::rename_repository_entry,
             project_relative_files::detect_workspace_sdd_signals,
             project_relative_files::read_project_relative_file,
+            project_relative_files::read_first_project_relative_file,
             project_relative_files::read_project_relative_file_for_editor,
             project_relative_files::stat_project_relative_file,
             project_relative_files::read_project_relative_file_base64,
@@ -815,6 +825,8 @@ pub fn run() {
             wise_mascot::wise_main_window_focus,
             main_window::wise_open_main_window,
             main_window::wise_close_main_workspace_window,
+            main_window::start_overlay_window_drag,
+            main_window::set_overlay_drag_cursor,
             wise_push::wise_push_start,
             wise_push::wise_push_stop,
             dingtalk_enterprise_bot::dingtalk_enterprise_bot_ping,

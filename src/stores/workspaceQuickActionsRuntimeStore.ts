@@ -97,7 +97,8 @@ async function loadScopeItems(scope: WorkspaceQuickActionScope, scopeId: string)
   entry.loading = true;
   bump();
 
-  const promise = (async () => {
+  let promise!: Promise<WorkspaceQuickActionItem[]>;
+  promise = (async () => {
     try {
       const payload =
         scope === "project"
@@ -123,7 +124,13 @@ async function loadScopeItems(scope: WorkspaceQuickActionScope, scopeId: string)
       if (loadGenerations.get(key) === loadGeneration && entries.get(key) === entry) {
         entry.loading = false;
       }
-      loadPromises.delete(key);
+      // 释放后立即重新 retain 同一 scope 时可能已有更新一代 load；旧请求不得删掉它。
+      if (loadPromises.get(key) === promise) {
+        loadPromises.delete(key);
+      }
+      if (!entries.has(key) && !loadPromises.has(key)) {
+        loadGenerations.delete(key);
+      }
       bump();
     }
   })();
@@ -180,6 +187,7 @@ export function releaseWorkspaceQuickActionsScope(
   loadGenerations.set(key, (loadGenerations.get(key) ?? 0) + 1);
   entries.delete(key);
   loadPromises.delete(key);
+  loadGenerations.delete(key);
 }
 
 export function getWorkspaceQuickActionsScopeItems(
@@ -259,6 +267,15 @@ export async function persistWorkspaceQuickActionsScopeItems(
       await reloadWorkspaceQuickActionsScope(scope, scopeId);
     }
     return false;
+  } finally {
+    if (
+      persistGenerations.get(key) === persistGeneration
+      && !entries.has(key)
+      && !pendingPersist.has(key)
+      && !persistTimers.has(key)
+    ) {
+      persistGenerations.delete(key);
+    }
   }
 }
 

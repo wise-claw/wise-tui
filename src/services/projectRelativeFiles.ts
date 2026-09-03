@@ -8,6 +8,22 @@ export async function readProjectRelativeFile(repositoryPath: string, relativePa
   });
 }
 
+export interface ProjectRelativeFileMatch {
+  relativePath: string;
+  content: string;
+}
+
+/** 按顺序读取第一个存在的候选；一次 IPC 完成整组模块路径探测。 */
+export async function readFirstProjectRelativeFile(
+  repositoryPath: string,
+  relativePaths: string[],
+): Promise<ProjectRelativeFileMatch | null> {
+  return invoke<ProjectRelativeFileMatch | null>("read_first_project_relative_file", {
+    projectPath: repositoryPath,
+    relativePaths,
+  });
+}
+
 export interface ProjectRelativeFileText {
   content: string;
   byteLen: number;

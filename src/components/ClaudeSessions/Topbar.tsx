@@ -1,5 +1,6 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../../types";
 import { HoverHint } from "../shared/HoverHint";
+import { WindowChromeDragUnderlay } from "../shared/WindowChromeDragUnderlay";
 import { AppearanceThemeToggle } from "../AppearanceThemeToggle";
 import { IconHud } from "../icons/IconHud";
 import { wiseHudToggle } from "../../services/wiseHud";
@@ -324,10 +325,10 @@ export const Topbar = memo(function Topbar({
 
   return (
     <div className="app-chat-topbar">
+      <WindowChromeDragUnderlay className="app-chat-topbar-drag-underlay" />
       <div
         className={`app-chat-topbar-leading${collapsed ? " app-chat-topbar-leading--collapsed" : ""}`}
       >
-        <div className="app-chat-topbar-drag-underlay" data-tauri-drag-region aria-hidden />
         <div className={topbarLeftClassName}>
           <div className="app-chat-topbar-leading-cluster">
             {onToggleSidebar ? (

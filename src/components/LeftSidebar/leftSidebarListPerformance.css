@@ -14,7 +14,7 @@
 }
 
 .app-left-sidebar .app-repository-row {
-  content-visibility: auto;
+  content-visibility: visible;
   contain-intrinsic-size: auto 28px;
 }
 
@@ -51,18 +51,32 @@
   transition: opacity 0.05s ease, color 0.05s ease, background 0.05s ease;
 }
 
-.app-left-sidebar .repo-tree-node {
+.app-left-sidebar .repo-tree-node,
+.app-workspace-file-tree-rail .repo-tree-node {
   transition: none;
-  box-shadow: none !important;
 }
 
-.app-left-sidebar .repo-tree-node--selected {
-  box-shadow: none !important;
-  background: var(--ant-color-fill-tertiary);
+.app-left-sidebar .repo-tree-node:hover,
+.app-left-sidebar .repo-tree-node--pointer-hover,
+.app-left-sidebar .repo-tree-virtual-list__row:hover > .repo-tree-node,
+.app-left-sidebar .repo-tree-virtual-list__row--pointer-hover > .repo-tree-node,
+.app-workspace-file-tree-rail .repo-tree-node:hover,
+.app-workspace-file-tree-rail .repo-tree-node--pointer-hover,
+.app-workspace-file-tree-rail .repo-tree-virtual-list__row:hover > .repo-tree-node,
+.app-workspace-file-tree-rail .repo-tree-virtual-list__row--pointer-hover > .repo-tree-node {
+  background: var(--ant-color-fill-secondary) !important;
+  background: color-mix(in srgb, var(--ant-color-primary) 16%, transparent) !important;
 }
 
-.app-left-sidebar .repo-tree-node--selected:hover {
-  background: var(--ant-color-fill-tertiary);
+.app-left-sidebar .repo-tree-node--selected,
+.app-left-sidebar .repo-tree-node--selected:hover,
+.app-left-sidebar .repo-tree-node--selected.repo-tree-node--pointer-hover,
+.app-left-sidebar .repo-tree-virtual-list__row--selected > .repo-tree-node,
+.app-workspace-file-tree-rail .repo-tree-node--selected,
+.app-workspace-file-tree-rail .repo-tree-node--selected:hover,
+.app-workspace-file-tree-rail .repo-tree-virtual-list__row--selected > .repo-tree-node {
+  background: var(--ant-color-primary-bg) !important;
+  box-shadow: inset 3px 0 0 var(--ant-color-primary) !important;
 }
 
 /* ── 快速滑动：统一关 transition / hover 命中 / content-visibility 节流 ── */
@@ -73,17 +87,11 @@
 .app-left-sidebar-scroll-region--scrolling .app-monitor-panel__item,
 .app-left-sidebar-scroll-region--scrolling .app-monitor-panel__item--terminal-row {
   transition: none !important;
-  box-shadow: none !important;
 }
 
 .app-left-sidebar-scroll-region--scrolling .app-repository-action,
 .app-left-sidebar-scroll-region--scrolling .app-monitor-panel__item-action-icon-btn {
   transition: none !important;
-}
-
-.app-left-sidebar-scroll-region--scrolling .app-repository-item:hover:not(.app-repository-item--project-active):not(.app-repository-item--repo-active),
-.app-repository-list--scrolling .app-repository-item:hover:not(.app-repository-item--project-active):not(.app-repository-item--repo-active) {
-  background: transparent !important;
 }
 
 /* 滚动中勿清选中行高亮 / 勿隐藏快捷按钮与子仓库；只关动画减轻合成。 */
@@ -112,12 +120,12 @@
 }
 
 .git-files-explorer-scroll-region--scrolling .repo-tree-virtual-list__row {
-  contain: layout style paint;
+  contain: none;
   content-visibility: visible !important;
 }
 
 .app-left-sidebar-scroll-region--scrolling .repo-tree-virtual-list__row {
-  contain: layout style paint;
+  contain: none;
   content-visibility: visible !important;
 }
 
@@ -138,8 +146,4 @@
 .app-left-sidebar-scroll-region--scrolling .git-file-row,
 .app-left-sidebar-scroll-region--scrolling .git-virtual-file-list__row {
   transition: none !important;
-}
-
-.app-left-sidebar-scroll-region--scrolling .git-file-row:hover {
-  background: transparent !important;
 }

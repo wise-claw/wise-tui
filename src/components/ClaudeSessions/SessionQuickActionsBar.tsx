@@ -10,13 +10,15 @@ import {
   UserOutlined,
 } from "@ant-design/icons";
 import { Dropdown, type MenuProps } from "antd";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   partitionSessionQuickActions,
   type SessionQuickActionId,
   type SessionQuickActionsAvailability,
 } from "../../constants/sessionQuickActionsLayout";
+import { usePointerClickAction } from "../../hooks/usePointerClickAction";
 import { useSessionQuickActionsLayout } from "../../hooks/useSessionQuickActionsLayout";
+import { createPointerClickGate, type PointerClickGate } from "../../utils/pointerClickGate";
 import type { AssistantEntry } from "../../types/assistant";
 import { resolveAssistantEntryKind } from "../../utils/assistantTemplateEntry";
 import {
@@ -75,11 +77,16 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
   const { layout, setLayout, resetLayout, persistLayout, catalog, assistantsById } =
     useSessionQuickActionsLayout();
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const createInvokeLockRef = useRef(false);
+  const assistantClickGateRef = useRef<PointerClickGate | null>(null);
+  if (assistantClickGateRef.current == null) {
+    assistantClickGateRef.current = createPointerClickGate();
+  }
 
   useEffect(() => {
     prefetchNewSessionSurface();
   }, []);
+
+  useEffect(() => () => assistantClickGateRef.current?.reset(), []);
 
   const availability: SessionQuickActionsAvailability = useMemo(
     () => ({
@@ -95,37 +102,23 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
   );
 
   const activateAssistantById = (assistantId: string) => {
-    const assistant = assistantsById.get(assistantId);
-    if (assistant && onActivateAssistant) {
-      void onActivateAssistant(assistant);
-      return;
-    }
-    onOpenBuiltinAssistant?.(assistantId);
+    assistantClickGateRef.current?.tryInvoke(() => {
+      const assistant = assistantsById.get(assistantId);
+      if (assistant && onActivateAssistant) {
+        void onActivateAssistant(assistant);
+        return;
+      }
+      onOpenBuiltinAssistant?.(assistantId);
+    });
   };
 
   const invokeCreateNewSession = useCallback(() => {
-    if (creatingNewSession || createInvokeLockRef.current) return;
-    createInvokeLockRef.current = true;
+    if (creatingNewSession) return;
     prefetchNewSessionSurface();
     onCreateNewSession?.();
-    // Lock until parent reports creatingNewSession, or briefly if sync no-op.
-    // Do NOT unlock on microtask — pointerdown+click would double-fire create.
   }, [creatingNewSession, onCreateNewSession]);
 
-  useEffect(() => {
-    if (!creatingNewSession) {
-      createInvokeLockRef.current = false;
-    }
-  }, [creatingNewSession]);
-
-  const handleNewSessionPointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLButtonElement>) => {
-      if (event.button !== 0 || creatingNewSession) return;
-      event.preventDefault();
-      invokeCreateNewSession();
-    },
-    [creatingNewSession, invokeCreateNewSession],
-  );
+  const newSessionClick = usePointerClickAction(invokeCreateNewSession, creatingNewSession);
 
   const renderPill = (id: SessionQuickActionId): ReactNode => {
     const meta = resolveSessionQuickActionMeta(id, catalog);
@@ -142,7 +135,8 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
           aria-label={creatingNewSession ? "正在创建会话" : meta.pillLabel}
           onMouseEnter={prefetchNewSessionSurface}
           onFocus={prefetchNewSessionSurface}
-          onPointerDown={handleNewSessionPointerDown}
+          onPointerDown={newSessionClick.onPointerDown}
+          onClick={newSessionClick.onClick}
         >
           <span className="app-session-quick-pill__icon app-session-quick-pill__icon--blue" aria-hidden>
             {creatingNewSession ? <LoadingOutlined spin /> : <CommentOutlined />}
@@ -165,6 +159,7 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
             event.preventDefault();
             activateAssistantById(id);
           }}
+          onClick={() => activateAssistantById(id)}
         >
           <span
             className={`app-session-quick-pill__icon app-session-quick-pill__icon--${iconTone}`}

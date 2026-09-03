@@ -1,5 +1,8 @@
 import type * as Monaco from "monaco-editor";
-import { readProjectRelativeFile } from "./projectRelativeFiles";
+import {
+  readFirstProjectRelativeFile,
+  type ProjectRelativeFileMatch,
+} from "./projectRelativeFiles";
 import {
   loadRepositoryTypeScriptProfile,
   mapTsconfigCompilerOptionsToMonaco,
@@ -7,6 +10,8 @@ import {
 } from "./monacoRepositoryTypeScriptConfig";
 import { shouldSkipMonacoTypeScriptModelSync } from "../utils/monacoLargeFile";
 import { applyReactCoreTypeLibs, filterAsyncTypePackages } from "./monacoReactTypeLibs";
+import { createBoundedStringCache } from "../utils/boundedStringCache";
+import { mapWithConcurrency } from "../utils/mapWithConcurrency";
 
 type MonacoApi = typeof Monaco;
 type MonacoCompilerOptionsValue =
@@ -109,6 +114,13 @@ const VITE_CLIENT_AMBIENT_TYPES = [
 ].join("\n");
 const MAX_DEPENDENCY_MODEL_COUNT = 80;
 const MAX_DEPENDENCY_DEPTH = 3;
+const MAX_DEPENDENCY_IMPORTS_PER_FILE = 32;
+const DEPENDENCY_RESOLVE_CONCURRENCY = 4;
+const MAX_AMBIENT_MODULE_COUNT = 512;
+const MAX_REPOSITORY_SYNC_SIGNATURES = 32;
+const DEPENDENCY_CACHE_MAX_ENTRIES = 512;
+const DEPENDENCY_CACHE_MAX_CHARS = 16 * 1024 * 1024;
+const DEPENDENCY_CACHE_MAX_ENTRY_CHARS = 512 * 1024;
 
 /**
  * 在依赖图不完整的浏览场景下屏蔽的 TypeScript 诊断码。
@@ -136,10 +148,18 @@ const REGISTERED_REPOSITORY_EXTRA_LIBS = new WeakMap<
   MonacoApi,
   Map<string, { content: string; disposable: Monaco.IDisposable }>
 >();
-const DEPENDENCY_FILE_CONTENT_CACHE = new Map<string, string>();
-const PENDING_DEPENDENCY_FILES = new Map<string, Promise<string | null>>();
+const DEPENDENCY_FILE_CONTENT_CACHE = createBoundedStringCache({
+  maxEntries: DEPENDENCY_CACHE_MAX_ENTRIES,
+  maxChars: DEPENDENCY_CACHE_MAX_CHARS,
+  maxEntryChars: DEPENDENCY_CACHE_MAX_ENTRY_CHARS,
+});
+const PENDING_DEPENDENCY_BATCHES = new Map<string, Promise<ProjectRelativeFileMatch | null>>();
 const LAST_SYNC_SIGNATURE_BY_REPOSITORY = new WeakMap<MonacoApi, Map<string, string>>();
 const APPLIED_REPOSITORY_TS_ENVIRONMENT = new WeakMap<MonacoApi, string>();
+const PENDING_REPOSITORY_TS_ENVIRONMENT = new WeakMap<
+  MonacoApi,
+  { signature: string; promise: Promise<void> }
+>();
 
 export function isTypeScriptLikeRepositoryPath(path: string): boolean {
   return TYPESCRIPT_LIKE_EXTENSIONS.has(getPathExtension(path));
@@ -239,30 +259,39 @@ export async function syncMonacoRepositoryTypeScriptModels({
   }
 
   if (normalizedSources.some((source) => shouldSkipMonacoTypeScriptModelSync(source.content.length))) {
-    repositorySignatures.set(repositoryPath, syncSignature);
+    setRepositorySyncSignature(repositorySignatures, repositoryPath, syncSignature);
     return;
   }
 
-  repositorySignatures.set(repositoryPath, syncSignature);
+  setRepositorySyncSignature(repositorySignatures, repositoryPath, syncSignature);
 
   for (const source of normalizedSources) {
     registerRepositorySource(monaco, repositoryPath, source);
   }
 
   const queue = normalizedSources.map((source) => ({ ...source, depth: 0 }));
+  let queueIndex = 0;
   const visited = new Set(normalizedSources.map((source) => source.relativePath));
   let loadedCount = 0;
 
-  while (queue.length > 0 && loadedCount < MAX_DEPENDENCY_MODEL_COUNT) {
-    const current = queue.shift()!;
+  while (queueIndex < queue.length && loadedCount < MAX_DEPENDENCY_MODEL_COUNT) {
+    const current = queue[queueIndex++]!;
     const imports = extractMonacoTypeScriptModuleSpecifiers(current.content);
     registerAmbientModules(monaco, imports.filter((specifier) => !isRelativeModuleSpecifier(specifier)));
 
     if (current.depth >= MAX_DEPENDENCY_DEPTH) continue;
 
-    for (const specifier of imports) {
-      if (!isRelativeModuleSpecifier(specifier)) continue;
-      const dependency = await readFirstExistingRelativeImport(repositoryPath, current.relativePath, specifier);
+    const resolveBudget = Math.min(
+      MAX_DEPENDENCY_IMPORTS_PER_FILE,
+      MAX_DEPENDENCY_MODEL_COUNT - loadedCount,
+    );
+    const relativeImports = imports.filter(isRelativeModuleSpecifier).slice(0, resolveBudget);
+    const dependencies = await mapWithConcurrency(
+      relativeImports,
+      DEPENDENCY_RESOLVE_CONCURRENCY,
+      (specifier) => readFirstExistingRelativeImport(repositoryPath, current.relativePath, specifier),
+    );
+    for (const dependency of dependencies) {
       if (!dependency || visited.has(dependency.relativePath)) continue;
 
       visited.add(dependency.relativePath);
@@ -295,6 +324,30 @@ async function applyRepositoryTypeScriptEnvironment(
   if (APPLIED_REPOSITORY_TS_ENVIRONMENT.get(monaco) === signature) {
     return;
   }
+
+  const active = PENDING_REPOSITORY_TS_ENVIRONMENT.get(monaco);
+  if (active) {
+    if (active.signature === signature) {
+      return active.promise;
+    }
+    await active.promise.catch(() => undefined);
+    return applyRepositoryTypeScriptEnvironment(monaco, signature);
+  }
+
+  let promise: Promise<void>;
+  promise = applyRepositoryTypeScriptEnvironmentNow(monaco, signature).finally(() => {
+    if (PENDING_REPOSITORY_TS_ENVIRONMENT.get(monaco)?.promise === promise) {
+      PENDING_REPOSITORY_TS_ENVIRONMENT.delete(monaco);
+    }
+  });
+  PENDING_REPOSITORY_TS_ENVIRONMENT.set(monaco, { signature, promise });
+  return promise;
+}
+
+async function applyRepositoryTypeScriptEnvironmentNow(
+  monaco: MonacoApi,
+  signature: string,
+): Promise<void> {
 
   const profile = await loadRepositoryTypeScriptProfile(signature);
   const ts = getMonacoTypeScriptRuntime(monaco);
@@ -445,9 +498,11 @@ function registerAmbientModules(monaco: MonacoApi, moduleSpecifiers: string[]): 
     REGISTERED_AMBIENT_MODULES.set(monaco, registered);
   }
 
+  const availableSlots = Math.max(0, MAX_AMBIENT_MODULE_COUNT - registered.size);
   const newSpecifiers = Array.from(new Set(moduleSpecifiers))
     .map((specifier) => specifier.trim())
-    .filter((specifier) => specifier.length > 0 && !registered.has(specifier));
+    .filter((specifier) => specifier.length > 0 && !registered.has(specifier))
+    .slice(0, availableSlots);
   if (newSpecifiers.length === 0) return;
 
   for (const specifier of newSpecifiers) {
@@ -489,9 +544,10 @@ async function readFirstExistingRelativeImport(
 ): Promise<MonacoRepositorySourceFile | null> {
   const importRelativePath = resolveImportSpecifierToRelativePath(fromRelativePath, specifier);
   const candidates = resolveMonacoRepositoryRelativeImportCandidates(fromRelativePath, specifier);
+  if (candidates.length === 0) return null;
   for (const candidate of candidates) {
-    const content = await readProjectFileIfExists(repositoryPath, candidate);
-    if (content != null) {
+    const content = DEPENDENCY_FILE_CONTENT_CACHE.get(`${repositoryPath}\0${candidate}`);
+    if (content !== undefined) {
       return {
         relativePath: candidate,
         content,
@@ -499,7 +555,37 @@ async function readFirstExistingRelativeImport(
       };
     }
   }
-  return null;
+
+  const batchKey = `${repositoryPath}\0${candidates.join("\0")}`;
+  let pending = PENDING_DEPENDENCY_BATCHES.get(batchKey);
+  if (!pending) {
+    let created: Promise<ProjectRelativeFileMatch | null>;
+    created = readFirstProjectRelativeFile(repositoryPath, candidates)
+      .then((matched) => {
+        if (!matched) return null;
+        DEPENDENCY_FILE_CONTENT_CACHE.set(
+          `${repositoryPath}\0${matched.relativePath}`,
+          matched.content,
+        );
+        return matched;
+      })
+      .catch(() => null)
+      .finally(() => {
+        if (PENDING_DEPENDENCY_BATCHES.get(batchKey) === created) {
+          PENDING_DEPENDENCY_BATCHES.delete(batchKey);
+        }
+      });
+    pending = created;
+    PENDING_DEPENDENCY_BATCHES.set(batchKey, created);
+  }
+  const matched = await pending;
+  if (!matched) return null;
+  return {
+    relativePath: matched.relativePath,
+    content: matched.content,
+    modelRelativePath:
+      importRelativePath !== matched.relativePath ? importRelativePath : undefined,
+  };
 }
 
 export function resolveMonacoRepositoryRelativeImportCandidates(fromRelativePath: string, specifier: string): string[] {
@@ -641,28 +727,18 @@ export function resolvePathClickCandidates(fromRelativePath: string, rawToken: s
   return Array.from(new Set(out));
 }
 
-async function readProjectFileIfExists(repositoryPath: string, relativePath: string): Promise<string | null> {
-  const normalized = normalizeRepositoryRelativePath(relativePath);
-  const key = `${repositoryPath}\0${normalized}`;
-  const cached = DEPENDENCY_FILE_CONTENT_CACHE.get(key);
-  if (cached != null) {
-    return cached;
+function setRepositorySyncSignature(
+  signatures: Map<string, string>,
+  repositoryPath: string,
+  signature: string,
+): void {
+  signatures.delete(repositoryPath);
+  signatures.set(repositoryPath, signature);
+  while (signatures.size > MAX_REPOSITORY_SYNC_SIGNATURES) {
+    const oldest = signatures.keys().next().value;
+    if (oldest === undefined) break;
+    signatures.delete(oldest);
   }
-
-  let pending = PENDING_DEPENDENCY_FILES.get(key);
-  if (!pending) {
-    pending = readProjectRelativeFile(repositoryPath, normalized)
-      .then((content) => {
-        DEPENDENCY_FILE_CONTENT_CACHE.set(key, content);
-        return content;
-      })
-      .catch(() => null)
-      .finally(() => {
-        PENDING_DEPENDENCY_FILES.delete(key);
-      });
-    PENDING_DEPENDENCY_FILES.set(key, pending);
-  }
-  return pending;
 }
 
 function isRelativeModuleSpecifier(specifier: string): boolean {

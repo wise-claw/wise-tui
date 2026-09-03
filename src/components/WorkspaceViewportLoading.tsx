@@ -1,4 +1,4 @@
-import { Spin } from "antd";
+import "./WorkspaceViewportLoading.css";
 
 /** 相对整个应用视口居中的加载态（不受左栏占位影响）。 */
 export function WorkspaceViewportLoading() {
@@ -9,7 +9,7 @@ export function WorkspaceViewportLoading() {
       aria-live="polite"
       aria-label="加载中"
     >
-      <Spin size="large" />
+      <span className="app-workspace-loading-spinner" aria-hidden="true" />
     </div>
   );
 }

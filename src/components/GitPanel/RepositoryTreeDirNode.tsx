@@ -7,7 +7,11 @@ import { repositoryTreeDirShouldUpdate } from "./repositoryTreeNodeMemo";
 import { RepoTreeGitDirDecoration } from "./repoTreeGitDecoration";
 import { explorerDirKey } from "./repositoryExplorerDirKey";
 import { repositoryTreeDepthIndentPx } from "./repositoryTreeLayout";
-import { setWiseRepositoryFileDragData } from "../../utils/repositoryFileDrag";
+import {
+  disableHtml5Drag,
+  enableHtml5DragOnPrimaryPointerDown,
+  setWiseRepositoryFileDragData,
+} from "../../utils/repositoryFileDrag";
 import { RepositoryTreeFileNode } from "./RepositoryTreeFileNode";
 import type { ExplorerInlineCreateState, RepositoryFileTreeNode } from "./types";
 
@@ -36,7 +40,7 @@ function RepositoryTreeDirNodeInner({
   loadingDirKeys,
   gitStatusRevision: _gitStatusRevision,
 }: RepositoryTreeDirNodeProps) {
-  const { onToggleDir, onSelectNode, onInlineValueChange, onInlineCommit, onInlineCancel } =
+  const { onToggleDir, onSelectNode, onHoverNode, onInlineValueChange, onInlineCommit, onInlineCancel } =
     useRepositoryExplorerTreeActions();
   const { getDirStatus } = useRepositoryExplorerGitStatus();
   const depthIndentPx = repositoryTreeDepthIndentPx(depth);
@@ -61,14 +65,18 @@ function RepositoryTreeDirNodeInner({
         className={`repo-tree-node repo-tree-node--dir${isSelected ? " repo-tree-node--selected" : ""}${isExpanded ? " repo-tree-node--expanded" : ""}${dirStatus ? ` repo-tree-node--dir--status-${dirStatus.toLowerCase()}` : ""}`}
         data-repo-path={node.path}
         data-repo-is-dir="1"
-        draggable
         role="treeitem"
         tabIndex={0}
         aria-expanded={isExpanded}
+        onPointerDown={enableHtml5DragOnPrimaryPointerDown}
+        onPointerUp={disableHtml5Drag}
+        onPointerCancel={disableHtml5Drag}
+        onPointerEnter={() => onHoverNode?.(node.path)}
         onDragStart={(e) => {
           e.stopPropagation();
           setWiseRepositoryFileDragData(e.dataTransfer, node.path, { isDir: true });
         }}
+        onDragEnd={disableHtml5Drag}
         onClick={activateDir}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {

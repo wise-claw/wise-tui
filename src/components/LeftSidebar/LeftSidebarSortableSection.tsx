@@ -9,26 +9,17 @@ import {
   type DragEvent,
   type ReactNode,
 } from "react";
+import { isLeftSidebarSectionId, type LeftSidebarSectionId } from "../../constants/leftSidebarSectionOrder";
 import {
-  isLeftSidebarSectionId,
-  type LeftSidebarSectionId,
-} from "../../constants/leftSidebarSectionOrder";
+  hasLeftSidebarSectionDragPayload,
+  isInteractiveLeftSidebarSectionDragTarget,
+  LEFT_SIDEBAR_SECTION_DND_MIME,
+  queryLeftSidebarSectionDragHandles,
+  sameDragHandleSet,
+} from "./leftSidebarSectionDrag";
 import "./LeftSidebarSortableSection.css";
 
-export const LEFT_SIDEBAR_SECTION_DND_MIME = "application/x-wise-left-sidebar-section";
-
-const HANDLE_SELECTOR = [
-  ":scope > .app-repository-header",
-  ":scope > .app-left-sidebar-workspace-list-collapsed-row",
-  ":scope > .app-left-sidebar-requirements-panel > .app-repository-header",
-  ":scope > .app-left-sidebar-monitor-panel .app-monitor-panel__head",
-  ":scope > .app-left-sidebar-bottom-tabs .app-left-sidebar-repo-panel-header",
-  ":scope > .app-left-sidebar-bottom-tabs .git-panel-header",
-  ":scope > .app-left-sidebar-bottom-tabs .git-files-explorer-bar",
-].join(", ");
-
-const INTERACTIVE_CLOSEST =
-  "button, a, input, textarea, select, .app-repository-header-btn, .ant-btn";
+export { LEFT_SIDEBAR_SECTION_DND_MIME };
 
 type DropEdge = "before" | "after" | null;
 
@@ -40,10 +31,6 @@ export type LeftSidebarSortableSectionProps = {
   onReorder: (fromId: LeftSidebarSectionId, toId: LeftSidebarSectionId, placeAfter: boolean) => void;
 };
 
-function hasSectionDragPayload(dataTransfer: DataTransfer): boolean {
-  return Array.from(dataTransfer.types).includes(LEFT_SIDEBAR_SECTION_DND_MIME);
-}
-
 function LeftSidebarSortableSectionInner({
   sectionId,
   orderIndex,
@@ -54,106 +41,178 @@ function LeftSidebarSortableSectionInner({
   const rootRef = useRef<HTMLDivElement>(null);
   const [dropEdge, setDropEdge] = useState<DropEdge>(null);
   const [dragging, setDragging] = useState(false);
+  const draggingRef = useRef(false);
+  const boundHandlesRef = useRef<HTMLElement[]>([]);
+  const unbindHandlesRef = useRef<(() => void) | null>(null);
+  const suppressClickByHandleRef = useRef(new WeakMap<HTMLElement, boolean>());
 
   const clearDropEdge = useCallback(() => setDropEdge(null), []);
-  const unbindHandlesRef = useRef<(() => void) | null>(null);
+
+  const finishDrag = useCallback(() => {
+    if (!draggingRef.current) {
+      clearDropEdge();
+      return;
+    }
+    draggingRef.current = false;
+    setDragging(false);
+    rootRef.current?.classList.remove("app-left-sidebar-section--dragging");
+    for (const handle of boundHandlesRef.current) {
+      handle.draggable = false;
+    }
+    clearDropEdge();
+  }, [clearDropEdge]);
 
   const rebindHandles = useCallback(() => {
+    if (draggingRef.current) return;
+    const root = rootRef.current;
+    const nextHandles = root && !disabled ? queryLeftSidebarSectionDragHandles(root) : [];
+    if (sameDragHandleSet(boundHandlesRef.current, nextHandles) && unbindHandlesRef.current) {
+      return;
+    }
+
     unbindHandlesRef.current?.();
     unbindHandlesRef.current = null;
-    const root = rootRef.current;
-    if (!root || disabled) return;
-
-    const handles = Array.from(root.querySelectorAll(HANDLE_SELECTOR)).filter(
-      (node): node is HTMLElement => node instanceof HTMLElement,
-    );
-    if (handles.length === 0) return;
+    boundHandlesRef.current = [];
+    if (!root || disabled || nextHandles.length === 0) return;
 
     const cleanups: Array<() => void> = [];
-    for (const handle of handles) {
-      handle.draggable = true;
+    for (const handle of nextHandles) {
+      handle.draggable = false;
       handle.classList.add("app-left-sidebar-section__drag-handle");
-      let suppressClick = false;
+
+      const armDrag = (event: Event) => {
+        if (isInteractiveLeftSidebarSectionDragTarget(event.target)) {
+          handle.draggable = false;
+          return;
+        }
+        handle.draggable = true;
+      };
+
+      const disarmIfIdle = () => {
+        if (draggingRef.current) return;
+        handle.draggable = false;
+      };
 
       const onDragStart = (event: globalThis.DragEvent) => {
-        const target = event.target;
-        if (target instanceof Element && target.closest(INTERACTIVE_CLOSEST)) {
+        if (isInteractiveLeftSidebarSectionDragTarget(event.target)) {
           event.preventDefault();
+          handle.draggable = false;
           return;
         }
         if (!event.dataTransfer) return;
-        suppressClick = false;
+        suppressClickByHandleRef.current.set(handle, false);
         event.dataTransfer.setData(LEFT_SIDEBAR_SECTION_DND_MIME, sectionId);
         event.dataTransfer.effectAllowed = "move";
+        draggingRef.current = true;
         setDragging(true);
         root.classList.add("app-left-sidebar-section--dragging");
       };
 
       const onDragEnd = () => {
-        setDragging(false);
-        root.classList.remove("app-left-sidebar-section--dragging");
-        clearDropEdge();
-        // 拖拽结束后浏览器常会补一次 click，避免误触折叠标题。
-        suppressClick = true;
+        suppressClickByHandleRef.current.set(handle, true);
+        finishDrag();
         window.setTimeout(() => {
-          suppressClick = false;
+          suppressClickByHandleRef.current.set(handle, false);
         }, 0);
       };
 
       const onClickCapture = (event: MouseEvent) => {
-        if (!suppressClick) return;
+        if (!suppressClickByHandleRef.current.get(handle)) return;
         event.preventDefault();
         event.stopPropagation();
-        suppressClick = false;
+        suppressClickByHandleRef.current.set(handle, false);
       };
 
+      handle.addEventListener("pointerdown", armDrag);
+      handle.addEventListener("mousedown", armDrag);
+      handle.addEventListener("pointerup", disarmIfIdle);
+      handle.addEventListener("pointercancel", disarmIfIdle);
       handle.addEventListener("dragstart", onDragStart);
       handle.addEventListener("dragend", onDragEnd);
       handle.addEventListener("click", onClickCapture, true);
       cleanups.push(() => {
+        handle.removeEventListener("pointerdown", armDrag);
+        handle.removeEventListener("mousedown", armDrag);
+        handle.removeEventListener("pointerup", disarmIfIdle);
+        handle.removeEventListener("pointercancel", disarmIfIdle);
         handle.removeEventListener("dragstart", onDragStart);
         handle.removeEventListener("dragend", onDragEnd);
         handle.removeEventListener("click", onClickCapture, true);
+        handle.draggable = false;
         handle.removeAttribute("draggable");
         handle.classList.remove("app-left-sidebar-section__drag-handle");
       });
     }
 
+    boundHandlesRef.current = nextHandles;
     unbindHandlesRef.current = () => {
       for (const cleanup of cleanups) cleanup();
+      boundHandlesRef.current = [];
     };
-  }, [clearDropEdge, disabled, sectionId]);
+  }, [disabled, finishDrag, sectionId]);
 
   useLayoutEffect(() => {
     rebindHandles();
     return () => {
       unbindHandlesRef.current?.();
       unbindHandlesRef.current = null;
+      draggingRef.current = false;
     };
-  }, [rebindHandles, children]);
+  }, [rebindHandles]);
 
-  // 面板异步挂载标题行（如 Git 工具栏）时补绑拖拽柄。
+  // 面板异步挂载标题行（如 Git 工具栏）时补绑拖拽柄；Git 文件列表变更不得拆掉正在进行的拖拽。
   useEffect(() => {
     const root = rootRef.current;
     if (!root || typeof MutationObserver === "undefined") return;
     let frame = 0;
     const observer = new MutationObserver(() => {
+      if (draggingRef.current) return;
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => rebindHandles());
+      frame = requestAnimationFrame(() => {
+        if (draggingRef.current) return;
+        rebindHandles();
+      });
     });
-    observer.observe(root, { childList: true, subtree: false });
-    const nested = root.firstElementChild;
-    if (nested) {
-      observer.observe(nested, { childList: true, subtree: true });
-    }
+    observer.observe(root, { childList: true, subtree: true });
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
   }, [rebindHandles]);
+
+  // HTML5 dragend 在 WKWebView 里可能丢；Esc / 松开后仍卡住时再清态。
+  // pointerup 后延迟回收，避免抢在 drop 之前把 draggable 拆掉。
+  useEffect(() => {
+    let stuckTimer = 0;
+    const onGlobalDragEnd = () => finishDrag();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      finishDrag();
+    };
+    const onPointerUp = () => {
+      if (!draggingRef.current) return;
+      window.clearTimeout(stuckTimer);
+      stuckTimer = window.setTimeout(() => {
+        if (!draggingRef.current) return;
+        finishDrag();
+      }, 200);
+    };
+    window.addEventListener("dragend", onGlobalDragEnd);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    return () => {
+      window.clearTimeout(stuckTimer);
+      window.removeEventListener("dragend", onGlobalDragEnd);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [finishDrag]);
+
   const handleDragOver = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
-      if (disabled || !hasSectionDragPayload(event.dataTransfer)) return;
+      if (disabled || !hasLeftSidebarSectionDragPayload(event.dataTransfer)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
       const rect = event.currentTarget.getBoundingClientRect();
@@ -174,7 +233,7 @@ function LeftSidebarSortableSectionInner({
 
   const handleDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
-      if (disabled || !hasSectionDragPayload(event.dataTransfer)) return;
+      if (disabled || !hasLeftSidebarSectionDragPayload(event.dataTransfer)) return;
       event.preventDefault();
       event.stopPropagation();
       const fromRaw = event.dataTransfer.getData(LEFT_SIDEBAR_SECTION_DND_MIME);

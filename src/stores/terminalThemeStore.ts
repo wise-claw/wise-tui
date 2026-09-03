@@ -2,13 +2,10 @@ import { useSyncExternalStore } from "react";
 import {
   parseTerminalThemeMode,
   resolveTerminalDark,
+  WISE_TERMINAL_THEME_MODE_CHANGED,
   type TerminalThemeMode,
 } from "../constants/terminalThemeMode";
 import { getAppThemeState, subscribeAppTheme } from "./appThemeStore";
-import {
-  loadWiseDefaultConfig,
-  WISE_TERMINAL_THEME_MODE_CHANGED,
-} from "../services/wiseDefaultConfigStore";
 
 /**
  * 内置终端主题全局状态：模式（跟随应用 / 浅 / 深）+ 解析后的实际深浅。
@@ -108,7 +105,8 @@ export function bootstrapTerminalThemeStore(): () => void {
 
   if (!hydrated) {
     hydrated = true;
-    void loadWiseDefaultConfig()
+    void import("../services/wiseDefaultConfigStore")
+      .then(({ loadWiseDefaultConfig }) => loadWiseDefaultConfig())
       .then((config) => {
         applyTerminalThemeMode(config.terminalThemeMode);
       })

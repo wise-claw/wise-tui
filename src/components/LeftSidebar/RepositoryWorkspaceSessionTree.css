@@ -38,8 +38,12 @@
 }
 
 .app-workspace-session-tree__row:hover {
-  background: color-mix(in srgb, var(--ant-color-fill-secondary) 72%, transparent);
+  background: var(--wise-row-hover-bg);
   color: var(--ant-color-text);
+}
+
+.app-workspace-session-tree__row:active:not(.app-workspace-session-tree__row--active) {
+  background: var(--wise-row-active-bg);
 }
 
 .app-workspace-session-tree__row--active {

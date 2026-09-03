@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import { isFileTreeScrollActive } from "../stores/chromePanelHoverStore";
 import { isMainThreadCongested } from "../stores/mainThreadCongestionStore";
 import { REPOSITORY_TREE_ROW_HEIGHT_PX } from "../components/GitPanel/repositoryTreeLayout";
 
@@ -9,7 +8,9 @@ import { REPOSITORY_TREE_ROW_HEIGHT_PX } from "../components/GitPanel/repository
  */
 function resolvePathFromTarget(scrollRoot: HTMLElement, target: EventTarget | null): string | null {
   if (!target || !(target instanceof Element)) return null;
-  const row = target.closest(".repo-tree-node[data-repo-path]");
+  const row =
+    target.closest(".repo-tree-node[data-repo-path]") ??
+    target.closest(".repo-tree-virtual-list__row[data-repo-path]");
   if (!row) return null;
   if (!scrollRoot.contains(row)) return null;
   return row.getAttribute("data-repo-path") ?? null;
@@ -24,6 +25,7 @@ export function useRepositoryExplorerPointerHover(
   scrollRootRef: RefObject<HTMLElement | null>,
   enabled = true,
   rowRef?: RefObject<readonly { key: string; node?: { readonly path: string } }[] | null>,
+  scrollRootEl: HTMLElement | null = null,
 ): string | null {
   const [hoverPath, setHoverPath] = useState<string | null>(null);
   const pointerRef = useRef({ x: 0, y: 0, inside: false });
@@ -92,7 +94,6 @@ export function useRepositoryExplorerPointerHover(
     if (!el) return;
 
     const onPointerMove = (event: PointerEvent) => {
-      if (isMainThreadCongested() || isFileTreeScrollActive()) return;
       pointerRef.current = { x: event.clientX, y: event.clientY, inside: true };
       pendingTargetRef.current = event.target;
       // pointermove 在高刷新率设备上可达 60–120 次/秒，用 rAF 合并，一帧最多一次 setHoverPath。
@@ -122,11 +123,13 @@ export function useRepositoryExplorerPointerHover(
       });
     };
 
+    el.addEventListener("pointerover", onPointerMove, { passive: true });
     el.addEventListener("pointermove", onPointerMove, { passive: true });
     el.addEventListener("pointerleave", onPointerLeave);
     el.addEventListener("scroll", onScroll, { passive: true });
 
     return () => {
+      el.removeEventListener("pointerover", onPointerMove);
       el.removeEventListener("pointermove", onPointerMove);
       el.removeEventListener("pointerleave", onPointerLeave);
       el.removeEventListener("scroll", onScroll);
@@ -139,7 +142,7 @@ export function useRepositoryExplorerPointerHover(
         scrollRafRef.current = 0;
       }
     };
-  }, [enabled, scrollRootRef, syncHoverFromPosition, syncHoverFromTarget]);
+  }, [enabled, scrollRootRef, scrollRootEl, syncHoverFromPosition, syncHoverFromTarget]);
 
   return hoverPath;
 }

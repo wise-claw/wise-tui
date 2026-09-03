@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
 
 const MAX_LIST_DIR_ENTRIES: usize = 200;
+const MAX_FIRST_FILE_CANDIDATES: usize = 32;
 const MAX_BINARY_PREVIEW_BYTES: u64 = 45 * 1024 * 1024;
 /// 仓库文件编辑器可读/可写的 UTF-8 正文上限（与前端 Monaco 大文件路径对齐）。
 const MAX_EDITOR_FILE_BYTES: u64 = 4 * 1024 * 1024;
@@ -144,7 +145,9 @@ pub struct WorkspaceSddSignals {
 }
 
 #[tauri::command]
-pub(crate) fn detect_workspace_sdd_signals(repo_path: String) -> Result<WorkspaceSddSignals, String> {
+pub(crate) fn detect_workspace_sdd_signals(
+    repo_path: String,
+) -> Result<WorkspaceSddSignals, String> {
     if repo_path.trim().is_empty() {
         return Err("repoPath 不能为空".into());
     }
@@ -178,6 +181,13 @@ pub struct ProjectRelativeFileStat {
     pub mtime_ms: u64,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectRelativeFileMatch {
+    pub relative_path: String,
+    pub content: String,
+}
+
 fn editor_file_too_large(byte_len: u64) -> bool {
     byte_len > MAX_EDITOR_FILE_BYTES
 }
@@ -197,6 +207,47 @@ pub(crate) fn read_project_relative_file(
 ) -> Result<String, String> {
     let (canon, _) = resolve_project_relative_regular_file(&project_path, &relative_path)?;
     fs::read_to_string(&canon).map_err(|e| format!("读取文件失败: {e}"))
+}
+
+/// 按优先级返回第一个存在的仓库相对文件。用于模块解析时把十余次 IPC/根路径校验
+/// 合并成一次；任一候选都必须通过与单文件读取相同的越界和普通文件检查。
+#[tauri::command]
+pub(crate) fn read_first_project_relative_file(
+    project_path: String,
+    relative_paths: Vec<String>,
+) -> Result<Option<ProjectRelativeFileMatch>, String> {
+    if relative_paths.len() > MAX_FIRST_FILE_CANDIDATES {
+        return Err(format!(
+            "候选文件数量超过上限（{}）",
+            MAX_FIRST_FILE_CANDIDATES
+        ));
+    }
+    let base = canonicalize_project_dir(&project_path)?;
+    for relative_path in relative_paths {
+        let normalized = relative_path.trim();
+        let candidate = match safe_join_under_project(&base, normalized) {
+            Ok(path) => path,
+            Err(_) => continue,
+        };
+        let canon = match candidate.canonicalize() {
+            Ok(path) if path.starts_with(&base) => path,
+            _ => continue,
+        };
+        let is_file = fs::metadata(&canon)
+            .map(|meta| meta.is_file())
+            .unwrap_or(false);
+        if !is_file {
+            continue;
+        }
+        let Ok(content) = fs::read_to_string(&canon) else {
+            continue;
+        };
+        return Ok(Some(ProjectRelativeFileMatch {
+            relative_path: normalized.to_string(),
+            content,
+        }));
+    }
+    Ok(None)
 }
 
 /// 仓库文件编辑器专用读取：超过 4MiB 拒绝打开，避免多 MB 正文整包 IPC。
@@ -385,7 +436,10 @@ pub(crate) fn read_wise_relative_file(relative_path: String) -> Result<String, S
 }
 
 #[tauri::command]
-pub(crate) fn append_wise_relative_file(relative_path: String, payload: String) -> Result<(), String> {
+pub(crate) fn append_wise_relative_file(
+    relative_path: String,
+    payload: String,
+) -> Result<(), String> {
     let rel = relative_path.trim();
     if rel.is_empty() {
         return Err("相对路径不能为空".into());
@@ -436,8 +490,9 @@ pub(crate) fn append_wise_relative_file(relative_path: String, payload: String) 
 mod tests {
     use super::{
         canonicalize_project_dir, editor_file_too_large, project_base_cache_get,
-        project_base_cache_put, resolve_project_relative_regular_file, MAX_EDITOR_FILE_BYTES,
-        PROJECT_BASE_CACHE, PROJECT_BASE_CACHE_CAPACITY,
+        project_base_cache_put, read_first_project_relative_file,
+        resolve_project_relative_regular_file, MAX_EDITOR_FILE_BYTES, PROJECT_BASE_CACHE,
+        PROJECT_BASE_CACHE_CAPACITY,
     };
     use std::fs;
     use std::io::Write;
@@ -483,11 +538,7 @@ mod tests {
         assert_eq!(hit, PathBuf::from("/canon/0"));
         assert_eq!(cache[0].0, oldest_key);
         // 再插入一条，应淘汰原先第二老（repo/1），保留刚访问的 repo/0
-        project_base_cache_put(
-            &mut cache,
-            "/repo/new".into(),
-            PathBuf::from("/canon/new"),
-        );
+        project_base_cache_put(&mut cache, "/repo/new".into(), PathBuf::from("/canon/new"));
         assert_eq!(cache.len(), PROJECT_BASE_CACHE_CAPACITY);
         assert!(cache.iter().any(|(k, _)| k == "/repo/0"));
         assert!(cache.iter().any(|(k, _)| k == "/repo/new"));
@@ -508,5 +559,39 @@ mod tests {
         assert_eq!(canon, file_path.canonicalize().expect("file canon"));
         assert_eq!(meta.len(), 5);
         assert!(resolve_project_relative_regular_file(&project, "../outside.txt").is_err());
+    }
+
+    #[test]
+    fn read_first_project_relative_file_preserves_candidate_priority() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(dir.path().join("fallback.ts"), "fallback").expect("fallback");
+        fs::write(dir.path().join("preferred.ts"), "preferred").expect("preferred");
+        let project = dir.path().to_string_lossy().to_string();
+        let matched = read_first_project_relative_file(
+            project,
+            vec![
+                "missing.ts".into(),
+                "preferred.ts".into(),
+                "fallback.ts".into(),
+            ],
+        )
+        .expect("read candidates")
+        .expect("match");
+        assert_eq!(matched.relative_path, "preferred.ts");
+        assert_eq!(matched.content, "preferred");
+    }
+
+    #[test]
+    fn read_first_project_relative_file_skips_unsafe_candidates() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(dir.path().join("safe.ts"), "safe").expect("safe");
+        let project = dir.path().to_string_lossy().to_string();
+        let matched = read_first_project_relative_file(
+            project,
+            vec!["../outside.ts".into(), "safe.ts".into()],
+        )
+        .expect("read candidates")
+        .expect("match");
+        assert_eq!(matched.relative_path, "safe.ts");
     }
 }

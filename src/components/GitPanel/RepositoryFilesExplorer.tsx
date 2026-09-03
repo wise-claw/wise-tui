@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HoverHint } from "../shared/HoverHint";
 import { Button, Empty, Input, Menu, Popconfirm, Spin } from "antd";
@@ -113,6 +113,12 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
     explorer.searchResultRows.length === 0;
 
   const scrollRegionRef = useRef<HTMLDivElement>(null);
+  const [scrollRegionEl, setScrollRegionEl] = useState<HTMLDivElement | null>(null);
+  const bindScrollRegion = useCallback((node: HTMLDivElement | null) => {
+    scrollRegionRef.current = node;
+    setScrollRegionEl((prev) => (prev === node ? prev : node));
+  }, []);
+  const [rowHoverPath, setRowHoverPath] = useState<string | null>(null);
   useScrollEndClass(scrollRegionRef, [
     LEFT_SIDEBAR_SCROLLING_CLASS,
     "git-files-explorer-scroll-region--scrolling",
@@ -174,14 +180,17 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
   }, [explorer.explorerCtx, explorer.setExplorerCtx]);
   const pointerHoverPath = useRepositoryExplorerPointerHover(
     scrollRegionRef,
-    active && !searchActive,
+    !searchActive,
     pointerHoverRowsRef,
+    scrollRegionEl,
   );
+  const hoverPath = rowHoverPath ?? pointerHoverPath;
 
   const treeActions = useMemo(
     () => ({
       onToggleDir: explorer.handleToggleDir,
       onSelectNode: explorer.handleSelectNode,
+      onHoverNode: setRowHoverPath,
       onOpenFile,
       onInlineValueChange: explorer.handleInlineValueChange,
       onInlineCommit: explorer.handleInlineCommit,
@@ -306,7 +315,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
           scrollRootRef={scrollRegionRef}
           rows={flatTreeRows}
           selectedPath={explorer.selected?.path ?? null}
-          hoverPath={pointerHoverPath}
+          hoverPath={hoverPath}
           loadingDirKeys={explorer.loadingDirKeys}
           inlineCreate={explorer.inlineCreate}
           inlineRename={explorer.inlineRename}
@@ -390,12 +399,13 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
         </div>
       ) : null}
       <div
-        ref={scrollRegionRef}
+        ref={bindScrollRegion}
         className={`git-files-explorer-scroll-region${
           explorer.isRefreshing && explorer.filteredTree.length === 0
             ? " git-files-explorer-scroll-region--refreshing"
             : ""
         }`}
+        onPointerLeave={() => setRowHoverPath(null)}
         onDragOver={treeDrop.onDragOver}
         onDragLeave={treeDrop.onDragLeave}
         onDrop={treeDrop.onDrop}

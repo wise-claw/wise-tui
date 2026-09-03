@@ -18,6 +18,7 @@ type ExplorerBridge = {
 const entriesByPath = new Map<string, PathEntry>();
 const listenersByPath = new Map<string, Set<Listener>>();
 let explorerBridge: ExplorerBridge | null = null;
+const MAX_WARM_PATHS = 32;
 
 function normalizePath(path: string): string {
   return path.trim();
@@ -59,6 +60,21 @@ function releasePath(pathKey: string): void {
   listenersByPath.delete(pathKey);
 }
 
+function trimWarmPaths(): void {
+  let warmCount = 0;
+  for (const entry of entriesByPath.values()) {
+    if (entry.consumers === 0) warmCount += 1;
+  }
+  if (warmCount <= MAX_WARM_PATHS) return;
+  for (const [pathKey, entry] of entriesByPath) {
+    if (entry.consumers > 0) continue;
+    entriesByPath.delete(pathKey);
+    listenersByPath.delete(pathKey);
+    warmCount -= 1;
+    if (warmCount <= MAX_WARM_PATHS) break;
+  }
+}
+
 /** Wired by gitRepositoryExplorerStatusStore to share one git_status poll. */
 export function registerGitRepositoryStatsExplorerBridge(bridge: ExplorerBridge): void {
   explorerBridge = bridge;
@@ -80,6 +96,11 @@ export function applyGitRepositoryStatsFromStatus(
       generation: 0,
       consumers: 0,
     };
+    entriesByPath.set(pathKey, entry);
+    trimWarmPaths();
+  } else if (entry.consumers === 0) {
+    // 零消费者条目是供稍后订阅复用的 LRU 热缓存，更新时刷新热度。
+    entriesByPath.delete(pathKey);
     entriesByPath.set(pathKey, entry);
   }
   if (

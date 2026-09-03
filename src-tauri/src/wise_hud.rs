@@ -237,6 +237,8 @@ fn show_main_workspace_windows(app: &AppHandle) {
         if main_window::is_main_workspace_window_label(&label) {
             let _ = win.unminimize();
             let _ = win.show();
+            #[cfg(target_os = "macos")]
+            main_window::disable_native_overlay_titlebar_drag(&win);
         }
     }
     let _ = main_window::focus_main_workspace_window(app);

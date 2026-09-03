@@ -7,6 +7,9 @@
 
 export type TerminalThemeMode = "follow" | "light" | "dark";
 
+/** 默认配置变更时通知终端主题 store，独立于大型配置模块以保持启动入口轻量。 */
+export const WISE_TERMINAL_THEME_MODE_CHANGED = "wise:terminal-theme-mode-changed";
+
 export const TERMINAL_THEME_MODES: readonly TerminalThemeMode[] = [
   "follow",
   "light",

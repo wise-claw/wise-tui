@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { releasePointerCaptureSafe } from "../../utils/releasePointerCapture";
 import "./index.css";
 
 // ── Types ──
@@ -44,6 +45,8 @@ export function MainLayoutResizeHandle({ variant, startWidthPx, onWidthChange }:
   // 仅用于触发 hover/active 视觉 class 的轻量 state：拖动时把 class 加上，结束时去掉。
   // 不参与宽度数据流，避免任何父组件重渲。
   const [dragging, setDragging] = useState(false);
+  const onWidthChangeRef = useRef(onWidthChange);
+  onWidthChangeRef.current = onWidthChange;
 
   /** 用 rAF 把"待提交的最新宽度"合并到下一帧。
    *  多次 pointermove 在同一帧时只 commit 一次最新值，绕开 React 逐事件重渲。 */
@@ -58,35 +61,28 @@ export function MainLayoutResizeHandle({ variant, startWidthPx, onWidthChange }:
       if (cur.pendingNext == null) return;
       const next = cur.pendingNext;
       cur.pendingNext = null;
-      onWidthChange(next);
+      onWidthChangeRef.current(next);
     });
-  }, [onWidthChange]);
+  }, []);
 
   /** 收尾：释放 pointer capture、清理 rAF、去掉 dragging 视觉与 body class。 */
-  const endDrag = useCallback(
-    (event?: PointerEvent) => {
-      const drag = dragRef.current;
-      if (!drag) return;
-      const el = handleRef.current;
-      if (el && event && el.hasPointerCapture?.(event.pointerId)) {
-        el.releasePointerCapture(event.pointerId);
-      }
-      if (drag.rafId != null) {
-        window.cancelAnimationFrame(drag.rafId);
-      }
-      // flush 最后一帧的 pending（用户最后 1 个 pointermove 后通常还会有一帧在排队）
-      if (drag.pendingNext != null) {
-        const next = drag.pendingNext;
-        drag.pendingNext = null;
-        // 用同步调用即可：pointerup 后不会再有新的 move 写入。
-        onWidthChange(next);
-      }
-      dragRef.current = null;
-      setResizingBodyClass(false);
-      setDragging(false);
-    },
-    [onWidthChange],
-  );
+  const endDrag = useCallback((event?: PointerEvent) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    releasePointerCaptureSafe(handleRef.current, event?.pointerId ?? drag.pointerId);
+    if (drag.rafId != null) {
+      window.cancelAnimationFrame(drag.rafId);
+    }
+    // flush 最后一帧的 pending（用户最后 1 个 pointermove 后通常还会有一帧在排队）
+    if (drag.pendingNext != null) {
+      const next = drag.pendingNext;
+      drag.pendingNext = null;
+      onWidthChangeRef.current(next);
+    }
+    dragRef.current = null;
+    setResizingBodyClass(false);
+    setDragging(false);
+  }, []);
 
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -142,8 +138,17 @@ export function MainLayoutResizeHandle({ variant, startWidthPx, onWidthChange }:
     [endDrag],
   );
 
-  // 兜底：window 失焦 / 切到后台 / 关闭页面 / 组件卸载时强制释放拖动状态。
-  // 否则拖到一半切窗口再回来，handle 会卡在 dragging 视觉、body cursor 锁住、raf 仍在跑。
+  const onLostPointerCapture = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!dragRef.current) return;
+      if (event.pointerId !== dragRef.current.pointerId) return;
+      endDrag(event.nativeEvent);
+    },
+    [endDrag],
+  );
+
+  // 兜底：window 失焦 / 切到后台 / 指针在捕获节点外松开 / 组件卸载时强制释放。
+  // endDrag 身份稳定，避免会话刷新导致 effect 清理误中断拖动。
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState !== "hidden") return;
@@ -154,12 +159,20 @@ export function MainLayoutResizeHandle({ variant, startWidthPx, onWidthChange }:
       if (!dragRef.current) return;
       endDrag();
     };
+    const onWindowPointerUp = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      endDrag(event);
+    };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("blur", onBlur);
+    window.addEventListener("pointerup", onWindowPointerUp);
+    window.addEventListener("pointercancel", onWindowPointerUp);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", onBlur);
-      // 组件卸载兜底
+      window.removeEventListener("pointerup", onWindowPointerUp);
+      window.removeEventListener("pointercancel", onWindowPointerUp);
       if (dragRef.current) endDrag();
       setResizingBodyClass(false);
     };
@@ -179,6 +192,7 @@ export function MainLayoutResizeHandle({ variant, startWidthPx, onWidthChange }:
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onLostPointerCapture={onLostPointerCapture}
     />
   );
 }

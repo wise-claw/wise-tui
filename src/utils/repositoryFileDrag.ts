@@ -1,4 +1,4 @@
-import type { DragEvent } from "react";
+import type { DragEvent, PointerEvent as ReactPointerEvent } from "react";
 
 /** 「开发文件」树（文件/目录）拖到聊天输入框或文件树目录时使用的 DataTransfer MIME（非系统文件拖放）。 */
 export const WISE_REPOSITORY_FILE_DRAG_MIME = "application/x-wise-repository-file";
@@ -78,4 +78,17 @@ export function getWiseRepositoryFileDragPayload(event: DragEvent): WiseReposito
 export function getWiseRepositoryFileDragPaths(event: DragEvent): string[] {
   const payload = getWiseRepositoryFileDragPayload(event);
   return payload ? [payload.relativePath] : [];
+}
+
+/**
+ * WKWebView 上常驻 `draggable=true` 会吞掉 CSS :hover。
+ * 只在主键按下时打开 HTML5 拖拽，指针抬起/拖完立刻关掉。
+ */
+export function enableHtml5DragOnPrimaryPointerDown(event: ReactPointerEvent<HTMLElement>): void {
+  if (event.button !== 0) return;
+  event.currentTarget.draggable = true;
+}
+
+export function disableHtml5Drag(event: { currentTarget: HTMLElement }): void {
+  event.currentTarget.draggable = false;
 }

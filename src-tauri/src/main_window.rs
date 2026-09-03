@@ -19,6 +19,186 @@ pub fn is_primary_main_workspace_window_label(label: &str) -> bool {
     label == PRIMARY_MAIN_WINDOW_LABEL
 }
 
+/// Overlay 标题栏会在按下时自己拖窗口；再叠 `data-tauri-drag-region` 就会瞬移。
+/// 关掉系统标题栏拖动，只保留我们在 LeftMouseDown 里按光标窗口坐标调用的 startDragging。
+#[cfg(target_os = "macos")]
+pub fn disable_native_overlay_titlebar_drag(win: &tauri::WebviewWindow) {
+    let win = win.clone();
+    let _ = win.clone().run_on_main_thread(move || {
+        let Ok(ptr) = win.ns_window() else {
+            return;
+        };
+        if ptr.is_null() {
+            return;
+        }
+        unsafe {
+            let obj = ptr as *const objc2::runtime::AnyObject;
+            let _: () = objc2::msg_send![obj, setMovable: false];
+            let _: () = objc2::msg_send![obj, setMovableByWindowBackground: false];
+        }
+    });
+}
+
+/// Overlay 顶栏必须在 LeftMouseDown 当下调用 `performWindowDragWithEvent:`。
+/// 抓取点用窗口内当前光标，避免 hide/show（HUD 切回）后 webview 事件坐标过期导致单击偏移。
+#[cfg(target_os = "macos")]
+fn perform_overlay_chrome_drag(
+    ns_window: *const objc2::runtime::AnyObject,
+    event: Option<&objc2_app_kit::NSEvent>,
+) {
+    use objc2::runtime::AnyObject;
+    use objc2_app_kit::NSEvent;
+    use objc2_foundation::NSPoint;
+
+    unsafe {
+        let screen = NSEvent::mouseLocation();
+        let grab: NSPoint = objc2::msg_send![ns_window, convertPointFromScreen: screen];
+        let window_number: isize = match event {
+            Some(current) => current.windowNumber(),
+            None => objc2::msg_send![ns_window, windowNumber],
+        };
+        let flags = event
+            .map(|current| current.modifierFlags())
+            .unwrap_or(objc2_app_kit::NSEventModifierFlags::empty());
+        let timestamp = event.map(|current| current.timestamp()).unwrap_or(0.0);
+        let corrected: *mut AnyObject = objc2::msg_send![
+            objc2::class!(NSEvent),
+            mouseEventWithType: 1usize,
+            location: grab,
+            modifierFlags: flags,
+            timestamp: timestamp,
+            windowNumber: window_number,
+            context: std::ptr::null::<AnyObject>(),
+            eventNumber: 0isize,
+            clickCount: 1isize,
+            pressure: 1.0f32
+        ];
+        if !corrected.is_null() {
+            let _: () = objc2::msg_send![ns_window, performWindowDragWithEvent: corrected];
+        } else if let Some(current) = event {
+            let _: () = objc2::msg_send![ns_window, performWindowDragWithEvent: current];
+        }
+    }
+}
+
+/// Overlay 顶栏必须在 LeftMouseDown 当下调用 `performWindowDragWithEvent:`。
+/// 抓取点用窗口内当前光标，避免 hide/show（HUD 切回）后 webview 事件坐标过期导致单击偏移。
+#[cfg(target_os = "macos")]
+fn start_overlay_window_drag_macos(win: &tauri::WebviewWindow) {
+    use objc2::MainThreadMarker;
+    use objc2::runtime::AnyObject;
+    use objc2_app_kit::{NSApplication, NSEvent};
+
+    if NSEvent::pressedMouseButtons() & 1 == 0 {
+        return;
+    }
+    let Ok(ptr) = win.ns_window() else {
+        return;
+    };
+    if ptr.is_null() {
+        return;
+    }
+    let ns_window = ptr as *const AnyObject;
+    let mtm = unsafe { MainThreadMarker::new_unchecked() };
+    let app = NSApplication::sharedApplication(mtm);
+    perform_overlay_chrome_drag(ns_window, app.currentEvent().as_deref());
+}
+
+#[cfg(target_os = "macos")]
+fn set_overlay_drag_cursor_macos(kind: &str) {
+    use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+
+    static MODE: AtomicU8 = AtomicU8::new(0);
+    static MONITOR_INSTALLED: AtomicBool = AtomicBool::new(false);
+
+    fn apply(mode: u8) {
+        use objc2::runtime::AnyObject;
+        unsafe {
+            let class = objc2::class!(NSCursor);
+            let cursor: *const AnyObject = match mode {
+                2 => objc2::msg_send![class, closedHandCursor],
+                0 => objc2::msg_send![class, arrowCursor],
+                _ => objc2::msg_send![class, openHandCursor],
+            };
+            if !cursor.is_null() {
+                let _: () = objc2::msg_send![cursor, set];
+            }
+        }
+    }
+
+    let mode: u8 = match kind {
+        "grabbing" => 2,
+        "reset" => 0,
+        _ => 1,
+    };
+    MODE.store(mode, Ordering::Relaxed);
+    apply(mode);
+
+    if MONITOR_INSTALLED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    use std::ptr::NonNull;
+    use block2::RcBlock;
+    use objc2_app_kit::{NSEvent, NSEventMask};
+
+    let block = RcBlock::new(|event: NonNull<NSEvent>| -> *mut NSEvent {
+        let current = MODE.load(Ordering::Relaxed);
+        if current != 0 {
+            apply(current);
+        }
+        event.as_ptr()
+    });
+    unsafe {
+        let _monitor = NSEvent::addLocalMonitorForEventsMatchingMask_handler(
+            NSEventMask::MouseMoved | NSEventMask::LeftMouseDragged,
+            &block,
+        );
+    }
+    std::mem::forget(block);
+}
+
+/// Overlay 顶栏在 mousedown 当下调用：用当前光标窗口坐标开始拖，避免单击偏移。
+#[tauri::command]
+pub fn start_overlay_window_drag(window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let window = window.clone();
+        window
+            .clone()
+            .run_on_main_thread(move || {
+                start_overlay_window_drag_macos(&window);
+            })
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        window.start_dragging().map_err(|e| e.to_string())
+    }
+}
+
+/// Overlay 标题栏会盖住 CSS cursor；悬停拖区时改用系统开/合掌光标。
+#[tauri::command]
+pub fn set_overlay_drag_cursor(
+    window: tauri::WebviewWindow,
+    kind: String,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let window = window.clone();
+        window
+            .clone()
+            .run_on_main_thread(move || {
+                set_overlay_drag_cursor_macos(&kind);
+            })
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, kind);
+        Ok(())
+    }
+}
+
 pub fn workspace_window_selection_storage_key(window_label: &str) -> String {
     format!(
         "wise.workspace.windowSelection.v1:{}",
@@ -165,6 +345,8 @@ pub fn open_main_workspace_window(
     let win = builder
         .build()
         .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    disable_native_overlay_titlebar_drag(&win);
     focus_window(&win)?;
     Ok(label)
 }

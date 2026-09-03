@@ -1,4 +1,5 @@
 import { ClaudeCodeUsageHeaderBtn } from "../ClaudeCodeUsagePopover";
+import { WindowChromeDragUnderlay } from "../shared/WindowChromeDragUnderlay";
 import { HoverHint } from "../shared/HoverHint";
 import { ClaudeCodeToolsTopbarTrigger } from "../ClaudeSessions/ClaudeCodeToolsTopbarTrigger";
 import { DefaultConfigTopbarTrigger } from "./DefaultConfigTopbarTrigger";
@@ -29,7 +30,8 @@ export function LeftSidebarTopbar({
 }: LeftSidebarTopbarProps) {
   return (
     <div className="app-left-sidebar-topbar">
-      <div className="app-left-sidebar-topbar-brand app-logo-draggable" data-tauri-drag-region>
+      <WindowChromeDragUnderlay className="app-left-sidebar-topbar-drag-underlay" />
+      <div className="app-left-sidebar-topbar-brand app-logo-draggable">
         <span className="app-left-sidebar-topbar-mark" aria-hidden>
           W
         </span>

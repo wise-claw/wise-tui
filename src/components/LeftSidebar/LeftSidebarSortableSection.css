@@ -13,6 +13,7 @@
 .app-left-sidebar-section--requirements,
 .app-left-sidebar-section--monitor {
   flex: 0 0 auto;
+  min-height: 26px;
 }
 
 .app-left-sidebar-section--repoPanel {

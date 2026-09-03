@@ -62,11 +62,13 @@ import {
 import { normalizeChord } from "../utils/atMentionShortcutChord";
 import {
   parseTerminalThemeMode,
+  WISE_TERMINAL_THEME_MODE_CHANGED,
   type TerminalThemeMode,
 } from "../constants/terminalThemeMode";
 import { deleteAppSetting, getAppSetting, setAppSetting, setAppSettingJson } from "./appSettingsStore";
 
 export type { TerminalThemeMode };
+export { WISE_TERMINAL_THEME_MODE_CHANGED };
 
 export type ClaudeSessionConnectionKind = NonNullable<ClaudeSession["connectionKind"]>;
 
@@ -146,8 +148,6 @@ export const WISE_REPO_PANEL_SPLIT_HEIGHT_CHANGED = "wise:repo-panel-split-heigh
 export const WISE_OPEN_IN_TERMINAL_SHORTCUT_CHANGED = "wise:open-in-terminal-shortcut-changed";
 
 export const WISE_OPEN_IN_EDITOR_SHORTCUT_CHANGED = "wise:open-in-editor-shortcut-changed";
-
-export const WISE_TERMINAL_THEME_MODE_CHANGED = "wise:terminal-theme-mode-changed";
 
 export const WISE_SESSION_FEEDBACK_LOOP_CHANGED = "wise:session-feedback-loop-changed";
 

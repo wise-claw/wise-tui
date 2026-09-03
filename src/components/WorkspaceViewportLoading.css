@@ -1,0 +1,33 @@
+/* 启动壳必须保持零 UI 框架依赖，先于 Ant Design 大包下载完成即可绘制。 */
+.app-workspace-loading-overlay--viewport {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: var(--app-workspace-stage-bg, var(--ant-color-bg-layout, #f4f6f8));
+}
+
+.app-workspace-loading-spinner {
+  width: 30px;
+  height: 30px;
+  box-sizing: border-box;
+  border: 3px solid color-mix(in srgb, var(--ant-color-primary, #1677ff) 20%, transparent);
+  border-top-color: var(--ant-color-primary, #1677ff);
+  border-radius: 50%;
+  animation: app-workspace-loading-spin 0.8s linear infinite;
+}
+
+@keyframes app-workspace-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-workspace-loading-spinner {
+    animation-duration: 1.6s;
+  }
+}

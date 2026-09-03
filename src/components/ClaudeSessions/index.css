@@ -506,6 +506,7 @@
   box-shadow: var(--app-workspace-glass-inset-glow);
   flex-shrink: 0;
   user-select: none;
+  cursor: grab;
 }
 
 .app-chat-topbar::after {
@@ -520,22 +521,30 @@
   z-index: 2;
 }
 
-/* Leading zone: full-width drag underlay; interactive chips stay clickable on top */
+/* Overlay 主窗口顶栏拖拽层：mousedown 当下拖窗口，并禁止划选。 */
+.app-chat-topbar-drag-underlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.app-chat-topbar-drag-underlay.is-dragging {
+  cursor: grabbing;
+}
+
 .app-chat-topbar-leading {
   position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   min-width: 0;
   flex: 1 1 0;
   align-self: stretch;
-}
-
-.app-chat-topbar-drag-underlay {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  -webkit-app-region: drag;
-  cursor: grab;
+  pointer-events: none;
 }
 
 .app-chat-topbar-left {
@@ -544,7 +553,8 @@
   display: flex;
   align-items: center;
   min-width: 0;
-  flex: 1 1 0;
+  flex: 0 1 auto;
+  max-width: 100%;
   pointer-events: none;
 }
 
@@ -553,8 +563,16 @@
   align-items: center;
   gap: 4px;
   min-width: 0;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  pointer-events: none;
+}
+
+.app-chat-topbar-leading-cluster > * {
   pointer-events: auto;
+}
+
+.app-chat-topbar-leading-cluster > .app-topbar-divider {
+  pointer-events: none;
 }
 
 /* 顶栏「消息/文件」切换器：紧凑纯文字胶囊，融入玻璃顶栏。
@@ -598,10 +616,6 @@
   box-shadow: var(--wise-elevation-1);
 }
 
-.app-chat-topbar-left > * {
-  pointer-events: auto;
-}
-
 .app-chat-topbar-left--collapsed,
 .app-chat-topbar-leading--collapsed .app-chat-topbar-left {
   margin-left: 80px;
@@ -619,11 +633,19 @@
 }
 
 .app-chat-topbar-right {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 0;
   min-width: 0;
   flex-shrink: 0;
+  pointer-events: none;
+}
+
+.app-chat-topbar-right > * {
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
 }
 
 /* Tooltip / Popover 外包一层，用相邻间距代替 gap */
@@ -733,6 +755,7 @@
   background: var(--ant-color-border-secondary);
   margin: 0 2px;
   flex-shrink: 0;
+  pointer-events: none;
 }
 
 .app-topbar-run-trigger-wrap,
@@ -8337,6 +8360,9 @@ button.app-message-part-header:disabled:hover {
   flex-shrink: 0;
   padding: 4px 6px 0;
   background: transparent;
+  position: relative;
+  z-index: 5;
+  pointer-events: auto;
 }
 
 /* 钉钉风格：左侧紧凑胶囊 + 右侧「更多」 */
@@ -8344,6 +8370,9 @@ button.app-message-part-header:disabled:hover {
   flex-shrink: 0;
   padding: 4px 6px 0;
   background: transparent;
+  position: relative;
+  z-index: 5;
+  pointer-events: auto;
 }
 
 .app-session-quick-actions__row {
@@ -8353,6 +8382,7 @@ button.app-message-part-header:disabled:hover {
   min-width: 0;
   position: relative;
   z-index: 3;
+  pointer-events: auto;
 }
 
 .app-session-quick-actions__primary {
@@ -8364,7 +8394,6 @@ button.app-message-part-header:disabled:hover {
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
 }
 
@@ -8569,6 +8598,7 @@ button.app-message-part-header:disabled:hover {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  pointer-events: auto;
   transition:
     color 0.12s ease,
     opacity 0.12s ease,

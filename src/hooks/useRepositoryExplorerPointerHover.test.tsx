@@ -224,6 +224,41 @@ describe("useRepositoryExplorerPointerHover", () => {
   });
 });
 
+describe("useRepositoryExplorerPointerHover 虚拟列表行", () => {
+  test("pointermove 落在虚拟行容器上也能解析 data-repo-path", () => {
+    let hover: string | null = null;
+    function Probe() {
+      const scrollRef = useRef<HTMLDivElement>(null);
+      const nextHover = useRepositoryExplorerPointerHover(scrollRef, true);
+      useEffect(() => {
+        hover = nextHover;
+      }, [nextHover]);
+      return (
+        <div ref={scrollRef}>
+          <div className="repo-tree-virtual-list__row" data-repo-path="src">
+            <span>src</span>
+          </div>
+        </div>
+      );
+    }
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(<Probe />);
+    });
+
+    const row = document.querySelector<HTMLElement>(".repo-tree-virtual-list__row")!;
+    act(() => {
+      dispatchPointerMove(row, 10, 10);
+    });
+    act(() => {
+      flushRaf();
+    });
+    expect(hover).toBe("src");
+  });
+});
+
 describe("useRepositoryExplorerPointerHover 渲染节流性能", () => {
   // 用 React.Profiler 的 onRender 量化高频 pointermove 实际触发的 React 提交次数。
   // 流畅度的客观指标：渲染次数越少越流畅（60fps 帧预算 16.67ms，每次提交都占用主线程）。

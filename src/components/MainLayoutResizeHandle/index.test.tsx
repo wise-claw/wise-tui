@@ -281,4 +281,37 @@ describe("MainLayoutResizeHandle", () => {
     });
     expect(document.body.classList.contains("app-main-layout-resizing")).toBe(false);
   });
+
+  test("拖动中父组件换新回调不会清掉 body class", () => {
+    let renderer: ReturnType<typeof create> | undefined;
+    act(() => {
+      renderer = create(
+        <MainLayoutResizeHandle variant="left" startWidthPx={260} onWidthChange={() => {}} />,
+      );
+    });
+    const handle = findHandle(renderer!.root);
+    act(() => {
+      handle.props.onPointerDown(
+        pointerEvent({
+          button: 0,
+          pointerId: 11,
+          pointerType: "mouse",
+          clientX: 0,
+          preventDefault: () => {},
+          currentTarget: handle,
+        }),
+      );
+    });
+    expect(document.body.classList.contains("app-main-layout-resizing")).toBe(true);
+    act(() => {
+      renderer!.update(
+        <MainLayoutResizeHandle variant="left" startWidthPx={260} onWidthChange={() => {}} />,
+      );
+    });
+    expect(document.body.classList.contains("app-main-layout-resizing")).toBe(true);
+    act(() => {
+      renderer!.unmount();
+    });
+    expect(document.body.classList.contains("app-main-layout-resizing")).toBe(false);
+  });
 });

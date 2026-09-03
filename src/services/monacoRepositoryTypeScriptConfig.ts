@@ -13,6 +13,7 @@ export interface RepositoryTypeScriptProfile {
 const TSCONFIG_CANDIDATES = ["tsconfig.json", "jsconfig.json"];
 const MAX_NODE_TYPE_REFERENCE_FILES = 64;
 const MAX_NODE_TYPE_FILE_BYTES = 512 * 1024;
+const MAX_REPOSITORY_PROFILE_CACHE_ENTRIES = 32;
 const CONFIGURED_REPOSITORY_PROFILES = new Map<string, RepositoryTypeScriptProfile>();
 const REGISTERED_REPOSITORY_TYPE_LIBS = new Map<
   string,
@@ -91,7 +92,11 @@ export async function loadRepositoryTypeScriptProfile(
   repositoryPath: string,
 ): Promise<RepositoryTypeScriptProfile> {
   const cached = CONFIGURED_REPOSITORY_PROFILES.get(repositoryPath);
-  if (cached) return cached;
+  if (cached) {
+    CONFIGURED_REPOSITORY_PROFILES.delete(repositoryPath);
+    CONFIGURED_REPOSITORY_PROFILES.set(repositoryPath, cached);
+    return cached;
+  }
 
   const profile: RepositoryTypeScriptProfile = {
     compilerOptions: {},
@@ -120,6 +125,11 @@ export async function loadRepositoryTypeScriptProfile(
   }
 
   CONFIGURED_REPOSITORY_PROFILES.set(repositoryPath, profile);
+  while (CONFIGURED_REPOSITORY_PROFILES.size > MAX_REPOSITORY_PROFILE_CACHE_ENTRIES) {
+    const oldest = CONFIGURED_REPOSITORY_PROFILES.keys().next().value;
+    if (oldest === undefined) break;
+    CONFIGURED_REPOSITORY_PROFILES.delete(oldest);
+  }
   return profile;
 }
 

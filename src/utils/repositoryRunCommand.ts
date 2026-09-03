@@ -273,6 +273,7 @@ export function buildRunErrorAutoFixPrompt(input: {
 }
 
 const RUN_ERROR_MONITOR_DEDUP_WINDOW_MS = 60_000;
+const RUN_ERROR_MONITOR_DEDUP_MAX_ENTRIES = 256;
 const runErrorMonitorSentAtByKey = new Map<string, number>();
 
 export function buildRunErrorMonitorDedupKey(runCwd: string, command: string, tailText: string): string {
@@ -289,16 +290,27 @@ export function shouldSkipRunErrorMonitorSend(dedupKey: string, now: number): bo
   if (lastAt && now - lastAt < RUN_ERROR_MONITOR_DEDUP_WINDOW_MS) {
     return true;
   }
+  runErrorMonitorSentAtByKey.delete(dedupKey);
   runErrorMonitorSentAtByKey.set(dedupKey, now);
-  if (runErrorMonitorSentAtByKey.size > 200) {
+  if (runErrorMonitorSentAtByKey.size > RUN_ERROR_MONITOR_DEDUP_MAX_ENTRIES) {
     const expireBefore = now - RUN_ERROR_MONITOR_DEDUP_WINDOW_MS;
     for (const [key, sentAt] of runErrorMonitorSentAtByKey.entries()) {
       if (sentAt < expireBefore) {
         runErrorMonitorSentAtByKey.delete(key);
       }
     }
+    while (runErrorMonitorSentAtByKey.size > RUN_ERROR_MONITOR_DEDUP_MAX_ENTRIES) {
+      const oldest = runErrorMonitorSentAtByKey.keys().next().value;
+      if (oldest === undefined) break;
+      runErrorMonitorSentAtByKey.delete(oldest);
+    }
   }
   return false;
+}
+
+/** @internal 仅用于回归测试。 */
+export function resetRunErrorMonitorDedupForTests(): void {
+  runErrorMonitorSentAtByKey.clear();
 }
 
 export function detectRunUrlFromLogText(text: string): string | null {

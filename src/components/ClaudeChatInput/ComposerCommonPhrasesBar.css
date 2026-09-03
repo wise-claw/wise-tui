@@ -42,6 +42,7 @@
   cursor: pointer;
   white-space: nowrap;
   touch-action: manipulation;
+  pointer-events: auto;
   transition:
     color 0.12s ease,
     opacity 0.12s ease,

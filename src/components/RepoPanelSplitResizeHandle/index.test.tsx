@@ -285,4 +285,37 @@ describe("RepoPanelSplitResizeHandle", () => {
     });
     expect(document.body.classList.contains("app-repo-panel-split-resizing")).toBe(false);
   });
+
+  test("拖动中父组件换新回调不会清掉 body class", () => {
+    let renderer: ReturnType<typeof create> | undefined;
+    act(() => {
+      renderer = create(
+        <RepoPanelSplitResizeHandle startHeightPx={230} onHeightChange={() => {}} />,
+      );
+    });
+    const handle = findHandle(renderer!.root);
+    act(() => {
+      handle.props.onPointerDown(
+        pointerEvent({
+          button: 0,
+          pointerId: 11,
+          pointerType: "mouse",
+          clientY: 0,
+          preventDefault: () => {},
+          currentTarget: handle,
+        }),
+      );
+    });
+    expect(document.body.classList.contains("app-repo-panel-split-resizing")).toBe(true);
+    act(() => {
+      renderer!.update(
+        <RepoPanelSplitResizeHandle startHeightPx={230} onHeightChange={() => {}} />,
+      );
+    });
+    expect(document.body.classList.contains("app-repo-panel-split-resizing")).toBe(true);
+    act(() => {
+      renderer!.unmount();
+    });
+    expect(document.body.classList.contains("app-repo-panel-split-resizing")).toBe(false);
+  });
 });

@@ -121,8 +121,9 @@
   --wise-focus-ring-inset: inset 0 0 0 1px var(--ant-color-primary);
 
   /* ═══ 可交互行的三态底色（侧栏、列表、Hub 卡片共用）═══ */
-  --wise-row-hover-bg: color-mix(in srgb, var(--ant-color-text) 6%, transparent);
-  --wise-row-active-bg: color-mix(in srgb, var(--ant-color-text) 9%, transparent);
+  /* 6% 在浅色侧栏几乎看不见；10% 才能让光标划过立刻有选中感 */
+  --wise-row-hover-bg: color-mix(in srgb, var(--ant-color-text) 10%, transparent);
+  --wise-row-active-bg: color-mix(in srgb, var(--ant-color-text) 14%, transparent);
   /* 11% 在浅色侧栏几乎看不见；提到 18% 才能和 hover/透明底立刻区分 */
   --wise-row-selected-bg: color-mix(in srgb, var(--ant-color-primary) 18%, transparent);
   --wise-row-selected-border: color-mix(in srgb, var(--ant-color-primary) 42%, transparent);
@@ -143,8 +144,8 @@
   --wise-elevation-3: 0 6px 20px rgba(0, 0, 0, 0.5);
   --wise-elevation-4: 0 16px 44px rgba(0, 0, 0, 0.58);
 
-  --wise-row-hover-bg: color-mix(in srgb, #ffffff 6%, transparent);
-  --wise-row-active-bg: color-mix(in srgb, #ffffff 10%, transparent);
+  --wise-row-hover-bg: color-mix(in srgb, #ffffff 10%, transparent);
+  --wise-row-active-bg: color-mix(in srgb, #ffffff 14%, transparent);
   --wise-row-selected-bg: color-mix(in srgb, var(--ant-color-primary) 26%, transparent);
   --wise-row-selected-border: color-mix(in srgb, var(--ant-color-primary) 52%, transparent);
 
@@ -247,18 +248,6 @@ body {
 /* 工作区壳懒加载占位 */
 .app-workspace-layout-shell {
   position: relative;
-  background: var(--app-workspace-stage-bg, var(--ant-color-bg-layout));
-}
-
-/* 相对整个 Wise 主窗口视口居中，不受左栏宽度影响 */
-.app-workspace-loading-overlay--viewport {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
   background: var(--app-workspace-stage-bg, var(--ant-color-bg-layout));
 }
 
@@ -538,6 +527,8 @@ body {
   z-index: 1;
   min-height: 0;
   height: 100%;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -558,6 +549,12 @@ body {
   opacity: 1;
   /* 左栏展开/收起动画已移除 */
   transition: none;
+}
+
+.app-left-sidebar input,
+.app-left-sidebar textarea {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .app-left-sidebar.ant-layout-sider.ant-layout-sider-collapsed:not(.app-left-sidebar--parked) .ant-layout-sider-children {
@@ -660,6 +657,7 @@ body {
 }
 
 .app-left-sidebar-topbar {
+  position: relative;
   flex-shrink: 0;
   box-sizing: border-box;
   display: flex;
@@ -670,13 +668,30 @@ body {
   height: var(--app-column-topbar-min-height);
   padding: var(--app-column-topbar-padding-y) 8px;
   user-select: none;
+  cursor: grab;
   background: var(--app-workspace-chrome-left);
   -webkit-backdrop-filter: var(--app-workspace-glass-blur);
   backdrop-filter: var(--app-workspace-glass-blur);
   border-bottom: 1px solid var(--app-workspace-glass-border);
 }
 
+.app-left-sidebar-topbar-drag-underlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.app-left-sidebar-topbar-drag-underlay.is-dragging {
+  cursor: grabbing;
+}
+
 .app-left-sidebar-topbar-brand {
+  position: relative;
+  z-index: 1;
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
@@ -685,6 +700,7 @@ body {
   align-items: center;
   gap: 0;
   overflow: hidden;
+  pointer-events: none;
 }
 
 .app-left-sidebar-topbar-mark {
@@ -705,10 +721,18 @@ body {
 }
 
 .app-left-sidebar-topbar-actions {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   flex-shrink: 0;
   gap: 2px;
+  pointer-events: none;
+}
+
+.app-left-sidebar-topbar-actions > * {
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
 }
 
 /* 左栏顶栏图标按钮：与 Claude Code 用量按钮同一套（透明底、24px、hover 浅灰） */
@@ -2309,6 +2333,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 .app-left-sidebar-project-and-files > .app-left-sidebar-section--monitor {
   flex-shrink: 0;
+  min-height: 26px;
 }
 
 .app-left-sidebar-project-and-files > .app-left-sidebar-section--requirements {
@@ -3313,11 +3338,15 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-item:hover {
-  background: color-mix(in srgb, var(--ant-color-fill-secondary) 72%, transparent);
+  background: var(--wise-row-hover-bg);
 }
 
 .app-left-sidebar .app-repository-item:hover {
-  background: color-mix(in srgb, var(--ant-color-fill-secondary) 72%, transparent);
+  background: var(--wise-row-hover-bg);
+}
+
+.app-left-sidebar .app-repository-item:active:not(.app-repository-item--project-active):not(.app-repository-item--repo-active) {
+  background: var(--wise-row-active-bg);
 }
 
 /* 工作区列表：VS Code 风格全出血直角行（与文件树 .repo-tree-node 一致）。 */

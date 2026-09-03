@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  applyGitRepositoryStatsFromStatus,
   getGitRepositoryStatsGeneration,
   getGitRepositoryStatsSnapshot,
   resetGitRepositoryStatsStoreForTests,
@@ -23,5 +24,19 @@ describe("gitRepositoryStatsStore", () => {
     expect(getGitRepositoryStatsSnapshot("/repo/a")).toEqual({ additions: 0, deletions: 0, ahead: 0, behind: 0 });
     expect(genA).toBe(0);
     expect(genB).toBe(0);
+  });
+
+  test("bounds zero-consumer warm snapshots while preserving recent paths", () => {
+    resetGitRepositoryStatsStoreForTests();
+    for (let i = 0; i < 40; i += 1) {
+      applyGitRepositoryStatsFromStatus(`/repo/${i}`, {
+        additions: i + 1,
+        deletions: 0,
+        ahead: 0,
+        behind: 0,
+      });
+    }
+    expect(getGitRepositoryStatsSnapshot("/repo/0").additions).toBe(0);
+    expect(getGitRepositoryStatsSnapshot("/repo/39").additions).toBe(40);
   });
 });
