@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type RefObject } from "react";
 import type { ClaudeSession, ClaudeSessionInfo } from "../../types";
 import { listRunningClaudeSessions } from "../../services/claude";
 import { isClaudeSessionRunningInHostOrUi } from "../../services/claudeSessionState";
-import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../../utils/adaptivePoll";
 import {
   getSystemResourceSnapshotStoreState,
   subscribeSystemResourceSnapshot,
@@ -44,15 +44,10 @@ export function useSystemResourceSessions({
   const [claudeCountPopoverOpen, setClaudeCountPopoverOpen] = useState(false);
   const [claudeSystemSessionSearch, setClaudeSystemSessionSearch] = useState("");
   const [systemSessionDrawerId, setSystemSessionDrawerId] = useState<string | null>(null);
-  const claudeCountPopoverOpenRef = useRef(false);
-  const systemSessionDrawerIdRef = useRef<string | null>(null);
-  claudeCountPopoverOpenRef.current = claudeCountPopoverOpen;
-  systemSessionDrawerIdRef.current = systemSessionDrawerId;
+  const systemSessionDetailOpen = claudeCountPopoverOpen || systemSessionDrawerId != null;
 
   useEffect(() => {
     let cancelled = false;
-    let timer: number | null = null;
-
     async function refreshRegistry() {
       try {
         const list = await listRunningClaudeSessions();
@@ -61,7 +56,15 @@ export function useSystemResourceSessions({
         setRegistryRunningClaude((prev) => {
           if (
             prev.length === nextRunning.length &&
-            prev.every((item, index) => item.session_id === nextRunning[index]?.session_id)
+            prev.every((item, index) => {
+              const next = nextRunning[index];
+              return next != null
+                && item.session_id === next.session_id
+                && item.project_path === next.project_path
+                && item.model === next.model
+                && item.status === next.status
+                && item.started_at === next.started_at;
+            })
           ) {
             return prev;
           }
@@ -75,29 +78,16 @@ export function useSystemResourceSessions({
     }
 
     void refreshRegistry();
-    const scheduleTimer = () => {
-      if (timer != null) window.clearInterval(timer);
-      const detailOpen =
-        claudeCountPopoverOpenRef.current || systemSessionDrawerIdRef.current != null;
-      timer = window.setInterval(() => {
-        if (document.visibilityState !== "visible") return;
-        void refreshRegistry();
-      }, readVisiblePollIntervalMs(detailOpen ? 8000 : 22000, detailOpen ? 20000 : 90000));
-    };
-    scheduleTimer();
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void refreshRegistry();
-        scheduleTimer();
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    const stopPoll = startAdaptiveInterval(
+      refreshRegistry,
+      systemSessionDetailOpen ? 8000 : 22000,
+      systemSessionDetailOpen ? 20000 : 90000,
+    );
     return () => {
       cancelled = true;
-      if (timer != null) window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      stopPoll();
     };
-  }, []);
+  }, [systemSessionDetailOpen]);
 
   const systemInlineSessionKeyword = normalizeSearchKeyword(claudeSystemSessionSearch);
   const claudeRegistryRunningIds = useMemo(

@@ -7,6 +7,7 @@ import {
   needsGitSyncWorkFromSummary,
 } from "./gitCommitPullPush";
 import { gitStatusSummary } from "./git";
+import { mapWithConcurrency } from "../utils/mapWithConcurrency";
 
 export interface GitWorkspaceRepositoryRef {
   path: string;
@@ -36,15 +37,17 @@ export async function countGitWorkspaceSyncableRepositories(
   entries: readonly GitWorkspaceRepositoryRef[],
 ): Promise<number> {
   if (entries.length === 0) return 0;
-  const flags = await Promise.all(
-    entries.map(async (entry) => {
+  const flags = await mapWithConcurrency(
+    entries,
+    6,
+    async (entry) => {
       try {
         const summary = await gitStatusSummary(entry.path);
         return needsGitSyncWorkFromSummary(summary);
       } catch {
         return false;
       }
-    }),
+    },
   );
   return flags.filter(Boolean).length;
 }

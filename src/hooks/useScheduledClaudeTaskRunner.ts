@@ -8,7 +8,7 @@ import {
   resolveScheduledTaskExecutionKind,
 } from "../utils/scheduledTaskExecution";
 import { buildScheduledTaskScriptCommand } from "../utils/scheduledTaskScript";
-import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../utils/adaptivePoll";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 
 const TICK_MS = 45_000;
@@ -271,25 +271,11 @@ export function useScheduledClaudeTaskRunner({
       }
     };
 
-    const id = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void tick();
-    }, readVisiblePollIntervalMs(TICK_MS, TICK_MS_HIDDEN));
+    const stopPoll = startAdaptiveInterval(tick, TICK_MS, TICK_MS_HIDDEN);
     void tick();
-    const onVisibilityChange = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        void tick();
-      }
-    };
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", onVisibilityChange);
-    }
     return () => {
       cancelled = true;
-      window.clearInterval(id);
-      if (typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVisibilityChange);
-      }
+      stopPoll();
     };
   }, [
     closeSessionRef,

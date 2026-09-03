@@ -9,7 +9,7 @@ import {
 } from "@ant-design/icons";
 import { Button, Empty, Space, Switch, Tabs, Tag, Typography, message } from "antd";
 import { AuthorPanelListShell, AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { DingTalkEnterpriseBotPopoverBody } from "../DingTalkEnterpriseBotPopoverBody";
 import { loadDingTalkEnterpriseBotConfig } from "../../services/dingtalkEnterpriseBot";
 import {
@@ -20,7 +20,7 @@ import {
   type DingTalkStreamGatewayStatus,
 } from "../../services/dingtalkStreamGateway";
 import { genericWsStatus, type GenericWsStatus } from "../../services/remoteChannels";
-import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../../utils/adaptivePoll";
 import { FeishuChannelBody } from "./FeishuChannelBody";
 import { WecomChannelBody } from "./WecomChannelBody";
 import { TelegramChannelBody } from "./TelegramChannelBody";
@@ -58,8 +58,10 @@ export function ChannelsPanel() {
   const [telegramConfigured, setTelegramConfigured] = useState(false);
   const [wsConfigured, setWsConfigured] = useState(false);
   const [wsStatus, setWsStatus] = useState<GenericWsStatus>({ running: false, phase: "stopped" });
+  const dingtalkRefreshSequenceRef = useRef(0);
 
   const refreshDingtalk = useCallback(async () => {
+    const sequence = ++dingtalkRefreshSequenceRef.current;
     const [config, status] = await Promise.all([
       loadDingTalkEnterpriseBotConfig().catch(() => null),
       dingtalkStreamGatewayStatus().catch(async () => {
@@ -70,6 +72,7 @@ export function ChannelsPanel() {
         } satisfies DingTalkStreamGatewayStatus;
       }),
     ]);
+    if (sequence !== dingtalkRefreshSequenceRef.current) return;
     setDingTalkConfigured(
       Boolean(config?.appKey?.trim() && config.appSecret?.trim() && config.robotCode?.trim()),
     );
@@ -80,11 +83,7 @@ export function ChannelsPanel() {
   useEffect(() => {
     if (activeKey !== "dingtalk") return;
     void refreshDingtalk();
-    const id = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void refreshDingtalk();
-    }, readVisiblePollIntervalMs(5000, 20000));
-    return () => window.clearInterval(id);
+    return startAdaptiveInterval(refreshDingtalk, 5000, 20000);
   }, [activeKey, refreshDingtalk]);
 
   // 初次进入页面时主动同步一次通用 WS 真实状态（避免事件流尚未抵达时显示 stopped）

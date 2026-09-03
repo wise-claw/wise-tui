@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { useClaudeSessionsStructureSnapshot } from "../../stores/claudeSessionsLiveStore";
 import { cancelClaudeExecution, listRunningClaudeSessions } from "../../services/claude";
 import { killClaudeHostProcess } from "../../services/systemResource";
-import { readVisiblePollIntervalMs, shouldDeferAdaptivePollTick } from "../../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../../utils/adaptivePoll";
 import {
   getSystemResourceSnapshotStoreSnapshot,
   refreshSystemResourceSnapshotStore,
@@ -72,12 +72,7 @@ export function ClaudeProcessPanel({ active, listSearch, onCountChange }: Props)
   useEffect(() => {
     if (!active) return;
     void pollRegistry();
-    const ms = readVisiblePollIntervalMs(POLL_VISIBLE_MS, POLL_HIDDEN_MS);
-    const timer = setInterval(() => {
-      if (shouldDeferAdaptivePollTick()) return;
-      void pollRegistry();
-    }, ms);
-    return () => clearInterval(timer);
+    return startAdaptiveInterval(pollRegistry, POLL_VISIBLE_MS, POLL_HIDDEN_MS);
   }, [active, pollRegistry]);
 
   const hostPidMap = useMemo(() => {

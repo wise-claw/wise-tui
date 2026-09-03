@@ -2717,63 +2717,55 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   /** 主会话 / 员工 / 团队等全部标签：定期与 Claude Code 宿主注册表对齐执行态（不限于当前活动标签）。 */
   useEffect(() => {
     let cancelled = false;
-    let timer: number | null = null;
     let cancelIdle: (() => void) | null = null;
+    let refreshInFlight: Promise<void> | null = null;
     const unsubscribeSnapshot = subscribeSystemResourceSnapshot(() => {
       /* store drives its own poll; this subscription keeps the singleton alive */
     });
 
-    const scheduleTimer = () => {
-      if (timer != null) window.clearInterval(timer);
-      const regPrimaryMs = 15_000;
-      const regHiddenMs = 45_000;
-      const regVisibleMs = isCurrentPrimaryMainWorkspaceWindowSync() ? regPrimaryMs : regHiddenMs;
-      timer = window.setInterval(() => {
-        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-        if (cancelIdle) cancelIdle();
-        cancelIdle = runWhenIdle(() => {
-          void tick();
-        }, { timeoutMs: 1800 });
-      }, readVisiblePollIntervalMs(regVisibleMs, regHiddenMs * 2));
-    };
-
-    const tick = async () => {
-      try {
-        const list = await listRunningClaudeSessions();
-        if (cancelled) return;
-        const claudeProcesses = [...getSystemResourceClaudeProcesses()];
-        hydrateStreamingProcessRegistryFromHost(
-          sessionsRef.current,
-          claudeProcesses,
-          streamingProcessByTabRef.current,
-          defaultConnectionKindRef.current,
-          streamingProcessActivityByTabRef.current,
-        );
-        const knownIds = new Set(
-          list.map((item) => item.session_id.trim()).filter((id) => id.length > 0),
-        );
-        const runningIds = new Set(
-          list
-            .filter((item) => item.status === "running")
-            .map((item) => item.session_id.trim())
-            .filter((id) => id.length > 0),
-        );
-        publishRunningClaudeSessionIds(runningIds);
-        pruneClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, runningIds);
-        startTransition(() => {
-          setSessions((prev) => {
-            const next = reconcileSessionStatusesWithRunningRegistry(
-              prev,
-              runningIds,
-              registryBootstrapDeadlineByClaudeSidRef.current,
-              knownIds,
-            );
-            return next === prev ? prev : next;
+    const tick = (): Promise<void> => {
+      if (refreshInFlight) return refreshInFlight;
+      refreshInFlight = (async () => {
+        try {
+          const list = await listRunningClaudeSessions();
+          if (cancelled) return;
+          const claudeProcesses = [...getSystemResourceClaudeProcesses()];
+          hydrateStreamingProcessRegistryFromHost(
+            sessionsRef.current,
+            claudeProcesses,
+            streamingProcessByTabRef.current,
+            defaultConnectionKindRef.current,
+            streamingProcessActivityByTabRef.current,
+          );
+          const knownIds = new Set(
+            list.map((item) => item.session_id.trim()).filter((id) => id.length > 0),
+          );
+          const runningIds = new Set(
+            list
+              .filter((item) => item.status === "running")
+              .map((item) => item.session_id.trim())
+              .filter((id) => id.length > 0),
+          );
+          publishRunningClaudeSessionIds(runningIds);
+          pruneClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, runningIds);
+          startTransition(() => {
+            setSessions((prev) => {
+              const next = reconcileSessionStatusesWithRunningRegistry(
+                prev,
+                runningIds,
+                registryBootstrapDeadlineByClaudeSidRef.current,
+                knownIds,
+              );
+              return next === prev ? prev : next;
+            });
           });
-        });
-      } catch {
-        /* 与流式事件并存：拉取失败则保持当前 UI */
-      }
+        } catch {
+          /* 与流式事件并存：拉取失败则保持当前 UI */
+        }
+      })().finally(() => {
+        refreshInFlight = null;
+      });
+      return refreshInFlight;
     };
 
     const runTick = () => {
@@ -2784,28 +2776,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     };
 
     runTick();
-    scheduleTimer();
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        runTick();
-        scheduleTimer();
-      } else {
-        scheduleTimer();
-      }
-    };
-    const onWindowResize = () => {
-      scheduleTimer();
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("resize", onWindowResize);
+    const regPrimaryMs = 15_000;
+    const regHiddenMs = 45_000;
+    const regVisibleMs = isCurrentPrimaryMainWorkspaceWindowSync() ? regPrimaryMs : regHiddenMs;
+    const stopPoll = startAdaptiveInterval(tick, regVisibleMs, regHiddenMs * 2);
 
     return () => {
       cancelled = true;
-      if (timer != null) window.clearInterval(timer);
+      stopPoll();
       if (cancelIdle) cancelIdle();
       unsubscribeSnapshot();
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("resize", onWindowResize);
     };
   }, []);
 

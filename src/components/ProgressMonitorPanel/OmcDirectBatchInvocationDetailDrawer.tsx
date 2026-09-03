@@ -16,7 +16,7 @@ import {
 } from "../../utils/backgroundInvocationStdoutParts";
 import { formatOmcDirectBatchInvocationListTitle } from "../../utils/omcDirectBatchInvocationDisplay";
 import { getMessageSenderGroupKey, isToolOnlyUserMessage } from "../../utils/claudeChatMessageDisplay";
-import { isWebViewDevToolsLikelyOpen } from "../../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../../utils/adaptivePoll";
 import { useClaudeInvocationLiveOutput } from "../../hooks/useClaudeInvocationLiveOutput";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import { ClaudeChatMessageRow } from "../ClaudeSessions/ClaudeChatMessageRow";
@@ -207,9 +207,7 @@ export function OmcDirectBatchInvocationDetailDrawer({
   }, [open, isDirectBatch, parentFinished, ik]);
   useEffect(() => {
     if (!open || !isDirectBatch || parentFinished || !ik.trim()) return;
-    const pollMs = isWebViewDevToolsLikelyOpen() ? 4000 : 2000;
-    const id = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    return startAdaptiveInterval(() => {
       const r = peekDirectBatchInvocationRingSnapshot(ik.trim());
       const prev = executionRingRef.current;
       if (
@@ -222,8 +220,7 @@ export function OmcDirectBatchInvocationDetailDrawer({
       }
       executionRingRef.current = { stdout: r.stdoutLines, stderr: r.stderrLines };
       setExecutionRingTick((n) => n + 1);
-    }, pollMs);
-    return () => window.clearInterval(id);
+    }, 2000, 8000);
   }, [open, isDirectBatch, parentFinished, ik]);
 
   /** 实时监听、bundle 落盘、进行中环形缓冲三路合并，取长的一侧以免截断 */

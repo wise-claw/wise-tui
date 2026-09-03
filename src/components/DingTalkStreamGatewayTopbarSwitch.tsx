@@ -1,8 +1,8 @@
 import { message, Switch } from "antd";
 import { HoverHint } from "./shared/HoverHint";
 import { isTauri } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
-import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { startAdaptiveInterval } from "../utils/adaptivePoll";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 import {
   dingtalkStreamGatewayIsRunning,
@@ -16,13 +16,16 @@ const POLL_MS = 3000;
 export function DingTalkStreamGatewayTopbarSwitch() {
   const [running, setRunning] = useState(false);
   const [busy, setBusy] = useState(false);
+  const refreshSequenceRef = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!isTauri()) return;
+    const sequence = ++refreshSequenceRef.current;
     try {
-      setRunning(await dingtalkStreamGatewayIsRunning());
+      const next = await dingtalkStreamGatewayIsRunning();
+      if (sequence === refreshSequenceRef.current) setRunning(next);
     } catch {
-      setRunning(false);
+      if (sequence === refreshSequenceRef.current) setRunning(false);
     }
   }, []);
 
@@ -32,11 +35,7 @@ export function DingTalkStreamGatewayTopbarSwitch() {
     const dingtalkPrimaryMs = POLL_MS;
     const dingtalkHiddenMs = 15000;
     const dingtalkVisibleMs = isCurrentPrimaryMainWorkspaceWindowSync() ? dingtalkPrimaryMs : dingtalkHiddenMs;
-    const id = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void refresh();
-    }, readVisiblePollIntervalMs(dingtalkVisibleMs, dingtalkHiddenMs * 2));
-    return () => window.clearInterval(id);
+    return startAdaptiveInterval(refresh, dingtalkVisibleMs, dingtalkHiddenMs * 2);
   }, [refresh]);
 
   const handleChange = useCallback(

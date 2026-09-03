@@ -8,12 +8,13 @@ import {
 } from "@ant-design/icons";
 import { Button, Empty, Select, message } from "antd";
 import { HoverHint } from "../shared/HoverHint";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { openCodeReviewDrawer } from "../../constants/workflowUiEvents";
 import type { Repository, RepositoryScheduledClaudeTask, WorkflowTemplateItem } from "../../types";
 import { readRepositoryScheduledClaudeTasks } from "../../services/repositoryScheduledClaudeTasksStore";
 import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import { RepositoryScheduledTasksModal } from "../RepositoryScheduledTasksModal";
+import { mapWithConcurrency } from "../../utils/mapWithConcurrency";
 import "./index.css";
 
 interface AutomationPanelProps {
@@ -41,10 +42,11 @@ function formatShortDateTime(timestamp: number | null | undefined): string {
 }
 
 function latestExecutedAt(tasks: RepositoryScheduledClaudeTask[]): number | null {
-  return tasks
-    .map((task) => task.lastExecutedAt ?? 0)
-    .filter((timestamp) => timestamp > 0)
-    .sort((a, b) => b - a)[0] ?? null;
+  const latest = tasks.reduce(
+    (max, task) => Math.max(max, task.lastExecutedAt ?? 0),
+    0,
+  );
+  return latest > 0 ? latest : null;
 }
 
 function getAvatarGradient(name: string): string {
@@ -76,6 +78,7 @@ export function AutomationPanel({
   const [summaries, setSummaries] = useState<RepositoryScheduleSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const refreshSequenceRef = useRef(0);
 
   useEffect(() => {
     if (activeRepositoryId != null) {
@@ -84,19 +87,22 @@ export function AutomationPanel({
   }, [activeRepositoryId]);
 
   const refresh = useCallback(async () => {
+    const sequence = ++refreshSequenceRef.current;
     setLoading(true);
     try {
-      const next = await Promise.all(
-        repositories.map(async (repository) => ({
+      const next = await mapWithConcurrency(
+        repositories,
+        6,
+        async (repository) => ({
           repository,
           tasks: repository.path.trim()
             ? await readRepositoryScheduledClaudeTasks(repository.path).catch(() => [])
             : [],
-        })),
+        }),
       );
-      setSummaries(next);
+      if (sequence === refreshSequenceRef.current) setSummaries(next);
     } finally {
-      setLoading(false);
+      if (sequence === refreshSequenceRef.current) setLoading(false);
     }
   }, [repositories]);
 

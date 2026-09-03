@@ -4,7 +4,7 @@ import { indexOfLastRenderableUserMessage, isAssistantDisplayNoiseText } from ".
 import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
 import { MONITOR_SESSIONS_SYNC_INTERVAL_MS } from "../constants/monitorUi";
 import { runWhenIdle } from "../utils/deferIdle";
-import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../utils/adaptivePoll";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 import { subscribeClaudeSessionsStructure } from "../stores/claudeSessionsLiveStore";
 
@@ -14,7 +14,6 @@ function attachMonitorFingerprintPolling(
   commitIfChanged: () => void,
 ): () => void {
   let cancelIdle: (() => void) | null = null;
-  let timer: number | null = null;
 
   const runCommit = () => {
     if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
@@ -22,37 +21,18 @@ function attachMonitorFingerprintPolling(
     cancelIdle = runWhenIdle(commitIfChanged, { timeoutMs: 1500 });
   };
 
-  const scheduleTimer = () => {
-    if (timer != null) window.clearInterval(timer);
-    const monitorVisibleMs = isCurrentPrimaryMainWorkspaceWindowSync()
-      ? MONITOR_SESSIONS_SYNC_INTERVAL_MS
-      : MONITOR_FINGERPRINT_HIDDEN_INTERVAL_MS;
-    timer = window.setInterval(
-      runCommit,
-      readVisiblePollIntervalMs(
-        monitorVisibleMs,
-        MONITOR_FINGERPRINT_HIDDEN_INTERVAL_MS * 3,
-      ),
-    );
-  };
-
-  scheduleTimer();
-  const onVisibilityChange = () => {
-    scheduleTimer();
-    if (typeof document !== "undefined" && document.visibilityState === "visible") {
-      commitIfChanged();
-    }
-  };
-  if (typeof document !== "undefined") {
-    document.addEventListener("visibilitychange", onVisibilityChange);
-  }
+  const monitorVisibleMs = isCurrentPrimaryMainWorkspaceWindowSync()
+    ? MONITOR_SESSIONS_SYNC_INTERVAL_MS
+    : MONITOR_FINGERPRINT_HIDDEN_INTERVAL_MS;
+  const stopPoll = startAdaptiveInterval(
+    runCommit,
+    monitorVisibleMs,
+    MONITOR_FINGERPRINT_HIDDEN_INTERVAL_MS * 3,
+  );
 
   return () => {
-    if (timer != null) window.clearInterval(timer);
+    stopPoll();
     if (cancelIdle) cancelIdle();
-    if (typeof document !== "undefined") {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    }
   };
 }
 

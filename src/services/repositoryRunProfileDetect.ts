@@ -11,6 +11,7 @@ import {
   type RepositoryRunProfile,
   type RepositoryRunProfileFileBundle,
 } from "../utils/detectRepositoryRunProfile";
+import { mapWithConcurrency } from "../utils/mapWithConcurrency";
 
 export type RepositoryRunProfileDetectionResult = {
   profiles: RepositoryRunProfile[];
@@ -75,33 +76,24 @@ async function readApplicationConfigFiles(
     profileNames.add(fallback);
   }
 
-  const applicationProfileConfigs: Record<string, string | null> = {};
-  await Promise.all(
-    [...profileNames].flatMap((profile) =>
-      resourceRoots.flatMap((prefix) => [
-        (async () => {
-          applicationProfileConfigs[profile] ??= await tryReadRepositoryFile(
+  const profileEntries = await mapWithConcurrency(
+    [...profileNames],
+    4,
+    async (profile) => {
+      // 同一 profile 按资源根与扩展名确定性查找，避免并行写同一键导致低优先级文件竞态覆盖。
+      for (const prefix of resourceRoots) {
+        for (const extension of ["yml", "yaml", "properties"] as const) {
+          const content = await tryReadRepositoryFile(
             repositoryPath,
-            `${prefix}/application-${profile}.yml`,
+            `${prefix}/application-${profile}.${extension}`,
           );
-        })(),
-        (async () => {
-          if (applicationProfileConfigs[profile]) return;
-          applicationProfileConfigs[profile] = await tryReadRepositoryFile(
-            repositoryPath,
-            `${prefix}/application-${profile}.yaml`,
-          );
-        })(),
-        (async () => {
-          if (applicationProfileConfigs[profile]) return;
-          applicationProfileConfigs[profile] = await tryReadRepositoryFile(
-            repositoryPath,
-            `${prefix}/application-${profile}.properties`,
-          );
-        })(),
-      ]),
-    ),
+          if (content != null) return [profile, content] as const;
+        }
+      }
+      return [profile, null] as const;
+    },
   );
+  const applicationProfileConfigs = Object.fromEntries(profileEntries) as Record<string, string | null>;
 
   return { applicationYaml, applicationYml, applicationProperties, applicationProfileConfigs };
 }
@@ -118,15 +110,18 @@ async function readMavenModulePoms(
     .filter((value): value is string => Boolean(value));
 
   const modulePomXmlByPath: Record<string, string | null> = {};
-  await Promise.all(
-    modulePaths.map(async (modulePath) => {
-      modulePomXmlByPath[modulePath] = await tryReadRepositoryFile(
+  const entries = await mapWithConcurrency(
+    modulePaths,
+    6,
+    async (modulePath) => [
+      modulePath,
+      await tryReadRepositoryFile(
         repositoryPath,
         relPath(scanRoot, `${modulePath}/pom.xml`),
-      );
-    }),
+      ),
+    ] as const,
   );
-  return modulePomXmlByPath;
+  return Object.assign(modulePomXmlByPath, Object.fromEntries(entries));
 }
 
 async function readIntellijSpringBootRunConfiguration(
@@ -205,10 +200,12 @@ async function detectRepositoryRunProfileAtScanRoot(
   repositoryPath: string,
   scanRoot: string,
 ): Promise<RepositoryRunProfile | null> {
-  const rootPomXml = await tryReadRepositoryFile(repositoryPath, relPath(scanRoot, "pom.xml"));
-  const packageJson = await tryReadRepositoryFile(repositoryPath, relPath(scanRoot, "package.json"));
-  const buildGradle = await tryReadRepositoryFile(repositoryPath, relPath(scanRoot, "build.gradle"));
-  const buildGradleKts = await tryReadRepositoryFile(repositoryPath, relPath(scanRoot, "build.gradle.kts"));
+  const [rootPomXml, packageJson, buildGradle, buildGradleKts] = await Promise.all([
+    tryReadRepositoryFile(repositoryPath, relPath(scanRoot, "pom.xml")),
+    tryReadRepositoryFile(repositoryPath, relPath(scanRoot, "package.json")),
+    tryReadRepositoryFile(repositoryPath, relPath(scanRoot, "build.gradle")),
+    tryReadRepositoryFile(repositoryPath, relPath(scanRoot, "build.gradle.kts")),
+  ]);
 
   if (scanRoot) {
     const hasMarker = Boolean(rootPomXml || packageJson || buildGradle || buildGradleKts);
@@ -282,8 +279,10 @@ export async function detectRepositoryRunProfiles(
     ...(!rootHasJava ? JAVA_SCAN_ROOTS : []),
   ];
 
-  const nestedProfiles = await Promise.all(
-    extraRoots.map(async (scanRoot) => detectRepositoryRunProfileAtScanRoot(trimmed, scanRoot)),
+  const nestedProfiles = await mapWithConcurrency(
+    extraRoots,
+    4,
+    async (scanRoot) => detectRepositoryRunProfileAtScanRoot(trimmed, scanRoot),
   );
   for (const profile of nestedProfiles) {
     if (profile) profiles.push(profile);

@@ -98,4 +98,61 @@ describe("adaptivePoll", () => {
       }
     }
   });
+
+  test("startAdaptiveInterval never overlaps slow asynchronous ticks", async () => {
+    if (typeof document === "undefined") return;
+    const originalDescriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "visible",
+    });
+    const releases: Array<() => void> = [];
+    let ticks = 0;
+    const dispose = startAdaptiveInterval(
+      () => new Promise<void>((resolve) => {
+        ticks += 1;
+        releases.push(resolve);
+      }),
+      1,
+      10,
+    );
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(ticks).toBe(1);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(ticks).toBe(1);
+      releases.shift()?.();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(ticks).toBe(2);
+    } finally {
+      dispose();
+      for (const release of releases) release();
+      if (originalDescriptor) {
+        Object.defineProperty(document, "visibilityState", originalDescriptor);
+      }
+    }
+  });
+
+  test("startAdaptiveInterval keeps polling after a synchronous failure", async () => {
+    if (typeof document === "undefined") return;
+    const originalDescriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "visible",
+    });
+    let attempts = 0;
+    const dispose = startAdaptiveInterval(() => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("transient");
+    }, 1, 10);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(attempts).toBeGreaterThanOrEqual(2);
+    } finally {
+      dispose();
+      if (originalDescriptor) {
+        Object.defineProperty(document, "visibilityState", originalDescriptor);
+      }
+    }
+  });
 });

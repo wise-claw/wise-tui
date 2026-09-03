@@ -36,7 +36,7 @@ import {
   shouldDebounceMonacoEditorContentChange,
 } from "../utils/monacoLargeFile";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
-import { shouldDeferAdaptivePollTick } from "../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../utils/adaptivePoll";
 import { setRepositoryEditorDirtyPaths } from "../stores/repositoryEditorDirtyPathsStore";
 import { requestPaneCenterView } from "../stores/paneCenterViewControlStore";
 import { refreshGitRepositoryUi } from "../services/gitRepositoryUiRefresh";
@@ -1622,19 +1622,9 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
   // 限定刷新经 mergeEditorRefreshScope 合并，不会互相降级。
   useEffect(() => {
     if (!editorVisible) return;
-    let cancelled = false;
-    const interval = window.setInterval(() => {
-      if (cancelled) return;
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
-        return;
-      }
-      if (shouldDeferAdaptivePollTick()) return;
+    return startAdaptiveInterval(() => {
       refreshOpenEditorTabsFromDisk({ trigger: "poll" });
-    }, EDITOR_FOREGROUND_POLL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
+    }, EDITOR_FOREGROUND_POLL_MS, EDITOR_FOREGROUND_POLL_MS * 4);
   }, [editorVisible, refreshOpenEditorTabsFromDisk]);
 
   useEffect(

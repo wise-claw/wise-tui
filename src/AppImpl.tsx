@@ -75,7 +75,7 @@ import { tryOpenWorkspaceInDefaultTerminal } from "./services/openWorkspaceWithT
 import type { CommandPaletteSearchMode } from "./components/CommandPalette";
 import { LazyAppWorkspaceLayout } from "./components/AppWorkspaceLayout.lazy";
 import { AppWorkspaceLayoutShell } from "./components/AppWorkspaceLayoutShell";
-import { RepositoryRunCommandModal } from "./components/RunCommand";
+import { RepositoryRunCommandModalHost } from "./components/RunCommand/RepositoryRunCommandModalHost";
 import {
   dismissStuckOperations,
   getStuckOperationsSnapshot,
@@ -262,7 +262,7 @@ import { useAppSidebarSelection } from "./hooks/useAppSidebarSelection";
 import type { ReconcileProjectMode } from "./constants/reconcileProjectMode";
 import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbound";
 import { useCodeReviewFixDispatch } from "./hooks/useCodeReviewFixDispatch";
-import { CodeReviewHost } from "./components/CodeReviewPanel";
+import { CodeReviewHost } from "./components/CodeReviewPanel/CodeReviewHost";
 import { CodexApprovalOverlay } from "./components/CodexApprovalOverlay";
 import { useOmcPluginInstalled } from "./hooks/useOmcPluginInstalled";
 import { useOmcRuntime } from "./hooks/useOmcRuntime";
@@ -3606,7 +3606,7 @@ export default function App() {
       }}
     />
     </Suspense>
-    <RepositoryRunCommandModal repositories={repositories} />
+    <RepositoryRunCommandModalHost repositories={repositories} />
     <CodeReviewHost
       defaultRepositoryPath={activeRepository?.path ?? null}
       defaultRepositoryName={activeRepository?.name ?? null}

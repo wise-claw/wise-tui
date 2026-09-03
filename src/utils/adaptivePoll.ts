@@ -58,41 +58,76 @@ export function readVisiblePollIntervalMs(visibleMs: number, hiddenMs: number): 
  * 返回 dispose：清 interval 并移除 visibility 监听。
  */
 export function startAdaptiveInterval(
-  onTick: () => void,
+  onTick: () => void | Promise<void>,
   visibleMs: number,
   hiddenMs: number,
 ): () => void {
-  let timer: ReturnType<typeof setInterval> | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let disposed = false;
+  let tickInFlight = false;
 
-  const tick = () => {
-    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-    if (shouldDeferAdaptivePollTick()) return;
-    onTick();
+  const clearTimer = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
   };
 
-  const restart = () => {
-    if (timer) clearInterval(timer);
-    timer = null;
-    // tick 本就不会在后台执行；隐藏时彻底停表，避免每个轮询器继续产生无效 wake-up。
+  const scheduleNext = () => {
+    clearTimer();
+    if (disposed) return;
+    // 后台彻底停表，恢复可见时由 visibilitychange 立即补一次。
     if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-    timer = setInterval(tick, readVisiblePollIntervalMs(visibleMs, hiddenMs));
+    // 每一拍重新计算倍率，使 DevTools / 主线程拥塞变化无需重建轮询器即可生效。
+    const delay = Math.max(1, readVisiblePollIntervalMs(visibleMs, hiddenMs));
+    timer = setTimeout(() => {
+      timer = null;
+      tick();
+    }, delay);
+  };
+
+  const tick = () => {
+    if (disposed || tickInFlight) return;
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+      scheduleNext();
+      return;
+    }
+    if (shouldDeferAdaptivePollTick()) {
+      scheduleNext();
+      return;
+    }
+
+    tickInFlight = true;
+    let result: void | Promise<void>;
+    try {
+      result = onTick();
+    } catch {
+      tickInFlight = false;
+      scheduleNext();
+      return;
+    }
+    // 自调度而非 setInterval：慢 IPC 不会重入叠加；单次失败也不会打断后续轮询。
+    void Promise.resolve(result)
+      .catch(() => undefined)
+      .finally(() => {
+        tickInFlight = false;
+        scheduleNext();
+      });
   };
 
   const onVisibilityChange = () => {
-    restart();
+    clearTimer();
     if (typeof document !== "undefined" && document.visibilityState === "visible") {
       tick();
     }
   };
 
-  restart();
+  scheduleNext();
   if (typeof document !== "undefined") {
     document.addEventListener("visibilitychange", onVisibilityChange);
   }
 
   return () => {
-    if (timer) clearInterval(timer);
-    timer = null;
+    disposed = true;
+    clearTimer();
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     }

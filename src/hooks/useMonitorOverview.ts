@@ -926,53 +926,59 @@ function buildCoreEmployeeMonitorItems(input: {
   );
   const sessionsById = new Map(sessions.map((item) => [item.id, item] as const));
   const runningEmployeeSessionByName = new Map<string, ClaudeSession>();
-  const allEmployeeSessionsByName = new Map<string, ClaudeSession[]>();
+  const latestSettledSessionAtByEmployeeName = new Map<string, number>();
   for (const session of sessions) {
     if (isOmcBatchHistoryStubSessionId(session.id)) continue;
     const employeeName = extractBoundEmployeeName(session.repositoryName);
-    if (employeeName) {
-      const rows = allEmployeeSessionsByName.get(employeeName) ?? [];
-      rows.push(session);
-      allEmployeeSessionsByName.set(employeeName, rows);
-    }
-    if (!isClaudeSessionRunningInHostOrUi(session, registryRunningClaudeSessionIds)) continue;
     if (!employeeName) continue;
+    if (!isClaudeSessionRunningInHostOrUi(session, registryRunningClaudeSessionIds)) {
+      const updatedAt = getSessionUpdatedAt(session);
+      if (updatedAt > (latestSettledSessionAtByEmployeeName.get(employeeName) ?? 0)) {
+        latestSettledSessionAtByEmployeeName.set(employeeName, updatedAt);
+      }
+      continue;
+    }
     const previous = runningEmployeeSessionByName.get(employeeName);
     if (!previous || getSessionUpdatedAt(session) > getSessionUpdatedAt(previous)) {
       runningEmployeeSessionByName.set(employeeName, session);
     }
   }
 
+  const inProgressTasksByEmployeeId = new Map<string, WorkflowTaskItem[]>();
+  const settledTasksByEmployeeId = new Map<string, WorkflowTaskItem[]>();
+  for (const task of workflowTasks) {
+    const employeeIds = new Set(
+      (taskPendingEmployeesByTaskId[task.id] ?? [])
+        .map((person) => person.employeeId.trim())
+        .filter(Boolean),
+    );
+    const fallbackEmployeeId = extractLatestEventEmployeeId(
+      workflowTaskEventsByTaskId[task.id] ?? [],
+    );
+    if (fallbackEmployeeId) employeeIds.add(fallbackEmployeeId);
+    const target = task.status === "in_progress"
+      ? inProgressTasksByEmployeeId
+      : settledTasksByEmployeeId;
+    for (const employeeId of employeeIds) {
+      const rows = target.get(employeeId) ?? [];
+      rows.push(task);
+      target.set(employeeId, rows);
+    }
+  }
+  for (const rows of inProgressTasksByEmployeeId.values()) {
+    rows.sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+  for (const rows of settledTasksByEmployeeId.values()) {
+    rows.sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
   const employeeMonitorItems: EmployeeMonitorItem[] = monitoredEmployees.map((employee) => {
-    const inProgressTasksByEmployee = workflowTasks.filter((task) => {
-      if (task.status !== "in_progress") return false;
-      const pending = taskPendingEmployeesByTaskId[task.id] ?? [];
-      if (pending.some((person) => person.employeeId === employee.id)) {
-        return true;
-      }
-      const fallbackEmployeeId = extractLatestEventEmployeeId(workflowTaskEventsByTaskId[task.id] ?? []);
-      return fallbackEmployeeId === employee.id;
-    });
-    const activeTask = inProgressTasksByEmployee.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    const activeTask = inProgressTasksByEmployeeId.get(employee.id)?.[0];
     const runningEmployeeSession = runningEmployeeSessionByName.get(employee.name.trim());
-    const completedTasksByEmployee = workflowTasks
-      .filter((task) => {
-        if (task.status === "in_progress") return false;
-        const pending = taskPendingEmployeesByTaskId[task.id] ?? [];
-        if (pending.some((person) => person.employeeId === employee.id)) {
-          return true;
-        }
-        const fallbackEmployeeId = extractLatestEventEmployeeId(workflowTaskEventsByTaskId[task.id] ?? []);
-        return fallbackEmployeeId === employee.id;
-      })
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-    const latestCompletedTaskAt = completedTasksByEmployee[0]?.updatedAt;
-    const latestSettledTaskStatus = completedTasksByEmployee[0]?.status;
-    const employeeSessions = allEmployeeSessionsByName.get(employee.name.trim()) ?? [];
-    const latestSettledSessionAt = employeeSessions
-      .filter((item) => !isClaudeSessionRunningInHostOrUi(item, registryRunningClaudeSessionIds))
-      .map((item) => getSessionUpdatedAt(item))
-      .sort((a, b) => b - a)[0];
+    const latestSettledTask = settledTasksByEmployeeId.get(employee.id)?.[0];
+    const latestCompletedTaskAt = latestSettledTask?.updatedAt;
+    const latestSettledTaskStatus = latestSettledTask?.status;
+    const latestSettledSessionAt = latestSettledSessionAtByEmployeeName.get(employee.name.trim());
     const session = activeTask ? sessionsById.get(activeTask.creator) : undefined;
     const previewSession = session ?? runningEmployeeSession;
     return {
@@ -1351,10 +1357,16 @@ export function useMonitorOverview({
     }
 
     /** 运行面板「工作流」仅展示配置中心仍存在的模板；历史 task 上的 orphan workflowId 不再占位。 */
+    const workflowTasksByWorkflowId = new Map<string, WorkflowTaskItem[]>();
+    for (const task of workflowTasks) {
+      const rows = workflowTasksByWorkflowId.get(task.workflowId) ?? [];
+      rows.push(task);
+      workflowTasksByWorkflowId.set(task.workflowId, rows);
+    }
     const workflowIds = workflowTemplates.map((item) => item.id);
     const teamMonitorItems: TeamMonitorItem[] = workflowIds.map((workflowId) => {
       const template = templateById.get(workflowId);
-      const tasks = workflowTasks.filter((task) => task.workflowId === workflowId);
+      const tasks = workflowTasksByWorkflowId.get(workflowId) ?? [];
       const memberIds = new Set<string>();
       const memberNamesFromRuntime = new Set<string>();
       const graph = workflowGraphsByWorkflowId[workflowId];
@@ -1369,7 +1381,7 @@ export function useMonitorOverview({
           if (!nodeLabel) {
             continue;
           }
-          const matchedEmployee = employees.find((item) => item.name.trim() === nodeLabel);
+          const matchedEmployee = employeeByName.get(nodeLabel);
           if (matchedEmployee) {
             memberIds.add(matchedEmployee.id);
           } else {
@@ -1419,23 +1431,22 @@ export function useMonitorOverview({
           ...Array.from(memberNamesFromRuntime),
         ]),
       ).sort((a, b) => a.localeCompare(b, "zh-CN"));
-      const activeTask = tasks
-        .filter((task) => effectiveTaskStatus(task, workflowTaskEventsByTaskId[task.id] ?? []) === "in_progress")
-        .sort((a, b) => b.updatedAt - a.updatedAt)[0];
-      const latestTask = tasks.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      const rankedTasks = tasks
+        .map((task) => ({
+          task,
+          status: effectiveTaskStatus(task, workflowTaskEventsByTaskId[task.id] ?? []),
+        }))
+        .sort((a, b) => b.task.updatedAt - a.task.updatedAt);
+      const activeTask = rankedTasks.find((row) => row.status === "in_progress")?.task;
+      const latestTask = rankedTasks[0]?.task;
       const targetTask = activeTask ?? latestTask;
-      const latestCompletedTaskAt = tasks
-        .filter((task) => effectiveTaskStatus(task, workflowTaskEventsByTaskId[task.id] ?? []) !== "in_progress")
-        .map((task) => task.updatedAt)
-        .sort((a, b) => b - a)[0];
-      const latestSettledTaskStatus = tasks
-        .filter((task) => effectiveTaskStatus(task, workflowTaskEventsByTaskId[task.id] ?? []) !== "in_progress")
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-        .map((task) => effectiveTaskStatus(task, workflowTaskEventsByTaskId[task.id] ?? []))[0];
+      const latestSettledTask = rankedTasks.find((row) => row.status !== "in_progress");
+      const latestCompletedTaskAt = latestSettledTask?.task.updatedAt;
+      const latestSettledTaskStatus = latestSettledTask?.status;
       const stageCount = template?.stages.length;
       const pendingEmployees = targetTask ? taskPendingEmployeesByTaskId[targetTask.id] ?? [] : [];
       const fallbackEmployeeId = targetTask ? extractLatestEventEmployeeId(workflowTaskEventsByTaskId[targetTask.id] ?? []) : undefined;
-      const fallbackEmployee = fallbackEmployeeId ? employees.find((item) => item.id === fallbackEmployeeId) : undefined;
+      const fallbackEmployee = fallbackEmployeeId ? employeeById.get(fallbackEmployeeId) : undefined;
       const currentEmployee = pendingEmployees[0] ?? (fallbackEmployee ? { employeeId: fallbackEmployee.id, name: fallbackEmployee.name } : undefined);
       const snapshots = targetTask ? workflowRuntimeSnapshotsByTaskId[targetTask.id] ?? [] : [];
       const latestSnapshot = snapshots[snapshots.length - 1];

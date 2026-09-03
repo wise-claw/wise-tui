@@ -11,6 +11,7 @@ import {
 } from "../../services/autoApproveSettings";
 import type { AutoApproveMode } from "../../utils/autoApproveDecide";
 import type { Repository } from "../../types";
+import { mapWithConcurrency } from "../../utils/mapWithConcurrency";
 import "./index.css";
 
 const { Text } = Typography;
@@ -72,15 +73,13 @@ export function AutoApprovePanel() {
         if (cancelled) return;
         setGlobalMode(mode);
         setRepos(repositoryList);
-        const next: Record<number, RepoAutoApproveOverride> = {};
-        await Promise.all(
-          repositoryList.map(async (repo) => {
-            const override = await getRepoAutoApproveOverride(repo.path);
-            if (!cancelled) next[repo.id] = override;
-          }),
+        const entries = await mapWithConcurrency(
+          repositoryList,
+          6,
+          async (repo) => [repo.id, await getRepoAutoApproveOverride(repo.path)] as const,
         );
         if (!cancelled) {
-          setOverrides(next);
+          setOverrides(Object.fromEntries(entries));
           setLoading(false);
         }
       } catch (err) {

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ClaudeSession } from "../types";
 import { CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD } from "../constants/claudeMessageListWindow";
 import { loadClaudeSessionJsonl } from "../services/claudeDisk";
-import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../utils/adaptivePoll";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 import {
   capSessionMessagesForMemory,
@@ -61,7 +61,7 @@ export function useSubagentDiskTranscript(params: {
     }
 
     let cancelled = false;
-    let timer: number | undefined;
+    let stopPoll: (() => void) | undefined;
 
     const load = async () => {
       setLoading(true);
@@ -102,15 +102,12 @@ export function useSubagentDiskTranscript(params: {
     const subHiddenMs = RUNNING_POLL_MS_HIDDEN;
     const subVisibleMs = isCurrentPrimaryMainWorkspaceWindowSync() ? subPrimaryMs : subHiddenMs;
     if (pollWhileRunning && (status === "running" || status === "connecting")) {
-      timer = window.setInterval(() => {
-        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-        void load();
-      }, readVisiblePollIntervalMs(subVisibleMs, subHiddenMs * 2));
+      stopPoll = startAdaptiveInterval(load, subVisibleMs, subHiddenMs * 2);
     }
 
     return () => {
       cancelled = true;
-      if (timer !== undefined) window.clearInterval(timer);
+      stopPoll?.();
     };
   }, [
     enabled,

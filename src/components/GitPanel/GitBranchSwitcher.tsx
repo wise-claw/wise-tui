@@ -3,7 +3,7 @@ import { DeleteOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Empty, Input, Modal, Popconfirm, Popover, Select, Spin, message } from "antd";
 import { gitCheckoutBranch, gitCreateBranch, gitDeleteBranch, gitListBranches, gitStatus } from "../../services/git";
 import type { GitBranchEntry } from "../../types";
-import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../../utils/adaptivePoll";
 
 function formatRelativeTime(timestamp: number | null): string {
   if (!timestamp) return "";
@@ -49,6 +49,8 @@ export function GitBranchSwitcher({
   const [branchActionLoading, setBranchActionLoading] = useState(false);
   const [branchDeletingName, setBranchDeletingName] = useState<string | null>(null);
   const [branches, setBranches] = useState<GitBranchEntry[]>([]);
+  const activeBranchLoadSequenceRef = useRef(0);
+  const branchListLoadSequenceRef = useRef(0);
 
   useEffect(() => {
     const next = branchHint?.trim();
@@ -56,27 +58,34 @@ export function GitBranchSwitcher({
   }, [branchHint]);
 
   const loadActiveBranch = useCallback(async () => {
+    const sequence = ++activeBranchLoadSequenceRef.current;
     if (!repositoryPath) {
-      setActiveBranch("-");
+      if (sequence === activeBranchLoadSequenceRef.current) setActiveBranch("-");
       return;
     }
     try {
       const status = await gitStatus(repositoryPath);
-      setActiveBranch(status.branch?.trim() || "(detached)");
+      if (sequence === activeBranchLoadSequenceRef.current) {
+        setActiveBranch(status.branch?.trim() || "(detached)");
+      }
     } catch {
-      setActiveBranch("-");
+      if (sequence === activeBranchLoadSequenceRef.current) setActiveBranch("-");
     }
   }, [repositoryPath]);
 
   const loadBranches = useCallback(async () => {
+    const sequence = ++branchListLoadSequenceRef.current;
     if (!repositoryPath) {
-      setBranches([]);
-      setActiveBranch("-");
+      if (sequence === branchListLoadSequenceRef.current) {
+        setBranches([]);
+        setActiveBranch("-");
+      }
       return;
     }
     setBranchListLoading(true);
     try {
       const list = await gitListBranches(repositoryPath);
+      if (sequence !== branchListLoadSequenceRef.current) return;
       setBranches(list);
       const current = list.find((item) => item.isCurrent && !item.isRemote);
       if (current?.name) {
@@ -87,7 +96,7 @@ export function GitBranchSwitcher({
     } catch {
       /* ignore */
     } finally {
-      setBranchListLoading(false);
+      if (sequence === branchListLoadSequenceRef.current) setBranchListLoading(false);
     }
   }, [loadActiveBranch, repositoryPath]);
 
@@ -195,11 +204,7 @@ export function GitBranchSwitcher({
 
   useEffect(() => {
     void loadActiveBranch();
-    const timer = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void loadActiveBranch();
-    }, readVisiblePollIntervalMs(30_000, 120_000));
-    return () => window.clearInterval(timer);
+    return startAdaptiveInterval(loadActiveBranch, 30_000, 120_000);
   }, [loadActiveBranch]);
 
   useEffect(() => {

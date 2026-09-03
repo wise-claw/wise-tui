@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { HoverHint } from "../shared/HoverHint";
 import { useStagehandBrowse } from "../../hooks/useStagehandBrowse";
 import { BrowserAutomationPanel } from "./BrowserAutomationPanel";
+import { startAdaptiveInterval } from "../../utils/adaptivePoll";
 import "./BrowserAutomationTopbarTrigger.css";
 
 function IconBrowserAutomation() {
@@ -76,10 +77,7 @@ export function BrowserAutomationTopbarTrigger({
 
   useEffect(() => {
     if (!open || !isActive) return;
-    const timer = window.setInterval(() => {
-      void refresh();
-    }, 4000);
-    return () => window.clearInterval(timer);
+    return startAdaptiveInterval(refresh, 4000, 16000);
   }, [isActive, open, refresh]);
 
   return (

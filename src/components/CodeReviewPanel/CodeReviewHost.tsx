@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { normalizeSessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import {
@@ -9,7 +9,10 @@ import {
 import { publishCodeReviewFindings } from "../../stores/codeReviewFindingsStore";
 import type { CodeReviewRun, CodeReviewScope } from "../../types/codeReview";
 import type { GitPanelOpenFileOptions } from "../GitPanel/types";
-import { CodeReviewDrawer } from "./CodeReviewDrawer";
+
+const LazyCodeReviewDrawer = lazy(() =>
+  import("./CodeReviewDrawer").then((module) => ({ default: module.CodeReviewDrawer })),
+);
 
 export interface CodeReviewHostProps {
   /** Fallback repo when event omits path (rare). */
@@ -79,36 +82,39 @@ export function CodeReviewHost({
     };
   }, [defaultExecutionEngine, defaultRepositoryName, defaultRepositoryPath]);
 
+  if (!open) return null;
   return (
-    <CodeReviewDrawer
-      open={open}
-      onClose={() => {
-        setOpen(false);
-        setAutoStart(false);
-        setSeededRun(null);
-        setFocusFinding(null);
-      }}
-      repositoryPath={repositoryPath}
-      repositoryName={repositoryName || undefined}
-      executionEngine={executionEngine}
-      onOpenFile={
-        onOpenFile
-          ? (path, options) =>
-              onOpenFile(path, {
-                ...options,
-                repositoryPath,
-                fileRootPath: repositoryPath,
-              })
-          : undefined
-      }
-      autoStart={autoStart}
-      initialScope={initialScope}
-      seededRun={seededRun}
-      focusFinding={focusFinding}
-      focusNonce={focusNonce}
-      onRunCompleted={(run) => {
-        publishCodeReviewFindings(run);
-      }}
-    />
+    <Suspense fallback={null}>
+      <LazyCodeReviewDrawer
+        open={open}
+        onClose={() => {
+          setOpen(false);
+          setAutoStart(false);
+          setSeededRun(null);
+          setFocusFinding(null);
+        }}
+        repositoryPath={repositoryPath}
+        repositoryName={repositoryName || undefined}
+        executionEngine={executionEngine}
+        onOpenFile={
+          onOpenFile
+            ? (path, options) =>
+                onOpenFile(path, {
+                  ...options,
+                  repositoryPath,
+                  fileRootPath: repositoryPath,
+                })
+            : undefined
+        }
+        autoStart={autoStart}
+        initialScope={initialScope}
+        seededRun={seededRun}
+        focusFinding={focusFinding}
+        focusNonce={focusNonce}
+        onRunCompleted={(run) => {
+          publishCodeReviewFindings(run);
+        }}
+      />
+    </Suspense>
   );
 }

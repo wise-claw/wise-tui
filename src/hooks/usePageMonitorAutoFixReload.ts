@@ -4,6 +4,7 @@ import { reloadChromeDevtoolsMonitor } from "../services/chromeDevtoolsMonitor";
 import { consumeCompletedPageMonitorReloads } from "../services/runtimeAutoFixDispatch";
 import { notifyPageMonitorReloaded } from "../stores/chromeDevtoolsMonitorRuntimeStore";
 import { subscribeClaudeSessionsStructure } from "../stores/claudeSessionsLiveStore";
+import { startAdaptiveInterval } from "../utils/adaptivePoll";
 
 /**
  * When a page-monitor auto-fix worker settles to idle, reload the monitored page
@@ -40,11 +41,11 @@ export function usePageMonitorAutoFixReload(input: {
 
     scan();
     const unsubscribe = subscribeClaudeSessionsStructure(scan);
-    const timer = window.setInterval(scan, 2500);
+    const stopPoll = startAdaptiveInterval(scan, 2500, 10000);
     return () => {
       cancelled = true;
       unsubscribe();
-      window.clearInterval(timer);
+      stopPoll();
     };
   }, []);
 }

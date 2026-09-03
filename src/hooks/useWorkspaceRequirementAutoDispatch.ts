@@ -20,7 +20,7 @@ import {
   isRequirementAutoDispatchEligible,
   planAutoDispatchSweepWithRetry,
 } from "../utils/workspaceRequirementAutoDispatch";
-import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../utils/adaptivePoll";
 
 const AUTO_DISPATCH_TICK_MS = 30_000;
 const AUTO_DISPATCH_TICK_MS_HIDDEN = 120_000;
@@ -225,36 +225,21 @@ export function useWorkspaceRequirementAutoDispatchEngine({
     );
     window.addEventListener(WISE_WORKSPACE_REQUIREMENTS_CHANGED, onRequirementsChanged);
 
-    const tick = () => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void sweepOnce();
-    };
-    const intervalMs = readVisiblePollIntervalMs(
+    const stopPoll = startAdaptiveInterval(
+      sweepOnce,
       AUTO_DISPATCH_TICK_MS,
       AUTO_DISPATCH_TICK_MS_HIDDEN,
     );
-    const id = window.setInterval(tick, intervalMs);
-    const onVisibilityChange = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        void sweepOnce();
-      }
-    };
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", onVisibilityChange);
-    }
 
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      stopPoll();
       window.removeEventListener(WISE_WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CHANGED, onToggle);
       window.removeEventListener(
         WISE_WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_CONCURRENCY_CHANGED,
         onConcurrencyChange,
       );
       window.removeEventListener(WISE_WORKSPACE_REQUIREMENTS_CHANGED, onRequirementsChanged);
-      if (typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVisibilityChange);
-      }
       if (changeTimerRef.current != null) {
         window.clearTimeout(changeTimerRef.current);
         changeTimerRef.current = null;

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { ClaudeSession } from "../types";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
+import { startAdaptiveInterval } from "../utils/adaptivePoll";
 import {
   findRunningFeedbackLoopDispatchesForWorker,
   getSessionFeedbackLoopDispatchesSnapshotForAnchor,
@@ -70,10 +71,10 @@ export function useSessionFeedbackLoopDispatchCompletion(input: {
     scan();
     const unsubscribe = subscribeSessionFeedbackLoopDispatches(scan);
     const feedbackPollMs = isCurrentPrimaryMainWorkspaceWindowSync() ? 3000 : 5000;
-    const timer = window.setInterval(scan, feedbackPollMs);
+    const stopPoll = startAdaptiveInterval(scan, feedbackPollMs, feedbackPollMs * 3);
     return () => {
       unsubscribe();
-      window.clearInterval(timer);
+      stopPoll();
     };
   }, [input.anchorSessionId, input.getSessions]);
 }

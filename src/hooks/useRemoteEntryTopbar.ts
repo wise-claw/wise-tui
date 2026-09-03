@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { message } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   dingtalkStreamGatewayStart,
   dingtalkStreamGatewayStop,
@@ -17,7 +17,7 @@ import {
   type RemoteEntryStartableId,
   type RemoteEntryTopbarSnapshot,
 } from "../services/remoteEntryTopbar";
-import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../utils/adaptivePoll";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 
@@ -26,13 +26,16 @@ const POLL_MS = 5000;
 export function useRemoteEntryTopbar() {
   const [snapshot, setSnapshot] = useState<RemoteEntryTopbarSnapshot | null>(null);
   const [busyId, setBusyId] = useState<RemoteEntryStartableId | null>(null);
+  const refreshSequenceRef = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!isTauri()) return;
+    const sequence = ++refreshSequenceRef.current;
     try {
-      setSnapshot(await loadRemoteEntryTopbarSnapshot());
+      const next = await loadRemoteEntryTopbarSnapshot();
+      if (sequence === refreshSequenceRef.current) setSnapshot(next);
     } catch {
-      setSnapshot(null);
+      if (sequence === refreshSequenceRef.current) setSnapshot(null);
     }
   }, []);
 
@@ -42,11 +45,7 @@ export function useRemoteEntryTopbar() {
     const remotePrimaryMs = POLL_MS;
     const remoteHiddenMs = 20000;
     const remoteVisibleMs = isCurrentPrimaryMainWorkspaceWindowSync() ? remotePrimaryMs : remoteHiddenMs;
-    const id = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void refresh();
-    }, readVisiblePollIntervalMs(remoteVisibleMs, remoteHiddenMs * 2));
-    return () => window.clearInterval(id);
+    return startAdaptiveInterval(refresh, remoteVisibleMs, remoteHiddenMs * 2);
   }, [refresh]);
 
   useEffect(() => {
