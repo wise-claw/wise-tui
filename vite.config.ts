@@ -57,7 +57,7 @@ function materialIconsStaticPlugin(): Plugin {
 
 /** 仅按需打开的功能块，不应出现在 index 入口的 modulepreload 里。 */
 const DEFERRED_MODULE_PRELOAD_CHUNK =
-  /(?:^|\/)assets\/(?:composer-region|markdown-vendor|tiptap-vendor|codemirror-vendor|monaco-vendor|terminal-vendor|graph-vendor|mermaid-vendor|AuthorPanel|x6-vendor)/;
+  /(?:^|\/)assets\/(?:composer-region|markdown-vendor|tiptap-vendor|codemirror-vendor|monaco-vendor|terminal-vendor|graph-vendor|mermaid-vendor|antd-vendor|AuthorPanel|x6-vendor)/;
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -119,12 +119,26 @@ export default defineConfig(async () => ({
       },
       output: {
         manualChunks(id) {
+          const moduleId = id.replace(/\\/g, "/");
           // 动态 import 的共享预加载 helper 必须留在独立小 chunk；如果交给 Rollup，
           // 它可能落入首个大型动态 vendor，反向制造启动期静态依赖。
           if (id === "\0vite/preload-helper.js") {
             return "vite-runtime";
           }
-          if (!id.includes("node_modules")) {
+          // 启动壳与 AppImpl 共用的小模块必须钉死独立 chunk。否则 Vite 会把它们
+          // 并进 @mermaid-js/parser 的语言块（产物名常带 cynefin），导致 main/AppImpl
+          // 静态依赖 3MB mermaid-vendor，并经由 dayjs 等共享依赖间接拖入 antd-vendor。
+          if (moduleId.endsWith("/src/utils/safeTauriUnlisten.ts")) {
+            return "wise-runtime";
+          }
+          if (
+            moduleId.endsWith("/src/utils/mermaidRender.ts") ||
+            moduleId.endsWith("/src/utils/mermaidViewerUi.ts") ||
+            moduleId.endsWith("/src/utils/mermaidSourceNormalize.ts")
+          ) {
+            return "mermaid-runtime";
+          }
+          if (!moduleId.includes("/node_modules/")) {
             return undefined;
           }
           if (id.includes("@tauri-apps")) {
@@ -177,7 +191,15 @@ export default defineConfig(async () => ({
           if (id.includes("node_modules/dompurify/")) {
             return "dompurify-vendor";
           }
-          if (id.includes("node_modules/mermaid") || id.includes("/mermaid/")) {
+          // dayjs 被 antd 与 mermaid 同时使用；不独立分块时会被并进 antd-vendor，
+          // 导致 deferred 的 mermaid-vendor 静态 import 整包 Ant Design。
+          if (id.includes("node_modules/dayjs/")) {
+            return "dayjs-vendor";
+          }
+          if (
+            id.includes("node_modules/mermaid/") ||
+            id.includes("node_modules/@mermaid-js/")
+          ) {
             return "mermaid-vendor";
           }
           if (id.includes("@antv/x6")) {
@@ -185,8 +207,8 @@ export default defineConfig(async () => ({
           }
           if (
             id.includes("node_modules/antd/") ||
-            id.includes("/rc-") ||
-            id.includes("/@rc-component/")
+            /(?:^|\/)node_modules\/rc-[^/]+\//.test(moduleId) ||
+            id.includes("node_modules/@rc-component/")
           ) {
             return "antd-vendor";
           }
