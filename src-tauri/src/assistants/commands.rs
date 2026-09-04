@@ -55,6 +55,8 @@ pub struct AssistantEntry {
     pub entry_workflow_id: Option<String>,
     #[serde(skip_serializing_if = "String::is_empty", default)]
     pub entry_script: String,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub entry_script_file_path: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -131,6 +133,7 @@ fn builtin_to_entry(bundle: &BuiltinAssistantBundle) -> AssistantEntry {
         entry_url: String::new(),
         entry_workflow_id: None,
         entry_script: String::new(),
+        entry_script_file_path: String::new(),
         created_at: BUILTIN_EPOCH.to_string(),
         updated_at: BUILTIN_EPOCH.to_string(),
     }
@@ -208,6 +211,7 @@ fn custom_to_entry(row: CustomAssistantRow) -> AssistantEntry {
         entry_url: row.entry_url,
         entry_workflow_id: row.entry_workflow_id,
         entry_script: row.entry_script,
+        entry_script_file_path: row.entry_script_file_path,
         created_at: row.created_at,
         updated_at: row.updated_at,
     }
@@ -268,6 +272,7 @@ pub fn assistants_list(
             entry_url: String::new(),
             entry_workflow_id: None,
             entry_script: String::new(),
+            entry_script_file_path: String::new(),
             // Extension assistants don't carry timestamps; keep the
             // builtin epoch for stable ordering.
             created_at: BUILTIN_EPOCH.to_string(),

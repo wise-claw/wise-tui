@@ -1390,7 +1390,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
         return;
       }
 
-      if (item.source === "execution_environment") {
+      if (item.source === "execution_environment" || item.source === "background_script") {
         setOmcDirectBatchDetailSnapshot(null);
         setSessionConversationTaskDetailTarget({ task: item });
         return;

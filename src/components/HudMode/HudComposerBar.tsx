@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ComposerRegion } from "../ClaudeChatInput/composer-region";
 import { wiseHudCancel, wiseHudExit, wiseHudNewSession, wiseHudSetDetailsOpen, wiseHudSubmit } from "../../services/wiseHud";
 import { HudContextPicker } from "./HudContextPicker";
+import { HudQuickActionsPicker } from "./HudQuickActionsPicker";
 import { HudCompletionToasts } from "./HudCompletionToasts";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import { safeUnlisten } from "../../utils/safeTauriUnlisten";
@@ -169,10 +170,13 @@ export function HudComposerBar({
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [menuOverlay, setMenuOverlay] = useState(false);
   const [contextOverlay, setContextOverlay] = useState(false);
+  const [quickActionsOverlay, setQuickActionsOverlay] = useState(false);
   const [previewImage, setPreviewImage] = useState<ImageAttachmentPart | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsOpenRef = useRef(detailsOpen);
   detailsOpenRef.current = detailsOpen;
+  const contextOverlayRef = useRef(contextOverlay);
+  contextOverlayRef.current = contextOverlay;
   const running = snapshot.busy;
 
   useEffect(() => {
@@ -184,12 +188,12 @@ export function HudComposerBar({
   }, [session]);
 
   useEffect(() => {
-    if (menuOverlay || contextOverlay) setPreviewImage(null);
-  }, [menuOverlay, contextOverlay]);
+    if (menuOverlay || contextOverlay || quickActionsOverlay) setPreviewImage(null);
+  }, [menuOverlay, contextOverlay, quickActionsOverlay]);
 
   useEffect(() => {
     onOverlayOpenChange?.(
-      menuOverlay || contextOverlay
+      menuOverlay || contextOverlay || quickActionsOverlay
         ? "menu"
         : previewImage
           ? "images"
@@ -197,7 +201,7 @@ export function HudComposerBar({
             ? "details"
             : "none",
     );
-  }, [menuOverlay, contextOverlay, previewImage, detailsOpen, onOverlayOpenChange]);
+  }, [menuOverlay, contextOverlay, quickActionsOverlay, previewImage, detailsOpen, onOverlayOpenChange]);
 
   useEffect(() => {
     void wiseHudSetDetailsOpen(detailsOpen);
@@ -243,6 +247,7 @@ export function HudComposerBar({
 
   const focusEditor = useCallback(() => {
     if (detailsOpenRef.current) return;
+    if (contextOverlayRef.current) return;
     const editor = shellRef.current?.querySelector<HTMLElement>(
       ".app-claude-semi-chat-input-wrap .tiptap",
     );
@@ -279,7 +284,7 @@ export function HudComposerBar({
         });
         const u2 = await listen<unknown>(WISE_HUD_ACTIVE_EVENT, (event) => {
           const active = parseWiseHudActiveChanged(event.payload);
-          if (active === true) focusEditor();
+          if (active === true && !contextOverlayRef.current) focusEditor();
           else if (active === false) setDetailsOpen(false);
         });
         if (cancelled) {
@@ -334,14 +339,19 @@ export function HudComposerBar({
       ) : null}
       <div className={`app-hud-bar${running ? " app-hud-bar--running" : ""}`}>
         <div className="app-hud-bar-drag" data-tauri-drag-region aria-hidden />
-        <HudNewSessionButton disabled={snapshot.activeRepositoryId == null} />
-        <HudRunStatusChip
-          runningCount={snapshot.runningCount}
-          runStatus={snapshot.runStatus}
-          detailsOpen={detailsOpen}
-          disabled={!session}
-          onToggle={() => setDetailsOpen((open) => !open)}
-        />
+        <div className="app-hud-bar-leading-cluster">
+          <div className="app-hud-bar-leading-actions">
+            <HudNewSessionButton disabled={snapshot.activeRepositoryId == null} />
+            <HudQuickActionsPicker snapshot={snapshot} onOverlayWantedChange={setQuickActionsOverlay} />
+          </div>
+          <HudRunStatusChip
+            runningCount={snapshot.runningCount}
+            runStatus={snapshot.runStatus}
+            detailsOpen={detailsOpen}
+            disabled={!session}
+            onToggle={() => setDetailsOpen((open) => !open)}
+          />
+        </div>
         {session ? (
           <div className="app-hud-composer">
             <ComposerRegion

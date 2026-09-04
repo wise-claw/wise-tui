@@ -81,7 +81,10 @@
 .app-hud-composer,
 .app-hud-empty-hint,
 .app-hud-exit-btn,
+.app-hud-bar-leading-cluster,
+.app-hud-bar-leading-actions,
 .app-hud-new-session-btn,
+.app-hud-quick-actions-btn,
 .app-hud-stop-btn,
 .app-hud-context-anchor,
 .app-hud-context-pill,
@@ -338,7 +341,8 @@
 }
 
 .app-hud-exit-btn svg,
-.app-hud-new-session-btn svg {
+.app-hud-new-session-btn svg,
+.app-hud-quick-actions-btn svg {
   width: 16px;
   height: 16px;
 }
@@ -354,10 +358,147 @@
   cursor: not-allowed;
 }
 
-.app-hud-stop-btn {
+.app-hud-bar-leading-cluster {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-hud-bar-leading-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.app-hud-bar-leading-actions .app-hud-quick-actions-anchor {
+  display: flex;
+  flex: 0 0 24px;
+  width: 24px;
+  min-width: 24px;
+  max-width: 24px;
+  height: 28px;
+  margin: 0 0 0 -4px;
+  padding: 0;
+  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-hud-bar-leading-actions .app-hud-new-session-btn {
+  flex: 0 0 24px;
+  width: 24px;
+  min-width: 24px;
+  max-width: 24px;
+}
+
+.app-hud-bar-leading-cluster .app-hud-run-chip {
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.app-hud-bar-leading-actions .app-hud-quick-actions-anchor > * {
+  display: flex !important;
+  flex: 0 0 24px;
+  width: 24px !important;
+  min-width: 24px !important;
+  max-width: 24px !important;
+  height: 28px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-hud-bar-leading-actions .app-hud-quick-actions-anchor .app-hud-quick-actions-btn {
+  flex: 0 0 24px;
+  width: 24px;
+  min-width: 24px;
+  max-width: 24px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+}
+
+.app-hud-quick-actions-btn {
   flex: 0 0 28px;
   width: 28px;
   height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #8b8f98;
+  cursor: pointer;
+}
+
+.app-hud-quick-actions-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.app-hud-quick-actions-btn:hover,
+.app-hud-quick-actions-btn--open {
+  background: rgba(15, 23, 42, 0.06);
+  color: #1f2328;
+}
+
+.app-hud-quick-actions-popover .ant-popover-inner,
+.app-hud-quick-actions-popover .ant-popover-container {
+  padding: 0;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+  overflow: hidden;
+}
+
+.app-hud-quick-actions-panel {
+  width: min(360px, calc(100vw - 24px));
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px 12px 12px;
+}
+
+.app-hud-quick-actions-panel__title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #52525b;
+}
+
+.app-hud-quick-actions-panel__title--section {
+  margin-top: 12px;
+}
+
+.app-hud-quick-actions-panel .app-composer-common-phrases-bar--quick {
+  flex-wrap: wrap;
+  max-width: 100%;
+  gap: 6px;
+}
+
+.app-hud-quick-actions-panel__empty {
+  padding: 12px 4px;
+  font-size: 13px;
+  color: #a1a1aa;
+  text-align: center;
+}
+
+.app-hud-quick-actions-panel__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.app-hud-stop-btn {
+  /* 与 HUD 的发送动作同尺度，避免高饱和停止态压过整条工具栏。 */
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -374,8 +515,8 @@
 }
 
 .app-hud-stop-btn svg {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 .app-hud-context-anchor {
@@ -497,8 +638,33 @@
   min-height: 20px !important;
   max-height: 20px !important;
   height: 20px;
-  overflow-x: hidden;
-  overflow-y: auto;
+}
+
+/* HUD 始终保持单行：正文超出可用宽度后由编辑区横向滚动，输入光标会自动保持可见。 */
+.app-hud-bar .app-claude-composer--hud .semi-aiChatInput-editor {
+  overflow: hidden;
+}
+
+.app-hud-bar .app-claude-composer--hud .semi-aiChatInput-editor-content {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.app-hud-bar .app-claude-composer--hud .semi-aiChatInput-editor-content::-webkit-scrollbar {
+  display: none;
+}
+
+.app-hud-bar .app-claude-composer--hud .semi-aiChatInput-editor-content .tiptap {
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
+  overflow: visible;
+}
+
+.app-hud-bar .app-claude-composer--hud .semi-aiChatInput-editor-content .tiptap p {
+  white-space: pre;
 }
 
 .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-editor-content .tiptap p.is-editor-empty:first-child::before {
@@ -550,6 +716,11 @@
 
 .app-hud-bar--running .app-claude-composer--hud button.semi-aiChatInput-footer-action-button {
   display: none;
+}
+
+.app-hud-bar--running .app-hud-context-anchor,
+.app-hud-bar--running .app-hud-context-pill {
+  pointer-events: auto;
 }
 
 .app-hud-shell > .app-claude-slash-popover--inline,
@@ -843,8 +1014,21 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
   scrollbar-width: thin;
 }
 
+.app-hud-context-item-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-hud-context-item-row--active .app-hud-context-item {
+  background: #f3f4f6;
+}
+
 .app-hud-context-item {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
   min-height: 24px;
   padding: 3px 8px;
   border: none;
@@ -856,6 +1040,9 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
   line-height: 18px;
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-hud-context-item:hover:not(:disabled) {
@@ -869,6 +1056,46 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
 .app-hud-context-item:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.app-hud-context-item-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.app-hud-context-item-action {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #8b8f98;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.app-hud-context-item-action__icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+  object-fit: contain;
+}
+
+.app-hud-context-item-action__fallback {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.app-hud-context-item-action:hover {
+  background: rgba(15, 23, 42, 0.06);
+  color: #1f2328;
 }
 
 .app-hud-context-empty {
@@ -943,8 +1170,14 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
   color: #a1a1aa;
 }
 
+:root[data-wise-theme="dark"] .app-hud-quick-actions-btn {
+  color: #a1a1aa;
+}
+
 :root[data-wise-theme="dark"] .app-hud-exit-btn:hover,
-:root[data-wise-theme="dark"] .app-hud-new-session-btn:hover:not(:disabled) {
+:root[data-wise-theme="dark"] .app-hud-new-session-btn:hover:not(:disabled),
+:root[data-wise-theme="dark"] .app-hud-quick-actions-btn:hover,
+:root[data-wise-theme="dark"] .app-hud-quick-actions-btn--open {
   background: rgba(255, 255, 255, 0.08);
   color: #f4f4f5;
 }
@@ -967,6 +1200,26 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
+:root[data-wise-theme="dark"] .app-hud-quick-actions-popover .ant-popover-inner,
+:root[data-wise-theme="dark"] .app-hud-quick-actions-popover .ant-popover-container {
+  background: #2a2a2e;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-wise-theme="dark"] .app-hud-quick-actions-panel__title {
+  color: #d4d4d8;
+}
+
+:root[data-wise-theme="dark"] .app-hud-quick-actions-panel .app-composer-common-phrases-quick-label {
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #e4e4e7;
+}
+
+:root[data-wise-theme="dark"] .app-hud-quick-actions-panel__empty {
+  color: #71717a;
+}
+
 :root[data-wise-theme="dark"] .app-hud-context-tabs {
   background: rgba(255, 255, 255, 0.06);
 }
@@ -985,8 +1238,14 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
 }
 
 :root[data-wise-theme="dark"] .app-hud-context-item:hover:not(:disabled),
-:root[data-wise-theme="dark"] .app-hud-context-item--active {
+:root[data-wise-theme="dark"] .app-hud-context-item--active,
+:root[data-wise-theme="dark"] .app-hud-context-item-row--active .app-hud-context-item {
   background: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-wise-theme="dark"] .app-hud-context-item-action:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f4f5;
 }
 
 :root[data-wise-theme="dark"] .app-hud-context-empty {

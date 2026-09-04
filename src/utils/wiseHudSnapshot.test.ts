@@ -11,6 +11,7 @@ import {
   parseWiseHudSessionSnapshot,
   parseWiseHudSetEnginePayload,
   parseWiseHudSetModelPayload,
+  parseWiseHudActivateAssistantPayload,
   parseWiseHudSetDetailsOpenPayload,
   parseWiseHudSubmitPayload,
   isWiseHudForwardEvent,
@@ -59,7 +60,7 @@ describe("buildWiseHudSessionSnapshot", () => {
       repositoryPath: "/tmp/demo",
       model: "gpt-5.4",
     });
-    expect(snap.repositories).toEqual([{ id: 9, name: "demo", path: "/tmp/demo" }]);
+    expect(snap.repositories).toEqual([{ id: 9, name: "demo", path: "/tmp/demo", openAppId: null }]);
   });
 
   it("does not treat the Wise tab id as a Claude session id", () => {
@@ -205,6 +206,7 @@ describe("parseWiseHud payloads", () => {
     expect(isWiseHudForwardEvent("wise-hud-set-engine")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-set-model")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-set-details-open")).toBe(true);
+    expect(isWiseHudForwardEvent("wise-hud-activate-assistant")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-state")).toBe(false);
     expect(isWiseHudForwardEvent("wise-hud-session-complete")).toBe(false);
   });
@@ -226,6 +228,11 @@ describe("parseWiseHud payloads", () => {
     expect(parseWiseHudSetDetailsOpenPayload({ open: true })).toEqual({ open: true });
     expect(parseWiseHudSetDetailsOpenPayload({ open: false })).toEqual({ open: false });
     expect(parseWiseHudSetDetailsOpenPayload({ open: 1 })).toBeNull();
+    expect(parseWiseHudActivateAssistantPayload({ assistantId: " custom:echo " })).toEqual({
+      assistantId: "custom:echo",
+    });
+    expect(parseWiseHudActivateAssistantPayload({ assistantId: "   " })).toBeNull();
+    expect(parseWiseHudActivateAssistantPayload(null)).toBeNull();
   });
 
   it("parses snapshot and active flag", () => {
@@ -291,7 +298,9 @@ describe("parseWiseHud payloads", () => {
     expect(snap?.messages).toEqual([
       { id: 9, role: "assistant", content: "好的", parts: [], timestamp: 2 },
     ]);
-    expect(snap?.repositories).toEqual([{ id: 3, name: "wise-tui", path: "/tmp/wise-tui" }]);
+    expect(snap?.repositories).toEqual([
+      { id: 3, name: "wise-tui", path: "/tmp/wise-tui", openAppId: null },
+    ]);
     expect(parseWiseHudSelectRepositoryPayload({ repositoryId: 3 })).toEqual({ repositoryId: 3 });
     expect(parseWiseHudSelectRepositoryPayload({ repositoryId: "3" })).toBeNull();
   });

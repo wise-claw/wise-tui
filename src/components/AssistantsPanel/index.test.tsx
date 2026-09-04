@@ -18,6 +18,10 @@ mock.module("../../services/agentRegistry", () => ({
   ]),
 }));
 
+mock.module("../../services/repositoryFiles", () => ({
+  listRepositoryExplorerChildren: mock(async () => []),
+}));
+
 mock.module("../../services/assistants", () => ({
   listAssistants: mock(async () => [
     {

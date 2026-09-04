@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { Input, Popover } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { App, Input, Popover } from "antd";
 import { useHudOverlaySelectOpen } from "../../hooks/useHudOverlaySelectOpen";
 import { useAgentRegistryCodexAvailable } from "../../hooks/useAgentRegistryCodexAvailable";
 import { useAgentRegistryCursorAvailable } from "../../hooks/useAgentRegistryCursorAvailable";
@@ -50,6 +50,18 @@ import { buildCursorModelPickerOptions } from "../../utils/cursorModel";
 import { buildOpencodeModelPickerOptions } from "../../utils/opencodeModel";
 import { buildQoderModelPickerOptions } from "../../utils/qoderModel";
 import { buildWorkspaceRepositoryFlatSelectOptions } from "../../utils/workspaceRepositoryTreeSelect";
+import {
+  OPEN_WORKSPACE_ERROR,
+  openWorkspaceWithStoredPreference,
+} from "../../services/openWorkspaceWithPreference";
+import { tryOpenWorkspaceInDefaultTerminal } from "../../services/openWorkspaceWithTerminalPreference";
+import { getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
+import { repositoryEditorOpenMenuLabel, resolveEffectiveOpenAppId } from "../../utils/openAppScope";
+import {
+  repositoryTerminalOpenAppIcon,
+  repositoryTerminalOpenMenuLabel,
+  showRepositoryTerminalOpenMenuItem,
+} from "../../utils/repositoryTerminalOpenMenu";
 import type { Repository } from "../../types";
 import type { WiseHudSessionSnapshot } from "../../utils/wiseHudSnapshot";
 import "./HudComposerBar.css";
@@ -64,6 +76,7 @@ function toHudRepositories(snapshot: WiseHudSessionSnapshot): Repository[] {
     id: item.id,
     name: item.name,
     path: item.path,
+    openAppId: item.openAppId ?? null,
     repositoryType: "document",
     createdAt: "",
     updatedAt: "",
@@ -176,6 +189,7 @@ function HudContextList({
   items,
   emptyText,
   onSelect,
+  renderItemActions,
 }: {
   items: Array<{
     key: string;
@@ -185,6 +199,7 @@ function HudContextList({
   }>;
   emptyText: string;
   onSelect: (key: string) => void;
+  renderItemActions?: (item: { key: string; label: string }) => ReactNode;
 }) {
   if (items.length === 0) {
     return <div className="app-hud-context-empty">{emptyText}</div>;
@@ -192,27 +207,33 @@ function HudContextList({
   return (
     <div className="app-hud-context-list" role="listbox">
       {items.map((item) => (
-        <button
+        <div
           key={item.key}
-          type="button"
-          role="option"
-          aria-selected={item.selected}
-          className={`app-hud-context-item${item.selected ? " app-hud-context-item--active" : ""}`}
-          disabled={item.disabled}
-          onMouseDown={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-          onClick={() => onSelect(item.key)}
+          className={`app-hud-context-item-row${item.selected ? " app-hud-context-item-row--active" : ""}`}
         >
-          {item.label}
-        </button>
+          <button
+            type="button"
+            role="option"
+            aria-selected={item.selected}
+            className={`app-hud-context-item${item.selected ? " app-hud-context-item--active" : ""}`}
+            disabled={item.disabled}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            onClick={() => onSelect(item.key)}
+          >
+            {item.label}
+          </button>
+          {renderItemActions?.(item)}
+        </div>
       ))}
     </div>
   );
 }
 
 export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContextPickerProps) {
+  const { message } = App.useApp();
   const sessionId = snapshot.sessionId;
   const hudSelect = useHudOverlaySelectOpen(true);
   const [tab, setTab] = useState<HudContextPickerTab>("repo");
@@ -245,6 +266,9 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
   const geminiAvailable = useAgentRegistryGeminiAvailable();
   const opencodeAvailable = useAgentRegistryOpencodeAvailable();
   const qoderAvailable = useAgentRegistryQoderAvailable();
+  const showTerminalOpen = showRepositoryTerminalOpenMenuItem();
+  const terminalActionLabel = repositoryTerminalOpenMenuLabel();
+  const terminalIconSrc = repositoryTerminalOpenAppIcon();
 
   const repositories = useMemo(() => toHudRepositories(snapshot), [snapshot]);
   const repoOptions = useMemo(
@@ -414,13 +438,23 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
 
   const repoItems = useMemo(
     () =>
-      filterHudPickerItems(repoOptions, query).map((item) => ({
-        key: item.value,
-        label: item.label,
-        selected:
-          snapshot.activeRepositoryId != null && item.value === `repo:${snapshot.activeRepositoryId}`,
-      })),
-    [query, repoOptions, snapshot.activeRepositoryId],
+      filterHudPickerItems(repoOptions, query).flatMap((item) => {
+        if (!item.value.startsWith("repo:")) return [];
+        const repositoryId = Number(item.value.slice(5));
+        const repository = repositories.find((entry) => entry.id === repositoryId);
+        return [
+          {
+            key: item.value,
+            label: item.label,
+            path: repository?.path?.trim() ?? "",
+            openAppId: repository?.openAppId ?? null,
+            selected:
+              snapshot.activeRepositoryId != null &&
+              item.value === `repo:${snapshot.activeRepositoryId}`,
+          },
+        ];
+      }),
+    [query, repoOptions, repositories, snapshot.activeRepositoryId],
   );
 
   const engineFiltered = useMemo(
@@ -498,9 +532,119 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
     event.stopPropagation();
   }, []);
 
+  const openRepositoryInPreferredEditor = useCallback(
+    (path: string, openAppId: string | null | undefined) => {
+      const trimmed = path.trim();
+      if (!trimmed) {
+        message.warning("仓库路径为空");
+        return;
+      }
+      void openWorkspaceWithStoredPreference(trimmed, undefined, openAppId).catch((err: unknown) => {
+        const code = err instanceof Error ? err.message : "";
+        if (code === OPEN_WORKSPACE_ERROR.NOT_CONFIGURED) {
+          message.warning("未配置可用的编辑器或命令，请在中栏顶部「打开方式」中选择");
+        } else if (code === OPEN_WORKSPACE_ERROR.EMPTY_PATH) {
+          message.warning("仓库路径为空");
+        } else if (code === OPEN_WORKSPACE_ERROR.NO_TARGET) {
+          message.warning("未找到可用的打开方式");
+        } else {
+          message.error("编辑器打开失败");
+          console.error(err);
+        }
+      });
+    },
+    [message],
+  );
+
+  const openRepositoryInDefaultTerminal = useCallback(
+    (path: string) => {
+      const trimmed = path.trim();
+      if (!trimmed) {
+        message.warning("仓库路径为空");
+        return;
+      }
+      void tryOpenWorkspaceInDefaultTerminal(trimmed).then((result) => {
+        if (!result.ok) message.warning(result.message);
+      });
+    },
+    [message],
+  );
+
+  const renderRepoItemActions = useCallback(
+    (item: { key: string; label: string }) => {
+      const repoItem = repoItems.find((entry) => entry.key === item.key);
+      if (!repoItem?.path) return null;
+      const editorActionLabel = repositoryEditorOpenMenuLabel(repoItem.openAppId);
+      const editorIconSrc = getKnownOpenAppIcon(resolveEffectiveOpenAppId(repoItem.openAppId));
+      return (
+        <div className="app-hud-context-item-actions">
+          <button
+            type="button"
+            className="app-hud-context-item-action app-hud-context-item-action--editor"
+            title={`${editorActionLabel}：${item.label}`}
+            aria-label={`${editorActionLabel}：${item.label}`}
+            onMouseDown={retainPopupPointer}
+            onClick={(event) => {
+              event.stopPropagation();
+              openRepositoryInPreferredEditor(repoItem.path, repoItem.openAppId);
+            }}
+          >
+            {editorIconSrc ? (
+              <img className="app-hud-context-item-action__icon" src={editorIconSrc} alt="" aria-hidden />
+            ) : (
+              <span className="app-hud-context-item-action__fallback" aria-hidden>
+                IDE
+              </span>
+            )}
+          </button>
+          {showTerminalOpen ? (
+            <button
+              type="button"
+              className="app-hud-context-item-action app-hud-context-item-action--terminal"
+              title={`${terminalActionLabel}：${item.label}`}
+              aria-label={`${terminalActionLabel}：${item.label}`}
+              onMouseDown={retainPopupPointer}
+              onClick={(event) => {
+                event.stopPropagation();
+                openRepositoryInDefaultTerminal(repoItem.path);
+              }}
+            >
+              {terminalIconSrc ? (
+                <img
+                  className="app-hud-context-item-action__icon"
+                  src={terminalIconSrc}
+                  alt=""
+                  aria-hidden
+                />
+              ) : (
+                <span className="app-hud-context-item-action__fallback" aria-hidden>
+                  T
+                </span>
+              )}
+            </button>
+          ) : null}
+        </div>
+      );
+    },
+    [
+      openRepositoryInDefaultTerminal,
+      openRepositoryInPreferredEditor,
+      repoItems,
+      retainPopupPointer,
+      showTerminalOpen,
+      terminalActionLabel,
+      terminalIconSrc,
+    ],
+  );
+
   const list =
     tab === "repo" ? (
-      <HudContextList items={repoItems} emptyText="没有匹配的仓库" onSelect={handleSelect} />
+      <HudContextList
+        items={repoItems}
+        emptyText="没有匹配的仓库"
+        onSelect={handleSelect}
+        renderItemActions={renderRepoItemActions}
+      />
     ) : tab === "engine" ? (
       <HudContextList
         items={engineFiltered}

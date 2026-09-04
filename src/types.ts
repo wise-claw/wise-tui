@@ -233,6 +233,8 @@ export interface SessionConversationTaskItem {
   cwd?: string;
   /** 后台 PTY 脚本子进程 pid */
   pid?: number;
+  /** 后台 PTY 脚本 terminal-output 累积文本（详情 fallback） */
+  terminalOutput?: string;
 }
 
 export interface MonitorStats {

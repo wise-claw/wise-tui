@@ -35,6 +35,8 @@ export interface ExecutionEnvironmentDispatchItem {
   exitCode?: number;
   /** 后台 PTY 脚本是否已被用户手动 kill */
   killedByUser?: boolean;
+  /** 后台 PTY 脚本 stdout/stderr 拼接（terminal-output 事件累积） */
+  terminalOutput?: string;
 }
 
 type Listener = () => void;
@@ -56,6 +58,13 @@ const REHYDRATED_PLACEHOLDER_WORKER_ID_PREFIX = "rehydrated:";
 
 function isRehydratedPlaceholderWorkerId(workerSessionId: string): boolean {
   return workerSessionId.startsWith(REHYDRATED_PLACEHOLDER_WORKER_ID_PREFIX);
+}
+
+/** 带 terminalId + workspaceId 的 dispatch item 表示后台 PTY 脚本，不是 Claude 执行环境 worker。 */
+export function isBackgroundScriptDispatchItem(
+  item: Pick<ExecutionEnvironmentDispatchItem, "terminalId" | "workspaceId">,
+): boolean {
+  return Boolean(item.terminalId?.trim() && item.workspaceId?.trim());
 }
 
 /**
@@ -371,6 +380,7 @@ export function markExecutionEnvironmentDispatchItemExited(input: {
   exitCode?: number;
   killedByUser?: boolean;
   exitMessage?: string;
+  terminalOutput?: string;
 }): void {
   const workerId = input.workerSessionId.trim();
   if (!workerId) return;
@@ -379,15 +389,18 @@ export function markExecutionEnvironmentDispatchItemExited(input: {
     const idx = record.items.findIndex((it) => it.workerSessionId === workerId);
     if (idx < 0) continue;
     const prev = record.items[idx]!;
-    const nextPreview =
-      input.exitMessage?.trim() ||
-      (input.killedByUser
-        ? "已手动结束"
-        : input.exitCode == null
-          ? prev.previewText
-          : input.exitCode === 0
-            ? "已完成"
-            : `已退出（code ${input.exitCode}）`);
+    const isBackgroundScript = isBackgroundScriptDispatchItem(prev);
+    const capturedOutput = input.terminalOutput?.trim() || prev.terminalOutput?.trim();
+    const nextPreview = isBackgroundScript
+      ? capturedOutput || prev.previewText
+      : input.exitMessage?.trim() ||
+        (input.killedByUser
+          ? "已手动结束"
+          : input.exitCode == null
+            ? prev.previewText
+            : input.exitCode === 0
+              ? "已完成"
+              : `已退出（code ${input.exitCode}）`);
     record.items = record.items.map((it, i) =>
       i === idx
         ? {
@@ -395,6 +408,7 @@ export function markExecutionEnvironmentDispatchItemExited(input: {
             exitCode: input.exitCode ?? it.exitCode,
             killedByUser: input.killedByUser ?? it.killedByUser,
             previewText: nextPreview,
+            terminalOutput: capturedOutput || it.terminalOutput,
             updatedAt: Date.now(),
           }
         : it,

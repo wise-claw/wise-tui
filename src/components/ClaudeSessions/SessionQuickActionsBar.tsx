@@ -10,7 +10,7 @@ import {
   UserOutlined,
 } from "@ant-design/icons";
 import { Dropdown, type MenuProps } from "antd";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   partitionSessionQuickActions,
   type SessionQuickActionId,
@@ -18,7 +18,6 @@ import {
 } from "../../constants/sessionQuickActionsLayout";
 import { usePointerClickAction } from "../../hooks/usePointerClickAction";
 import { useSessionQuickActionsLayout } from "../../hooks/useSessionQuickActionsLayout";
-import { createPointerClickGate, type PointerClickGate } from "../../utils/pointerClickGate";
 import type { AssistantEntry } from "../../types/assistant";
 import { resolveAssistantEntryKind } from "../../utils/assistantTemplateEntry";
 import {
@@ -65,6 +64,38 @@ function actionMenuIcon(id: SessionQuickActionId, assistant?: AssistantEntry): R
   return BUILTIN_ACTION_MENU_ICONS[id] ?? <UserOutlined />;
 }
 
+const AssistantQuickPill = memo(function AssistantQuickPill({
+  id,
+  pillLabel,
+  assistant,
+  onActivate,
+}: {
+  id: SessionQuickActionId;
+  pillLabel: string;
+  assistant: AssistantEntry | undefined;
+  onActivate: (assistantId: string) => void;
+}) {
+  const activate = useCallback(() => onActivate(id), [id, onActivate]);
+  const click = usePointerClickAction(activate);
+  const iconTone = "neutral";
+  return (
+    <button
+      type="button"
+      className="app-session-quick-pill"
+      onPointerDown={click.onPointerDown}
+      onClick={click.onClick}
+    >
+      <span
+        className={`app-session-quick-pill__icon app-session-quick-pill__icon--${iconTone}`}
+        aria-hidden
+      >
+        {actionMenuIcon(id, assistant)}
+      </span>
+      <span className="app-session-quick-pill__label">{pillLabel}</span>
+    </button>
+  );
+});
+
 export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
   onCreateNewSession,
   creatingNewSession = false,
@@ -77,16 +108,10 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
   const { layout, setLayout, resetLayout, persistLayout, catalog, assistantsById } =
     useSessionQuickActionsLayout();
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const assistantClickGateRef = useRef<PointerClickGate | null>(null);
-  if (assistantClickGateRef.current == null) {
-    assistantClickGateRef.current = createPointerClickGate();
-  }
 
   useEffect(() => {
     prefetchNewSessionSurface();
   }, []);
-
-  useEffect(() => () => assistantClickGateRef.current?.reset(), []);
 
   const availability: SessionQuickActionsAvailability = useMemo(
     () => ({
@@ -101,16 +126,17 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
     [layout, availability, catalog],
   );
 
-  const activateAssistantById = (assistantId: string) => {
-    assistantClickGateRef.current?.tryInvoke(() => {
+  const activateAssistantById = useCallback(
+    (assistantId: string) => {
       const assistant = assistantsById.get(assistantId);
       if (assistant && onActivateAssistant) {
         void onActivateAssistant(assistant);
         return;
       }
       onOpenBuiltinAssistant?.(assistantId);
-    });
-  };
+    },
+    [assistantsById, onActivateAssistant, onOpenBuiltinAssistant],
+  );
 
   const invokeCreateNewSession = useCallback(() => {
     if (creatingNewSession) return;
@@ -148,27 +174,14 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
       );
     }
     if (isAssistantTemplateQuickActionId(id)) {
-      const iconTone = "neutral";
       return (
-        <button
+        <AssistantQuickPill
           key={id}
-          type="button"
-          className="app-session-quick-pill"
-          onPointerDown={(event) => {
-            if (event.button !== 0) return;
-            event.preventDefault();
-            activateAssistantById(id);
-          }}
-          onClick={() => activateAssistantById(id)}
-        >
-          <span
-            className={`app-session-quick-pill__icon app-session-quick-pill__icon--${iconTone}`}
-            aria-hidden
-          >
-            {actionMenuIcon(id, assistantsById.get(id))}
-          </span>
-          <span className="app-session-quick-pill__label">{meta.pillLabel}</span>
-        </button>
+          id={id}
+          pillLabel={meta.pillLabel}
+          assistant={assistantsById.get(id)}
+          onActivate={activateAssistantById}
+        />
       );
     }
     return null;

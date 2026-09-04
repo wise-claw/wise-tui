@@ -101,11 +101,14 @@ export const ComposerCommonPhrasesBar = memo(function ComposerCommonPhrasesBar({
   phrases,
   variant = "composer",
   sessionBusyWithoutEnqueue = false,
+  disabled = false,
   onApplyPhrase,
 }: {
   phrases: readonly ComposerCommonPhrase[];
   variant?: "composer" | "quickBar";
   sessionBusyWithoutEnqueue?: boolean;
+  /** 额外禁用（如无会话时 HUD 不可应用） */
+  disabled?: boolean;
   onApplyPhrase: (phrase: ComposerCommonPhrase) => void;
 }) {
   const isQuickBar = variant === "quickBar";
@@ -127,14 +130,15 @@ export const ComposerCommonPhrasesBar = memo(function ComposerCommonPhrasesBar({
       aria-label="会话常用语"
     >
       {phrases.map((phrase) => {
-        const disabled = shouldDisableComposerCommonPhraseSend(phrase, sessionBusyWithoutEnqueue);
+        const phraseDisabled =
+          disabled || shouldDisableComposerCommonPhraseSend(phrase, sessionBusyWithoutEnqueue);
         const tooltipTitle = tooltipById.get(phrase.id) ?? phrase.title;
         if (isQuickBar) {
           return (
             <PhraseQuickLabel
               key={phrase.id}
               phrase={phrase}
-              disabled={disabled}
+              disabled={phraseDisabled}
               onApplyPhrase={onApplyPhrase}
               tooltipTitle={tooltipTitle}
             />
@@ -144,7 +148,7 @@ export const ComposerCommonPhrasesBar = memo(function ComposerCommonPhrasesBar({
           <PhraseComposerChip
             key={phrase.id}
             phrase={phrase}
-            disabled={disabled}
+            disabled={phraseDisabled}
             onApplyPhrase={onApplyPhrase}
             tooltipTitle={tooltipTitle}
           />

@@ -1,5 +1,5 @@
 import { PlusOutlined, ReloadOutlined, UserOutlined } from "@ant-design/icons";
-import { App, Button, Drawer, Form, Input, Modal, Select, Typography } from "antd";
+import { App, Button, Drawer, Form, Input, Modal, Segmented, Select, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AssistantHubBody } from "../AssistantHubShared/AssistantHubBody";
 import type { AssistantHubFilter } from "../AssistantHubShared/groupAssistants";
@@ -18,7 +18,11 @@ import type { WorkflowTemplateItem } from "../../types";
 import {
   ASSISTANT_ENTRY_KIND_OPTIONS,
   resolveAssistantEntryKind,
+  resolveAssistantRunScriptSource,
+  type AssistantRunScriptSource,
 } from "../../utils/assistantTemplateEntry";
+import { normalizeScheduledTaskScriptFilePath } from "../../utils/scheduledTaskScript";
+import { ScheduledTaskScriptFileSelect } from "../RepositoryScheduledTasksModal/ScheduledTaskScriptFileSelect";
 import {
   AuthorPanelHubTab,
   AuthorPanelHubTabs,
@@ -52,6 +56,8 @@ interface FormValues {
   entryUrl?: string;
   entryWorkflowId?: string;
   entryScript?: string;
+  scriptSource: AssistantRunScriptSource;
+  entryScriptFilePath?: string;
 }
 
 export interface AssistantsPanelProps {
@@ -86,6 +92,7 @@ export function AssistantsPanel({
   const [mcpBundle, setMcpBundle] = useState<AssistantRuntimeBundle>(EMPTY_RUNTIME_BUNDLE);
   const [bundleLoading, setBundleLoading] = useState(false);
   const watchedEntryKind = Form.useWatch("entryKind", form) ?? "dispatch_direct";
+  const watchedScriptSource = Form.useWatch("scriptSource", form) ?? "inline";
 
   const settingsAssistant = useMemo(
     () => list.find((a) => a.id === settingsAssistantId) ?? null,
@@ -162,6 +169,8 @@ export function AssistantsPanel({
       entryUrl: "",
       entryWorkflowId: undefined,
       entryScript: "",
+      scriptSource: "inline",
+      entryScriptFilePath: "",
     });
   }, [form]);
 
@@ -181,6 +190,8 @@ export function AssistantsPanel({
         entryUrl: row.entryUrl ?? "",
         entryWorkflowId: row.entryWorkflowId ?? undefined,
         entryScript: row.entryScript ?? "",
+        scriptSource: resolveAssistantRunScriptSource(row),
+        entryScriptFilePath: normalizeScheduledTaskScriptFilePath(row.entryScriptFilePath) ?? "",
       });
     },
     [form, loadTemplateBundles],
@@ -194,6 +205,24 @@ export function AssistantsPanel({
     try {
       const v = await form.validateFields();
       const entryKind = v.entryKind ?? "dispatch_direct";
+      let entryScript = "";
+      let entryScriptFilePath = "";
+      if (entryKind === "run_script") {
+        if (v.scriptSource === "file") {
+          const normalized = normalizeScheduledTaskScriptFilePath(v.entryScriptFilePath);
+          if (!normalized) {
+            message.error("请选择执行文件");
+            return;
+          }
+          entryScriptFilePath = normalized;
+        } else {
+          entryScript = (v.entryScript ?? "").trim();
+          if (!entryScript) {
+            message.error("请填写脚本内容");
+            return;
+          }
+        }
+      }
       setSaving(true);
       const input: CustomAssistantInput = {
         id: v.id,
@@ -205,7 +234,8 @@ export function AssistantsPanel({
         entryKind,
         entryUrl: (v.entryUrl ?? "").trim(),
         entryWorkflowId: v.entryWorkflowId?.trim() ? v.entryWorkflowId.trim() : null,
-        entryScript: (v.entryScript ?? "").trim(),
+        entryScript,
+        entryScriptFilePath,
       };
       const saved = await saveCustomAssistant(input);
       if (entryKind === "dispatch_direct") {
@@ -508,14 +538,45 @@ export function AssistantsPanel({
             </>
           ) : null}
           {watchedEntryKind === "run_script" ? (
-            <Form.Item
-              name="entryScript"
-              label="脚本内容"
-              rules={[{ required: true, message: "需要填写脚本内容" }]}
-              help="在仓库根目录通过 zsh -c 执行；执行前请先在左栏选择目标仓库。"
-            >
-              <Input.TextArea rows={8} placeholder={"bun test\n# 或多行 Shell 脚本"} />
-            </Form.Item>
+            <>
+              <Form.Item
+                name="scriptSource"
+                label="脚本来源"
+                rules={[{ required: true, message: "请选择脚本来源" }]}
+              >
+                <Segmented
+                  block
+                  size="small"
+                  options={[
+                    { label: "内联脚本", value: "inline" },
+                    { label: "仓库文件", value: "file" },
+                  ]}
+                />
+              </Form.Item>
+              {watchedScriptSource === "file" ? (
+                <Form.Item
+                  name="entryScriptFilePath"
+                  label="执行文件"
+                  rules={[{ required: true, message: "请选择执行文件" }]}
+                  help={
+                    activeRepositoryPath?.trim()
+                      ? "从仓库目录树选择文件；执行时在所选仓库根目录用 zsh 运行。"
+                      : "请先在左栏选择目标仓库，再从目录树选择执行文件。"
+                  }
+                >
+                  <ScheduledTaskScriptFileSelect repositoryPath={activeRepositoryPath ?? ""} />
+                </Form.Item>
+              ) : (
+                <Form.Item
+                  name="entryScript"
+                  label="脚本内容"
+                  rules={[{ required: true, message: "需要填写脚本内容" }]}
+                  help="在仓库根目录通过 zsh 执行；支持多行脚本与引号。执行前请先在左栏选择目标仓库。"
+                >
+                  <Input.TextArea rows={8} placeholder={"bun test\n# 或多行 Shell 脚本"} />
+                </Form.Item>
+              )}
+            </>
           ) : null}
         </Form>
       </Drawer>

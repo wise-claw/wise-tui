@@ -2,9 +2,12 @@ import type { BackgroundInvocationSnapshot } from "../services/backgroundInvocat
 import type { WorkflowInvocationStreamDetail } from "../constants/workflowUiEvents";
 import type { ClaudeMessage, ClaudeSession, MessagePart, SessionConversationTaskItem, ToolUsePart } from "../types";
 import { SESSION_EXECUTION_ENGINE_LABELS } from "../constants/sessionExecutionEngine";
+import {
+  isBackgroundScriptDispatchItem,
+  sessionStatusToConversationTaskStatus,
+} from "../stores/executionEnvironmentDispatchStore";
 import type { ExecutionEnvironmentDispatchRecord } from "../stores/executionEnvironmentDispatchStore";
 import type { SessionFeedbackLoopDispatchRecord } from "../stores/sessionFeedbackLoopDispatchStore";
-import { sessionStatusToConversationTaskStatus } from "../stores/executionEnvironmentDispatchStore";
 import { indexOfLastRenderableUserMessage, isToolOnlyUserMessage, isAssistantDisplayNoiseText, parseDispatchRecordDisplayTimeMs, type DispatchRecordMeta } from "./claudeChatMessageDisplay";
 import { isExecutionEnvironmentWorkerRepositoryName, sanitizeExecutionEnvironmentWorkerUserMessages } from "./executionEnvironmentDispatch";
 import { isFeedbackLoopWorkerRepositoryName } from "./sessionFeedbackLoopDispatch";
@@ -466,6 +469,7 @@ export function buildExecutionEnvironmentConversationTasks(input: {
             },
           ];
     for (const item of batchItems) {
+      if (isBackgroundScriptDispatchItem(item)) continue;
       const repoPath = batch.repositoryPath || anchor.repositoryPath;
       const worker =
         findExecutionEnvironmentWorkerForTaskDetail(input.sessions, {
@@ -600,12 +604,15 @@ export function buildBackgroundScriptConversationTasks(input: {
             : "running";
       const labelSource = item.label?.trim() || item.previewText?.trim() || "后台脚本";
       const label = truncate(labelSource, 48);
+      const outputPreview = item.terminalOutput?.replace(/\s+/g, " ").trim();
+      const previewSource =
+        outputPreview || item.previewText?.trim() || labelSource || "执行中…";
       out.push({
         key: `bg-script:${item.batchId}:${item.workerSessionId}`,
         label,
         subtitle: item.pid != null ? `pid ${item.pid}` : "脚本",
         status,
-        previewText: truncate(item.previewText?.trim() || labelSource || "执行中…", 120),
+        previewText: truncate(previewSource, 120),
         updatedAt: item.updatedAt > 0 ? item.updatedAt : batch.createdAt,
         source: "background_script",
         sessionId: item.workerSessionId,
@@ -617,6 +624,7 @@ export function buildBackgroundScriptConversationTasks(input: {
         terminalId: item.terminalId,
         cwd: item.cwd,
         pid: item.pid,
+        terminalOutput: item.terminalOutput,
       });
     }
   }

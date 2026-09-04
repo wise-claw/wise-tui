@@ -29,6 +29,7 @@ export const WISE_HUD_SET_ENGINE_EVENT = "wise-hud-set-engine";
 export const WISE_HUD_SET_MODEL_EVENT = "wise-hud-set-model";
 export const WISE_HUD_SESSION_COMPLETE_EVENT = "wise-hud-session-complete";
 export const WISE_HUD_SET_DETAILS_OPEN_EVENT = "wise-hud-set-details-open";
+export const WISE_HUD_ACTIVATE_ASSISTANT_EVENT = "wise-hud-activate-assistant";
 
 export const HUD_ASSISTANT_PREVIEW_MAX_LEN = 280;
 
@@ -49,6 +50,7 @@ export interface WiseHudRepositoryOption {
   id: number;
   name: string;
   path: string;
+  openAppId?: string | null;
 }
 
 export interface WiseHudComposerSession {
@@ -95,6 +97,7 @@ const HUD_FORWARD_EVENTS = [
   WISE_HUD_SET_ENGINE_EVENT,
   WISE_HUD_SET_MODEL_EVENT,
   WISE_HUD_SET_DETAILS_OPEN_EVENT,
+  WISE_HUD_ACTIVATE_ASSISTANT_EVENT,
 ] as const;
 
 export type WiseHudForwardEvent = (typeof HUD_FORWARD_EVENTS)[number];
@@ -121,8 +124,12 @@ export interface WiseHudSetDetailsOpenPayload {
   open: boolean;
 }
 
+export interface WiseHudActivateAssistantPayload {
+  assistantId: string;
+}
+
 export interface BuildWiseHudSessionSnapshotExtras {
-  repositories?: ReadonlyArray<{ id: number; name: string; path: string }>;
+  repositories?: ReadonlyArray<{ id: number; name: string; path: string; openAppId?: string | null }>;
   activeRepositoryId?: number | null;
   runningCount?: number;
   runStatus?: WiseHudRunStatus;
@@ -223,6 +230,7 @@ function mapHudRepositories(
     id: item.id,
     name: item.name,
     path: item.path,
+    openAppId: item.openAppId ?? null,
   }));
 }
 
@@ -365,10 +373,15 @@ function parseHudRepositories(raw: unknown): WiseHudRepositoryOption[] {
   const out: WiseHudRepositoryOption[] = [];
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
-    const value = item as { id?: unknown; name?: unknown; path?: unknown };
+    const value = item as { id?: unknown; name?: unknown; path?: unknown; openAppId?: unknown };
     if (typeof value.id !== "number" || !Number.isFinite(value.id)) continue;
     if (typeof value.name !== "string" || typeof value.path !== "string") continue;
-    out.push({ id: value.id, name: value.name, path: value.path });
+    out.push({
+      id: value.id,
+      name: value.name,
+      path: value.path,
+      openAppId: typeof value.openAppId === "string" ? value.openAppId : null,
+    });
   }
   return out;
 }
@@ -502,6 +515,16 @@ export function parseWiseHudSetDetailsOpenPayload(raw: unknown): WiseHudSetDetai
   if (!raw || typeof raw !== "object") return null;
   const open = (raw as { open?: unknown }).open;
   return typeof open === "boolean" ? { open } : null;
+}
+
+export function parseWiseHudActivateAssistantPayload(
+  raw: unknown,
+): WiseHudActivateAssistantPayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const assistantIdRaw = (raw as { assistantId?: unknown }).assistantId;
+  if (typeof assistantIdRaw !== "string") return null;
+  const assistantId = assistantIdRaw.trim();
+  return assistantId ? { assistantId } : null;
 }
 
 export function parseWiseHudActiveChanged(raw: unknown): boolean | null {

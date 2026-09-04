@@ -66,6 +66,7 @@ const MIGRATION_047: &str = include_str!("../migrations/047_workspace_todos_glob
 const MIGRATION_049: &str = include_str!("../migrations/049_workspace_global_memo.sql");
 const MIGRATION_050: &str = include_str!("../migrations/050_terminal_quick_commands.sql");
 const MIGRATION_052: &str = include_str!("../migrations/052_workspace_quick_actions_category.sql");
+const MIGRATION_053: &str = include_str!("../migrations/053_assistant_custom_script_file.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -289,6 +290,10 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "052_workspace_quick_actions_category",
         action: MigrationAction::Sql(MIGRATION_052),
+    },
+    Migration {
+        name: "053_assistant_custom_script_file",
+        action: MigrationAction::Sql(MIGRATION_053),
     },
 ];
 

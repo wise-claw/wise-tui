@@ -3,7 +3,9 @@ mod frame;
 use portable_pty::{ChildKiller, CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use serde::Serialize;
 use std::collections::HashMap;
+use std::fs;
 use std::io::{ErrorKind, Read, Write};
+use std::path::PathBuf;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
@@ -157,6 +159,31 @@ fn normalize_terminal_source(source: Option<String>) -> String {
 
 fn session_key(workspace_id: &str, terminal_id: &str) -> String {
     format!("{}:{}", workspace_id, terminal_id)
+}
+
+/// 后台脚本落盘到 `~/.wise/assistant-scripts/`，用 `zsh -f <file>` 执行，
+/// 避免 `zsh -c` 对引号/中文/多行内容的解析问题。
+fn background_script_file_path(terminal_id: &str) -> Result<PathBuf, String> {
+    let dir = crate::wise_paths::wise_dir()?.join("assistant-scripts");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let safe: String = terminal_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    Ok(dir.join(format!("{safe}.sh")))
+}
+
+fn write_background_script_file(terminal_id: &str, command: &str) -> Result<PathBuf, String> {
+    let path = background_script_file_path(terminal_id)?;
+    fs::write(&path, command.as_bytes())
+        .map_err(|e| format!("Failed to write background script file: {e}"))?;
+    Ok(path)
 }
 
 fn panic_payload_message(payload: Box<dyn std::any::Any + Send>) -> String {
@@ -394,6 +421,7 @@ impl TerminalManager {
         session_key: String,
         app: tauri::AppHandle,
         emulator: Arc<Mutex<EmulatorState>>,
+        cleanup_script_path: Option<PathBuf>,
     ) {
         std::thread::spawn(move || {
             // 阻塞 read 与超时 flush 拆成两段：读线程只管灌字节，处理线程用
@@ -601,6 +629,9 @@ impl TerminalManager {
                     }
                 }
             }
+            if let Some(path) = cleanup_script_path {
+                let _ = fs::remove_file(path);
+            }
         });
     }
 
@@ -708,6 +739,7 @@ impl TerminalManager {
             session_key_clone,
             app_clone,
             emulator_clone,
+            None,
         );
 
         let info = TerminalSessionInfo {
@@ -757,7 +789,7 @@ impl TerminalManager {
         Ok(())
     }
 
-    /// 在 cwd 下用 `zsh -c <command>` 通过 PTY 启动一次性后台脚本。
+    /// 在 cwd 下把脚本写入 `~/.wise/assistant-scripts/` 后通过 `zsh -f <file>` 启动后台 PTY。
     fn open_background_script(
         &mut self,
         workspace_id: String,
@@ -797,12 +829,16 @@ impl TerminalManager {
             })
             .map_err(|e| format!("Failed to open PTY: {}", e))?;
 
+        let script_path = write_background_script_file(&terminal_id, &command)?;
+        let script_path_for_zsh = script_path.to_string_lossy().into_owned();
+        let script_cleanup = script_path.clone();
+
         let mut cmd = if cfg!(windows) {
             return Err("后台脚本当前仅支持 macOS/Linux".to_string());
         } else {
             let mut zsh = CommandBuilder::new("zsh");
-            zsh.arg("-c");
-            zsh.arg(&command);
+            zsh.arg("-f");
+            zsh.arg(&script_path_for_zsh);
             apply_embedded_terminal_shell_env(&mut zsh);
             zsh
         };
@@ -870,6 +906,7 @@ impl TerminalManager {
             session_key_clone,
             app_clone,
             emulator_clone,
+            Some(script_cleanup),
         );
 
         self.sessions.insert(
@@ -1156,7 +1193,7 @@ pub(crate) fn terminal_open(
     )
 }
 
-/// 后台脚本入口：用 PTY 跑一次性 `zsh -c <command>`，返回包含 pid 的 session info。
+/// 后台脚本入口：脚本落盘后 `zsh -f <file>` 跑 PTY，返回包含 pid 的 session info。
 #[tauri::command]
 pub(crate) fn terminal_open_background_script(
     manager: tauri::State<std::sync::Mutex<TerminalManager>>,

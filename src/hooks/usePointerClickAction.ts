@@ -28,6 +28,9 @@ export function usePointerClickAction(
 
   useEffect(() => () => gateRef.current?.reset(), []);
 
+  /** pointerdown 已触发时跳过紧随其后的 click，避免 WebView 下 preventDefault 未吞掉 click 的双击。 */
+  const skipClickRef = useRef(false);
+
   const run = useCallback(() => {
     gateRef.current?.tryInvoke(() => {
       actionRef.current();
@@ -38,10 +41,19 @@ export function usePointerClickAction(
     (event: ReactPointerEvent<HTMLElement>) => {
       if (event.button !== 0) return;
       event.preventDefault();
+      skipClickRef.current = true;
       run();
     },
     [run],
   );
 
-  return { onPointerDown, onClick: run };
+  const onClick = useCallback(() => {
+    if (skipClickRef.current) {
+      skipClickRef.current = false;
+      return;
+    }
+    run();
+  }, [run]);
+
+  return { onPointerDown, onClick };
 }

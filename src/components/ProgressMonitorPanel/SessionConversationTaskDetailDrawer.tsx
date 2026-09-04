@@ -24,6 +24,7 @@ import {
   type MonitorDrawerResumeSessionFn,
 } from "./MonitorDrawerSessionComposer";
 import { SubagentStatusIndicator } from "./SubagentStatusIndicator";
+import { BackgroundScriptTerminalView } from "./BackgroundScriptTerminalView";
 import {
   useClaudeSessionLiveSnapshot,
   useClaudeSessionsStructureSnapshot,
@@ -62,6 +63,24 @@ function resolveTaskSession(
       repositoryPath: task.repositoryPath,
     });
     if (found) return found;
+  } else if (task.source === "background_script") {
+    const repoPath = task.repositoryPath?.trim() || task.cwd?.trim() || "";
+    if (!repoPath) return null;
+    const stubForRepoLabel = {
+      repositoryName: repoPath,
+      repositoryPath: repoPath,
+    } as ClaudeSession;
+    return {
+      id: sid,
+      claudeSessionId: null,
+      repositoryPath: repoPath,
+      repositoryName: resolveMonitorSessionRepoShortLabel(stubForRepoLabel),
+      model: "sonnet",
+      status: task.status === "running" ? "running" : task.status === "failed" ? "error" : "completed",
+      messages: [],
+      createdAt: task.updatedAt || Date.now(),
+      pendingPrompt: "",
+    } satisfies ClaudeSession;
   } else if (task.source === "feedback_loop") {
     const found =
       sessions.find((item) => item.id === sid || item.claudeSessionId?.trim() === sid) ?? null;
@@ -221,7 +240,9 @@ const SessionConversationTaskDetailBody = memo(function SessionConversationTaskD
                 ? "执行会话进行中，消息将随对话流式更新…"
                 : task.source === "feedback_loop"
                   ? "反馈神经网 worker 执行中，消息将随对话流式更新…"
-                  : "子代理正在执行，内容随对话流式更新中..."}
+                  : task.source === "background_script"
+                    ? "脚本执行中，终端输出将实时更新…"
+                    : "子代理正在执行，内容随对话流式更新中..."}
             </span>
           </div>
         ) : null}
@@ -448,6 +469,9 @@ function SessionConversationTaskDetailDrawerInner({
     if (!openTaskKey || !task) {
       return;
     }
+    if (task.source === "background_script") {
+      return;
+    }
 
     const workerKey = task.sessionId?.trim();
     if (!workerKey) return;
@@ -516,6 +540,7 @@ function SessionConversationTaskDetailDrawerInner({
 
   const resumeComposerSession = useMemo(() => {
     if (!session || !task) return session;
+    if (task.source === "background_script") return null;
     const workerId = task.sessionId?.trim();
     if (task.source !== "execution_environment" || !workerId) return session;
     const live =
@@ -544,7 +569,9 @@ function SessionConversationTaskDetailDrawerInner({
           {task
             ? task.source === "execution_environment"
               ? `${task.label} · 执行会话`
-              : `${task.label} · 会话记录`
+              : task.source === "background_script"
+                ? `${task.label} · 脚本输出`
+                : `${task.label} · 会话记录`
             : "会话记录"}
         </span>
       }
@@ -575,10 +602,42 @@ function SessionConversationTaskDetailDrawerInner({
         ) : null
       }
     >
-      {!task || !session || !transcriptSession ? (
+      {!task || !session ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={task?.source === "execution_environment" ? "无执行会话记录" : "无子代理记录"}
+          description={
+            task?.source === "execution_environment"
+              ? "无执行会话记录"
+              : task?.source === "background_script"
+                ? "无脚本任务记录"
+                : "无子代理记录"
+          }
+        />
+      ) : task.source === "background_script" ? (
+        <div className="app-monitor-panel__subagent-detail">
+          <div className="app-monitor-panel__history-session-drawer-inner">
+            <HistorySessionDrawerContextBar session={session} />
+            {task.status === "running" ? (
+              <div className="app-monitor-panel__subagent-detail-hint">
+                <span className="app-monitor-panel__subagent-detail-hint-dot" />
+                <span>脚本执行中，终端输出将实时更新…</span>
+              </div>
+            ) : null}
+            {task.workspaceId?.trim() && task.terminalId?.trim() ? (
+              <BackgroundScriptTerminalView
+                workspaceId={task.workspaceId.trim()}
+                terminalId={task.terminalId.trim()}
+                fallbackOutput={task.terminalOutput}
+              />
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="终端信息缺失，无法展示输出" />
+            )}
+          </div>
+        </div>
+      ) : !transcriptSession ? (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={task.source === "execution_environment" ? "无执行会话记录" : "无子代理记录"}
         />
       ) : (
         <SessionConversationTaskDetailBody

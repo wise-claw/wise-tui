@@ -1,4 +1,8 @@
 import type { AssistantEntry, AssistantEntryKind } from "../types/assistant";
+import {
+  normalizeScheduledTaskScriptFilePath,
+  shellSingleQuoteForZsh,
+} from "./scheduledTaskScript";
 
 export const ASSISTANT_ENTRY_KIND_OPTIONS: {
   value: AssistantEntryKind;
@@ -18,7 +22,7 @@ export const ASSISTANT_ENTRY_KIND_OPTIONS: {
   {
     value: "run_script",
     label: "执行脚本",
-    description: "在仓库根目录通过 zsh -c 执行 Shell 命令或多行脚本",
+    description: "在仓库根目录通过 zsh 执行内联脚本或仓库内脚本文件",
   },
   {
     value: "open_link",
@@ -70,4 +74,53 @@ export function isAssistantConversationEntry(
   _assistant: Pick<AssistantEntry, "entryKind" | "source">,
 ): boolean {
   return false;
+}
+
+/** 执行前规范化脚本：弯引号→直引号、去 BOM、剥 markdown 代码块外壳。 */
+export function normalizeAssistantEntryScript(raw: string): string {
+  let script = raw.replace(/\uFEFF/g, "").trim();
+  script = script
+    .replace(/[\u201C\u201D\u201E\u2033\u2036]/g, '"')
+    .replace(/[\u2018\u2019\u201A\u2032\u2035]/g, "'");
+  const fenceMatch = script.match(/^```(?:bash|sh|zsh|shell)?\s*\n([\s\S]*?)\n```\s*$/i);
+  if (fenceMatch?.[1] != null) {
+    script = fenceMatch[1].trim();
+  }
+  return script;
+}
+
+export type AssistantRunScriptSource = "inline" | "file";
+
+export function resolveAssistantRunScriptSource(
+  assistant: Pick<AssistantEntry, "entryScript" | "entryScriptFilePath">,
+): AssistantRunScriptSource {
+  return normalizeScheduledTaskScriptFilePath(assistant.entryScriptFilePath) ? "file" : "inline";
+}
+
+export type ResolveAssistantRunScriptCommandResult =
+  | { ok: true; command: string; mode: AssistantRunScriptSource; scriptFilePath?: string }
+  | { ok: false; reason: string };
+
+/**
+ * 组装助手模板 run_script 的后台命令：
+ * - 有合法仓库相对路径时：在仓库根用 zsh 执行该文件；
+ * - 否则：把 `entryScript` 当作内联 shell（与历史行为一致）。
+ */
+export function resolveAssistantRunScriptCommand(
+  assistant: Pick<AssistantEntry, "entryScript" | "entryScriptFilePath">,
+): ResolveAssistantRunScriptCommandResult {
+  const scriptFilePath = normalizeScheduledTaskScriptFilePath(assistant.entryScriptFilePath);
+  if (scriptFilePath) {
+    return {
+      ok: true,
+      mode: "file",
+      scriptFilePath,
+      command: `zsh -- ${shellSingleQuoteForZsh(`./${scriptFilePath}`)}`,
+    };
+  }
+  const inline = normalizeAssistantEntryScript(assistant.entryScript ?? "");
+  if (!inline) {
+    return { ok: false, reason: "脚本内容为空" };
+  }
+  return { ok: true, mode: "inline", command: inline };
 }

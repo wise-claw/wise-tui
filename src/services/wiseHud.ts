@@ -9,6 +9,7 @@ import {
   WISE_HUD_SELECT_REPOSITORY_EVENT,
   WISE_HUD_SET_ENGINE_EVENT,
   WISE_HUD_SET_MODEL_EVENT,
+  WISE_HUD_ACTIVATE_ASSISTANT_EVENT,
   WISE_HUD_SET_DETAILS_OPEN_EVENT,
   WISE_HUD_SUBMIT_EVENT,
 } from "../utils/wiseHudSnapshot";
@@ -112,6 +113,12 @@ export async function wiseHudSetModel(model: string, sessionId?: string | null):
 
 export async function wiseHudSetDetailsOpen(open: boolean): Promise<void> {
   await emitToPrimaryMain(WISE_HUD_SET_DETAILS_OPEN_EVENT, { open });
+}
+
+export async function wiseHudActivateAssistant(assistantId: string): Promise<void> {
+  const trimmed = assistantId.trim();
+  if (!trimmed) return;
+  await emitToPrimaryMain(WISE_HUD_ACTIVATE_ASSISTANT_EVENT, { assistantId: trimmed });
 }
 
 /** 选择本地文件，路径供 HUD 以 `@path` 附到草稿。 */

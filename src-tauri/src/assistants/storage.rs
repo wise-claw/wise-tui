@@ -19,6 +19,7 @@ pub struct CustomAssistantRow {
     pub entry_url: String,
     pub entry_workflow_id: Option<String>,
     pub entry_script: String,
+    pub entry_script_file_path: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -46,6 +47,8 @@ pub struct CustomAssistantInput {
     pub entry_workflow_id: Option<String>,
     #[serde(default)]
     pub entry_script: String,
+    #[serde(default)]
+    pub entry_script_file_path: String,
 }
 
 fn default_entry_kind() -> String {
@@ -56,7 +59,8 @@ pub fn list(conn: &Connection) -> Result<Vec<CustomAssistantRow>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT id, name, description, avatar_color, engine_id, system_prompt, model,
-                    entry_kind, entry_url, entry_workflow_id, entry_script, created_at, updated_at
+                    entry_kind, entry_url, entry_workflow_id, entry_script, entry_script_file_path,
+                    created_at, updated_at
              FROM assistant_custom ORDER BY created_at",
         )
         .map_err(|e| e.to_string())?;
@@ -73,7 +77,8 @@ pub fn list(conn: &Connection) -> Result<Vec<CustomAssistantRow>, String> {
 pub fn get_by_id(conn: &Connection, id: &str) -> Result<Option<CustomAssistantRow>, String> {
     conn.query_row(
         "SELECT id, name, description, avatar_color, engine_id, system_prompt, model,
-                entry_kind, entry_url, entry_workflow_id, entry_script, created_at, updated_at
+                entry_kind, entry_url, entry_workflow_id, entry_script, entry_script_file_path,
+                created_at, updated_at
          FROM assistant_custom WHERE id = ?1",
         params![id],
         row_to_assistant,
@@ -91,6 +96,39 @@ fn normalize_entry_kind(raw: &str) -> Result<&'static str, String> {
         "run_script" => Ok("run_script"),
         other => Err(format!("unsupported entryKind: {other}")),
     }
+}
+
+fn normalize_script_file_path(raw: &str) -> Result<String, String> {
+    let trimmed = raw
+        .trim()
+        .replace('\\', "/")
+        .trim_matches('/')
+        .to_string();
+    if trimmed.is_empty() {
+        return Err("entryScriptFilePath must not be empty".to_string());
+    }
+    if trimmed.starts_with('~') || (trimmed.len() >= 2 && trimmed.as_bytes().get(1) == Some(&b':')) {
+        return Err("entryScriptFilePath must be a repository-relative path".to_string());
+    }
+    for seg in trimmed.split('/') {
+        if seg.is_empty() || seg == "." || seg == ".." {
+            return Err("entryScriptFilePath is invalid".to_string());
+        }
+    }
+    Ok(trimmed)
+}
+
+fn resolve_run_script_fields(
+    input: &CustomAssistantInput,
+) -> Result<(String, String), String> {
+    let file_raw = input.entry_script_file_path.trim();
+    if !file_raw.is_empty() {
+        return Ok((String::new(), normalize_script_file_path(file_raw)?));
+    }
+    if input.entry_script.trim().is_empty() {
+        return Err("entryScript or entryScriptFilePath must not be empty for run_script".to_string());
+    }
+    Ok((input.entry_script.clone(), String::new()))
 }
 
 pub fn upsert(conn: &Connection, input: &CustomAssistantInput) -> Result<CustomAssistantRow, String> {
@@ -115,9 +153,11 @@ pub fn upsert(conn: &Connection, input: &CustomAssistantInput) -> Result<CustomA
         // （与 dispatch_direct 等价），有值时按所选工作流入队（leader worker 拉起）。
         // 这里不再做非空校验，激活阶段由前端 + executeSession 共同决定。
     }
-    if entry_kind == "run_script" && input.entry_script.trim().is_empty() {
-        return Err("entryScript must not be empty for run_script".to_string());
-    }
+    let (entry_script, entry_script_file_path) = if entry_kind == "run_script" {
+        resolve_run_script_fields(input)?
+    } else {
+        (String::new(), String::new())
+    };
     let engine_id = if input.engine_id.trim().is_empty() {
         "claude".to_string()
     } else {
@@ -133,8 +173,9 @@ pub fn upsert(conn: &Connection, input: &CustomAssistantInput) -> Result<CustomA
     };
     conn.execute(
         "INSERT INTO assistant_custom (id, name, description, avatar_color, engine_id, system_prompt, model,
-                                       entry_kind, entry_url, entry_workflow_id, entry_script, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                                       entry_kind, entry_url, entry_workflow_id, entry_script,
+                                       entry_script_file_path, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            description = excluded.description,
@@ -146,6 +187,7 @@ pub fn upsert(conn: &Connection, input: &CustomAssistantInput) -> Result<CustomA
            entry_url = excluded.entry_url,
            entry_workflow_id = excluded.entry_workflow_id,
            entry_script = excluded.entry_script,
+           entry_script_file_path = excluded.entry_script_file_path,
            updated_at = excluded.updated_at",
         params![
             id,
@@ -158,7 +200,8 @@ pub fn upsert(conn: &Connection, input: &CustomAssistantInput) -> Result<CustomA
             entry_kind,
             input.entry_url,
             input.entry_workflow_id,
-            input.entry_script,
+            entry_script,
+            entry_script_file_path,
             created_at,
             now,
         ],
@@ -190,8 +233,9 @@ fn row_to_assistant(row: &rusqlite::Row<'_>) -> rusqlite::Result<CustomAssistant
         entry_url: row.get(8)?,
         entry_workflow_id: row.get(9)?,
         entry_script: row.get(10)?,
-        created_at: row.get(11)?,
-        updated_at: row.get(12)?,
+        entry_script_file_path: row.get(11)?,
+        created_at: row.get(12)?,
+        updated_at: row.get(13)?,
     })
 }
 
@@ -204,6 +248,8 @@ mod tests {
         conn.execute_batch(include_str!("../../migrations/026_assistant_custom.sql"))
             .unwrap();
         conn.execute_batch(include_str!("../../migrations/037_assistant_custom_entry.sql"))
+            .unwrap();
+        conn.execute_batch(include_str!("../../migrations/053_assistant_custom_script_file.sql"))
             .unwrap();
         conn
     }
@@ -223,6 +269,7 @@ mod tests {
             entry_url: String::new(),
             entry_workflow_id: None,
             entry_script: String::new(),
+            entry_script_file_path: String::new(),
         }
     }
 
@@ -316,5 +363,40 @@ mod tests {
         let row = upsert(&conn, &wf).unwrap();
         assert_eq!(row.entry_kind, "run_workflow");
         assert_eq!(row.entry_workflow_id.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn run_script_requires_inline_or_file_path() {
+        let conn = open_in_memory();
+        let mut script = input("script", "claude");
+        script.entry_kind = "run_script".to_string();
+        assert!(upsert(&conn, &script).is_err());
+
+        script.entry_script = "echo hi".to_string();
+        let row = upsert(&conn, &script).unwrap();
+        assert_eq!(row.entry_kind, "run_script");
+        assert_eq!(row.entry_script, "echo hi");
+        assert_eq!(row.entry_script_file_path, "");
+    }
+
+    #[test]
+    fn run_script_accepts_repository_relative_file_without_inline() {
+        let conn = open_in_memory();
+        let mut script = input("script-file", "claude");
+        script.entry_kind = "run_script".to_string();
+        script.entry_script_file_path = "scripts/echo.sh".to_string();
+        let row = upsert(&conn, &script).unwrap();
+        assert_eq!(row.entry_kind, "run_script");
+        assert_eq!(row.entry_script, "");
+        assert_eq!(row.entry_script_file_path, "scripts/echo.sh");
+    }
+
+    #[test]
+    fn run_script_rejects_parent_directory_file_path() {
+        let conn = open_in_memory();
+        let mut script = input("bad-path", "claude");
+        script.entry_kind = "run_script".to_string();
+        script.entry_script_file_path = "../secret.sh".to_string();
+        assert!(upsert(&conn, &script).is_err());
     }
 }

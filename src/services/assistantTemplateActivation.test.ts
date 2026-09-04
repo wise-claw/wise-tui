@@ -28,11 +28,16 @@ mock.module("./terminal", () => ({
   openBackgroundScript: openBackgroundScriptMock,
 }));
 
+const ensureTerminalOutputAndExitReadyMock = mock(async () => undefined);
+mock.module("./events", () => ({
+  ensureTerminalOutputAndExitReady: ensureTerminalOutputAndExitReadyMock,
+}));
+
 mock.module("./claudeComposerPrompt", () => ({
   buildClaudeOutgoingPrompt: buildClaudeOutgoingPromptMock,
 }));
 
-import { activateAssistantTemplate } from "./assistantTemplateActivation";
+import { activateAssistantTemplate, resetRunScriptActivationGuardForTests } from "./assistantTemplateActivation";
 import {
   getExecutionEnvironmentDispatchesSnapshotForAnchor,
   resetExecutionEnvironmentDispatchStore,
@@ -136,10 +141,12 @@ function repoBinding(repositoryPath: string): {
 
 beforeEach(() => {
   resetExecutionEnvironmentDispatchStore();
+  resetRunScriptActivationGuardForTests();
   openExternalUrlMock.mockReset();
   runShellCommandMock.mockReset();
   openBackgroundScriptMock.mockReset();
   buildClaudeOutgoingPromptMock.mockReset();
+  ensureTerminalOutputAndExitReadyMock.mockReset();
   openExternalUrlMock.mockResolvedValue(undefined);
   runShellCommandMock.mockResolvedValue({ stdout: "ok", stderr: "", exit_code: 0 });
   openBackgroundScriptMock.mockImplementation(
@@ -259,6 +266,7 @@ describe("activateAssistantTemplate", () => {
       message,
     });
     // 走 PTY 后台脚本路径（openBackgroundScript），不再调用 fire-and-forget 的 spawn_shell_command。
+    expect(ensureTerminalOutputAndExitReadyMock).toHaveBeenCalledTimes(1);
     expect(openBackgroundScriptMock).toHaveBeenCalledTimes(1);
     const [cwd, terminalId, , command, title] = openBackgroundScriptMock.mock.calls[0] ?? [];
     expect(cwd).toBe("/repo/a");
@@ -275,6 +283,45 @@ describe("activateAssistantTemplate", () => {
     expect(success?.text).toContain("pid 4242");
     expect(success?.text).toContain("assistant-script:custom:test:".slice(0, 20));
     expect(calls.some((c) => c.type === "error" || c.type === "warning")).toBe(false);
+  });
+
+  test("run_script concurrent activation for same assistant+repo only spawns once", async () => {
+    const { message } = messageStub();
+    let releaseSpawn!: () => void;
+    const spawnGate = new Promise<void>((resolve) => {
+      releaseSpawn = resolve;
+    });
+    openBackgroundScriptMock.mockImplementation(async (workspaceId: string, terminalId: string) => {
+      await spawnGate;
+      return {
+        workspaceId,
+        terminalId,
+        title: "执行脚本·测试",
+        source: "background-script" as const,
+        status: "running" as const,
+        cwd: "/repo/a",
+        cols: 80,
+        rows: 24,
+        cursor: 0,
+        pid: 4242,
+      };
+    });
+    const assistant = customAssistant({ entryKind: "run_script", entryScript: "echo hi" });
+    const base = {
+      assistant,
+      repositoryPath: "/repo/a",
+      workflowTemplates: [] as const,
+      repositories: [] as const,
+      sessions: [] as const,
+      repositoryMainBindings: {} as const,
+      executeSession: mock(async () => true),
+      message,
+    };
+    const first = activateAssistantTemplate(base);
+    const second = activateAssistantTemplate(base);
+    releaseSpawn();
+    await Promise.all([first, second]);
+    expect(openBackgroundScriptMock).toHaveBeenCalledTimes(1);
   });
 
   test("run_script PTY spawn failure surfaces error via message (no modal)", async () => {
@@ -415,6 +462,27 @@ describe("activateAssistantTemplate", () => {
     expect(stub.calls.some((c) => c.type === "error" && c.text.includes("脚本内容为空"))).toBe(true);
     expect(openBackgroundScriptMock).not.toHaveBeenCalled();
     expect(runShellCommandMock).not.toHaveBeenCalled();
+  });
+
+  test("run_script file path executes the repository-relative file via zsh", async () => {
+    const { message } = messageStub();
+    await activateAssistantTemplate({
+      assistant: customAssistant({
+        entryKind: "run_script",
+        entryScript: "",
+        entryScriptFilePath: "scripts/echo.sh",
+      }),
+      repositoryPath: "/repo/a",
+      workflowTemplates: [],
+      repositories: [],
+      sessions: [],
+      repositoryMainBindings: {},
+      executeSession: mock(async () => true),
+      message,
+    });
+    expect(openBackgroundScriptMock).toHaveBeenCalledTimes(1);
+    const [, , , command] = openBackgroundScriptMock.mock.calls[0] ?? [];
+    expect(command).toBe("zsh -- './scripts/echo.sh'");
   });
 
   test("run_script background PTY 还顺手注册了 dispatch item，存进 executionEnvironmentDispatchStore", async () => {

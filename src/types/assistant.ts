@@ -5,7 +5,7 @@ export type AssistantSource = "builtin" | "custom" | "extension";
  *
  * - `dispatch_direct`（立即执行）：在仓库主会话上直接 `executeSession` 立即起 Claude Code 子进程，不入 workflow 队列。
  * - `run_workflow`（直接派发执行）：按所选工作流入队，由 leader worker 拉起。
- * - `run_script`：在仓库根目录通过 `zsh -c` 执行 Shell 脚本。
+ * - `run_script`：在仓库根目录通过 zsh 执行内联脚本或仓库相对路径文件。
  * - `open_link`：在系统默认浏览器中打开 http(s) 链接。
  *
  * 内置/扩展助手未显式设置时统一 fallback 到 `dispatch_direct`。
@@ -39,8 +39,13 @@ export interface AssistantEntry {
   entryUrl?: string | null;
   /** entryKind === run_workflow */
   entryWorkflowId?: string | null;
-  /** entryKind === run_script */
+  /** entryKind === run_script：内联脚本正文 */
   entryScript?: string | null;
+  /**
+   * entryKind === run_script：仓库相对脚本路径。
+   * 有合法路径时优先于 `entryScript`，在仓库根目录用 zsh 执行该文件。
+   */
+  entryScriptFilePath?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -71,4 +76,5 @@ export interface CustomAssistantInput {
   entryUrl?: string;
   entryWorkflowId?: string | null;
   entryScript?: string;
+  entryScriptFilePath?: string;
 }

@@ -5,8 +5,9 @@ import type { AssistantEntry } from "../types/assistant";
 import type { ClaudeSession, PendingExecutionTask, Repository, WorkflowTemplateItem } from "../types";
 import { buildClaudeOutgoingPrompt } from "./claudeComposerPrompt";
 import { openExternalUrl, isSafeExternalHref } from "./openExternal";
+import { ensureTerminalOutputAndExitReady } from "./events";
 import { openBackgroundScript } from "./terminal";
-import { resolveAssistantEntryKind } from "../utils/assistantTemplateEntry";
+import { resolveAssistantEntryKind, resolveAssistantRunScriptCommand } from "../utils/assistantTemplateEntry";
 import { repositoryFolderBasename } from "../utils/repositoryType";
 import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "../utils/executionEnvironmentDispatchAnchor";
 import { upsertExecutionEnvironmentDispatchItem } from "../stores/executionEnvironmentDispatchStore";
@@ -15,6 +16,21 @@ import {
   resolveBoundMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "../utils/repositoryMainSessionBinding";
+
+/** @internal test helper */
+export function resetRunScriptActivationGuardForTests(): void {
+  runScriptActivationInFlight.clear();
+  runScriptLastSpawnAt.clear();
+}
+
+/** 同一助手+仓库的 run_script 激活互斥，防止 pointerdown+click 或连点重复 spawn。 */
+const runScriptActivationInFlight = new Set<string>();
+const runScriptLastSpawnAt = new Map<string, number>();
+const RUN_SCRIPT_DEBOUNCE_MS = 600;
+
+function runScriptFlightKey(assistantId: string, repositoryPath: string): string {
+  return `${assistantId.trim()}::${repositoryPath.trim()}`;
+}
 
 const DEFAULT_WORKFLOW_PROMPT = "按助手模板配置执行工作流。";
 
@@ -100,12 +116,24 @@ export async function activateAssistantTemplate(
   }
 
   if (kind === "run_script") {
-    const script = input.assistant.entryScript?.trim() ?? "";
-    if (!script) {
-      input.message.error("脚本内容为空");
+    const built = resolveAssistantRunScriptCommand(input.assistant);
+    if (!built.ok) {
+      input.message.error(built.reason);
       return;
     }
+    const script = built.command;
+    const flightKey = runScriptFlightKey(input.assistant.id, repoPath);
+    if (runScriptActivationInFlight.has(flightKey)) {
+      return;
+    }
+    const lastSpawnAt = runScriptLastSpawnAt.get(flightKey) ?? 0;
+    if (Date.now() - lastSpawnAt < RUN_SCRIPT_DEBOUNCE_MS) {
+      return;
+    }
+    runScriptActivationInFlight.add(flightKey);
     try {
+      // 先挂 output/exit 监听再 spawn，避免 echo 等瞬时命令在 listen 就绪前已退出。
+      await ensureTerminalOutputAndExitReady();
       // 后台通过 shell 启动执行：走 PTY 体系（`terminal_open_background_script`），
       // 输出走 terminal-output / terminal-exit 事件；内置面板渲染走 terminal-frame
       // 终端渲染来查看/kill。失败只可能发生在 spawn 阶段（路径无效、PTY 不可用等），
@@ -144,7 +172,10 @@ export async function activateAssistantTemplate(
         anchorSessionId,
         workerSessionId: terminalId,
         label: `执行脚本·${input.assistant.name?.trim() || "助手模板"}`,
-        previewText: truncateScriptPreview(script, 240),
+        previewText: truncateScriptPreview(
+          built.mode === "file" && built.scriptFilePath ? `./${built.scriptFilePath}` : script,
+          240,
+        ),
         batchIndex: 1,
         sessionCount: 1,
         workspaceId: repoPath,
@@ -155,8 +186,11 @@ export async function activateAssistantTemplate(
       input.message.success(
         `脚本已后台启动（pid ${info.pid}，终端 ${info.terminalId.slice(0, 24)}…）`,
       );
+      runScriptLastSpawnAt.set(flightKey, Date.now());
     } catch (error) {
       input.message.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      runScriptActivationInFlight.delete(flightKey);
     }
     return;
   }

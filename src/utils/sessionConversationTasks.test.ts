@@ -1108,6 +1108,17 @@ describe("buildBackgroundScriptConversationTasks", () => {
     expect(items).toHaveLength(0);
   });
 
+  test("buildSessionConversationTasks 仅后台脚本时不生成 execution_environment 行", () => {
+    const anchor = anchorSession();
+    const items = buildSessionConversationTasks({
+      session: anchor,
+      allSessions: [anchor],
+      executionEnvironmentRecords: [bgRecord({ previewText: 'echo "你好"', pid: 99 })],
+    });
+    expect(items.some((it) => it.source === "background_script")).toBe(true);
+    expect(items.some((it) => it.source === "execution_environment")).toBe(false);
+  });
+
   test("buildSessionConversationTasks 合并 background_script + execution_environment", () => {
     const anchor = anchorSession();
     const worker = session({

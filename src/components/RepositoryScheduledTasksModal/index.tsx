@@ -659,7 +659,7 @@ export function RepositoryScheduledTasksModal({
                       name="scriptFilePath"
                       label="执行文件"
                       rules={[{ required: true, message: "请选择执行文件" }]}
-                      extra={<span className="app-scheduled-tasks-drawer__hint">仓库相对路径，触发时用 zsh 执行</span>}
+                      extra={<span className="app-scheduled-tasks-drawer__hint">从仓库目录树选择文件，触发时用 zsh 执行</span>}
                     >
                       <ScheduledTaskScriptFileSelect repositoryPath={repositoryPath} />
                     </Form.Item>

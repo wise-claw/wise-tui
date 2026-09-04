@@ -1,29 +1,50 @@
-import { useEffect } from "react";
-import { subscribeTerminalExit } from "../services/events";
+import { useEffect, useRef } from "react";
+import { subscribeTerminalExit, subscribeTerminalOutput } from "../services/events";
 import { markExecutionEnvironmentDispatchItemExited } from "../stores/executionEnvironmentDispatchStore";
+import { normalizeBackgroundScriptOutputText } from "../utils/backgroundScriptOutput";
+
+function isBackgroundScriptTerminalId(terminalId: string): boolean {
+  return terminalId.startsWith("assistant-script:") || terminalId.startsWith("workflow-code:");
+}
 
 /**
- * 全局订阅 terminal-exit，把 `assistant-script:<id>:<ts>` 终端退出事件
- * 翻译为 dispatch store 的「已退出」标记，让运行面板自动从「运行中」
- * 切到「已完成/失败」并展示结局（exit code）。
- *
- * 设计要点：
- * - 仅过滤 `assistant-script:` 前缀的 terminalId，避免与 user / agent 终端混淆。
- * - 复用 `markExecutionEnvironmentDispatchItemExited`（store 内部按 workerSessionId
- *   查找并更新 previewText/updatedAt/exitCode），无需在这里维护反向映射表。
- * - 这里只挂一个全局订阅即可；组件层（AppImpl）useEffect 调用一次。
+ * 全局订阅 terminal-output / terminal-exit，把 `assistant-script:<id>:<ts>` 终端事件
+ * 翻译为 dispatch store 的「已退出」标记与输出文本，让运行面板展示脚本 stdout/stderr。
  */
 export function useBackgroundScriptRuntimeSync(): void {
+  const outputBuffersRef = useRef(new Map<string, string>());
+  const lastChunkRef = useRef(new Map<string, string>());
+
   useEffect(() => {
-    const unlisten = subscribeTerminalExit((event) => {
+    const outputBuffers = outputBuffersRef.current;
+    const lastChunkByTerminal = lastChunkRef.current;
+
+    const unlistenOutput = subscribeTerminalOutput((event) => {
       const terminalId = event.terminalId?.trim();
-      if (!terminalId) return;
-      if (!terminalId.startsWith("assistant-script:") && !terminalId.startsWith("workflow-code:")) return;
+      if (!terminalId || !isBackgroundScriptTerminalId(terminalId)) return;
+      const chunk = event.data ?? "";
+      if (!chunk) return;
+      if (lastChunkByTerminal.get(terminalId) === chunk) return;
+      lastChunkByTerminal.set(terminalId, chunk);
+      outputBuffers.set(terminalId, (outputBuffers.get(terminalId) ?? "") + chunk);
+    });
+
+    const unlistenExit = subscribeTerminalExit((event) => {
+      const terminalId = event.terminalId?.trim();
+      if (!terminalId || !isBackgroundScriptTerminalId(terminalId)) return;
+      const captured = normalizeBackgroundScriptOutputText(outputBuffers.get(terminalId) ?? "");
       markExecutionEnvironmentDispatchItemExited({
         workerSessionId: terminalId,
         exitCode: event.exitCode,
+        terminalOutput: captured || undefined,
       });
+      outputBuffers.delete(terminalId);
+      lastChunkByTerminal.delete(terminalId);
     });
-    return unlisten;
+
+    return () => {
+      unlistenOutput();
+      unlistenExit();
+    };
   }, []);
 }

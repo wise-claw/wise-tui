@@ -6,6 +6,8 @@ import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow"
 import { restoreComposerFocusAfterHudExit } from "../services/globalScreenshotHotkey";
 import { wiseHudIsActive } from "../services/wiseHud";
 import { getWiseHudModeActive, setWiseHudModeActive } from "../stores/wiseHudModeStore";
+import { getAssistantsSnapshot } from "../stores/assistantsStore";
+import type { AssistantEntry } from "../types/assistant";
 import { resolveSessionExecutionEngine } from "../utils/sessionExecutionEngine";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import {
@@ -20,6 +22,7 @@ import {
   parseWiseHudSelectRepositoryPayload,
   parseWiseHudSetEnginePayload,
   parseWiseHudSetModelPayload,
+  parseWiseHudActivateAssistantPayload,
   parseWiseHudSetDetailsOpenPayload,
   resolveHudRunStatus,
   resolveHudSubmitSessionId,
@@ -29,6 +32,7 @@ import {
   WISE_HUD_REQUEST_STATE_EVENT,
   WISE_HUD_SELECT_REPOSITORY_EVENT,
   WISE_HUD_SESSION_COMPLETE_EVENT,
+  WISE_HUD_ACTIVATE_ASSISTANT_EVENT,
   WISE_HUD_SET_DETAILS_OPEN_EVENT,
   WISE_HUD_SET_ENGINE_EVENT,
   WISE_HUD_SET_MODEL_EVENT,
@@ -49,6 +53,8 @@ interface UseWiseHudBridgeInput {
   createNewSession: (repository: Repository) => void | Promise<void>;
   setExecutionEngine: (sessionId: string, engine: SessionExecutionEngine) => void;
   setModel: (sessionId: string, model: string) => void;
+  activateAssistant: (assistant: AssistantEntry) => void | Promise<void>;
+  openBuiltinAssistant: (assistantId: string) => void;
 }
 
 function snapshotKey(snapshot: WiseHudSessionSnapshot): string {
@@ -67,6 +73,8 @@ export function useWiseHudBridge({
   createNewSession,
   setExecutionEngine,
   setModel,
+  activateAssistant,
+  openBuiltinAssistant,
 }: UseWiseHudBridgeInput): void {
   const sessionsRef = useRef(sessions);
   const activeSessionIdRef = useRef(activeSessionId);
@@ -79,6 +87,8 @@ export function useWiseHudBridge({
   const createNewSessionRef = useRef(createNewSession);
   const setExecutionEngineRef = useRef(setExecutionEngine);
   const setModelRef = useRef(setModel);
+  const activateAssistantRef = useRef(activateAssistant);
+  const openBuiltinAssistantRef = useRef(openBuiltinAssistant);
   const lastKeyRef = useRef("");
   const publishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hadRunningInHudRef = useRef(false);
@@ -96,6 +106,8 @@ export function useWiseHudBridge({
   createNewSessionRef.current = createNewSession;
   setExecutionEngineRef.current = setExecutionEngine;
   setModelRef.current = setModel;
+  activateAssistantRef.current = activateAssistant;
+  openBuiltinAssistantRef.current = openBuiltinAssistant;
 
   const buildSnapshot = (): WiseHudSessionSnapshot => {
     const session =
@@ -238,6 +250,16 @@ export function useWiseHudBridge({
         lastKeyRef.current = "";
         publishNow();
       });
+      const u10 = await listen<unknown>(WISE_HUD_ACTIVATE_ASSISTANT_EVENT, (event) => {
+        const payload = parseWiseHudActivateAssistantPayload(event.payload);
+        if (!payload) return;
+        const assistant = getAssistantsSnapshot().find((item) => item.id === payload.assistantId);
+        if (assistant) {
+          void activateAssistantRef.current(assistant);
+          return;
+        }
+        openBuiltinAssistantRef.current(payload.assistantId);
+      });
       if (cancelled) {
         safeUnlisten(u1);
         safeUnlisten(u2);
@@ -248,6 +270,7 @@ export function useWiseHudBridge({
         safeUnlisten(u7);
         safeUnlisten(u8);
         safeUnlisten(u9);
+        safeUnlisten(u10);
         return;
       }
       unsubs.push(
@@ -260,6 +283,7 @@ export function useWiseHudBridge({
         () => safeUnlisten(u7),
         () => safeUnlisten(u8),
         () => safeUnlisten(u9),
+        () => safeUnlisten(u10),
       );
     })();
     return () => {

@@ -2036,6 +2036,8 @@ export default function App() {
     setModel: (sessionId, model) => {
       hudSetModelRef.current(sessionId, model);
     },
+    activateAssistant,
+    openBuiltinAssistant,
   });
 
   const fileEditorRootPath = useMemo(() => {

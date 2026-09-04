@@ -158,7 +158,7 @@ describe("executionEnvironmentDispatchStore background-script lifecycle", () => 
     });
   }
 
-  test("markExited 退出码 0 → previewText=已完成，exitCode=0", () => {
+  test("markExited 退出码 0 → 后台脚本保留 previewText / terminalOutput，不写「已完成」", () => {
     resetExecutionEnvironmentDispatchStore();
     setupBackgroundScriptItem({
       anchor: "anchor-bg-1",
@@ -170,16 +170,18 @@ describe("executionEnvironmentDispatchStore background-script lifecycle", () => 
     markExecutionEnvironmentDispatchItemExited({
       workerSessionId: "assistant-script:a:1",
       exitCode: 0,
+      terminalOutput: "你好\n",
     });
     const item = getExecutionEnvironmentDispatchesSnapshotForAnchor("anchor-bg-1")
       .flatMap((row) => row.items)
       .find((it) => it.workerSessionId === "assistant-script:a:1");
     expect(item?.exitCode).toBe(0);
-    expect(item?.previewText).toBe("已完成");
+    expect(item?.previewText).toBe("你好");
+    expect(item?.terminalOutput).toBe("你好");
     expect(item?.killedByUser).toBeUndefined();
   });
 
-  test("markExited 退出码非 0 → previewText=已退出（code N），exitCode 写入", () => {
+  test("markExited 退出码非 0 → 后台脚本保留捕获输出而非「已退出 code N」", () => {
     resetExecutionEnvironmentDispatchStore();
     setupBackgroundScriptItem({
       anchor: "anchor-bg-2",
@@ -191,15 +193,17 @@ describe("executionEnvironmentDispatchStore background-script lifecycle", () => 
     markExecutionEnvironmentDispatchItemExited({
       workerSessionId: "assistant-script:a:2",
       exitCode: 137,
+      terminalOutput: "partial\n",
     });
     const item = getExecutionEnvironmentDispatchesSnapshotForAnchor("anchor-bg-2")
       .flatMap((row) => row.items)
       .find((it) => it.workerSessionId === "assistant-script:a:2");
     expect(item?.exitCode).toBe(137);
-    expect(item?.previewText).toBe("已退出（code 137）");
+    expect(item?.previewText).toBe("partial");
+    expect(item?.previewText).not.toContain("已退出");
   });
 
-  test("markExited killedByUser:true + exitMessage → previewText=已手动结束", () => {
+  test("markExited killedByUser:true → 后台脚本仍保留原 previewText", () => {
     resetExecutionEnvironmentDispatchStore();
     setupBackgroundScriptItem({
       anchor: "anchor-bg-3",
@@ -211,13 +215,12 @@ describe("executionEnvironmentDispatchStore background-script lifecycle", () => 
     markExecutionEnvironmentDispatchItemExited({
       workerSessionId: "assistant-script:a:3",
       killedByUser: true,
-      exitMessage: "已手动结束",
     });
     const item = getExecutionEnvironmentDispatchesSnapshotForAnchor("anchor-bg-3")
       .flatMap((row) => row.items)
       .find((it) => it.workerSessionId === "assistant-script:a:3");
     expect(item?.killedByUser).toBe(true);
-    expect(item?.previewText).toBe("已手动结束");
+    expect(item?.previewText).toBe("echo hi");
   });
 
   test("markExited 找不到 workerSessionId 时静默返回", () => {

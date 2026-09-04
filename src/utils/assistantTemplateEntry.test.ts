@@ -4,7 +4,10 @@ import {
   assistantEntryActionLabel,
   assistantEntryKindLabel,
   isAssistantConversationEntry,
+  normalizeAssistantEntryScript,
   resolveAssistantEntryKind,
+  resolveAssistantRunScriptCommand,
+  resolveAssistantRunScriptSource,
 } from "./assistantTemplateEntry";
 
 function customAssistant(partial: Partial<AssistantEntry>): AssistantEntry {
@@ -76,5 +79,51 @@ describe("assistantTemplateEntry", () => {
     // 对话助手形态已下线：isAssistantConversationEntry 始终返回 false
     expect(isAssistantConversationEntry(customAssistant({}))).toBe(false);
     expect(isAssistantConversationEntry(customAssistant({ entryKind: "run_workflow" }))).toBe(false);
+  });
+
+  test("normalizeAssistantEntryScript normalizes curly quotes and markdown fences", () => {
+    expect(normalizeAssistantEntryScript('echo “你好”')).toBe('echo "你好"');
+    expect(normalizeAssistantEntryScript("```bash\necho hi\n```")).toBe("echo hi");
+  });
+
+  test("resolveAssistantRunScriptSource prefers a repository-relative file path", () => {
+    expect(
+      resolveAssistantRunScriptSource({
+        entryScript: "echo hi",
+        entryScriptFilePath: "scripts/echo.sh",
+      }),
+    ).toBe("file");
+    expect(
+      resolveAssistantRunScriptSource({
+        entryScript: "echo hi",
+        entryScriptFilePath: "",
+      }),
+    ).toBe("inline");
+  });
+
+  test("resolveAssistantRunScriptCommand runs the file or inline script", () => {
+    expect(
+      resolveAssistantRunScriptCommand({
+        entryScript: "",
+        entryScriptFilePath: "bin/job.sh",
+      }),
+    ).toEqual({
+      ok: true,
+      mode: "file",
+      scriptFilePath: "bin/job.sh",
+      command: "zsh -- './bin/job.sh'",
+    });
+    expect(
+      resolveAssistantRunScriptCommand({
+        entryScript: "echo hi",
+        entryScriptFilePath: "",
+      }),
+    ).toEqual({ ok: true, mode: "inline", command: "echo hi" });
+    expect(
+      resolveAssistantRunScriptCommand({
+        entryScript: "  ",
+        entryScriptFilePath: "",
+      }),
+    ).toEqual({ ok: false, reason: "脚本内容为空" });
   });
 });
