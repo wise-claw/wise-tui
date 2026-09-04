@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { HUD_SELECT_OPEN_DELAY_MS } from "../utils/hudSelectPopup";
+import {
+  HUD_SELECT_OPEN_DELAY_MS,
+  shouldScheduleHudOverlayOpen,
+} from "../utils/hudSelectPopup";
 
 /**
  * HUD 仓库下拉：先把 overlay 窗口撑高，再真正打开 Select，
@@ -14,6 +17,8 @@ export function useHudOverlaySelectOpen(enabled: boolean): {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openRef = useRef(false);
+  openRef.current = open;
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -32,7 +37,9 @@ export function useHudOverlaySelectOpen(enabled: boolean): {
       if (!enabled) return;
       if (next) {
         setPending(true);
-        clearTimer();
+        if (!shouldScheduleHudOverlayOpen(openRef.current, timerRef.current != null)) {
+          return;
+        }
         timerRef.current = setTimeout(() => {
           timerRef.current = null;
           setOpen(true);

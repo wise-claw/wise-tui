@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ComposerRegion } from "../ClaudeChatInput/composer-region";
@@ -8,6 +8,10 @@ import { HudQuickActionsPicker } from "./HudQuickActionsPicker";
 import { HudCompletionToasts } from "./HudCompletionToasts";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import { safeUnlisten } from "../../utils/safeTauriUnlisten";
+import {
+  HUD_CHROME_FOCUS_SUPPRESS_MS,
+  isHudChromeControl,
+} from "../../utils/hudSelectPopup";
 import {
   hudComposerSessionToClaudeSession,
   parseWiseHudActiveChanged,
@@ -177,7 +181,48 @@ export function HudComposerBar({
   detailsOpenRef.current = detailsOpen;
   const contextOverlayRef = useRef(contextOverlay);
   contextOverlayRef.current = contextOverlay;
+  const quickActionsOverlayRef = useRef(quickActionsOverlay);
+  quickActionsOverlayRef.current = quickActionsOverlay;
+  const menuOverlayRef = useRef(menuOverlay);
+  menuOverlayRef.current = menuOverlay;
+  const suppressEditorFocusRef = useRef(false);
+  const suppressEditorFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const running = snapshot.busy;
+
+  const setContextOverlayWanted = useCallback((wanted: boolean) => {
+    contextOverlayRef.current = wanted;
+    setContextOverlay(wanted);
+  }, []);
+
+  const setQuickActionsOverlayWanted = useCallback((wanted: boolean) => {
+    quickActionsOverlayRef.current = wanted;
+    setQuickActionsOverlay(wanted);
+  }, []);
+
+  const setMenuOverlayWanted = useCallback((wanted: boolean) => {
+    menuOverlayRef.current = wanted;
+    setMenuOverlay(wanted);
+  }, []);
+
+  const suppressEditorAutofocus = useCallback(() => {
+    suppressEditorFocusRef.current = true;
+    if (suppressEditorFocusTimerRef.current) {
+      clearTimeout(suppressEditorFocusTimerRef.current);
+    }
+    suppressEditorFocusTimerRef.current = setTimeout(() => {
+      suppressEditorFocusTimerRef.current = null;
+      suppressEditorFocusRef.current = false;
+    }, HUD_CHROME_FOCUS_SUPPRESS_MS);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (suppressEditorFocusTimerRef.current) {
+        clearTimeout(suppressEditorFocusTimerRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     setPreviewImage(null);
@@ -245,19 +290,38 @@ export function HudComposerBar({
     [snapshot.repositories],
   );
 
+  const overlayBlocksEditorFocus = useCallback(() => {
+    return (
+      suppressEditorFocusRef.current ||
+      detailsOpenRef.current ||
+      contextOverlayRef.current ||
+      quickActionsOverlayRef.current ||
+      menuOverlayRef.current
+    );
+  }, []);
+
   const focusEditor = useCallback(() => {
-    if (detailsOpenRef.current) return;
-    if (contextOverlayRef.current) return;
+    if (overlayBlocksEditorFocus()) return;
     const editor = shellRef.current?.querySelector<HTMLElement>(
       ".app-claude-semi-chat-input-wrap .tiptap",
     );
     editor?.focus();
-  }, []);
+  }, [overlayBlocksEditorFocus]);
+
+  const handleBarPointerDownCapture = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      if (!isHudChromeControl(event.target)) return;
+      suppressEditorAutofocus();
+    },
+    [suppressEditorAutofocus],
+  );
 
   useEffect(() => {
     const shell = shellRef.current;
     if (!shell) return;
     const onFocusIn = (event: FocusEvent) => {
+      if (suppressEditorFocusRef.current) return;
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (!target.closest(".app-claude-semi-chat-input-wrap")) return;
@@ -280,7 +344,16 @@ export function HudComposerBar({
       try {
         const win = getCurrentWindow();
         const u1 = await win.onFocusChanged(({ payload: focused }) => {
-          if (focused) focusEditor();
+          if (!focused) return;
+          const active = document.activeElement;
+          if (
+            active instanceof Element &&
+            active !== document.body &&
+            active !== document.documentElement
+          ) {
+            return;
+          }
+          focusEditor();
         });
         const u2 = await listen<unknown>(WISE_HUD_ACTIVE_EVENT, (event) => {
           const active = parseWiseHudActiveChanged(event.payload);
@@ -306,12 +379,17 @@ export function HudComposerBar({
   }, [focusEditor]);
 
   const contextPicker = (
-    <HudContextPicker snapshot={snapshot} onOverlayWantedChange={setContextOverlay} />
+    <HudContextPicker snapshot={snapshot} onOverlayWantedChange={setContextOverlayWanted} />
   );
 
   return (
-    <div className="app-hud-shell" ref={shellRef}>
-      <div className="app-hud-drag-shell" data-tauri-drag-region aria-hidden />
+    <div className="app-hud-shell" ref={shellRef} onPointerDownCapture={handleBarPointerDownCapture}>
+      <div
+        className="app-hud-drag-shell"
+        data-tauri-drag-region
+        aria-hidden
+        onMouseDown={(event) => event.preventDefault()}
+      />
       {previewImage ? (
         <button
           type="button"
@@ -338,18 +416,29 @@ export function HudComposerBar({
         </div>
       ) : null}
       <div className={`app-hud-bar${running ? " app-hud-bar--running" : ""}`}>
-        <div className="app-hud-bar-drag" data-tauri-drag-region aria-hidden />
+        <div
+          className="app-hud-bar-drag"
+          data-tauri-drag-region
+          aria-hidden
+          onMouseDown={(event) => event.preventDefault()}
+        />
         <div className="app-hud-bar-leading-cluster">
           <div className="app-hud-bar-leading-actions">
             <HudNewSessionButton disabled={snapshot.activeRepositoryId == null} />
-            <HudQuickActionsPicker snapshot={snapshot} onOverlayWantedChange={setQuickActionsOverlay} />
+            <HudQuickActionsPicker snapshot={snapshot} onOverlayWantedChange={setQuickActionsOverlayWanted} />
           </div>
           <HudRunStatusChip
             runningCount={snapshot.runningCount}
             runStatus={snapshot.runStatus}
             detailsOpen={detailsOpen}
             disabled={!session}
-            onToggle={() => setDetailsOpen((open) => !open)}
+            onToggle={() => {
+              setDetailsOpen((open) => {
+                const next = !open;
+                detailsOpenRef.current = next;
+                return next;
+              });
+            }}
           />
         </div>
         {session ? (
@@ -383,7 +472,7 @@ export function HudComposerBar({
                   <HudExitButton />
                 </>
               }
-              onHudOverlayChange={setMenuOverlay}
+              onHudOverlayChange={setMenuOverlayWanted}
               onHudImagePreviewChange={handleHudImagePreviewChange}
               draftBucketKey={`hud:${session.id}`}
             />

@@ -10,8 +10,9 @@ import { setWiseHudModeActive } from "./stores/wiseHudModeStore";
 import { bootstrapAppTheme, startSystemThemeWatch, useAppTheme } from "./stores/appThemeStore";
 import { buildAppThemeConfig } from "./constants/appThemeTokens";
 import { ensureTauriEventUnlistenPatched, safeUnlisten } from "./utils/safeTauriUnlisten";
+import { overlayHeightFor } from "./utils/hudOverlayHeight";
+import { useHudClickThrough } from "./hooks/useHudClickThrough";
 import { useHudCompletionToasts } from "./hooks/useHudCompletionToasts";
-import { hudToastStackExtraHeight } from "./utils/hudCompletionToast";
 import {
   buildWiseHudSessionSnapshot,
   parseWiseHudActiveChanged,
@@ -26,25 +27,6 @@ import "./hud.css";
 ensureTauriEventUnlistenPatched();
 bootstrapAppTheme();
 startSystemThemeWatch();
-
-const HUD_COMPACT_HEIGHT = 64;
-const HUD_IMAGE_OVERLAY_MAX = 780;
-const HUD_MENU_OVERLAY_HEIGHT = 400;
-const HUD_DETAILS_OVERLAY_HEIGHT = 420;
-
-function overlayHeightForMode(mode: HudOverlayMode): number {
-  if (mode === "menu") return HUD_MENU_OVERLAY_HEIGHT;
-  if (mode === "images") return HUD_IMAGE_OVERLAY_MAX;
-  if (mode === "details") return HUD_DETAILS_OVERLAY_HEIGHT;
-  return HUD_COMPACT_HEIGHT;
-}
-
-function overlayHeightFor(mode: HudOverlayMode, toastCount: number): number {
-  return Math.max(
-    overlayHeightForMode(mode),
-    HUD_COMPACT_HEIGHT + hudToastStackExtraHeight(toastCount),
-  );
-}
 
 function HudThemeRoot({ children }: { children: ReactNode }) {
   const { dark } = useAppTheme();
@@ -73,12 +55,17 @@ function HudApp() {
   const { toasts, renderedCount, dismiss } = useHudCompletionToasts();
   const toastCountRef = useRef(renderedCount);
   toastCountRef.current = renderedCount;
+  useHudClickThrough();
+  const lastOverlayHeightRef = useRef<number | null>(null);
 
   const syncWindowHeight = useCallback(async (mode: HudOverlayMode, toastCount: number) => {
+    const height = overlayHeightFor(mode, toastCount);
+    if (lastOverlayHeightRef.current === height) return;
+    lastOverlayHeightRef.current = height;
     try {
-      await wiseHudSetOverlayHeight(overlayHeightFor(mode, toastCount));
+      await wiseHudSetOverlayHeight(height);
     } catch {
-      /* 窗口 API 在非 Tauri 预览时不可用 */
+      lastOverlayHeightRef.current = null;
     }
   }, []);
 

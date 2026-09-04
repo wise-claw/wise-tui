@@ -10,6 +10,7 @@ body,
   min-height: 100%;
   background: transparent !important;
   overflow: hidden;
+  pointer-events: none;
 }
 
 .app-claude-slash-popover,
@@ -17,6 +18,8 @@ body,
 .ant-popover,
 .semi-portal,
 .app-hud-image-float,
-.app-hud-context-popover {
+.app-hud-context-popover,
+.app-hud-quick-actions-popover {
+  pointer-events: auto;
   -webkit-app-region: no-drag;
 }

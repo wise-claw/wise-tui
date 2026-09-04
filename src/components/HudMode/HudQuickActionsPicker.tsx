@@ -7,7 +7,7 @@ import {
   UserOutlined,
 } from "@ant-design/icons";
 import { Popover } from "antd";
-import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, type MouseEvent, type ReactNode } from "react";
 import {
   partitionSessionQuickActions,
   type SessionQuickActionId,
@@ -26,16 +26,16 @@ import { useSessionQuickActionsLayout } from "../../hooks/useSessionQuickActions
 import { wiseHudActivateAssistant, wiseHudNewSession } from "../../services/wiseHud";
 import type { AssistantEntry } from "../../types/assistant";
 import { resolveAssistantEntryKind } from "../../utils/assistantTemplateEntry";
-import { hudSelectPopupContainer } from "../../utils/hudSelectPopup";
+import {
+  hudSelectPopupContainer,
+  isInsideHudQuickActionsPicker,
+} from "../../utils/hudSelectPopup";
 import {
   isAssistantTemplateQuickActionId,
   resolveSessionQuickActionMeta,
 } from "../../utils/sessionQuickAssistantCatalog";
 import type { WiseHudSessionSnapshot } from "../../utils/wiseHudSnapshot";
 import "../ClaudeChatInput/ComposerCommonPhrasesBar.css";
-
-export const HUD_QUICK_ACTIONS_PICKER_ROOT_SELECTOR =
-  ".app-hud-quick-actions-popover, .app-hud-quick-actions-panel";
 
 export interface HudQuickActionsPickerProps {
   snapshot: WiseHudSessionSnapshot;
@@ -72,13 +72,6 @@ function actionMenuIcon(id: SessionQuickActionId, assistant?: AssistantEntry): R
   }
   if (id === "new-session") return <CommentOutlined />;
   return <UserOutlined />;
-}
-
-function isInsideHudQuickActionsPicker(target: EventTarget | null): boolean {
-  if (target == null || typeof target !== "object") return false;
-  const node = target as { closest?: (selector: string) => Element | null };
-  if (typeof node.closest !== "function") return false;
-  return Boolean(node.closest(HUD_QUICK_ACTIONS_PICKER_ROOT_SELECTOR));
 }
 
 const HudNewSessionQuickPill = memo(function HudNewSessionQuickPill({
@@ -194,6 +187,19 @@ export function HudQuickActionsPicker({ snapshot, onOverlayWantedChange }: HudQu
     [hudSelect],
   );
 
+  const handleAnchorMouseDown = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      // 在 click 之前撑高 HUD 并启动打开计时，避免窗口 resize 吞掉 Popover 的 click trigger。
+      if (!hudSelect.open) {
+        hudSelect.onOpenChange(true);
+      } else {
+        hudSelect.prepareOverlay();
+      }
+    },
+    [hudSelect],
+  );
+
   const activateAction = useCallback(
     (id: SessionQuickActionId) => {
       if (id === "new-session") {
@@ -282,7 +288,7 @@ export function HudQuickActionsPicker({ snapshot, onOverlayWantedChange }: HudQu
   );
 
   return (
-    <div className="app-hud-quick-actions-anchor">
+    <div className="app-hud-quick-actions-anchor" onMouseDown={handleAnchorMouseDown}>
       <Popover
         trigger="click"
         placement="topLeft"
@@ -305,7 +311,6 @@ export function HudQuickActionsPicker({ snapshot, onOverlayWantedChange }: HudQu
           aria-expanded={hudSelect.open}
           aria-label="快捷操作"
           title="快捷操作"
-          onMouseDown={hudSelect.prepareOverlay}
         >
           <IconHudQuickActions />
         </button>

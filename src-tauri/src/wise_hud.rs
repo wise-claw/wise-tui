@@ -11,7 +11,8 @@ pub const HUD_ACTIVE_EVENT: &str = "wise-hud-active-changed";
 
 const HUD_BOUNDS_SETTING_KEY: &str = "wise.hud.window.v1";
 const DEFAULT_HUD_WIDTH: f64 = 720.0;
-const DEFAULT_HUD_HEIGHT: f64 = 64.0;
+/// 与前端 `HUD_RESTING_OVERLAY_HEIGHT` 对齐：空闲态也保持菜单高度，点按钮不再拉伸窗口。
+const DEFAULT_HUD_HEIGHT: f64 = 420.0;
 const HUD_COMPACT_LOGICAL_HEIGHT: f64 = 64.0;
 const HUD_BOTTOM_MARGIN: i32 = 48;
 
@@ -30,8 +31,37 @@ fn overlay_frame_keeping_bottom(
     (new_y, new_h)
 }
 
+fn overlay_height_already_applied(current: f64, desired: f64) -> bool {
+    (current - desired).abs() < 0.5
+}
+
+/// Cocoa 原点在左下：保持 `window_bottom`，只改高度，窗口向上长/缩。
+fn cocoa_overlay_height_keeping_bottom(
+    desired_height: f64,
+    min_height: f64,
+    window_bottom: f64,
+    work_area_top: f64,
+) -> f64 {
+    let max_height = (work_area_top - window_bottom).max(min_height);
+    desired_height.max(min_height).min(max_height)
+}
+
 fn hud_set_overlay_height(win: &WebviewWindow, logical_height: f64) -> Result<(), String> {
-    let _ = win.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
+    #[cfg(target_os = "macos")]
+    {
+        return hud_set_overlay_height_macos(win, logical_height);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        hud_set_overlay_height_cross_platform(win, logical_height)
+    }
+}
+
+/// 分两步改 frame 时胶囊会先跳后回。非 macOS 仍走这条路径。
+fn hud_set_overlay_height_cross_platform(
+    win: &WebviewWindow,
+    logical_height: f64,
+) -> Result<(), String> {
     let scale = win.scale_factor().map_err(|e| e.to_string())?;
     let pos = win.outer_position().map_err(|e| e.to_string())?;
     let size = win.outer_size().map_err(|e| e.to_string())?;
@@ -46,8 +76,10 @@ fn hud_set_overlay_height(win: &WebviewWindow, logical_height: f64) -> Result<()
         .map(|m| m.work_area().position.y)
         .unwrap_or(0);
     let (new_y, new_h) = overlay_frame_keeping_bottom(pos.y, size.height, desired, min_h, monitor_top);
+    if new_h == size.height && new_y == pos.y {
+        return Ok(());
+    }
     let growing = new_h > size.height;
-    // macOS 保持左上角：加高先上移再长高，缩短先变矮再下移，底边才不会带着胶囊走。
     if growing {
         win.set_position(PhysicalPosition::new(pos.x, new_y))
             .map_err(|e| e.to_string())?;
@@ -59,6 +91,71 @@ fn hud_set_overlay_height(win: &WebviewWindow, logical_height: f64) -> Result<()
         win.set_position(PhysicalPosition::new(pos.x, new_y))
             .map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn hud_set_overlay_height_macos(win: &WebviewWindow, logical_height: f64) -> Result<(), String> {
+    if objc2::MainThreadMarker::new().is_some() {
+        return unsafe { hud_apply_overlay_height_macos(win, logical_height) };
+    }
+    let win = win.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    win.clone()
+        .run_on_main_thread(move || {
+            let result = unsafe { hud_apply_overlay_height_macos(&win, logical_height) };
+            let _ = tx.send(result);
+        })
+        .map_err(|e| e.to_string())?;
+    rx.recv()
+        .unwrap_or_else(|_| Err("HUD 主线程未响应".into()))
+}
+
+/// 一次 `setFrame` 只改高度、底边不动，避免先 set_position 再 set_size 把胶囊闪一下。
+#[cfg(target_os = "macos")]
+unsafe fn hud_apply_overlay_height_macos(
+    win: &WebviewWindow,
+    logical_height: f64,
+) -> Result<(), String> {
+    use objc2::runtime::AnyObject;
+    use objc2_foundation::{NSPoint, NSRect, NSSize};
+
+    let Ok(ptr) = win.ns_window() else {
+        return hud_set_overlay_height_cross_platform(win, logical_height);
+    };
+    if ptr.is_null() {
+        return hud_set_overlay_height_cross_platform(win, logical_height);
+    }
+    let obj = ptr as *const AnyObject;
+    let frame: NSRect = objc2::msg_send![obj, frame];
+    let desired = logical_height.max(HUD_COMPACT_LOGICAL_HEIGHT);
+    let screen: *const AnyObject = objc2::msg_send![obj, screen];
+    let work_area_top = if screen.is_null() {
+        frame.origin.y + desired.max(frame.size.height)
+    } else {
+        let visible: NSRect = objc2::msg_send![screen, visibleFrame];
+        visible.origin.y + visible.size.height
+    };
+    let new_h = cocoa_overlay_height_keeping_bottom(
+        desired,
+        HUD_COMPACT_LOGICAL_HEIGHT,
+        frame.origin.y,
+        work_area_top,
+    );
+    if overlay_height_already_applied(frame.size.height, new_h) {
+        return Ok(());
+    }
+    let new_frame = NSRect {
+        origin: NSPoint {
+            x: frame.origin.x,
+            y: frame.origin.y,
+        },
+        size: NSSize {
+            width: frame.size.width,
+            height: new_h,
+        },
+    };
+    let _: () = objc2::msg_send![obj, setFrame: new_frame, display: true, animate: false];
     Ok(())
 }
 
@@ -450,6 +547,24 @@ mod tests {
         assert_eq!(y, 0);
         assert_eq!(h, 96);
         assert_eq!(y + h as i32, 96);
+    }
+
+    #[test]
+    fn cocoa_overlay_grows_height_without_moving_bottom() {
+        let height = cocoa_overlay_height_keeping_bottom(400.0, 64.0, 48.0, 1080.0);
+        assert_eq!(height, 400.0);
+    }
+
+    #[test]
+    fn cocoa_overlay_clamps_to_work_area_top() {
+        let height = cocoa_overlay_height_keeping_bottom(400.0, 64.0, 1000.0, 1080.0);
+        assert_eq!(height, 80.0);
+    }
+
+    #[test]
+    fn overlay_height_skips_subpixel_noop() {
+        assert!(overlay_height_already_applied(400.0, 400.2));
+        assert!(!overlay_height_already_applied(64.0, 400.0));
     }
 
     #[test]

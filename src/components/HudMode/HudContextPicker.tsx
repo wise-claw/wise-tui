@@ -491,6 +491,18 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
     [hudSelect],
   );
 
+  const handleAnchorMouseDown = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      if (!hudSelect.open) {
+        hudSelect.onOpenChange(true);
+      } else {
+        hudSelect.prepareOverlay();
+      }
+    },
+    [hudSelect],
+  );
+
   const handleSelect = useCallback(
     (key: string) => {
       if (tab === "repo") {
@@ -697,7 +709,7 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
   );
 
   return (
-    <div className="app-hud-context-anchor" onMouseDown={hudSelect.prepareOverlay}>
+    <div className="app-hud-context-anchor" onMouseDown={handleAnchorMouseDown}>
       <Popover
         trigger="click"
         placement="topRight"
