@@ -43,6 +43,9 @@ export interface HudComposerBarProps {
   onOverlayOpenChange?: (mode: HudOverlayMode) => void;
 }
 
+/** HUD 重挂载或切换会话时，仍按仓库阻止重复提交推送。 */
+const hudGitSyncingRepositoryPaths = new Set<string>();
+
 function IconHudExit() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -82,6 +85,8 @@ function HudGitActions({
   const [syncing, setSyncing] = useState(false);
   const [phase, setPhase] = useState("");
   const syncLockRef = useRef(false);
+  const mountedRef = useRef(true);
+  const operationSeqRef = useRef(0);
   const changedLines = stats.additions + stats.deletions;
   const statsTitle = changedLines > 0
     ? `代码变更：新增 ${stats.additions} 行，删除 ${stats.deletions} 行；点击提交并推送`
@@ -91,15 +96,48 @@ function HudGitActions({
     : syncing
       ? `${phase || "同步"}中…`
       : statsTitle;
+
+  useEffect(() => {
+    // 切换仓库时让新仓库拥有独立 UI 状态；旧操作继续在原仓库完成，不能回写这里。
+    operationSeqRef.current += 1;
+    syncLockRef.current = false;
+    setSyncing(false);
+    setPhase("");
+  }, [repositoryPath]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      operationSeqRef.current += 1;
+    };
+  }, []);
+
   const handleSync = useCallback(async () => {
+    const targetPath = repositoryPath.trim();
     if (disabled || syncLockRef.current) return;
+    if (!targetPath) {
+      message.warning("仓库路径为空，无法提交推送");
+      return;
+    }
+    if (hudGitSyncingRepositoryPaths.has(targetPath)) {
+      message.info("当前仓库正在提交推送");
+      return;
+    }
+
+    const operationSeq = ++operationSeqRef.current;
+    const updateIfCurrent = (update: () => void) => {
+      if (!mountedRef.current || operationSeqRef.current !== operationSeq) return;
+      update();
+    };
     syncLockRef.current = true;
+    hudGitSyncingRepositoryPaths.add(targetPath);
     setSyncing(true);
     setPhase("读取变更");
     try {
-      const outcome = await aiCommitPullPushRepository(repositoryPath, {
+      const outcome = await aiCommitPullPushRepository(targetPath, {
         executionEngine,
-        onPhase: setPhase,
+        onPhase: (nextPhase) => updateIfCurrent(() => setPhase(nextPhase)),
       });
       const success = gitCommitPullPushSuccessMessage(outcome);
       if (success) message.success(success);
@@ -112,10 +150,13 @@ function HudGitActions({
         message.error(`提交推送失败：${detail}`);
       }
     } finally {
-      refreshGitRepositoryStats(repositoryPath);
-      syncLockRef.current = false;
-      setSyncing(false);
-      setPhase("");
+      hudGitSyncingRepositoryPaths.delete(targetPath);
+      refreshGitRepositoryStats(targetPath);
+      updateIfCurrent(() => {
+        syncLockRef.current = false;
+        setSyncing(false);
+        setPhase("");
+      });
     }
   }, [disabled, executionEngine, message, repositoryPath]);
 
