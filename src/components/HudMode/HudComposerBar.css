@@ -78,6 +78,8 @@
 .app-hud-context-anchor,
 .app-hud-context-pill,
 .app-hud-run-chip,
+.app-hud-git-actions,
+.app-hud-git-stats,
 .app-hud-toasts,
 .app-hud-toast,
 .app-hud-session-details,
@@ -187,6 +189,68 @@
   font-variant-numeric: tabular-nums;
   line-height: 1;
   pointer-events: none;
+}
+
+.app-hud-git-actions {
+  display: inline-flex;
+  align-items: center;
+  height: var(--app-hud-control-size);
+  flex: 0 0 auto;
+  margin-left: calc(-1 * var(--app-hud-control-gap));
+}
+
+.app-hud-git-stats {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  height: var(--app-hud-control-size);
+  margin: 0;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.app-hud-git-stats:hover {
+  color: #52525b;
+}
+
+.app-hud-git-stats:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.app-hud-git-stats--syncing {
+  animation: app-hud-git-stats-pulse 1s ease-in-out infinite;
+}
+
+.app-hud-git-stats__add {
+  color: #16a34a;
+}
+
+.app-hud-git-stats__delete {
+  color: #dc2626;
+}
+
+.app-hud-git-stats__separator {
+  color: #a1a1aa;
+  font-weight: 500;
+}
+
+@keyframes app-hud-git-stats-pulse {
+  50% {
+    opacity: 0.45;
+  }
 }
 
 @keyframes app-hud-run-spin {
@@ -582,7 +646,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--app-hud-control-gap);
-  padding: 0 8px !important;
+  padding: 0 2px 0 8px !important;
   border: none;
   border-radius: 999px;
   background: transparent !important;
@@ -1250,6 +1314,18 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
 
 :root[data-wise-theme="dark"] .app-hud-stop-btn:hover .app-hud-stop-btn__ring {
   background: rgba(248, 113, 113, 0.16);
+}
+
+:root[data-wise-theme="dark"] .app-hud-git-stats {
+  color: #a1a1aa;
+}
+
+:root[data-wise-theme="dark"] .app-hud-git-stats__add {
+  color: #4ade80;
+}
+
+:root[data-wise-theme="dark"] .app-hud-git-stats__delete {
+  color: #f87171;
 }
 
 :root[data-wise-theme="dark"] .app-hud-context-pill {

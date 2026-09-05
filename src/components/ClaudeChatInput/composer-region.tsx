@@ -394,6 +394,8 @@ interface ComposerInnerProps {
   /** HUD 胶囊：隐藏附件/常用语；仓库与运行时在条左侧，发送/退出走 trailing。 */
   hudChrome?: boolean;
   hudLeadingActions?: ReactNode;
+  /** HUD：位于发送按钮左侧的紧凑操作。 */
+  hudBeforeSendActions?: ReactNode;
   hudTrailingActions?: ReactNode;
   onHudOverlayChange?: (open: boolean) => void;
   onHudImagePreviewChange?: (image: ImageAttachmentPart | null) => void;
@@ -700,6 +702,7 @@ function ComposerInner({
   compactFooterChrome = false,
   hudChrome = false,
   hudLeadingActions,
+  hudBeforeSendActions,
   hudTrailingActions,
   onHudOverlayChange,
   onHudImagePreviewChange,
@@ -3526,6 +3529,7 @@ function ComposerInner({
           <>
             {hudLeadingActions}
             {repositoryPickerSelect}
+            {hudBeforeSendActions}
             {menuItem}
             {hudTrailingActions}
           </>
@@ -3627,6 +3631,7 @@ function ComposerInner({
       compactFooterChrome,
       hudChrome,
       hudLeadingActions,
+      hudBeforeSendActions,
       hudTrailingActions,
       repositoryPickerSelect,
     ],
@@ -4054,6 +4059,8 @@ export interface ComposerRegionProps {
   /** HUD 胶囊：隐藏附件/常用语；仓库与运行时在条左侧，发送/退出走 trailing。 */
   hudChrome?: boolean;
   hudLeadingActions?: ReactNode;
+  /** HUD：位于发送按钮左侧的紧凑操作。 */
+  hudBeforeSendActions?: ReactNode;
   hudTrailingActions?: ReactNode;
   onHudOverlayChange?: (open: boolean) => void;
   onHudImagePreviewChange?: (image: ImageAttachmentPart | null) => void;

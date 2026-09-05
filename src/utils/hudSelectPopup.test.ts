@@ -96,4 +96,15 @@ describe("isHudChromeControl", () => {
     expect(isHudChromeControl(pill)).toBe(true);
     anchor.remove();
   });
+
+  test("treats Git stats as chrome", () => {
+    const actions = document.createElement("div");
+    actions.className = "app-hud-git-actions";
+    const stats = document.createElement("span");
+    stats.className = "app-hud-git-stats";
+    actions.append(stats);
+    document.body.appendChild(actions);
+    expect(isHudChromeControl(stats)).toBe(true);
+    actions.remove();
+  });
 });

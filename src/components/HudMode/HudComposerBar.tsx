@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { App } from "antd";
 import { ComposerRegion } from "../ClaudeChatInput/composer-region";
 import { wiseHudCancel, wiseHudExit, wiseHudNewSession, wiseHudSetDetailsOpen, wiseHudSubmit } from "../../services/wiseHud";
 import { HudContextPicker } from "./HudContextPicker";
@@ -22,6 +23,15 @@ import {
 import type { HudCompletionToastView } from "../../utils/hudCompletionToast";
 import type { ImageAttachmentPart } from "../../types";
 import { buildRepositoryMentionOptions } from "../../utils/projectRoleTagOptions";
+import { useGitRepositoryStats } from "../../hooks/useGitRepositoryStats";
+import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
+import {
+  aiCommitPullPushRepository,
+  gitCommitPullPushNoopMessage,
+  gitCommitPullPushSuccessMessage,
+  isGitMergeConflictError,
+} from "../../services/gitCommitPullPush";
+import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import "./HudComposerBar.css";
 
 export type HudOverlayMode = "none" | "images" | "menu" | "details";
@@ -55,6 +65,76 @@ function IconHudStop() {
     <svg viewBox="0 0 10 10" aria-hidden="true">
       <rect width="10" height="10" rx="2" fill="currentColor" />
     </svg>
+  );
+}
+
+function HudGitActions({
+  repositoryPath,
+  executionEngine,
+  disabled,
+}: {
+  repositoryPath: string;
+  executionEngine: SessionExecutionEngine;
+  disabled?: boolean;
+}) {
+  const { message } = App.useApp();
+  const stats = useGitRepositoryStats(repositoryPath);
+  const [syncing, setSyncing] = useState(false);
+  const [phase, setPhase] = useState("");
+  const syncLockRef = useRef(false);
+  const changedLines = stats.additions + stats.deletions;
+  const statsTitle = changedLines > 0
+    ? `代码变更：新增 ${stats.additions} 行，删除 ${stats.deletions} 行；点击提交并推送`
+    : "当前没有代码行变更；点击检查并推送待同步提交";
+  const actionTitle = disabled
+    ? "任务运行中，完成后可提交并推送"
+    : syncing
+      ? `${phase || "同步"}中…`
+      : statsTitle;
+  const handleSync = useCallback(async () => {
+    if (disabled || syncLockRef.current) return;
+    syncLockRef.current = true;
+    setSyncing(true);
+    setPhase("读取变更");
+    try {
+      const outcome = await aiCommitPullPushRepository(repositoryPath, {
+        executionEngine,
+        onPhase: setPhase,
+      });
+      const success = gitCommitPullPushSuccessMessage(outcome);
+      if (success) message.success(success);
+      else message.info(gitCommitPullPushNoopMessage());
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      if (isGitMergeConflictError(detail)) {
+        message.warning("拉取/合并存在冲突，请手动解决后重试");
+      } else {
+        message.error(`提交推送失败：${detail}`);
+      }
+    } finally {
+      refreshGitRepositoryStats(repositoryPath);
+      syncLockRef.current = false;
+      setSyncing(false);
+      setPhase("");
+    }
+  }, [disabled, executionEngine, message, repositoryPath]);
+
+  return (
+    <div className="app-hud-git-actions">
+      <button
+        type="button"
+        className={`app-hud-git-stats${syncing ? " app-hud-git-stats--syncing" : ""}`}
+        aria-label={actionTitle}
+        aria-busy={syncing}
+        title={actionTitle}
+        disabled={disabled || syncing}
+        onClick={() => void handleSync()}
+      >
+        <span className="app-hud-git-stats__add">{stats.additions}</span>
+        <span className="app-hud-git-stats__separator" aria-hidden>/</span>
+        <span className="app-hud-git-stats__delete">{stats.deletions}</span>
+      </button>
+    </div>
   );
 }
 
@@ -464,6 +544,13 @@ export function HudComposerBar({
               hudChrome
               projectRepositoryMentionOptions={repositoryMentionOptions}
               hudLeadingActions={contextPicker}
+              hudBeforeSendActions={
+                <HudGitActions
+                  repositoryPath={session.repositoryPath}
+                  executionEngine={snapshot.engine}
+                  disabled={snapshot.busy}
+                />
+              }
               hudTrailingActions={
                 <>
                   {snapshot.canCancel ? <HudStopButton /> : null}

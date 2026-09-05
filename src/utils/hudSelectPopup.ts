@@ -60,6 +60,7 @@ export const HUD_CHROME_CONTROL_SELECTOR = [
   ".app-hud-quick-actions-btn",
   ".app-hud-quick-actions-anchor",
   ".app-hud-run-chip",
+  ".app-hud-git-actions",
   ".app-hud-context-anchor",
   ".app-hud-context-pill",
   ".app-hud-exit-btn",
