@@ -34,6 +34,13 @@ describe("parseExecutionEnvironmentDispatch", () => {
     ).toBe("/oh-my-claudecode:autopilot 你好");
   });
 
+  test("parses @Cursor Agent mention", () => {
+    const plan = parseExecutionEnvironmentDispatch("@Cursor Agent 你好");
+    expect(plan?.executionEngine).toBe("cursor");
+    expect(plan?.sessionCount).toBe(1);
+    expect(plan?.cleanedPrompt).toBe("你好");
+  });
+
   test("parses @Codex CLI mention", () => {
     const plan = parseExecutionEnvironmentDispatch("@Codex CLI 重构接口层");
     expect(plan?.executionEngine).toBe("codex");

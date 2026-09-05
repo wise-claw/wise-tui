@@ -197,6 +197,7 @@ import {
   useTerminalCenterPanelState,
 } from "./stores/terminalCenterPanelStore";
 import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "./utils/executionEnvironmentDispatchAnchor";
+import { parseExecutionEnvironmentDispatch } from "./utils/executionEnvironmentDispatch";
 import {
   subscribeClaudeSessionsStructure,
   getClaudeSessionsStructureKey,
@@ -1606,6 +1607,14 @@ export default function App() {
       dispatchTarget?: Parameters<typeof handleComposerExecute>[2],
       executeOptions?: Parameters<typeof handleComposerExecute>[3],
     ) => {
+      if (parseExecutionEnvironmentDispatch(prompt)) {
+        await handleDispatchExecutionEnvironment({
+          prompt,
+          userBubblePrompt: executeOptions?.userBubblePrompt,
+          defaultInstructionApplied: executeOptions?.defaultInstructionApplied,
+        });
+        return true;
+      }
       if (
         handleDispatchRepositoryMention({
           prompt,
@@ -1617,7 +1626,7 @@ export default function App() {
       }
       return handleComposerExecute(sessionId, prompt, dispatchTarget, executeOptions);
     },
-    [handleComposerExecute, handleDispatchRepositoryMention],
+    [handleComposerExecute, handleDispatchExecutionEnvironment, handleDispatchRepositoryMention],
   );
   handleComposerExecuteRef.current = handleComposerExecuteWithRepositoryMention;
 

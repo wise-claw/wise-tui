@@ -9,7 +9,10 @@ import {
   hudToastStackExtraHeight,
   parseHudCompletionToastPayload,
   removeHudToast,
+  resolveHudToastMarqueeDurationSec,
   sessionStatusMap,
+  HUD_TOAST_MARQUEE_PX_PER_SEC,
+  HUD_TOAST_MARQUEE_TRAVEL_FRACTION,
   type HudCompletionToastItem,
 } from "./hudCompletionToast";
 
@@ -78,16 +81,79 @@ describe("collectHudSessionCompletions", () => {
 });
 
 describe("formatHudCompletionToast", () => {
-  it("truncates long assistant previews", () => {
+  it("keeps the full assistant summary up to the toast cap", () => {
+    const longText = "字".repeat(120);
     const item = formatHudCompletionToast({
       id: "s1",
       status: "completed",
       threadName: "很长的会话标题需要截断处理一下下下",
       repositoryName: "demo",
-      messages: [assistant("字".repeat(80))],
+      messages: [assistant(longText)],
     });
-    expect(item.message.endsWith("…")).toBe(true);
-    expect(item.message.length).toBeLessThanOrEqual(42);
+    expect(item.message).toBe(longText);
+    expect(item.message.length).toBe(120);
+  });
+
+  it("prefers the final assistant summary on error when available", () => {
+    const item = formatHudCompletionToast({
+      id: "s1",
+      status: "error",
+      messages: [assistant("连接中断，请检查网络后重试。")],
+    });
+    expect(item.message).toBe("连接中断，请检查网络后重试。");
+  });
+
+  it("does not put thinking text into the completion toast", () => {
+    const item = formatHudCompletionToast({
+      id: "s1",
+      status: "completed",
+      messages: [
+        {
+          id: 1,
+          role: "assistant",
+          content: "你好",
+          parts: [
+            { type: "reasoning", text: "用户持续问候，我将再次简短热情地回应。" },
+            { type: "text", text: "你好" },
+          ],
+          timestamp: 1,
+        },
+      ],
+    });
+    expect(item.message).toBe("你好");
+    expect(item.message).not.toContain("思考过程");
+  });
+
+  it("falls back when the assistant only thought", () => {
+    const item = formatHudCompletionToast({
+      id: "s1",
+      status: "completed",
+      messages: [
+        {
+          id: 1,
+          role: "assistant",
+          content: "",
+          parts: [{ type: "reasoning", text: "用户持续问候，我将再次简短热情地回应。" }],
+          timestamp: 1,
+        },
+      ],
+    });
+    expect(item.message).toBe("已经完成，可以继续发任务。");
+  });
+});
+
+describe("resolveHudToastMarqueeDurationSec", () => {
+  it("keeps a constant px/s so longer copy takes proportionally longer", () => {
+    const short = resolveHudToastMarqueeDurationSec(80);
+    const long = resolveHudToastMarqueeDurationSec(400);
+    expect(short).toBe(80 / HUD_TOAST_MARQUEE_PX_PER_SEC / HUD_TOAST_MARQUEE_TRAVEL_FRACTION);
+    expect(long).toBe(400 / HUD_TOAST_MARQUEE_PX_PER_SEC / HUD_TOAST_MARQUEE_TRAVEL_FRACTION);
+    expect(long / short).toBeCloseTo(5, 5);
+  });
+
+  it("does not marquee tiny overflow", () => {
+    expect(resolveHudToastMarqueeDurationSec(4)).toBe(0);
+    expect(resolveHudToastMarqueeDurationSec(0)).toBe(0);
   });
 });
 

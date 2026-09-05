@@ -52,8 +52,8 @@ function IconHudPlus() {
 
 function IconHudStop() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="7" y="7" width="10" height="10" rx="1.8" fill="currentColor" />
+    <svg viewBox="0 0 10 10" aria-hidden="true">
+      <rect width="10" height="10" rx="2" fill="currentColor" />
     </svg>
   );
 }
@@ -96,10 +96,12 @@ function HudRunStatusChip({
       }}
     >
       {runStatus === "running" ? (
-        <>
-          <span className="app-hud-run-chip__spinner" aria-hidden />
-          <span className="app-hud-run-chip__badge">{runningCount}</span>
-        </>
+        <span className="app-hud-run-chip__meter" aria-hidden>
+          <span className="app-hud-run-chip__spinner" />
+          <span className="app-hud-run-chip__count">
+            {runningCount > 9 ? "9+" : Math.max(1, runningCount)}
+          </span>
+        </span>
       ) : (
         <span className="app-hud-run-chip__check" aria-hidden>
           <svg viewBox="0 0 16 16">
@@ -159,7 +161,9 @@ function HudStopButton() {
       title="停止当前运行"
       onClick={() => void wiseHudCancel()}
     >
-      <IconHudStop />
+      <span className="app-hud-stop-btn__ring" aria-hidden>
+        <IconHudStop />
+      </span>
     </button>
   );
 }

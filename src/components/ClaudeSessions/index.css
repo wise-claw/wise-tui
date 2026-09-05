@@ -4736,6 +4736,7 @@
 .app-claude-messages .app-claude-message--assistant .app-message-part--long-prose .app-markdown {
   line-height: 1.62;
   letter-spacing: 0.008em;
+  font-weight: 500;
 }
 
 .app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown--chat-prose p,
@@ -4755,7 +4756,7 @@
 .app-claude-messages .app-claude-message--assistant .app-message-part--completion-summary .app-markdown h1,
 .app-claude-messages .app-claude-message--assistant .app-message-part--long-prose .app-markdown h1 {
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 600;
   margin: 1.15em 0 0.5em;
   padding-bottom: 0.35em;
   border-bottom: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 68%, transparent);
@@ -4871,7 +4872,15 @@
 .app-claude-messages .app-message-part--text {
   font-size: 14px;
   line-height: 1.62;
+  font-weight: 500;
   color: var(--ant-color-text);
+}
+
+/* Codex 式正文只保留常规 / 中粗两档：正文稳定用 500，标题和显式强调用 600。
+   避免 Markdown 标签默认 bold（700）在中文段落里显得突兀。 */
+.app-claude-messages .app-message-part--text .app-markdown strong,
+.app-claude-messages .app-message-part--text .app-markdown b {
+  font-weight: 600;
 }
 
 /* 主会话助手 text part 的段落节奏：与下方 chat-prose/summary 取同一组数值。
@@ -4946,6 +4955,7 @@
   overflow-wrap: anywhere;
   word-break: break-word;
   line-height: 22px;
+  font-weight: 500;
   color: var(--ant-color-text);
   min-width: 0;
   max-width: 100%;
@@ -7021,7 +7031,7 @@ button.app-message-part-header:disabled:hover {
    拉开字号并加大「段前 > 段后」的留白，让章节边界靠留白而非分隔线成立。 */
 .app-markdown h1 {
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   margin: 20px 0 8px;
   line-height: 1.3;
   letter-spacing: -0.01em;

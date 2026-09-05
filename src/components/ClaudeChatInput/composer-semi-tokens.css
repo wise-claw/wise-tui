@@ -43,9 +43,10 @@
   min-width: 0;
 }
 
-/* 会话输入：与消息区 13px 正文基准对齐 */
+/* 会话输入：与消息区 13px 正文基准对齐；字重参照 Codex，macOS 中文落到 PingFang Medium */
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content .tiptap {
   font-size: 13px;
+  font-weight: 500;
   line-height: var(--app-semi-ai-chat-editor-line-px);
   min-height: calc(
     var(--app-semi-ai-chat-editor-min-lines) * var(--app-semi-ai-chat-editor-line-px)
@@ -154,6 +155,7 @@
   min-height: calc(
     var(--app-semi-ai-chat-editor-min-lines) * var(--app-semi-ai-chat-editor-line-px)
   );
+  font-weight: 400;
 }
 
 /* 底栏单行：收紧 Semi 默认大间距，缩小发送按钮 */

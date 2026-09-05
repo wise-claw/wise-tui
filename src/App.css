@@ -3131,6 +3131,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   cursor: pointer;
   font-size: 12px;
   line-height: 1.35;
+  font-weight: 500;
   box-shadow: none !important;
   transition: all 0.2s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
@@ -3197,7 +3198,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .app-left-sidebar-footer {
@@ -3371,6 +3372,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   padding: 0 8px;
   font-size: var(--app-sidebar-list-font-size, 13px);
   line-height: var(--app-sidebar-list-line-height, 1.35);
+  font-weight: 500;
   min-height: var(--app-sidebar-list-row-min-height, 22px);
   height: var(--app-sidebar-list-row-min-height, 22px);
   box-sizing: border-box;
@@ -3673,7 +3675,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-repository-row:has(.app-workspace-session-tree__row--active)
   .app-repository-item--repo.app-repository-item--repo-active
   .app-repository-name {
-  font-weight: 400;
+  font-weight: 500;
 }
 
 .app-repository-item--repo.app-repository-item--repo-active:hover {
@@ -3681,7 +3683,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-item--repo.app-repository-item--repo-active .app-repository-name {
-  font-weight: 400;
+  font-weight: 600;
   color: var(--ant-color-text);
 }
 
@@ -3700,7 +3702,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-row:has(.app-repository-item--repo-active) .app-repository-item--project.app-repository-item--project-active .app-repository-name {
-  font-weight: 400;
+  font-weight: 500;
   color: var(--ant-color-text-secondary);
 }
 
@@ -4551,7 +4553,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-left-sidebar-monitor-panel .app-monitor-panel__title,
 .git-files-explorer-title {
   font-size: 11px !important;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
   color: var(--ant-color-text-secondary) !important;
   letter-spacing: 0.05em !important;
   line-height: 20px !important;

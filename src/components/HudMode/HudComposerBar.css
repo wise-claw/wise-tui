@@ -29,6 +29,11 @@
 }
 
 .app-hud-bar {
+  --app-hud-control-size: 28px;
+  --app-hud-icon-size: 16px;
+  --app-hud-control-gap: 4px;
+  --app-hud-run-glyph-size: 20px;
+  --app-hud-run-glyph-stroke: 2px;
   position: relative;
   z-index: 1;
   flex: 0 0 auto;
@@ -97,8 +102,8 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 28px;
+  gap: var(--app-hud-control-gap);
+  height: var(--app-hud-control-size);
   padding: 0 4px;
   margin: 0;
   border: none;
@@ -126,18 +131,19 @@
   box-shadow: none;
 }
 
+.app-hud-run-chip--running,
 .app-hud-run-chip--completed,
 .app-hud-run-chip--ready {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
+  width: var(--app-hud-control-size);
+  min-width: var(--app-hud-control-size);
+  height: var(--app-hud-control-size);
   padding: 0;
   justify-content: center;
 }
 
 .app-hud-run-chip__check {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -147,35 +153,48 @@
 }
 
 .app-hud-run-chip__check svg {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
   display: block;
 }
 
-.app-hud-run-chip__spinner {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+.app-hud-run-chip__meter {
+  position: relative;
+  width: var(--app-hud-run-glyph-size);
+  height: var(--app-hud-run-glyph-size);
+  flex: 0 0 var(--app-hud-run-glyph-size);
+}
+
+.app-hud-run-chip__spinner,
+.app-hud-stop-btn__ring {
+  box-sizing: border-box;
+  width: var(--app-hud-run-glyph-size);
+  height: var(--app-hud-run-glyph-size);
+  flex: 0 0 var(--app-hud-run-glyph-size);
   border-radius: 50%;
-  border: 2px solid #d4d4d8;
+  border: var(--app-hud-run-glyph-stroke) solid currentColor;
+}
+
+.app-hud-run-chip__spinner {
+  position: absolute;
+  inset: 0;
+  border-color: #d4d4d8;
   border-top-color: #22c55e;
   animation: app-hud-run-spin 0.75s linear infinite;
 }
 
-.app-hud-run-chip__badge {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  display: inline-flex;
+.app-hud-run-chip__count {
+  position: absolute;
+  inset: 0;
+  display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  background: #c4c8d0;
-  color: #fff;
+  color: #16a34a;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  pointer-events: none;
 }
 
 @keyframes app-hud-run-spin {
@@ -205,10 +224,10 @@
   -webkit-appearance: none;
   pointer-events: auto;
   box-sizing: border-box;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  width: max-content;
-  max-width: 100%;
+  width: 100%;
+  max-width: min(360px, calc(100% - 24px));
   height: 36px;
   margin: 0;
   padding: 0 12px;
@@ -229,15 +248,49 @@
   pointer-events: none;
 }
 
-.app-hud-toast__message {
+.app-hud-toast__message-viewport {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 10px,
+    #000 calc(100% - 10px),
+    transparent 100%
+  );
+}
+
+.app-hud-toast__message {
+  display: inline-block;
+  min-width: 0;
   color: #1f2328;
   font-size: 12px;
   font-weight: 500;
   line-height: 16px;
+  white-space: nowrap;
+}
+
+.app-hud-toast__message--marquee {
+  /* 单程约占 33%（12%→45%），时长由溢出距离 / 28px/s 换算，保持匀速。 */
+  animation: app-hud-toast-marquee var(--app-hud-toast-marquee-duration, 12s) linear infinite;
+}
+
+@keyframes app-hud-toast-marquee {
+  0%,
+  12% {
+    transform: translateX(0);
+  }
+
+  45%,
+  55% {
+    transform: translateX(var(--app-hud-toast-marquee-distance, 0));
+  }
+
+  88%,
+  100% {
+    transform: translateX(0);
+  }
 }
 
 @keyframes app-hud-toast-in {
@@ -309,6 +362,16 @@
   .app-hud-toast--leaving {
     animation: none;
   }
+
+  .app-hud-toast__message--marquee {
+    animation: none;
+    transform: none;
+  }
+
+  .app-hud-toast__message-viewport {
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
 }
 
 .app-hud-composer {
@@ -322,17 +385,20 @@
   padding: 0;
   color: #8b8f98;
   font-size: 13px;
-  line-height: 28px;
+  line-height: var(--app-hud-control-size);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .app-hud-exit-btn,
-.app-hud-new-session-btn {
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
+.app-hud-new-session-btn,
+.app-hud-quick-actions-btn,
+.app-hud-stop-btn {
+  flex: 0 0 var(--app-hud-control-size);
+  width: var(--app-hud-control-size);
+  min-width: var(--app-hud-control-size);
+  height: var(--app-hud-control-size);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -347,8 +413,8 @@
 .app-hud-exit-btn svg,
 .app-hud-new-session-btn svg,
 .app-hud-quick-actions-btn svg {
-  width: 16px;
-  height: 16px;
+  width: var(--app-hud-icon-size);
+  height: var(--app-hud-icon-size);
 }
 
 .app-hud-exit-btn:hover,
@@ -366,7 +432,7 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--app-hud-control-gap);
 }
 
 .app-hud-bar-leading-actions {
@@ -378,23 +444,16 @@
 
 .app-hud-bar-leading-actions .app-hud-quick-actions-anchor {
   display: flex;
-  flex: 0 0 24px;
-  width: 24px;
-  min-width: 24px;
-  max-width: 24px;
-  height: 28px;
-  margin: 0 0 0 -4px;
+  flex: 0 0 var(--app-hud-control-size);
+  width: var(--app-hud-control-size);
+  min-width: var(--app-hud-control-size);
+  max-width: var(--app-hud-control-size);
+  height: var(--app-hud-control-size);
+  margin: 0 0 0 -6px;
   padding: 0;
   overflow: hidden;
   align-items: center;
   justify-content: center;
-}
-
-.app-hud-bar-leading-actions .app-hud-new-session-btn {
-  flex: 0 0 24px;
-  width: 24px;
-  min-width: 24px;
-  max-width: 24px;
 }
 
 .app-hud-bar-leading-cluster .app-hud-run-chip {
@@ -402,19 +461,20 @@
   flex: 0 0 auto;
 }
 
+.app-hud-bar-leading-cluster .app-hud-run-chip--running,
 .app-hud-bar-leading-cluster .app-hud-run-chip--completed,
 .app-hud-bar-leading-cluster .app-hud-run-chip--ready {
-  width: 28px;
-  min-width: 28px;
+  width: var(--app-hud-control-size);
+  min-width: var(--app-hud-control-size);
 }
 
 .app-hud-bar-leading-actions .app-hud-quick-actions-anchor > * {
   display: flex !important;
-  flex: 0 0 24px;
-  width: 24px !important;
-  min-width: 24px !important;
-  max-width: 24px !important;
-  height: 28px !important;
+  flex: 0 0 var(--app-hud-control-size);
+  width: var(--app-hud-control-size) !important;
+  min-width: var(--app-hud-control-size) !important;
+  max-width: var(--app-hud-control-size) !important;
+  height: var(--app-hud-control-size) !important;
   margin: 0 !important;
   padding: 0 !important;
   line-height: 0;
@@ -423,39 +483,46 @@
 }
 
 .app-hud-bar-leading-actions .app-hud-quick-actions-anchor .app-hud-quick-actions-btn {
-  flex: 0 0 24px;
-  width: 24px;
-  min-width: 24px;
-  max-width: 24px;
-  height: 28px;
+  flex: 0 0 var(--app-hud-control-size);
+  width: var(--app-hud-control-size);
+  min-width: var(--app-hud-control-size);
+  max-width: var(--app-hud-control-size);
+  height: var(--app-hud-control-size);
   margin: 0;
   padding: 0;
-}
-
-.app-hud-quick-actions-btn {
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: #8b8f98;
-  cursor: pointer;
-}
-
-.app-hud-quick-actions-btn svg {
-  width: 16px;
-  height: 16px;
 }
 
 .app-hud-quick-actions-btn:hover,
 .app-hud-quick-actions-btn--open {
   background: rgba(15, 23, 42, 0.06);
   color: #1f2328;
+}
+
+.app-hud-stop-btn {
+  background: transparent;
+  color: #ef4444;
+}
+
+.app-hud-stop-btn__ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
+.app-hud-stop-btn svg {
+  width: 8px;
+  height: 8px;
+  display: block;
+}
+
+.app-hud-stop-btn:hover {
+  background: transparent;
+  color: #dc2626;
+}
+
+.app-hud-stop-btn:hover .app-hud-stop-btn__ring {
+  background: rgba(239, 68, 68, 0.12);
 }
 
 .app-hud-quick-actions-popover .ant-popover-inner,
@@ -504,31 +571,6 @@
   gap: 8px;
 }
 
-.app-hud-stop-btn {
-  /* 与 HUD 的发送动作同尺度，避免高饱和停止态压过整条工具栏。 */
-  flex: 0 0 22px;
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  background: #ef4444;
-  color: #fff;
-  cursor: pointer;
-}
-
-.app-hud-stop-btn:hover {
-  background: #dc2626;
-}
-
-.app-hud-stop-btn svg {
-  width: 8px;
-  height: 8px;
-}
-
 .app-hud-context-anchor {
   flex: 0 0 auto;
   min-width: 0;
@@ -539,10 +581,10 @@
 .app-hud-bar .app-claude-semi-footer-toolbar-right .app-hud-context-pill,
 .app-hud-context-pill {
   max-width: 180px;
-  height: 28px;
+  height: var(--app-hud-control-size);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--app-hud-control-gap);
   padding: 0 8px !important;
   border: none;
   border-radius: 999px;
@@ -560,7 +602,7 @@
 .app-hud-context-pill:hover,
 .app-hud-context-pill--open {
   background: rgba(15, 23, 42, 0.06) !important;
-  color: #1f2328;
+  color: #52525b;
 }
 
 .app-hud-context-pill__name {
@@ -568,13 +610,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #1f2328;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.app-hud-context-pill:hover .app-hud-context-pill__name,
+.app-hud-context-pill--open .app-hud-context-pill__name {
+  color: #111827;
 }
 
 .app-hud-context-pill__stack,
 .app-hud-context-pill__chevron {
   flex: 0 0 auto;
   display: inline-flex;
-  color: inherit;
+  color: #8b8f98;
 }
 
 .app-hud-context-pill__stack svg {
@@ -671,6 +722,8 @@
   width: max-content;
   min-width: 100%;
   overflow: visible;
+  /* Codex：略高于 400，macOS 中文会落到 PingFang Medium。 */
+  font-weight: 500;
 }
 
 .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-editor-content .tiptap p {
@@ -679,13 +732,14 @@
 
 .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-editor-content .tiptap p.is-editor-empty:first-child::before {
   color: #9aa0a8;
+  font-weight: 400;
 }
 
 .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-footer {
   margin-top: 0;
   flex: 0 0 auto;
   width: auto;
-  height: 28px;
+  height: var(--app-hud-control-size);
   column-gap: 0;
   justify-content: flex-end;
   align-items: center;
@@ -697,18 +751,19 @@
 
 .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-footer-action,
 .app-hud-bar .app-claude-composer--hud .app-claude-semi-footer-toolbar-right {
-  height: 28px;
-  gap: 4px;
-  column-gap: 4px;
+  height: var(--app-hud-control-size);
+  gap: var(--app-hud-control-gap);
+  column-gap: var(--app-hud-control-gap);
   align-items: center;
   flex-wrap: nowrap;
 }
 
 .app-hud-bar .app-claude-composer--hud .semi-aiChatInput-footer-action-button {
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
-  min-height: 22px;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0;
   border-radius: 999px;
   background: #1f2328 !important;
   color: #fff !important;
@@ -766,15 +821,15 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
 .app-hud-bar .app-hud-repo-anchor,
 .app-hud-bar .app-claude-dual-pane-repo-picker {
   max-width: 148px;
-  height: 28px;
+  height: var(--app-hud-control-size);
   flex-shrink: 1;
   min-width: 72px;
 }
 
 .app-hud-bar .app-claude-dual-pane-repo-picker .ant-select-selector {
   background: transparent;
-  min-height: 28px !important;
-  height: 28px !important;
+  min-height: var(--app-hud-control-size) !important;
+  height: var(--app-hud-control-size) !important;
   padding-inline: 6px 16px !important;
 }
 
@@ -816,7 +871,7 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
   gap: 4px !important;
   width: auto;
   max-width: 96px;
-  height: 28px;
+  height: var(--app-hud-control-size);
   margin: 0 6px 0 0 !important;
   padding: 0;
   overflow: hidden;
@@ -837,8 +892,8 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
   display: flex !important;
   align-items: center;
   justify-content: center;
-  width: 28px !important;
-  height: 28px !important;
+  width: var(--app-hud-control-size) !important;
+  height: var(--app-hud-control-size) !important;
   overflow: hidden;
   line-height: 0;
   border-radius: 6px !important;
@@ -846,8 +901,8 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
 
 .app-hud-bar .app-claude-image-thumb-wrap .ant-image,
 .app-hud-bar .app-claude-image-thumb-wrap img {
-  width: 28px !important;
-  height: 28px !important;
+  width: var(--app-hud-control-size) !important;
+  height: var(--app-hud-control-size) !important;
   border-radius: 6px;
   display: block;
   object-fit: cover;
@@ -1131,8 +1186,8 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
   border-top-color: #4ade80;
 }
 
-:root[data-wise-theme="dark"] .app-hud-run-chip__badge {
-  background: #52525b;
+:root[data-wise-theme="dark"] .app-hud-run-chip__count {
+  color: #4ade80;
 }
 
 :root[data-wise-theme="dark"] .app-hud-run-chip:hover:not(:disabled),
@@ -1186,15 +1241,38 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
   color: #f4f4f5;
 }
 
+:root[data-wise-theme="dark"] .app-hud-stop-btn {
+  background: transparent;
+  color: #f87171;
+}
+
+:root[data-wise-theme="dark"] .app-hud-stop-btn:hover {
+  background: transparent;
+  color: #fca5a5;
+}
+
+:root[data-wise-theme="dark"] .app-hud-stop-btn:hover .app-hud-stop-btn__ring {
+  background: rgba(248, 113, 113, 0.16);
+}
+
 :root[data-wise-theme="dark"] .app-hud-context-pill {
   background: transparent !important;
-  color: #a1a1aa;
+  color: #71717a;
+}
+
+:root[data-wise-theme="dark"] .app-hud-context-pill__name {
+  color: #f4f4f5;
 }
 
 :root[data-wise-theme="dark"] .app-hud-context-pill:hover,
 :root[data-wise-theme="dark"] .app-hud-context-pill--open {
   background: rgba(255, 255, 255, 0.08) !important;
-  color: #f4f4f5;
+  color: #a1a1aa;
+}
+
+:root[data-wise-theme="dark"] .app-hud-context-pill:hover .app-hud-context-pill__name,
+:root[data-wise-theme="dark"] .app-hud-context-pill--open .app-hud-context-pill__name {
+  color: #fafafa;
 }
 
 :root[data-wise-theme="dark"] .app-hud-context-popover .ant-popover-inner,

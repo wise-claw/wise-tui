@@ -174,6 +174,49 @@ describe("resolveHudAssistantPreview", () => {
     expect(text.endsWith("…")).toBe(true);
     expect(text.length).toBe(20);
   });
+
+  it("keeps the reply and drops the thinking part", () => {
+    const text = resolveHudAssistantPreview([
+      {
+        id: 1,
+        role: "assistant",
+        content: "你好",
+        parts: [
+          { type: "reasoning", text: "用户持续问候，我将再次简短热情地回应。" },
+          { type: "text", text: "你好" },
+        ],
+        timestamp: 1,
+      },
+    ]);
+    expect(text).toBe("你好");
+  });
+
+  it("skips thinking-only assistant messages", () => {
+    const text = resolveHudAssistantPreview([
+      { id: 1, role: "assistant", content: "先前的答复", parts: [], timestamp: 1 },
+      {
+        id: 2,
+        role: "assistant",
+        content: "",
+        parts: [{ type: "reasoning", text: "用户持续问候，我将再次简短热情地回应。" }],
+        timestamp: 2,
+      },
+    ]);
+    expect(text).toBe("先前的答复");
+  });
+
+  it("returns empty when the assistant only thought", () => {
+    const text = resolveHudAssistantPreview([
+      {
+        id: 1,
+        role: "assistant",
+        content: "[思考过程] 用户持续问候，我将再次简短热情地回应。",
+        parts: [],
+        timestamp: 1,
+      },
+    ]);
+    expect(text).toBe("");
+  });
 });
 
 describe("parseWiseHud payloads", () => {

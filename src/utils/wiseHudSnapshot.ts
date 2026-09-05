@@ -1,4 +1,4 @@
-import type { ClaudeMessage, ClaudeSession } from "../types";
+import type { ClaudeMessage, ClaudeSession, TextPart } from "../types";
 import {
   CLAUDE_REASONING_EFFORT_LABELS,
   isClaudeReasoningEffort,
@@ -13,10 +13,7 @@ import {
   type SessionExecutionEngine,
 } from "../constants/sessionExecutionEngine";
 import { formatClaudeModelLabel } from "./claudeModel";
-import {
-  chatMessagePlainTextForCopy,
-  hasRenderableChatMessageBody,
-} from "./claudeChatMessageDisplay";
+import { isAssistantDisplayNoiseText } from "./claudeChatMessageDisplay";
 
 export const WISE_HUD_STATE_EVENT = "wise-hud-state";
 export const WISE_HUD_SUBMIT_EVENT = "wise-hud-submit";
@@ -205,6 +202,31 @@ export function formatHudModelLabel(
   return SESSION_EXECUTION_ENGINE_LABELS[engine]?.short ?? "Wise";
 }
 
+const HUD_THINKING_PREVIEW_PREFIX = "[思考过程]";
+
+/** HUD 预览 / 完成通知只用助手正文，不带思考过程。 */
+function assistantReplyTextForHudPreview(msg: ClaudeMessage): string {
+  const parts = msg.parts;
+  if (Array.isArray(parts) && parts.length > 0) {
+    return parts
+      .filter((part): part is TextPart => part.type === "text")
+      .map((part) => part.text.trim())
+      .filter(
+        (chunk) =>
+          chunk.length > 0 &&
+          !isAssistantDisplayNoiseText(chunk) &&
+          !chunk.startsWith(HUD_THINKING_PREVIEW_PREFIX),
+      )
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  const content = (msg.content ?? "").replace(/\s+/g, " ").trim();
+  if (!content || isAssistantDisplayNoiseText(content)) return "";
+  if (content.startsWith(HUD_THINKING_PREVIEW_PREFIX)) return "";
+  return content;
+}
+
 export function resolveHudAssistantPreview(
   messages: readonly ClaudeMessage[] | undefined,
   maxLen = HUD_ASSISTANT_PREVIEW_MAX_LEN,
@@ -213,8 +235,7 @@ export function resolveHudAssistantPreview(
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const msg = messages[i]!;
     if (msg.role !== "assistant") continue;
-    if (!hasRenderableChatMessageBody(msg)) continue;
-    const text = chatMessagePlainTextForCopy(msg).replace(/\s+/g, " ").trim();
+    const text = assistantReplyTextForHudPreview(msg);
     if (!text) continue;
     if (text.length <= maxLen) return text;
     return `${text.slice(0, Math.max(1, maxLen - 1))}…`;

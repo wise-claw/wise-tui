@@ -6,7 +6,19 @@ export const HUD_COMPLETION_TOAST_DURATION_MS = 4200;
 export const HUD_COMPLETION_TOAST_LEAVE_MS = 240;
 export const HUD_COMPLETION_TOAST_HEIGHT = 36;
 export const HUD_COMPLETION_TOAST_GAP = 8;
-export const HUD_COMPLETION_TOAST_MESSAGE_MAX_LEN = 42;
+/** 通知展示会话最后一条助手总结；过长时由 UI 横向滚动，不在此处截断。 */
+export const HUD_COMPLETION_TOAST_MESSAGE_MAX_LEN = 2000;
+/** Toast 横向滚动速度。时长按溢出距离换算，避免长文案被压进固定时长而飞快扫过。 */
+export const HUD_TOAST_MARQUEE_PX_PER_SEC = 28;
+/** 与 `.app-hud-toast-marquee` 中 12%→45% 单程占比一致。 */
+export const HUD_TOAST_MARQUEE_TRAVEL_FRACTION = 0.33;
+const HUD_TOAST_MARQUEE_OVERFLOW_PX = 4;
+
+export function resolveHudToastMarqueeDurationSec(overflowPx: number): number {
+  const overflow = Math.max(0, overflowPx);
+  if (overflow <= HUD_TOAST_MARQUEE_OVERFLOW_PX) return 0;
+  return overflow / HUD_TOAST_MARQUEE_PX_PER_SEC / HUD_TOAST_MARQUEE_TRAVEL_FRACTION;
+}
 
 export type HudCompletionToastKind = "success" | "error";
 
@@ -61,9 +73,8 @@ export function formatHudCompletionToast(session: HudCompletionSessionProbe): Hu
   const kind: HudCompletionToastKind = session.status === "error" ? "error" : "success";
   const preview = resolveHudAssistantPreview(session.messages, HUD_COMPLETION_TOAST_MESSAGE_MAX_LEN);
   const message =
-    kind === "error"
-      ? "这轮没跑通，可以再试一次。"
-      : preview || "已经完成，可以继续发任务。";
+    preview ||
+    (kind === "error" ? "这轮没跑通，可以再试一次。" : "已经完成，可以继续发任务。");
   return {
     id: nextToastId(session.id),
     sessionId: session.id,
@@ -168,7 +179,7 @@ export function parseHudCompletionToastPayload(raw: unknown): HudCompletionToast
     if (typeof value.sessionId !== "string" || !value.sessionId.trim()) continue;
     if (value.kind !== "success" && value.kind !== "error") continue;
     if (typeof value.message !== "string") continue;
-    const message = clipLabel(value.message, HUD_COMPLETION_TOAST_MESSAGE_MAX_LEN + 8);
+    const message = clipLabel(value.message, HUD_COMPLETION_TOAST_MESSAGE_MAX_LEN);
     if (!message) continue;
     items.push({
       id: value.id.trim(),
