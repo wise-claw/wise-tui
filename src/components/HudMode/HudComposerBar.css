@@ -20,14 +20,6 @@
   -webkit-font-smoothing: antialiased;
 }
 
-.app-hud-drag-shell {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  cursor: grab;
-  -webkit-app-region: drag;
-}
-
 .app-hud-bar {
   --app-hud-control-size: 28px;
   --app-hud-icon-size: 16px;
@@ -569,6 +561,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.app-hud-quick-actions-panel__grid .app-session-quick-pill:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 
 .app-hud-context-anchor {

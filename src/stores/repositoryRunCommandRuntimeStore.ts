@@ -1,8 +1,13 @@
 import { message } from "antd";
 import { subscribeTerminalExit, subscribeTerminalOutput } from "../services/events";
 import { openExternalUrl } from "../services/openExternal";
-import { openTerminalSession, writeTerminalSession } from "../services/terminal";
+import {
+  closeTerminalSession,
+  openTerminalSession,
+  writeTerminalSession,
+} from "../services/terminal";
 import type { Repository } from "../types";
+import { shouldIgnoreTerminalError } from "../utils/terminalErrors";
 import type { RunCommandOutputLine, RepositoryRunStatus } from "../hooks/useRepositoryRunCommand";
 import {
   REPOSITORY_RUNNER_TERMINAL_ID,
@@ -221,6 +226,13 @@ function patchRepoState(repositoryId: number, patch: Partial<RepoRuntimeState>):
     return;
   }
   repoStateById.set(repositoryId, next);
+  // HUD 模式会隐藏主窗口。开始/停止属于低频关键状态，必须立即通知订阅者；
+  // 只有高频日志/提示继续走隐藏窗口节流，否则 HUD 会一直停留在乐观状态。
+  if (next.status !== prev.status) {
+    pendingNotifyRepoIds.delete(repositoryId);
+    notifyRepositoryRunCommandRuntime(repositoryId);
+    return;
+  }
   scheduleRepoNotify(repositoryId);
 }
 
@@ -755,7 +767,18 @@ export async function stopRepositoryRunCommand(
   const internals = repoInternalsById.get(repository.id);
   patchRepoState(repository.id, { status: "stopping", statusHint: "停止中..." });
   try {
-    await writeTerminalSession(String(repository.id), REPOSITORY_RUNNER_TERMINAL_ID, "\u0003");
+    // Ctrl+C 只对正确接管前台进程组的命令可靠；某些 dev server / shell 包装器会吞掉它。
+    // 先给进程一次优雅退出机会，再关闭 runner PTY，确保终端及其运行确实结束。
+    try {
+      await writeTerminalSession(String(repository.id), REPOSITORY_RUNNER_TERMINAL_ID, "\u0003");
+    } catch (error) {
+      if (!shouldIgnoreTerminalError(error)) throw error;
+    }
+    try {
+      await closeTerminalSession(String(repository.id), REPOSITORY_RUNNER_TERMINAL_ID);
+    } catch (error) {
+      if (!shouldIgnoreTerminalError(error)) throw error;
+    }
     if (internals) {
       clearIdleTimer(internals);
       clearAutoOpenFallbackTimer(internals);

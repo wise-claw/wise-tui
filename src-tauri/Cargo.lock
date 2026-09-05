@@ -6881,6 +6881,7 @@ dependencies = [
  "futures-util",
  "git2",
  "keyboard-types",
+ "libc",
  "memchr",
  "notify",
  "objc2",

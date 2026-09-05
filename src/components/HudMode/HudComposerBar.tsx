@@ -388,12 +388,6 @@ export function HudComposerBar({
 
   return (
     <div className="app-hud-shell" ref={shellRef} onPointerDownCapture={handleBarPointerDownCapture}>
-      <div
-        className="app-hud-drag-shell"
-        data-tauri-drag-region
-        aria-hidden
-        onMouseDown={(event) => event.preventDefault()}
-      />
       {previewImage ? (
         <button
           type="button"

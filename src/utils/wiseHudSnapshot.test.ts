@@ -13,6 +13,7 @@ import {
   parseWiseHudSetModelPayload,
   parseWiseHudActivateAssistantPayload,
   parseWiseHudSetDetailsOpenPayload,
+  parseWiseHudToggleRepositoryRunPayload,
   parseWiseHudSubmitPayload,
   isWiseHudForwardEvent,
   resolveHudAssistantPreview,
@@ -45,6 +46,7 @@ describe("buildWiseHudSessionSnapshot", () => {
     expect(snap.repositories).toEqual([]);
     expect(snap.runningCount).toBe(0);
     expect(snap.runStatus).toBe("idle");
+    expect(snap.repositoryRunStatus).toBe("idle");
     expect(snap.messages).toEqual([]);
   });
 
@@ -87,9 +89,11 @@ describe("buildWiseHudSessionSnapshot", () => {
     const idle = buildWiseHudSessionSnapshot(session(), "claude", {
       runningCount: 0,
       runStatus: "completed",
+      repositoryRunStatus: "running",
     });
     expect(idle.runningCount).toBe(0);
     expect(idle.runStatus).toBe("completed");
+    expect(idle.repositoryRunStatus).toBe("running");
     const running = buildWiseHudSessionSnapshot(null, "claude", {
       runningCount: 3,
     });
@@ -250,6 +254,7 @@ describe("parseWiseHud payloads", () => {
     expect(isWiseHudForwardEvent("wise-hud-set-model")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-set-details-open")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-activate-assistant")).toBe(true);
+    expect(isWiseHudForwardEvent("wise-hud-toggle-repository-run")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-state")).toBe(false);
     expect(isWiseHudForwardEvent("wise-hud-session-complete")).toBe(false);
   });
@@ -276,6 +281,8 @@ describe("parseWiseHud payloads", () => {
     });
     expect(parseWiseHudActivateAssistantPayload({ assistantId: "   " })).toBeNull();
     expect(parseWiseHudActivateAssistantPayload(null)).toBeNull();
+    expect(parseWiseHudToggleRepositoryRunPayload({ repositoryId: 42 })).toEqual({ repositoryId: 42 });
+    expect(parseWiseHudToggleRepositoryRunPayload({ repositoryId: 0 })).toBeNull();
   });
 
   it("parses snapshot and active flag", () => {
@@ -329,6 +336,7 @@ describe("parseWiseHud payloads", () => {
       },
       runningCount: 2,
       runStatus: "running",
+      repositoryRunStatus: "stopping",
       messages: [{ id: 9, role: "assistant", content: "好的", parts: [], timestamp: 2 }],
     });
     expect(snap).toMatchObject({
@@ -337,6 +345,7 @@ describe("parseWiseHud payloads", () => {
       composerSession: { id: "sess-1", repositoryPath: "/tmp/wise-tui" },
       runningCount: 2,
       runStatus: "running",
+      repositoryRunStatus: "stopping",
     });
     expect(snap?.messages).toEqual([
       { id: 9, role: "assistant", content: "好的", parts: [], timestamp: 2 },

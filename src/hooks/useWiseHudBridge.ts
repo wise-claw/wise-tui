@@ -1,15 +1,21 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import type { ClaudeSession, EmployeeItem, Repository } from "../types";
 import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 import { restoreComposerFocusAfterHudExit } from "../services/globalScreenshotHotkey";
-import { wiseHudIsActive } from "../services/wiseHud";
+import { wiseHudExit, wiseHudIsActive } from "../services/wiseHud";
 import { getWiseHudModeActive, setWiseHudModeActive } from "../stores/wiseHudModeStore";
 import { getAssistantsSnapshot } from "../stores/assistantsStore";
 import type { AssistantEntry } from "../types/assistant";
 import { resolveSessionExecutionEngine } from "../utils/sessionExecutionEngine";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
+import {
+  getRepositoryRunCommandState,
+  subscribeRepositoryRunCommandRuntimeForRepository,
+  toggleRepositoryRunCommand,
+} from "../stores/repositoryRunCommandRuntimeStore";
+import { openRepositoryRunCommandModal } from "../stores/repositoryRunCommandModalStore";
 import {
   collectHudSessionCompletions,
   sessionStatusMap,
@@ -24,6 +30,7 @@ import {
   parseWiseHudSetModelPayload,
   parseWiseHudActivateAssistantPayload,
   parseWiseHudSetDetailsOpenPayload,
+  parseWiseHudToggleRepositoryRunPayload,
   resolveHudRunStatus,
   resolveHudSubmitSessionId,
   WISE_HUD_ACTIVE_EVENT,
@@ -38,6 +45,7 @@ import {
   WISE_HUD_SET_MODEL_EVENT,
   WISE_HUD_STATE_EVENT,
   WISE_HUD_SUBMIT_EVENT,
+  WISE_HUD_TOGGLE_REPOSITORY_RUN_EVENT,
   type WiseHudSessionSnapshot,
 } from "../utils/wiseHudSnapshot";
 
@@ -76,6 +84,26 @@ export function useWiseHudBridge({
   activateAssistant,
   openBuiltinAssistant,
 }: UseWiseHudBridgeInput): void {
+  const activeRepositoryId = activeRepository?.id ?? null;
+  const subscribeRepositoryRunStatus = useCallback(
+    (listener: () => void) => {
+      if (activeRepositoryId == null) return () => {};
+      return subscribeRepositoryRunCommandRuntimeForRepository(activeRepositoryId, listener);
+    },
+    [activeRepositoryId],
+  );
+  const getRepositoryRunStatus = useCallback(
+    () =>
+      activeRepositoryId == null
+        ? ("idle" as const)
+        : getRepositoryRunCommandState(activeRepositoryId).status,
+    [activeRepositoryId],
+  );
+  const repositoryRunStatus = useSyncExternalStore(
+    subscribeRepositoryRunStatus,
+    getRepositoryRunStatus,
+    getRepositoryRunStatus,
+  );
   const sessionsRef = useRef(sessions);
   const activeSessionIdRef = useRef(activeSessionId);
   const repositoriesRef = useRef(repositories);
@@ -94,6 +122,7 @@ export function useWiseHudBridge({
   const hadRunningInHudRef = useRef(false);
   const prevStatusByIdRef = useRef<Map<string, string>>(new Map());
   const detailsOpenRef = useRef(false);
+  const repositoryRunStatusRef = useRef(repositoryRunStatus);
 
   sessionsRef.current = sessions;
   activeSessionIdRef.current = activeSessionId;
@@ -108,6 +137,7 @@ export function useWiseHudBridge({
   setModelRef.current = setModel;
   activateAssistantRef.current = activateAssistant;
   openBuiltinAssistantRef.current = openBuiltinAssistant;
+  repositoryRunStatusRef.current = repositoryRunStatus;
 
   const buildSnapshot = (): WiseHudSessionSnapshot => {
     const session =
@@ -127,6 +157,7 @@ export function useWiseHudBridge({
       activeRepositoryId: activeRepositoryRef.current?.id ?? null,
       runningCount,
       runStatus: resolveHudRunStatus(runningCount, hadRunningInHudRef.current),
+      repositoryRunStatus: repositoryRunStatusRef.current,
       includeMessages: detailsOpenRef.current,
     });
   };
@@ -165,7 +196,7 @@ export function useWiseHudBridge({
     return () => {
       if (publishTimer.current) clearTimeout(publishTimer.current);
     };
-  }, [sessions, activeSessionId, repositories, employees, activeRepository]);
+  }, [sessions, activeSessionId, repositories, employees, activeRepository, repositoryRunStatus]);
 
   useEffect(() => {
     if (!isCurrentPrimaryMainWorkspaceWindowSync()) return;
@@ -260,6 +291,27 @@ export function useWiseHudBridge({
         }
         openBuiltinAssistantRef.current(payload.assistantId);
       });
+      const u11 = await listen<unknown>(WISE_HUD_TOGGLE_REPOSITORY_RUN_EVENT, (event) => {
+        const payload = parseWiseHudToggleRepositoryRunPayload(event.payload);
+        if (!payload) return;
+        const repository = repositoriesRef.current.find((item) => item.id === payload.repositoryId);
+        if (!repository?.path?.trim()) return;
+        void (async () => {
+          await toggleRepositoryRunCommand({
+            repository: { id: repository.id, path: repository.path },
+            onRequestConfigure: () => {
+              openRepositoryRunCommandModal({
+                repositoryId: repository.id,
+                repositoryPath: repository.path,
+              });
+              void wiseHudExit();
+            },
+          });
+          repositoryRunStatusRef.current = getRepositoryRunCommandState(repository.id).status;
+          lastKeyRef.current = "";
+          publishNow();
+        })();
+      });
       if (cancelled) {
         safeUnlisten(u1);
         safeUnlisten(u2);
@@ -271,6 +323,7 @@ export function useWiseHudBridge({
         safeUnlisten(u8);
         safeUnlisten(u9);
         safeUnlisten(u10);
+        safeUnlisten(u11);
         return;
       }
       unsubs.push(
@@ -284,6 +337,7 @@ export function useWiseHudBridge({
         () => safeUnlisten(u8),
         () => safeUnlisten(u9),
         () => safeUnlisten(u10),
+        () => safeUnlisten(u11),
       );
     })();
     return () => {

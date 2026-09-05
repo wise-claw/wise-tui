@@ -27,12 +27,14 @@ export const WISE_HUD_SET_MODEL_EVENT = "wise-hud-set-model";
 export const WISE_HUD_SESSION_COMPLETE_EVENT = "wise-hud-session-complete";
 export const WISE_HUD_SET_DETAILS_OPEN_EVENT = "wise-hud-set-details-open";
 export const WISE_HUD_ACTIVATE_ASSISTANT_EVENT = "wise-hud-activate-assistant";
+export const WISE_HUD_TOGGLE_REPOSITORY_RUN_EVENT = "wise-hud-toggle-repository-run";
 
 export const HUD_ASSISTANT_PREVIEW_MAX_LEN = 280;
 
 export const HUD_RUN_STATUSES = ["idle", "running", "completed"] as const;
 
 export type WiseHudRunStatus = (typeof HUD_RUN_STATUSES)[number];
+export type WiseHudRepositoryRunStatus = "idle" | "running" | "stopping";
 
 const HUD_SESSION_STATUSES = [
   "idle",
@@ -77,6 +79,7 @@ export interface WiseHudSessionSnapshot {
   composerSession: WiseHudComposerSession | null;
   runningCount: number;
   runStatus: WiseHudRunStatus;
+  repositoryRunStatus: WiseHudRepositoryRunStatus;
   messages: ClaudeMessage[];
 }
 
@@ -95,6 +98,7 @@ const HUD_FORWARD_EVENTS = [
   WISE_HUD_SET_MODEL_EVENT,
   WISE_HUD_SET_DETAILS_OPEN_EVENT,
   WISE_HUD_ACTIVATE_ASSISTANT_EVENT,
+  WISE_HUD_TOGGLE_REPOSITORY_RUN_EVENT,
 ] as const;
 
 export type WiseHudForwardEvent = (typeof HUD_FORWARD_EVENTS)[number];
@@ -125,11 +129,16 @@ export interface WiseHudActivateAssistantPayload {
   assistantId: string;
 }
 
+export interface WiseHudToggleRepositoryRunPayload {
+  repositoryId: number;
+}
+
 export interface BuildWiseHudSessionSnapshotExtras {
   repositories?: ReadonlyArray<{ id: number; name: string; path: string; openAppId?: string | null }>;
   activeRepositoryId?: number | null;
   runningCount?: number;
   runStatus?: WiseHudRunStatus;
+  repositoryRunStatus?: WiseHudRepositoryRunStatus;
   includeMessages?: boolean;
 }
 
@@ -148,6 +157,7 @@ const EMPTY_SNAPSHOT: WiseHudSessionSnapshot = {
   composerSession: null,
   runningCount: 0,
   runStatus: "idle",
+  repositoryRunStatus: "idle",
   messages: [],
 };
 
@@ -282,6 +292,7 @@ export function buildWiseHudSessionSnapshot(
     extras.activeRepositoryId === undefined ? null : extras.activeRepositoryId;
   const runningCount = Math.max(0, Math.floor(extras.runningCount ?? 0));
   const runStatus = extras.runStatus ?? (runningCount > 0 ? "running" : "idle");
+  const repositoryRunStatus = extras.repositoryRunStatus ?? "idle";
   const messages = extras.includeMessages && session ? [...session.messages] : [];
   if (!session) {
     return {
@@ -290,6 +301,7 @@ export function buildWiseHudSessionSnapshot(
       activeRepositoryId,
       runningCount,
       runStatus,
+      repositoryRunStatus,
       messages,
     };
   }
@@ -317,6 +329,7 @@ export function buildWiseHudSessionSnapshot(
     composerSession: buildHudComposerSession(session, engine),
     runningCount,
     runStatus,
+    repositoryRunStatus,
     messages,
   };
 }
@@ -411,6 +424,10 @@ function parseHudRunStatus(raw: unknown): WiseHudRunStatus {
   return raw === "running" || raw === "completed" || raw === "idle" ? raw : "idle";
 }
 
+function parseHudRepositoryRunStatus(raw: unknown): WiseHudRepositoryRunStatus {
+  return raw === "running" || raw === "stopping" ? raw : "idle";
+}
+
 function parseHudRunningCount(raw: unknown): number {
   if (typeof raw !== "number" || !Number.isFinite(raw)) return 0;
   return Math.max(0, Math.floor(raw));
@@ -495,6 +512,7 @@ export function parseWiseHudSessionSnapshot(raw: unknown): WiseHudSessionSnapsho
     composerSession: parseHudComposerSession(value.composerSession),
     runningCount: parseHudRunningCount(value.runningCount),
     runStatus: parseHudRunStatus(value.runStatus),
+    repositoryRunStatus: parseHudRepositoryRunStatus(value.repositoryRunStatus),
     messages: parseHudMessages(value.messages),
   };
 }
@@ -546,6 +564,15 @@ export function parseWiseHudActivateAssistantPayload(
   if (typeof assistantIdRaw !== "string") return null;
   const assistantId = assistantIdRaw.trim();
   return assistantId ? { assistantId } : null;
+}
+
+export function parseWiseHudToggleRepositoryRunPayload(
+  raw: unknown,
+): WiseHudToggleRepositoryRunPayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const repositoryId = Number((raw as { repositoryId?: unknown }).repositoryId);
+  if (!Number.isInteger(repositoryId) || repositoryId <= 0) return null;
+  return { repositoryId };
 }
 
 export function parseWiseHudActiveChanged(raw: unknown): boolean | null {

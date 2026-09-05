@@ -12,6 +12,7 @@ import {
   WISE_HUD_ACTIVATE_ASSISTANT_EVENT,
   WISE_HUD_SET_DETAILS_OPEN_EVENT,
   WISE_HUD_SUBMIT_EVENT,
+  WISE_HUD_TOGGLE_REPOSITORY_RUN_EVENT,
 } from "../utils/wiseHudSnapshot";
 
 /** HUD 窗不能用全局 emit：主窗隐藏后收不到。经 Rust 打到 `main`，失败再 emitTo。 */
@@ -119,6 +120,10 @@ export async function wiseHudActivateAssistant(assistantId: string): Promise<voi
   const trimmed = assistantId.trim();
   if (!trimmed) return;
   await emitToPrimaryMain(WISE_HUD_ACTIVATE_ASSISTANT_EVENT, { assistantId: trimmed });
+}
+
+export async function wiseHudToggleRepositoryRun(repositoryId: number): Promise<void> {
+  await emitToPrimaryMain(WISE_HUD_TOGGLE_REPOSITORY_RUN_EVENT, { repositoryId });
 }
 
 /** 选择本地文件，路径供 HUD 以 `@path` 附到草稿。 */

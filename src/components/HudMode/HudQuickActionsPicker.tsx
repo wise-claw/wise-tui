@@ -1,13 +1,15 @@
 import {
   ApartmentOutlined,
   CodeOutlined,
-  CommentOutlined,
+  FolderOpenOutlined,
   LinkOutlined,
+  PlayCircleOutlined,
+  StopOutlined,
   ThunderboltOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import { Popover } from "antd";
-import { memo, useCallback, useEffect, useMemo, useRef, type MouseEvent, type ReactNode } from "react";
+import { message, Popover } from "antd";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import {
   partitionSessionQuickActions,
   type SessionQuickActionId,
@@ -23,7 +25,20 @@ import { useComposerCommonPhrases } from "../../hooks/useComposerCommonPhrases";
 import { useHudOverlaySelectOpen } from "../../hooks/useHudOverlaySelectOpen";
 import { usePointerClickAction } from "../../hooks/usePointerClickAction";
 import { useSessionQuickActionsLayout } from "../../hooks/useSessionQuickActionsLayout";
-import { wiseHudActivateAssistant, wiseHudNewSession } from "../../services/wiseHud";
+import {
+  wiseHudActivateAssistant,
+  wiseHudToggleRepositoryRun,
+} from "../../services/wiseHud";
+import { openInFinder } from "../../services/repository";
+import {
+  tryOpenWorkspaceInDefaultTerminal,
+  tryOpenWorkspaceInDefaultTerminalWithCommand,
+} from "../../services/openWorkspaceWithTerminalPreference";
+import { openWorkspaceWithOpenAppTarget } from "../../services/openWorkspaceWithPreference";
+import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
+import { isTerminalOpenAppId } from "../../services/macosTerminal";
+import { closeRepositoryRunnerTerminal, writeTerminalSession } from "../../services/terminal";
+import { DEFAULT_OPEN_APP_TARGETS } from "../OpenAppMenu/constants";
 import type { AssistantEntry } from "../../types/assistant";
 import { resolveAssistantEntryKind } from "../../utils/assistantTemplateEntry";
 import {
@@ -35,6 +50,11 @@ import {
   resolveSessionQuickActionMeta,
 } from "../../utils/sessionQuickAssistantCatalog";
 import type { WiseHudSessionSnapshot } from "../../utils/wiseHudSnapshot";
+import {
+  REPOSITORY_RUNNER_TERMINAL_ID,
+  repositoryRunCommandStorageKeys,
+} from "../../utils/repositoryRunCommand";
+import { shouldIgnoreTerminalError } from "../../utils/terminalErrors";
 import "../ClaudeChatInput/ComposerCommonPhrasesBar.css";
 
 export interface HudQuickActionsPickerProps {
@@ -55,7 +75,7 @@ function IconHudQuickActions() {
   );
 }
 
-function actionMenuIcon(id: SessionQuickActionId, assistant?: AssistantEntry): ReactNode {
+function actionMenuIcon(assistant?: AssistantEntry): ReactNode {
   if (assistant) {
     switch (resolveAssistantEntryKind(assistant)) {
       case "open_link":
@@ -70,32 +90,8 @@ function actionMenuIcon(id: SessionQuickActionId, assistant?: AssistantEntry): R
         break;
     }
   }
-  if (id === "new-session") return <CommentOutlined />;
   return <UserOutlined />;
 }
-
-const HudNewSessionQuickPill = memo(function HudNewSessionQuickPill({
-  pillLabel,
-  onActivate,
-}: {
-  pillLabel: string;
-  onActivate: () => void;
-}) {
-  const click = usePointerClickAction(onActivate);
-  return (
-    <button
-      type="button"
-      className="app-session-quick-pill app-session-quick-pill--new-session"
-      onPointerDown={click.onPointerDown}
-      onClick={click.onClick}
-    >
-      <span className="app-session-quick-pill__icon app-session-quick-pill__icon--blue" aria-hidden>
-        <CommentOutlined />
-      </span>
-      <span className="app-session-quick-pill__label">{pillLabel}</span>
-    </button>
-  );
-});
 
 const HudQuickActionPill = memo(function HudQuickActionPill({
   id,
@@ -118,9 +114,37 @@ const HudQuickActionPill = memo(function HudQuickActionPill({
       onClick={click.onClick}
     >
       <span className="app-session-quick-pill__icon app-session-quick-pill__icon--neutral" aria-hidden>
-        {actionMenuIcon(id, assistant)}
+        {actionMenuIcon(assistant)}
       </span>
       <span className="app-session-quick-pill__label">{pillLabel}</span>
+    </button>
+  );
+});
+
+const HudWorkspaceQuickActionPill = memo(function HudWorkspaceQuickActionPill({
+  label,
+  icon,
+  disabled,
+  onActivate,
+}: {
+  label: string;
+  icon: ReactNode;
+  disabled?: boolean;
+  onActivate: () => void;
+}) {
+  const click = usePointerClickAction(onActivate);
+  return (
+    <button
+      type="button"
+      className="app-session-quick-pill"
+      disabled={disabled}
+      onPointerDown={click.onPointerDown}
+      onClick={click.onClick}
+    >
+      <span className="app-session-quick-pill__icon app-session-quick-pill__icon--neutral" aria-hidden>
+        {icon}
+      </span>
+      <span className="app-session-quick-pill__label">{label}</span>
     </button>
   );
 });
@@ -128,6 +152,9 @@ const HudQuickActionPill = memo(function HudQuickActionPill({
 export function HudQuickActionsPicker({ snapshot, onOverlayWantedChange }: HudQuickActionsPickerProps) {
   const hudSelect = useHudOverlaySelectOpen(true);
   const pointerDownTargetRef = useRef<EventTarget | null>(null);
+  const [repositoryRunStatus, setRepositoryRunStatus] = useState(
+    snapshot.repositoryRunStatus,
+  );
   const { layout, catalog, assistantsById } = useSessionQuickActionsLayout();
   const { phrases: composerCommonPhrases } = useComposerCommonPhrases({
     repositoryId: snapshot.activeRepositoryId,
@@ -141,6 +168,10 @@ export function HudQuickActionsPicker({ snapshot, onOverlayWantedChange }: HudQu
   const sessionBusyWithoutEnqueue = snapshot.busy && !snapshot.canSend;
   const phrasesDisabled = !snapshot.sessionId?.trim();
 
+  useEffect(() => {
+    setRepositoryRunStatus(snapshot.repositoryRunStatus);
+  }, [snapshot]);
+
   const availability: SessionQuickActionsAvailability = useMemo(
     () => ({
       canNewSession: snapshot.activeRepositoryId != null,
@@ -152,9 +183,7 @@ export function HudQuickActionsPicker({ snapshot, onOverlayWantedChange }: HudQu
   const actionIds = useMemo(() => {
     const { primary, overflow } = partitionSessionQuickActions(layout, availability, catalog);
     const ids = [...primary, ...overflow];
-    return ids.filter(
-      (id) => id === "new-session" || isAssistantTemplateQuickActionId(id),
-    );
+    return ids.filter(isAssistantTemplateQuickActionId);
   }, [layout, availability, catalog]);
 
   useEffect(() => {
@@ -202,11 +231,6 @@ export function HudQuickActionsPicker({ snapshot, onOverlayWantedChange }: HudQu
 
   const activateAction = useCallback(
     (id: SessionQuickActionId) => {
-      if (id === "new-session") {
-        void wiseHudNewSession();
-        close();
-        return;
-      }
       if (isAssistantTemplateQuickActionId(id)) {
         void wiseHudActivateAssistant(id);
         close();
@@ -225,7 +249,81 @@ export function HudQuickActionsPicker({ snapshot, onOverlayWantedChange }: HudQu
     [close, snapshot.sessionId],
   );
 
-  const hasActions = actionIds.length > 0;
+  const activeRepository = useMemo(
+    () => snapshot.repositories.find((item) => item.id === snapshot.activeRepositoryId) ?? null,
+    [snapshot.activeRepositoryId, snapshot.repositories],
+  );
+
+  const activateWorkspaceAction = useCallback(
+    async (action: "files" | "terminal" | "ide" | "run") => {
+      if (!activeRepository?.path.trim()) {
+        message.warning("请先选择仓库");
+        return;
+      }
+      const path = activeRepository.path.trim();
+      try {
+        if (action === "files") {
+          close();
+          await openInFinder(path);
+          return;
+        }
+        if (action === "terminal") {
+          close();
+          const terminalRunKey = repositoryRunCommandStorageKeys(path).terminalRunKey;
+          const command = terminalRunKey
+            ? (window.localStorage.getItem(terminalRunKey) ?? "").trim()
+            : "";
+          const result = command
+            ? await tryOpenWorkspaceInDefaultTerminalWithCommand(path, command)
+            : await tryOpenWorkspaceInDefaultTerminal(path);
+          if (!result.ok) message.warning(result.message);
+          return;
+        }
+        if (action === "ide") {
+          close();
+          await hydrateOpenAppPreference();
+          const preferredId =
+            activeRepository.openAppId?.trim() || getOpenAppPreferenceSync().trim();
+          const isIde = (id: string, kind: string) =>
+            kind !== "finder" && !isTerminalOpenAppId(id);
+          const target =
+            DEFAULT_OPEN_APP_TARGETS.find(
+              (item) => item.id === preferredId && isIde(item.id, item.kind),
+            ) ?? DEFAULT_OPEN_APP_TARGETS.find((item) => isIde(item.id, item.kind));
+          if (!target) {
+            message.warning("未找到可用的 IDE");
+            return;
+          }
+          await openWorkspaceWithOpenAppTarget(path, target);
+          return;
+        }
+        if (repositoryRunStatus !== "idle") {
+          setRepositoryRunStatus("stopping");
+          const workspaceId = String(activeRepository.id);
+          try {
+            await writeTerminalSession(workspaceId, REPOSITORY_RUNNER_TERMINAL_ID, "\u0003");
+          } catch (error) {
+            if (!shouldIgnoreTerminalError(error)) throw error;
+          }
+          try {
+            await closeRepositoryRunnerTerminal(workspaceId, path);
+          } catch (error) {
+            if (!shouldIgnoreTerminalError(error)) throw error;
+          }
+          setRepositoryRunStatus("idle");
+          return;
+        }
+        setRepositoryRunStatus("running");
+        await wiseHudToggleRepositoryRun(activeRepository.id);
+      } catch (error) {
+        setRepositoryRunStatus(snapshot.repositoryRunStatus);
+        message.error(error instanceof Error ? error.message : "操作失败");
+      }
+    },
+    [activeRepository, close, repositoryRunStatus, snapshot.repositoryRunStatus],
+  );
+
+  const hasActions = true;
   const hasPhrases = quickBarPhrases.length > 0;
 
   const panel = (
@@ -242,17 +340,38 @@ export function HudQuickActionsPicker({ snapshot, onOverlayWantedChange }: HudQu
             <>
               <div className="app-hud-quick-actions-panel__title">快捷操作</div>
               <div className="app-hud-quick-actions-panel__grid" role="toolbar" aria-label="快捷操作">
+                <HudWorkspaceQuickActionPill
+                  label="打开文件"
+                  icon={<FolderOpenOutlined />}
+                  disabled={!activeRepository}
+                  onActivate={() => void activateWorkspaceAction("files")}
+                />
+                <HudWorkspaceQuickActionPill
+                  label="打开外部终端"
+                  icon={<CodeOutlined />}
+                  disabled={!activeRepository}
+                  onActivate={() => void activateWorkspaceAction("terminal")}
+                />
+                <HudWorkspaceQuickActionPill
+                  label="打开 IDE"
+                  icon={<ApartmentOutlined />}
+                  disabled={!activeRepository}
+                  onActivate={() => void activateWorkspaceAction("ide")}
+                />
+                <HudWorkspaceQuickActionPill
+                  label={repositoryRunStatus === "idle" ? "开始" : "停止"}
+                  icon={
+                    repositoryRunStatus === "idle" ? (
+                      <PlayCircleOutlined />
+                    ) : (
+                      <StopOutlined />
+                    )
+                  }
+                  disabled={!activeRepository}
+                  onActivate={() => void activateWorkspaceAction("run")}
+                />
                 {actionIds.map((id) => {
                   const meta = resolveSessionQuickActionMeta(id, catalog);
-                  if (id === "new-session") {
-                    return (
-                      <HudNewSessionQuickPill
-                        key={id}
-                        pillLabel={meta.pillLabel}
-                        onActivate={() => activateAction(id)}
-                      />
-                    );
-                  }
                   return (
                     <HudQuickActionPill
                       key={id}

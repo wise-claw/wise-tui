@@ -392,6 +392,20 @@ impl TerminalSession {
     }
 }
 
+fn terminate_terminal_session(mut session: TerminalSession) {
+    session.info.status = "exited".to_string();
+    #[cfg(unix)]
+    if let Some(process_group) = session.master.process_group_leader() {
+        let wise_process_group = unsafe { libc::getpgrp() };
+        if process_group > 1 && process_group != wise_process_group {
+            unsafe {
+                libc::killpg(process_group, libc::SIGTERM);
+            }
+        }
+    }
+    let _ = session.killer.kill();
+}
+
 pub(crate) struct TerminalManager {
     pty_system: NativePtySystem,
     sessions: HashMap<String, TerminalSession>,
@@ -1159,12 +1173,37 @@ impl TerminalManager {
 
     fn close(&mut self, workspace_id: &str, terminal_id: &str) -> Result<(), String> {
         let key = session_key(workspace_id, terminal_id);
-        let mut session = self
+        let session = self
             .sessions
             .remove(&key)
             .ok_or_else(|| format!("Terminal session not found: {}", key))?;
-        session.info.status = "exited".to_string();
-        let _ = session.killer.kill();
+        terminate_terminal_session(session);
+        Ok(())
+    }
+
+    fn close_repository_runner(&mut self, workspace_id: &str, cwd: &str) -> Result<(), String> {
+        const RUNNER_TERMINAL_ID: &str = "topbar-runner";
+        let exact_key = session_key(workspace_id, RUNNER_TERMINAL_ID);
+        let key = if self.sessions.contains_key(&exact_key) {
+            exact_key
+        } else {
+            let normalized_cwd = cwd.trim();
+            self.sessions
+                .iter()
+                .find(|(_, session)| {
+                    session.info.terminal_id == RUNNER_TERMINAL_ID
+                        && session.info.cwd.trim() == normalized_cwd
+                })
+                .map(|(key, _)| key.clone())
+                .ok_or_else(|| {
+                    format!("Terminal session not found: {} ({})", exact_key, normalized_cwd)
+                })?
+        };
+        let session = self
+            .sessions
+            .remove(&key)
+            .ok_or_else(|| format!("Terminal session not found: {}", key))?;
+        terminate_terminal_session(session);
         Ok(())
     }
 }
@@ -1331,6 +1370,18 @@ pub(crate) fn terminal_close(
         .lock()
         .map_err(|e| e.to_string())?
         .close(&workspace_id, &terminal_id)
+}
+
+#[tauri::command]
+pub(crate) fn terminal_close_repository_runner(
+    manager: tauri::State<std::sync::Mutex<TerminalManager>>,
+    workspace_id: String,
+    cwd: String,
+) -> Result<(), String> {
+    manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .close_repository_runner(&workspace_id, &cwd)
 }
 
 #[cfg(test)]

@@ -176,3 +176,11 @@ export async function closeTerminalSession(
 ): Promise<void> {
   return invoke("terminal_close", { workspaceId, terminalId });
 }
+
+/** 关闭仓库运行器；workspace id 不一致时由后端按 cwd 定位 topbar-runner。 */
+export async function closeRepositoryRunnerTerminal(
+  workspaceId: string,
+  cwd: string,
+): Promise<void> {
+  return invoke("terminal_close_repository_runner", { workspaceId, cwd });
+}
