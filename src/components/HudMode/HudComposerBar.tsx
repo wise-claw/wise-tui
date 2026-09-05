@@ -119,6 +119,8 @@ function HudGitActions({
     }
   }, [disabled, executionEngine, message, repositoryPath]);
 
+  if (changedLines === 0 && !syncing) return null;
+
   return (
     <div className="app-hud-git-actions">
       <button
@@ -131,7 +133,11 @@ function HudGitActions({
         onClick={() => void handleSync()}
       >
         <span className="app-hud-git-stats__add">{stats.additions}</span>
-        <span className="app-hud-git-stats__separator" aria-hidden>/</span>
+        {syncing ? (
+          <span className="app-hud-git-stats__progress" aria-hidden />
+        ) : (
+          <span className="app-hud-git-stats__separator" aria-hidden>/</span>
+        )}
         <span className="app-hud-git-stats__delete">{stats.deletions}</span>
       </button>
     </div>

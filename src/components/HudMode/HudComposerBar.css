@@ -231,7 +231,7 @@
 }
 
 .app-hud-git-stats--syncing {
-  animation: app-hud-git-stats-pulse 1s ease-in-out infinite;
+  opacity: 1;
 }
 
 .app-hud-git-stats__add {
@@ -247,9 +247,49 @@
   font-weight: 500;
 }
 
-@keyframes app-hud-git-stats-pulse {
+.app-hud-git-stats__progress {
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border: 1.5px solid rgba(59, 130, 246, 0.24);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: app-hud-git-sync-spin 0.65s linear infinite;
+}
+
+.app-hud-git-stats--syncing .app-hud-git-stats__add,
+.app-hud-git-stats--syncing .app-hud-git-stats__delete {
+  animation: app-hud-git-sync-rise 0.9s ease-in-out infinite;
+}
+
+.app-hud-git-stats--syncing .app-hud-git-stats__delete {
+  animation-delay: 0.14s;
+}
+
+@keyframes app-hud-git-sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes app-hud-git-sync-rise {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
   50% {
-    opacity: 0.45;
+    transform: translateY(-2px);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-hud-git-stats__progress,
+  .app-hud-git-stats--syncing .app-hud-git-stats__add,
+  .app-hud-git-stats--syncing .app-hud-git-stats__delete {
+    animation: none;
   }
 }
 
