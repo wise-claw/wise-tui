@@ -1,3 +1,5 @@
+import { useComposerModelSelection } from "../../hooks/useComposerModelSelection";
+import { createComposerSendScope, requireComposerDispatchAccepted } from "./composerSendScope";
 import {
   useRef,
   useState,
@@ -275,7 +277,7 @@ interface ComposerInnerProps {
       targetWorkflowName?: string;
     },
     executeOptions?: ClaudeComposerExecuteBubbleOptions,
-  ) => void;
+  ) => boolean | void | Promise<boolean | void>;
   onSessionModelChange: (model: string) => void;
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
   /**
@@ -784,27 +786,9 @@ function ComposerInner({
   const isCursorEngine = sessionExecutionEngine === "cursor";
   const isOpencodeEngine = sessionExecutionEngine === "opencode";
   const isSelectOnlyEngine = isCursorEngine || isOpencodeEngine;
-  const [model, setModel] = useState(() => session.model?.trim() || "sonnet");
-  const modelEngineRef = useRef(sessionExecutionEngine);
-  useEffect(() => {
-    const next = session.model?.trim();
-    const engineChanged = modelEngineRef.current !== sessionExecutionEngine;
-    modelEngineRef.current = sessionExecutionEngine;
-    if (!next) {
-      // 切换执行环境后会话模型被清空（交给目标环境自己决定）：不能继续显示上一个环境的模型，
-      // 交由 ComposerModelPicker 按该环境的已保存默认 / 档案重新填充。
-      if (engineChanged) setModel("");
-      return;
-    }
-    setModel((prev) => {
-      if (prev === next) return prev;
-      if (isCursorEngine && (next === "auto" || next === "default")) {
-        const current = prev.trim();
-        if (current && current !== "auto" && current !== "default") return prev;
-      }
-      return next;
-    });
-  }, [session.id, session.model, isCursorEngine, sessionExecutionEngine]);
+  const [model, setModel] = useComposerModelSelection(
+    session.id, sessionExecutionEngine, session.model,
+  );
   const [profileStoreRevision, setProfileStoreRevision] = useState(0);
   const profileEngineForPicker: ModelProfileEngine | null = isSelectOnlyEngine
     ? null
@@ -1028,6 +1012,7 @@ function ComposerInner({
     // bump generation：旧会话在途的 rAF setContent tick 会判定 stale 直接 return（不调 onGiveUp /
     // settle，因上方已归零 pendingSetContentRef 并清理 composerResettingRef），不再把旧 prompt 写进新会话编辑器。
     composerSessionGenerationRef.current += 1;
+    return () => { composerSessionGenerationRef.current += 1; };
   }, [session.id, draftBucketKey]);
 
   /** 会话输入区：Tab 仅用于 @ / 补全，不触发浏览器默认焦点切换（底栏按钮等） */
@@ -1851,11 +1836,34 @@ function ComposerInner({
     async (plainFromEditor?: string) => {
       if (composerSendInFlightRef.current) return;
       composerSendInFlightRef.current = true;
+      const sendScope = createComposerSendScope(composerSessionGenerationRef);
+      const isCurrentComposer = sendScope.isCurrent;
+      const awaitForComposer = sendScope.wait;
+      const dispatchExecute = (...args: Parameters<typeof onExecute>) =>
+        requireComposerDispatchAccepted(onExecute(...args));
+      let failedDraft: LastSentComposerDraft | null = null;
+      let composerCleared = false;
+      const recoverDraft = (draft: LastSentComposerDraft) => {
+        // 新会话或用户正在写下一条时不能覆盖编辑器；保留到输入历史供找回。
+        const currentPlain = plainSurfaceRef.current?.getPlain() ?? lastEditorPlainRef.current;
+        if (isCurrentComposer() && !currentPlain.trim() &&
+          imagesRef.current.length === 0 && contextItemsRef.current.length === 0) {
+          restoreComposerDraft(draft);
+        } else {
+          const recoveryPrompt: Prompt = [...draft.prompt, ...draft.contextItems.map((item) => ({
+            type: "file" as const, path: item.path, text: item.path, selection: item.selection, start: 0, end: 0,
+          }))];
+          addToHistory(recoveryPrompt, "normal", draft.contextItems.map((item) => ({
+            path: item.path, selection: item.selection, text: item.comment ?? "",
+          })), draft.images);
+          message.info("未发送的内容已保留到输入历史，可通过历史记录找回。");
+        }
+      };
       try {
       // 语音听写：仅在确有在途「整理」时才 await，避免无语音场景因空 async 推迟清空/派发。
       const speechFlushResult = flushPendingSpeechForSend();
       const speechFlushed =
-        typeof speechFlushResult === "boolean" ? speechFlushResult : await speechFlushResult;
+        typeof speechFlushResult === "boolean" ? speechFlushResult : await awaitForComposer(speechFlushResult);
       const postFlushPlain = speechFlushed
         ? plainSurfaceRef.current?.getPlain() ?? lastEditorPlainRef.current
         : "";
@@ -1902,8 +1910,11 @@ function ComposerInner({
         contextItems: contextSnap.map((c) => ({ ...c })),
       };
 
+      failedDraft = rollbackDraft;
+
       /** 先清空输入区，再 await 构建 outbound（图片落盘等），避免主线程长时间被占导致「点了没反应」 */
       const clearComposerSurfaceSync = (sentPlain?: string) => {
+        composerCleared = true;
         onComposerInputClearedForSend(sentPlain);
         debouncedPromptSyncRef.current.cancel();
         canSendComposerRef.current = false;
@@ -1986,9 +1997,7 @@ function ComposerInner({
             // 立即滚到底，避免 toggle 后等下条 user 消息渲染才滚。
             // 与主链路一致：用 queueMicrotask + rAF 兜底聚焦。
             const followUpPrompt = decision.prompt;
-            queueMicrotask(() => {
-              onExecute(session.id, followUpPrompt);
-            });
+            await dispatchExecute(session.id, followUpPrompt);
             return;
           }
           return;
@@ -2029,18 +2038,18 @@ function ComposerInner({
         clearComposerSurfaceSync(logicalSnap.trim());
         const outbound = logicalSnap.trim();
         if (!outbound && imagesSnap.length === 0 && contextSnap.length === 0) {
-          restoreComposerDraft(rollbackDraft);
+          recoverDraft(rollbackDraft);
           return;
         }
         if (imagesSnap.length > 0 || contextSnap.length > 0) {
           try {
-            const payload = await buildClaudeComposerSendPayload({
+            const payload = await awaitForComposer(buildClaudeComposerSendPayload({
               prompt: promptSnap,
               contextItems: contextSnap,
               images: imagesSnap,
               repositoryPath: session.repositoryPath,
               userBubbleMain: logicalSnap,
-            });
+            }));
             const built = payload.outbound.replace(/\u200B/g, "").trim();
             if (built) {
               if (
@@ -2055,16 +2064,17 @@ function ComposerInner({
                 finalizeTranscriptBaselineAfterSend();
                 return;
               }
-              onExecute(session.id, built);
+              await dispatchExecute(session.id, built);
               return;
             }
-          } catch {
-            restoreComposerDraft(rollbackDraft);
+          } catch (error) {
+            message.error(error instanceof Error ? error.message : "发送准备失败，请重试");
+            recoverDraft(rollbackDraft);
             return;
           }
         }
         if (!outbound) {
-          restoreComposerDraft(rollbackDraft);
+          recoverDraft(rollbackDraft);
           return;
         }
         if (
@@ -2079,7 +2089,7 @@ function ComposerInner({
           finalizeTranscriptBaselineAfterSend();
           return;
         }
-        onExecute(session.id, outbound);
+        await dispatchExecute(session.id, outbound);
         return;
       }
 
@@ -2104,9 +2114,9 @@ function ComposerInner({
           if (defaultInstructionPrefixForExec.trim() || imagesSnap.length > 0 || contextSnap.length > 0) {
             let instructionResolveContext: DefaultInstructionResolveContext | undefined;
             if (defaultInstructionPrefixForExec.trim()) {
-              instructionResolveContext = await loadDefaultInstructionResolveContext(
+              instructionResolveContext = await awaitForComposer(loadDefaultInstructionResolveContext(
                 session.repositoryPath,
-              );
+              ));
               appliedDefaultInstruction = resolveComposerSendDefaultInstructionApplied(
                 logicalSnap,
                 composerDefaultInstruction,
@@ -2116,7 +2126,7 @@ function ComposerInner({
               );
             }
             if (imagesSnap.length > 0 || contextSnap.length > 0) {
-              const payload = await buildClaudeComposerSendPayload({
+              const payload = await awaitForComposer(buildClaudeComposerSendPayload({
                 prompt: promptSnap,
                 contextItems: contextSnap,
                 images: imagesSnap,
@@ -2124,7 +2134,7 @@ function ComposerInner({
                 userBubbleMain: logicalSnap,
                 defaultInstructionPrefix: defaultInstructionPrefixForExec,
                 defaultInstructionResolveContext: instructionResolveContext,
-              });
+              }));
               userBubblePrompt = payload.userBubblePrompt;
               rollbackDraft.images = attachDiskPathsToComposerImages(
                 imagesSnap,
@@ -2132,8 +2142,9 @@ function ComposerInner({
               ).map((img) => ({ ...img }));
             }
           }
-        } catch {
-          restoreComposerDraft(rollbackDraft);
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : "发送准备失败，请重试");
+          recoverDraft(rollbackDraft);
           return;
         }
         onTrackSendFlow?.({
@@ -2225,9 +2236,9 @@ function ComposerInner({
       let instructionResolveContext: DefaultInstructionResolveContext | undefined;
       let appliedDefaultInstruction = "";
       if (defaultInstructionPrefixForSend.trim()) {
-        instructionResolveContext = await loadDefaultInstructionResolveContext(
+        instructionResolveContext = await awaitForComposer(loadDefaultInstructionResolveContext(
           session.repositoryPath,
-        );
+        ));
         appliedDefaultInstruction = resolveComposerSendDefaultInstructionApplied(
           logicalSnap,
           composerDefaultInstruction,
@@ -2262,7 +2273,7 @@ function ComposerInner({
         let outbound: string;
         let userBubblePrompt: string;
         try {
-          const payload = await buildClaudeComposerSendPayload({
+          const payload = await awaitForComposer(buildClaudeComposerSendPayload({
             prompt: promptSnap,
             contextItems: contextSnap,
             images: imagesSnap,
@@ -2270,15 +2281,16 @@ function ComposerInner({
             userBubbleMain: logicalSnap,
             defaultInstructionPrefix: defaultInstructionPrefixForSend,
             defaultInstructionResolveContext: instructionResolveContext,
-          });
+          }));
           outbound = payload.outbound;
           userBubblePrompt = payload.userBubblePrompt;
           rollbackDraft.images = attachDiskPathsToComposerImages(
             imagesSnap,
             payload.imageDiskPaths,
           ).map((img) => ({ ...img }));
-        } catch {
-          restoreComposerDraft(rollbackDraft);
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : "发送准备失败，请重试");
+          recoverDraft(rollbackDraft);
           return;
         }
         sendFlowNodes.push({
@@ -2287,7 +2299,7 @@ function ComposerInner({
           detail: outbound.trim() || "(空)",
         });
         if (!outbound.trim()) {
-          restoreComposerDraft(rollbackDraft);
+          recoverDraft(rollbackDraft);
           return;
         }
 
@@ -2381,7 +2393,7 @@ function ComposerInner({
           recordMissionMessage(logicalSnap);
           postSendEscUndoRef.current = rollbackDraft;
           finalizeTranscriptBaselineAfterSend();
-          onExecute(
+          await dispatchExecute(
             session.id,
             dispatchPromptText,
             undefined,
@@ -2437,12 +2449,12 @@ function ComposerInner({
       let cursorSendPayload: Awaited<ReturnType<typeof buildCursorComposerSendPayload>> | null = null;
       try {
         if (isCursorEngine && imagesSnap.length > 0) {
-          cursorSendPayload = await buildCursorComposerSendPayload({
+          cursorSendPayload = await awaitForComposer(buildCursorComposerSendPayload({
             prompt: promptSnap,
             contextItems: contextSnap,
             images: imagesSnap,
             repositoryPath: session.repositoryPath,
-          });
+          }));
           outbound = cursorSendPayload.outbound;
           const paths = extractComposerAttachmentPathsFromText(outbound);
           rollbackDraft.images = attachDiskPathsToComposerImages(
@@ -2450,7 +2462,7 @@ function ComposerInner({
             imagesSnap.map((_, i) => paths[i] ?? null),
           ).map((img) => ({ ...img }));
         } else {
-          const payload = await buildClaudeComposerSendPayload({
+          const payload = await awaitForComposer(buildClaudeComposerSendPayload({
             prompt: promptSnap,
             contextItems: contextSnap,
             images: imagesSnap,
@@ -2458,7 +2470,7 @@ function ComposerInner({
             userBubbleMain: logicalSnap,
             defaultInstructionPrefix: defaultInstructionPrefixForSend,
             defaultInstructionResolveContext: instructionResolveContext,
-          });
+          }));
           outbound = payload.outbound;
           userBubblePrompt = payload.userBubblePrompt;
           rollbackDraft.images = attachDiskPathsToComposerImages(
@@ -2467,8 +2479,9 @@ function ComposerInner({
           ).map((img) => ({ ...img }));
         }
         lastSentDraftRef.current = rollbackDraft;
-      } catch {
-        restoreComposerDraft(rollbackDraft);
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : "发送准备失败，请重试");
+        recoverDraft(rollbackDraft);
         return;
       }
       sendFlowNodes.push({
@@ -2477,7 +2490,7 @@ function ComposerInner({
         detail: outbound.trim() || "(空)",
       });
       if (!outbound.trim()) {
-        restoreComposerDraft(rollbackDraft);
+        recoverDraft(rollbackDraft);
         return;
       }
 
@@ -2660,11 +2673,16 @@ function ComposerInner({
       lastSentDraftRef.current = null;
       postSendEscUndoRef.current = rollbackDraft;
       finalizeTranscriptBaselineAfterSend();
-      onExecute(session.id, dispatchPromptText, consumePending, dispatchTargetForExecute, executeOptions);
+      await dispatchExecute(session.id, dispatchPromptText, consumePending, dispatchTargetForExecute, executeOptions);
+      } catch (error) {
+        if (composerCleared && failedDraft) recoverDraft(failedDraft);
+        message.error(error instanceof Error ? error.message : "发送失败，请重试");
       } finally {
-        composerSendInFlightRef.current = false;
-        // 请求发送后重新聚焦输入框：跨瞬时卸载/重挂与重渲染，由 semiEditorReady effect 兜底聚焦。
-        requestComposerRefocus(session.id);
+        // 旧发送的 finally 不得释放新会话的发送锁或抢走焦点。
+        sendScope.finish(() => {
+          composerSendInFlightRef.current = false;
+          requestComposerRefocus(session.id);
+        });
       }
     },
     [
@@ -3582,6 +3600,7 @@ function ComposerInner({
           <ComposerModelPicker
             session={session}
             sessionExecutionEngine={sessionExecutionEngine}
+            key={`${session.id}:${sessionExecutionEngine}`}
             model={model}
             onModelChange={handleComposerModelChange}
             disabled={isSessionBusy}
@@ -3947,7 +3966,7 @@ export interface ComposerRegionProps {
       targetWorkflowName?: string;
     },
     executeOptions?: ClaudeComposerExecuteBubbleOptions,
-  ) => void;
+  ) => boolean | void | Promise<boolean | void>;
   onSessionModelChange: (model: string) => void;
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
   /**

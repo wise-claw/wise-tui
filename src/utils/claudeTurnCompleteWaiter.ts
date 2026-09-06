@@ -30,6 +30,9 @@ export function isClaudeTurnWaitControlError(err: unknown): boolean {
 
 export function createClaudeTurnCompleteWaiter(): ClaudeTurnCompleteWaiter {
   const pendingByTab = new Map<string, PendingWaiter[]>();
+  // invoke IPC 返回前可能已收到 complete；仅缓存尚无人等待的最近结果，消费后删除。
+  const earlyByTab = new Map<string, { nonce: number; success: boolean }>();
+  const MAX_EARLY_COMPLETIONS = 512;
 
   function removeWaiter(tabId: string, waiter: PendingWaiter): void {
     const list = pendingByTab.get(tabId);
@@ -44,6 +47,11 @@ export function createClaudeTurnCompleteWaiter(): ClaudeTurnCompleteWaiter {
 
   return {
     wait(tabId: string, nonce: number, timeoutMs = DEFAULT_TURN_COMPLETE_WAIT_MS) {
+      const early = earlyByTab.get(tabId);
+      if (early?.nonce === nonce) {
+        earlyByTab.delete(tabId);
+        return Promise.resolve({ success: early.success });
+      }
       return new Promise<TurnCompleteWaitResult>((resolve, reject) => {
         const timer = globalThis.setTimeout(() => {
           removeWaiter(tabId, waiter);
@@ -62,7 +70,17 @@ export function createClaudeTurnCompleteWaiter(): ClaudeTurnCompleteWaiter {
     },
     resolve(tabId: string, nonce: number, success: boolean) {
       const list = pendingByTab.get(tabId);
-      if (!list || list.length === 0) return;
+      if (!list?.some((waiter) => waiter.nonce === nonce)) {
+        const previous = earlyByTab.get(tabId);
+        if (!previous || nonce > previous.nonce) {
+          earlyByTab.delete(tabId);
+          earlyByTab.set(tabId, { nonce, success });
+          if (earlyByTab.size > MAX_EARLY_COMPLETIONS) {
+            earlyByTab.delete(earlyByTab.keys().next().value!);
+          }
+        }
+        return;
+      }
       for (const waiter of list) {
         if (waiter.nonce !== nonce) continue;
         globalThis.clearTimeout(waiter.timer);
@@ -71,6 +89,7 @@ export function createClaudeTurnCompleteWaiter(): ClaudeTurnCompleteWaiter {
       }
     },
     clear(tabId: string) {
+      earlyByTab.delete(tabId);
       const list = pendingByTab.get(tabId);
       if (!list) return;
       for (const waiter of list) {

@@ -4194,7 +4194,7 @@
 .app-claude-messages-end-thinking {
   /* 消息行已无头像列（旧 grid 22px 头像 + 8px 间距 = 30px），
      提示行与消息正文同从容器 padding 起左对齐。 */
-  padding-left: 0;
+  padding-left: 12px;
 }
 
 /* 消息行不做入场动画。
@@ -4283,6 +4283,10 @@
 /* 与上一条同发送者：不再重复头像与时间，仅保留内容以纵向成组 */
 .app-claude-message--merged {
   margin-top: 3px;
+}
+
+.app-claude-messages-virtual-row--merged {
+  padding-left: 12px;
 }
 
 .app-claude-messages-virtual-row--user-sticky {

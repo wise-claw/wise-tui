@@ -259,6 +259,28 @@ describe("resolveCodexComposerModel", () => {
   });
 });
 
+describe("saved Codex Composer selection", () => {
+  test("a stale catalog/profile cannot overwrite a restored saved selection", () => {
+    for (const sessionModel of ["gpt-new", ""]) {
+      expect(resolveCodexComposerModel({
+        sessionModel,
+        savedDefault: "gpt-new",
+        profileModel: "gpt-old",
+        knownModels: [{ id: "gpt-old" }],
+      })).toBe("gpt-new");
+    }
+  });
+
+  test("an explicit profile application can replace a saved selection", () => {
+    expect(resolveCodexComposerModel({
+      sessionModel: "gpt-new",
+      savedDefault: "gpt-new",
+      profileModel: "gpt-old",
+      profileApplied: true,
+    })).toBe("gpt-old");
+  });
+});
+
 describe("mergeCodexKnownModels", () => {
   test("includes local profile model ids missing from the runtime catalog", () => {
     const merged = mergeCodexKnownModels(

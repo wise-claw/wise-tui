@@ -182,7 +182,9 @@ export function latestTurnHasInFlightToolUse(messages: readonly ClaudeMessage[])
 /** oneshot 推迟 complete 后，若长时间无新 stdout，仍须强制收尾以释放 running 状态。 */
 export const ONESHOT_DEFERRED_COMPLETE_FORCE_MS = 20_000;
 /** oneshot 推迟 complete 后，按 stdout 静默时长递增重试收尾。 */
-export const ONESHOT_DEFERRED_COMPLETE_RETRY_DELAYS_MS = [80, 400, 1200, 4000, 12_000] as const;
+export const ONESHOT_DEFERRED_COMPLETE_RETRY_DELAYS_MS = [
+  80, 400, 1200, 4000, 12_000, ONESHOT_DEFERRED_COMPLETE_FORCE_MS + 1,
+] as const;
 
 export function shouldForceFinalizeDeferredOneshotComplete(
   messages: readonly ClaudeMessage[],

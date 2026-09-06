@@ -53,10 +53,16 @@ describe("executionEngineModelDefaults", () => {
     );
 
     const pendingLoad = loadExecutionEngineModelDefaults();
-    await saveExecutionEngineDefaultModel("cursor", "grok-4.6");
-    resolveRead(null);
+    const pendingSave = saveExecutionEngineDefaultModel("cursor", "grok-4.6");
+    resolveRead(JSON.stringify({ claude: "opus", cursor: "old" }));
     await pendingLoad;
+    await pendingSave;
 
     expect(getCachedExecutionEngineDefaultModel("cursor")).toBe("grok-4.6");
+    expect(getCachedExecutionEngineDefaultModel("claude")).toBe("opus");
+    expect(setAppSetting).toHaveBeenLastCalledWith(
+      WISE_EXECUTION_ENGINE_MODEL_DEFAULTS_KEY,
+      JSON.stringify({ claude: "opus", cursor: "grok-4.6" }),
+    );
   });
 });

@@ -1,17 +1,21 @@
 import { notificationHub } from "../notifications";
 import type { ClaudeSession } from "../types";
 
-export function sendFollowupById(params: {
+export async function sendFollowupById(params: {
   sessionId: string;
   followupId: string;
   sendMessageToSession: (sessionId: string, prompt: string) => void | Promise<void>;
-}): void {
+}): Promise<void> {
   const item = notificationHub
     .getDockSlice(params.sessionId)
     .followupItems.find((followup) => followup.id === params.followupId);
   if (!item) return;
-  params.sendMessageToSession(params.sessionId, item.text);
-  notificationHub.removeFollowupItem(params.sessionId, params.followupId);
+  try {
+    await params.sendMessageToSession(params.sessionId, item.text);
+    notificationHub.removeFollowupItem(params.sessionId, params.followupId);
+  } catch {
+    /* 未接单或执行失败时保留追问，允许用户再次发送。 */
+  }
 }
 
 export async function restoreRevertById(params: {

@@ -57,6 +57,7 @@ import {
 } from "./useClaudeSessions.streamingReclaim";
 
 export type ClaudeEngineHandlersDeps = {
+  dispatchAbortByTabRef: MutableRefObject<Map<string, AbortController>>;
   streamRuntimeRef: MutableRefObject<ClaudeStreamRuntimeHandlers | null>;
   sessionIdMapRef: MutableRefObject<Map<string, string>>;
   sessionsRef: MutableRefObject<ClaudeSession[]>;
@@ -101,14 +102,18 @@ export type ClaudeTurnInvokeParams = ClaudeOneshotInvokeParams & {
 
 async function waitForStreamRuntime(
   streamRuntimeRef: MutableRefObject<ClaudeStreamRuntimeHandlers | null>,
+  signal?: AbortSignal,
 ): Promise<ClaudeStreamRuntimeHandlers> {
+  signal?.throwIfAborted();
   if (!streamRuntimeRef.current) {
     const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
     while (!streamRuntimeRef.current && Date.now() < deadline) {
+      signal?.throwIfAborted();
       await new Promise<void>((r) => {
         window.setTimeout(r, CLAUDE_STREAM_RUNTIME_READY_POLL_MS);
       });
     }
+    signal?.throwIfAborted();
     if (!streamRuntimeRef.current) {
       message.error("流式引擎尚未就绪或初始化超时，请稍后重试发送。");
       throw new Error("Claude stream runtime not ready");
@@ -137,6 +142,12 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     scheduleStreamStallTimer,
   } = deps;
 
+  const assertCanSpawn = (tabId: string, signal?: AbortSignal) => {
+    signal?.throwIfAborted();
+    const live = sessionsRef.current.find((session) => session.id === tabId);
+    if (!live || live.status === "cancelled") throw new Error("会话执行已取消或关闭");
+  };
+
   const reclaimStreamingProcessesBeforeSpawn = async () => {
     await applyStreamingProcessReclaim({
       reserveSlotForSpawn: true,
@@ -161,7 +172,9 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       modelArg,
       resumeClaudeSid,
     } = params;
-    await waitForStreamRuntime(streamRuntimeRef);
+    const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
+    await waitForStreamRuntime(streamRuntimeRef, signal);
+    assertCanSpawn(tabSessionId, signal);
     // 新一轮子进程会替换或清空 stdin 映射；上一轮的 AskUserQuestion / 权限弹窗再提交必败
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
     const mappedTab = sessionIdMapRef.current.get(tabSessionId);
@@ -191,13 +204,24 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       }
     }
     // 仅当 invocation 监听已挂载时才传 key：Rust 会抑制共享 stdout；监听失败时必须不传 key，否则前端收不到流式行。
+    try {
+      assertCanSpawn(tabSessionId, signal);
+    } catch (error) {
+      detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
+      throw error;
+    }
     const invocationKey = detach ? inv : undefined;
     if (rt && !detach) {
       message.warning("本会话流式监听未建立，已退回全局通道；若多标签同时跑 Claude，输出可能短暂串屏。");
     }
     const sk = invokeConc?.concurrencyScopeKey;
     const lim = invokeConc?.concurrencyLimit;
-    const cliExtras = await resolveSpawnExtrasForClaudePrompt(tabSessionId, prompt);
+    const cliExtras = await resolveSpawnExtrasForClaudePrompt(tabSessionId, prompt).catch((error) => {
+      detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
+      throw error;
+    });
     const spawnSession = sessionsRef.current.find((s) => s.id === tabSessionId) ?? null;
     const proxyBypassResolver = claudeSessionsOptionsRef.current?.resolveClaudeProxyBypassRef?.current;
     const anthropicProxyBypass =
@@ -205,6 +229,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     try {
       if (resumeClaudeSid) {
         try {
+          assertCanSpawn(tabSessionId, signal);
           await resumeClaudeCode(
             repositoryPath,
             resumeClaudeSid,
@@ -222,6 +247,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
             throw resumeError;
           }
           // Claude 侧会话可能已被清理；自动回退到新会话启动，避免用户手动重发。
+          assertCanSpawn(tabSessionId, signal);
           await executeClaudeCode(
             repositoryPath,
             prompt,
@@ -236,6 +262,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
           );
         }
       } else {
+        assertCanSpawn(tabSessionId, signal);
         await executeClaudeCode(
           repositoryPath,
           prompt,
@@ -251,6 +278,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       }
     } catch (e) {
       detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
       throw e;
     }
   };
@@ -275,7 +303,9 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       codexResumeSessionId,
       forceNewClaudeConversation,
     } = params;
-    await waitForStreamRuntime(streamRuntimeRef);
+    const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
+    await waitForStreamRuntime(streamRuntimeRef, signal);
+    assertCanSpawn(tabSessionId, signal);
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
     const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;
@@ -298,6 +328,13 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         detach = null;
       }
     }
+    try {
+      assertCanSpawn(tabSessionId, signal);
+    } catch (error) {
+      detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
+      throw error;
+    }
     const invocationKey = detach ? inv : undefined;
     const codexModel = resolveCodexExecModelId({
       sessionModel: modelArg,
@@ -314,6 +351,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       ),
     );
     try {
+      assertCanSpawn(tabSessionId, signal);
       await executeCodexCode(
         repositoryPath,
         prompt,
@@ -325,6 +363,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       );
     } catch (e) {
       detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
       throw e;
     }
   };
@@ -347,7 +386,9 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       contextExecutionEngine,
       codexResumeSessionId,
     } = params;
-    await waitForStreamRuntime(streamRuntimeRef);
+    const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
+    await waitForStreamRuntime(streamRuntimeRef, signal);
+    assertCanSpawn(tabSessionId, signal);
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
     const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;
@@ -369,6 +410,13 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       } catch {
         detach = null;
       }
+    }
+    try {
+      assertCanSpawn(tabSessionId, signal);
+    } catch (error) {
+      detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
+      throw error;
     }
     const invocationKey = detach ? inv : undefined;
     const codexModel = resolveCodexExecModelId({
@@ -392,6 +440,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       ),
     );
     try {
+      assertCanSpawn(tabSessionId, signal);
       await executeCodexRpcCode(
         repositoryPath,
         prompt,
@@ -403,6 +452,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       );
     } catch (e) {
       detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
       throw e;
     }
   };
@@ -428,7 +478,9 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     } = params;
     // Composer 选择的模型优先；上下文引擎在 invoke 入口已固定为 opencode。
     void params.contextExecutionEngine;
-    await waitForStreamRuntime(streamRuntimeRef);
+    const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
+    await waitForStreamRuntime(streamRuntimeRef, signal);
+    assertCanSpawn(tabSessionId, signal);
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
     const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;
@@ -451,6 +503,13 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         detach = null;
       }
     }
+    try {
+      assertCanSpawn(tabSessionId, signal);
+    } catch (error) {
+      detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
+      throw error;
+    }
     const invocationKey = detach ? inv : undefined;
     const opencodeModel = resolveOpencodeExecModelId({
       sessionModel: modelArg,
@@ -467,6 +526,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       ),
     );
     try {
+      assertCanSpawn(tabSessionId, signal);
       await executeOpencodeCode(
         repositoryPath,
         prompt,
@@ -478,6 +538,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       );
     } catch (e) {
       detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
       throw e;
     }
   };
@@ -500,7 +561,9 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       qoderResumeSessionId,
       forceNewClaudeConversation,
     } = params;
-    await waitForStreamRuntime(streamRuntimeRef);
+    const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
+    await waitForStreamRuntime(streamRuntimeRef, signal);
+    assertCanSpawn(tabSessionId, signal);
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
     const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;
@@ -523,6 +586,13 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         detach = null;
       }
     }
+    try {
+      assertCanSpawn(tabSessionId, signal);
+    } catch (error) {
+      detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
+      throw error;
+    }
     const invocationKey = detach ? inv : undefined;
     const qoderModel = resolveQoderExecModelId(modelArg);
     const qoderModelLabel = formatQoderModelLabel(modelArg?.trim() || "auto");
@@ -535,6 +605,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       ),
     );
     try {
+      assertCanSpawn(tabSessionId, signal);
       await executeQoderCode(
         repositoryPath,
         prompt,
@@ -546,6 +617,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       );
     } catch (e) {
       detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
       throw e;
     }
   };
@@ -568,7 +640,9 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       cursorAgentId,
       cursorAttachments,
     } = params;
-    await waitForStreamRuntime(streamRuntimeRef);
+    const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
+    await waitForStreamRuntime(streamRuntimeRef, signal);
+    assertCanSpawn(tabSessionId, signal);
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
     streamingTargetIdRef.current = tabSessionId;
     scheduleStreamStallTimer(tabSessionId);
@@ -596,10 +670,18 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         detach = null;
       }
     }
+    try {
+      assertCanSpawn(tabSessionId, signal);
+    } catch (error) {
+      detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
+      throw error;
+    }
     const invocationKey = detach ? inv : undefined;
     const resolvedModel = resolveCursorLocalModelId(modelArg ?? CURSOR_SDK_DEFAULT_MODEL);
     // Cursor CLI 自行读取工作区/用户 mcp.json（--approve-mcps）；勿在 invoke 前组装 MCP（可达数秒且 Rust 侧已丢弃）。
     try {
+      assertCanSpawn(tabSessionId, signal);
       await executeCursorCode(
         repositoryPath,
         prompt,
@@ -612,6 +694,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       );
     } catch (e) {
       detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
       throw e;
     }
   };
@@ -627,7 +710,9 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       resumeClaudeSid,
     } = params;
 
-    await waitForStreamRuntime(streamRuntimeRef);
+    const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
+    await waitForStreamRuntime(streamRuntimeRef, signal);
+    assertCanSpawn(tabSessionId, signal);
 
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
     const mappedTab = sessionIdMapRef.current.get(tabSessionId);
@@ -680,6 +765,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
           streamingProcessActivityByTabRef.current,
           tabSessionId,
         );
+        assertCanSpawn(tabSessionId, signal);
         await sendStreamingUserMessage(liveSid, prompt);
         return;
       } catch (err) {
@@ -733,6 +819,13 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         detach = null;
       }
     }
+    try {
+      assertCanSpawn(tabSessionId, signal);
+    } catch (error) {
+      detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
+      throw error;
+    }
     const invocationKey = detach ? inv : undefined;
     if (rt && !detach) {
       message.warning("本会话流式监听未建立，已退回全局通道；若多标签同时跑 Claude，输出可能短暂串屏。");
@@ -740,10 +833,15 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
 
     const sk = invokeConc?.concurrencyScopeKey;
     const lim = invokeConc?.concurrencyLimit;
-    const cliExtras = await resolveSpawnExtrasForClaudePrompt(tabSessionId, prompt);
+    const cliExtras = await resolveSpawnExtrasForClaudePrompt(tabSessionId, prompt).catch((error) => {
+      detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
+      throw error;
+    });
 
     try {
       await reclaimStreamingProcessesBeforeSpawn();
+      assertCanSpawn(tabSessionId, signal);
       await spawnStreamingSession({
         repositoryPath,
         initialPrompt: prompt,
@@ -754,6 +852,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         concurrencyLimit: lim,
         cliExtras,
       });
+      assertCanSpawn(tabSessionId, signal);
       setStreamingProcessEntry(
         streamingProcessByTabRef.current,
         streamingProcessActivityByTabRef.current,

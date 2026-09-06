@@ -18,7 +18,7 @@ import { createClaudeStreamRuntime } from "../services/claudeStreamRuntime";
 import { getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGrouping";
 import { isClaudeSessionRunningByHostProcesses } from "../utils/claudeHostRunningSessionIds";
 import { isProjectRootSessionDisplayName, normalizeRepositoryPathKey, repositoryPathsMatch } from "../utils/repositoryMainSessionBinding";
-import { safeUnlisten } from "../utils/safeTauriUnlisten";
+import { collectTauriListeners, safeUnlisten } from "../utils/safeTauriUnlisten";
 
 export type ClaudeStreamRuntimeHandlers = ReturnType<typeof createClaudeStreamRuntime>;
 
@@ -150,7 +150,7 @@ export async function attachClaudeInvocationStream(
   };
   const attach = (event: string, handler: (payload: unknown) => void) =>
     listen(event, (e) => handler(e.payload));
-  const pending = await Promise.all([
+  const pending = await collectTauriListeners([
     attach(claudeInvocationStreamEvent("output", inv), (payload) => {
       rt.handleOutputForSendTab(stableTabId, payload);
     }),
@@ -213,7 +213,7 @@ export async function attachClaudeSessionStreamForTurn(
     safeUnlisten(uc);
     onCleaned?.();
   };
-  const [uo0, ue0, uc0] = await Promise.all([
+  const [uo0, ue0, uc0] = await collectTauriListeners([
     listen(claudeSessionStreamEvent("output", sid), (e) => {
       rt.handleOutputForSendTab(stableTabId, e.payload);
     }),

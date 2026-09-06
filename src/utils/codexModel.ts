@@ -111,6 +111,7 @@ export function isCodexModelId(
 export function resolveCodexComposerModel(input: {
   pickedModel?: string | null;
   sessionModel?: string | null;
+  savedDefault?: string | null;
   profileModel?: string | null;
   knownModels?: readonly CodexModelRef[];
   /** 用户刚点选并应用了本地档案。 */
@@ -123,6 +124,8 @@ export function resolveCodexComposerModel(input: {
   if (input.profileApplied) {
     return profile || session || undefined;
   }
+  const saved = input.savedDefault?.trim();
+  if (saved && (!session || session === saved)) return saved;
   if (session && isCodexModelId(session, input.knownModels) && profile && session !== profile) {
     return session;
   }

@@ -998,6 +998,7 @@
 .git-panel-header .ant-btn-text .sync-count.sync-count--staged,
 .git-sync-row .ant-btn-text .sync-count.sync-count--staged {
   color: var(--ant-color-primary);
+  margin-left: -6px;
 }
 
 /* ── Commit Section：输入 + 操作整合为单卡片 ── */

@@ -9,6 +9,8 @@ import {
   executionEngineModelListKind,
   getCachedClaudeModelPickerOptions,
   getCachedCursorModels,
+  getCachedCodexModels,
+  saveCachedCodexModels,
   loadExecutionEngineModelLists,
   resetExecutionEngineModelListsForTests,
   saveCachedClaudeModelPickerOptions,
@@ -73,9 +75,10 @@ describe("executionEngineModelListCache", () => {
     );
 
     const pendingLoad = loadExecutionEngineModelLists();
-    await saveCachedCursorModels([{ id: "grok-4.6-fast", displayName: "Grok 4.6 Fast" }]);
+    const pendingSave = saveCachedCursorModels([{ id: "grok-4.6-fast", displayName: "Grok 4.6 Fast" }]);
     resolveRead(JSON.stringify({ cursor: [{ id: "auto", displayName: "Auto" }] }));
     await pendingLoad;
+    await pendingSave;
 
     expect(getCachedCursorModels()?.[0]?.id).toBe("grok-4.6-fast");
   });
@@ -93,4 +96,21 @@ describe("executionEngineModelListCache", () => {
     await saveCachedClaudeModelPickerOptions({ defaultModel: null, availableModels: [] });
     expect(getCachedClaudeModelPickerOptions()?.availableModels).toEqual(["sonnet", "opus"]);
   });
+  test("unchanged lists do not write; changes only replace the matching engine", async () => {
+    getAppSetting.mockImplementation(async () => null);
+    const cursor = [{ id: "composer-2.5", displayName: "Composer 2.5", aliases: ["fast"] }];
+    const codex = [{ id: "gpt-test", displayName: "GPT Test", provider: "openai" }];
+    await saveCachedCursorModels(cursor);
+    await saveCachedCodexModels(codex);
+    setAppSetting.mockClear();
+    await saveCachedCursorModels(structuredClone(cursor));
+    await saveCachedCodexModels(structuredClone(codex));
+    expect(setAppSetting).not.toHaveBeenCalled();
+
+    await saveCachedCodexModels([{ ...codex[0], displayName: "Updated GPT" }]);
+    expect(setAppSetting).toHaveBeenCalledTimes(1);
+    expect(getCachedCodexModels()?.[0].displayName).toBe("Updated GPT");
+    expect(getCachedCursorModels()).toEqual(cursor);
+  });
+
 });

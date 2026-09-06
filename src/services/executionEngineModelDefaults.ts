@@ -1,6 +1,6 @@
 import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import { normalizeSessionExecutionEngine } from "../constants/sessionExecutionEngine";
-import { getAppSetting, setAppSetting } from "./appSettingsStore";
+import { createLocalModelPreferenceCache } from "./localModelPreferenceCache";
 
 /**
  * Composer 中由用户直接选择的模型，按执行环境保存。
@@ -12,10 +12,6 @@ export const WISE_EXECUTION_ENGINE_MODEL_DEFAULTS_KEY =
   "wise.executionEngineModelDefaults.v1";
 
 export type ExecutionEngineModelDefaults = Partial<Record<SessionExecutionEngine, string>>;
-
-let cachedDefaults: ExecutionEngineModelDefaults = {};
-let loaded = false;
-let loadPromise: Promise<ExecutionEngineModelDefaults> | null = null;
 
 function normalizeModelId(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -43,36 +39,22 @@ function parseDefaults(raw: string | null): ExecutionEngineModelDefaults {
   }
 }
 
-/** 读取并缓存默认模型；重复调用不再产生 IPC。 */
+const defaults = createLocalModelPreferenceCache(WISE_EXECUTION_ENGINE_MODEL_DEFAULTS_KEY, parseDefaults);
+
+/** 本地镜像先供同步读取，桌面持久化只在冷启动加载一次。 */
 export async function loadExecutionEngineModelDefaults(): Promise<ExecutionEngineModelDefaults> {
-  if (loaded) return { ...cachedDefaults };
-  if (!loadPromise) {
-    loadPromise = getAppSetting(WISE_EXECUTION_ENGINE_MODEL_DEFAULTS_KEY)
-      .then((raw) => {
-        // 保存可能先于这次读取完成；勿用过期磁盘值覆盖刚选的模型。
-        if (loaded) return { ...cachedDefaults };
-        cachedDefaults = parseDefaults(raw);
-        loaded = true;
-        return { ...cachedDefaults };
-      })
-      .finally(() => {
-        loadPromise = null;
-      });
-  }
-  return loadPromise;
+  return { ...await defaults.load() };
 }
 
-/** 测试用：清空内存缓存，避免用例之间串状态。 */
 export function resetExecutionEngineModelDefaultsForTests(): void {
-  cachedDefaults = {};
-  loaded = false;
-  loadPromise = null;
+  defaults.reset();
 }
 
 /** 同步读取已加载的默认模型，适用于渲染热路径。 */
 export function getCachedExecutionEngineDefaultModel(
   engine: SessionExecutionEngine,
 ): string | null {
+  const cachedDefaults = defaults.read();
   const direct = cachedDefaults[engine]?.trim() || "";
   if (direct) return direct;
   if (engine === "codex-rpc") return cachedDefaults.codex?.trim() || null;
@@ -85,13 +67,5 @@ export async function saveExecutionEngineDefaultModel(
   engine: SessionExecutionEngine,
   value: string,
 ): Promise<void> {
-  const model = normalizeModelId(value);
-  const next = { ...cachedDefaults };
-  if (model) next[engine] = model;
-  else delete next[engine];
-  // 先更新内存，紧随其后的「新建会话」无需等待磁盘写入完成。
-  cachedDefaults = next;
-  loaded = true;
-  await setAppSetting(WISE_EXECUTION_ENGINE_MODEL_DEFAULTS_KEY, JSON.stringify(next));
+  await defaults.update(engine, normalizeModelId(value) ?? undefined);
 }
-

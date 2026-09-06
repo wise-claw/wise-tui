@@ -25,7 +25,7 @@ import {
   isTerminalWorkerWiseTab,
 } from "../services/terminalDispatch";
 import { getCachedModelProfileStore } from "../stores/modelProfileStoreCache";
-import { beginSessionTurn, endSessionTurn } from "../stores/sessionTurnStore";
+import { beginSessionTurn, endSessionTurn, hasActiveSessionTurn, peekSessionTurn } from "../stores/sessionTurnStore";
 import type { CursorSdkAttachment } from "../services/cursorComposerPrompt";
 import type { SessionExecutionEngine } from "../types";
 import { resolveSessionForExecuteKey } from "../utils/sessionExecuteResolve";
@@ -42,6 +42,8 @@ import type {
 
 export type SessionActionHandlersDeps = {
   sessionsRef: MutableRefObject<ClaudeSession[]>;
+  dispatchAbortByTabRef: MutableRefObject<Map<string, AbortController>>;
+  executionTeardownByTabRef: MutableRefObject<Map<string, Promise<void>>>;
   sessionIdMapRef: MutableRefObject<Map<string, string>>;
   executeSessionRetryCountRef: MutableRefObject<Map<string, number>>;
   recentExecutePromptBySessionRef: MutableRefObject<Map<string, { prompt: string; at: number }>>;
@@ -74,6 +76,7 @@ export type SessionActionHandlersDeps = {
   scheduleStreamStallTimer: (tabId: string) => void;
   resolveSessionExecutionEngine: (session: ClaudeSession) => SessionExecutionEngine;
   runClaudeTurnWithContextGuard: (params: {
+    signal: AbortSignal;
     tabSessionId: string;
     turnNonce: number;
     invokeConc:
@@ -96,6 +99,8 @@ export type SessionActionHandlersDeps = {
 export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
   const {
     sessionsRef,
+    executionTeardownByTabRef,
+    dispatchAbortByTabRef,
     sessionIdMapRef,
     executeSessionRetryCountRef,
     recentExecutePromptBySessionRef,
@@ -129,6 +134,32 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     purgeStreamSidecarsForSession,
   } = deps;
 
+  const teardownExecution = (sessionId: string, realSessionId: string | null) => {
+    dispatchAbortByTabRef.current.get(sessionId)?.abort();
+    dispatchAbortByTabRef.current.delete(sessionId);
+    const existing = executionTeardownByTabRef.current.get(sessionId);
+    if (existing) return existing;
+    // 新令牌使旧启动回调失效，同时通过轮次 store 通知队列等待停止完成。
+    const stoppingTurn = sessionsRef.current.some((row) => row.id === sessionId)
+      ? beginSessionTurn(sessionId) : undefined;
+    // 保留停止屏障直到所有按 tab/session 定位的取消完成，避免旧取消杀掉刚重发的新进程。
+    const pending = (async () => {
+      await Promise.allSettled([
+        cancelHostExecutionForTab(sessionId, realSessionId),
+        closeStreamingSession(realSessionId ?? sessionId),
+        import("../services/cursorAcp").then(({ shutdownCursorAcp }) => shutdownCursorAcp(sessionId)),
+        import("../services/opencodeAcp").then(({ shutdownOpencodeAcp }) => shutdownOpencodeAcp(sessionId)),
+      ]);
+    })().finally(() => {
+      if (executionTeardownByTabRef.current.get(sessionId) === pending) {
+        executionTeardownByTabRef.current.delete(sessionId);
+        if (stoppingTurn !== undefined) endSessionTurn(sessionId, stoppingTurn);
+      }
+    });
+    executionTeardownByTabRef.current.set(sessionId, pending);
+    return pending;
+  };
+
   const executeSession = (
     sessionId: string,
     prompt: string,
@@ -140,19 +171,11 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
       sessionIdMapRef.current,
     );
     const tabSessionId = session?.id ?? sessionId;
-    if (!session) {
-      const retried = executeSessionRetryCountRef.current.get(sessionId) ?? 0;
-      if (retried < 8) {
-        executeSessionRetryCountRef.current.set(sessionId, retried + 1);
-        window.setTimeout(() => {
-          executeSession(sessionId, prompt, opts);
-        }, 40);
-      } else {
-        executeSessionRetryCountRef.current.delete(sessionId);
-      }
-      return false;
-    }
+    // 返回 false 必须表示未接单；由调用方保留草稿/队列并重试，不能暗中定时启动。
+    if (!session || (!prompt.trim() && !opts?.cursorAttachments?.length)) return false;
     executeSessionRetryCountRef.current.delete(sessionId);
+
+    if (executionTeardownByTabRef.current.has(tabSessionId)) return false;
 
     const trimmedPrompt = prompt.trim();
     if (trimmedPrompt) {
@@ -161,44 +184,19 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
       // / gemini 不支持等「未真正派发」路径污染 dedup 表，致重派时 dedup 假命中 return true
       // 被上层当成功移除而丢任务（C1 修复）。
       const recent = recentExecutePromptBySessionRef.current.get(tabSessionId);
-      if (recent && recent.prompt === trimmedPrompt && Date.now() - recent.at < 900) {
+      if (hasActiveSessionTurn(tabSessionId) && recent && recent.prompt === trimmedPrompt && Date.now() - recent.at < 900) {
         return true;
       }
     }
 
     const forceFreshClaudeSession = opts?.terminalFreshTurn === true;
     let terminalFreshTeardown: { cancelSessionIds: Set<string>; wasActive: boolean } | null = null;
-    if (forceFreshClaudeSession) {
-      sessionIdMapRef.current.delete(tabSessionId);
-      const staleClaudeSid = session.claudeSessionId?.trim();
-      const cancelSessionIds = new Set<string>();
-      if (staleClaudeSid) cancelSessionIds.add(staleClaudeSid);
-      const wasActive =
-        session.status === "running" ||
-        session.status === "connecting" ||
-        streamingProcessByTabRef.current.has(tabSessionId);
-      // 勿 cancelClaudeExecution(tabSessionId)：Rust 会对 Wise tab id 发 success=false complete，误判为本轮失败。
-      if (cancelSessionIds.size > 0 || wasActive) {
-        terminalFreshTeardown = { cancelSessionIds, wasActive };
-        deleteStreamingProcessEntry(
-          streamingProcessByTabRef.current,
-          streamingProcessActivityByTabRef.current,
-          tabSessionId,
-        );
-      }
-    }
     const claudeSidRaw = session.claudeSessionId ?? sessionIdMapRef.current.get(tabSessionId) ?? null;
     const claudeSid = forceFreshClaudeSession ? null : claudeSidRaw;
 
     const liveSession = sessionsRef.current.find((s) => s.id === tabSessionId) ?? session;
     const engineResolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
     const executionEngine = engineResolver && liveSession ? engineResolver(liveSession) : "claude";
-    const skipClaudeSidBootstrapWait =
-      executionEngine === "cursor" ||
-      executionEngine === "codex" ||
-      executionEngine === "codex-rpc" ||
-      executionEngine === "opencode" ||
-      executionEngine === "qoder";
     const bubblePrompt = opts?.userBubblePrompt?.trim()
       ? opts.userBubblePrompt
       : opts?.cursorAttachments && opts.cursorAttachments.length > 0
@@ -231,9 +229,34 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
       });
       return false;
     }
+    if (!forceFreshClaudeSession && (
+      hasActiveSessionTurn(tabSessionId) || session.status === "running" || session.status === "connecting"
+    )) return false;
+    if (forceFreshClaudeSession) {
+      sessionIdMapRef.current.delete(tabSessionId);
+      const staleClaudeSid = session.claudeSessionId?.trim();
+      const cancelSessionIds = new Set<string>();
+      if (staleClaudeSid) cancelSessionIds.add(staleClaudeSid);
+      const wasActive =
+        session.status === "running" ||
+        session.status === "connecting" ||
+        streamingProcessByTabRef.current.has(tabSessionId);
+      // 勿 cancelClaudeExecution(tabSessionId)：Rust 会对 Wise tab id 发 success=false complete，误判为本轮失败。
+      if (cancelSessionIds.size > 0 || wasActive) {
+        terminalFreshTeardown = { cancelSessionIds, wasActive };
+        deleteStreamingProcessEntry(
+          streamingProcessByTabRef.current,
+          streamingProcessActivityByTabRef.current,
+          tabSessionId,
+        );
+      }
+    }
     // 轮次登记必须先于状态提交，且是同步的：待执行队列在 `onExecute` resolve 后的微任务里
     // 判断能否派发下一条，那时 `session.status` 的重渲染尚未到达。登记之后所有 return false
     // 与失败分支都要 `endSessionTurn(tabSessionId, turnToken)` 注销，否则该会话车道会卡住。
+    dispatchAbortByTabRef.current.get(tabSessionId)?.abort();
+    const dispatchAbort = new AbortController();
+    dispatchAbortByTabRef.current.set(tabSessionId, dispatchAbort);
     const turnToken = beginSessionTurn(tabSessionId);
     commitSessions((prev) => {
       if (opts?.replaceUserBubbleAtIndex !== undefined && Number.isFinite(opts.replaceUserBubbleAtIndex)) {
@@ -274,43 +297,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
         defaultInstructionApplied,
       );
     });
-    // 首轮已启动但尚未收到 stream-json 的 session_id 时，避免再 spawn 第二个进程。
-    // 用户气泡须在上面的 commit 中先落盘，否则 bootstrap 等待会直接 return 导致「发送了但不见」。
-    // 终端派发强制新回合时已主动取消旧进程并重置为 idle，不得在此阻塞。
-    // Cursor/Codex oneshot 不使用 Claude session_id，不得在此等待。
-    //
-    // 重要：此处尚未真正 spawn。不得写入 recentExecutePrompt dedup——否则 80ms 重试会在
-    // 900ms 窗内被假命中 return true，用户气泡已落盘却永久不再 spawn（页面监控 / 运行指令
-    // 自动修复表现为「消息已发出但没有处理」）。
-    if (
-      !claudeSid &&
-      liveSession.status === "running" &&
-      !forceFreshClaudeSession &&
-      !skipClaudeSidBootstrapWait
-    ) {
-      const retried = executeSessionRetryCountRef.current.get(sessionId) ?? 0;
-      if (retried < 20) {
-        executeSessionRetryCountRef.current.set(sessionId, retried + 1);
-        window.setTimeout(() => {
-          executeSession(sessionId, prompt, opts);
-        }, 80);
-      } else {
-        executeSessionRetryCountRef.current.delete(sessionId);
-        endSessionTurn(tabSessionId, turnToken);
-        commitSessions((prev) =>
-          appendSystemMessageBySessionId(
-            prev.map((s) => (s.id === tabSessionId ? { ...s, status: "error" as const } : s)),
-            tabSessionId,
-            "会话仍在启动中，请稍后再试或先停止当前执行。",
-          ),
-        );
-        return false;
-      }
-      // 重试路径：本轮仍在推进（80ms 后重入 executeSession），轮次不注销。
-      return true;
-    }
-
-    // dedup 写入：已通过 bootstrap 等待，即将进入真正 spawn。
+    // dedup 写入：已通过派发门闸，即将进入真正 spawn。
     // 并发阻塞 / gemini / session 未 hydrate 等 return false 路径不会到此，dedup 表不被污染。
     if (trimmedPrompt) {
       recentExecutePromptBySessionRef.current.set(tabSessionId, {
@@ -383,6 +370,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
       triedProfileIds: [],
     };
 
+    const ownsTurn = () => peekSessionTurn(tabSessionId)?.turnId === turnToken;
     void (async () => {
       try {
         let effectiveTurnNonce = turnNonce;
@@ -397,6 +385,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
             await cancelClaudeExecution(sid).catch(() => {});
             expectedTurnNonceByTabIdRef.current.delete(sid);
           }
+          if (!ownsTurn()) return;
           streamTurnSeqRef.current += 1;
           effectiveTurnNonce = streamTurnSeqRef.current;
           lastUserSendNonceRef.current = effectiveTurnNonce;
@@ -409,7 +398,9 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
             window.setTimeout(resolve, 80);
           });
         }
+        if (!ownsTurn()) return;
         await runClaudeTurnWithContextGuard({
+          signal: dispatchAbort.signal,
           tabSessionId,
           turnNonce: effectiveTurnNonce,
           invokeConc,
@@ -422,6 +413,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
           codexContextExecutionEngine,
         });
       } catch (err) {
+        if (!ownsTurn()) return;
         clearStreamStallTimer(tabSessionId);
         const ctx = pendingTurnFailoverRef.current;
         const errText = err instanceof Error ? err.message : String(err);
@@ -437,7 +429,11 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
             /* fall through to error UI */
           }
         }
-        pendingTurnFailoverRef.current = null;
+        if (!ownsTurn()) return;
+        if (pendingTurnFailoverRef.current?.tabSessionId === tabSessionId) {
+          pendingTurnFailoverRef.current = null;
+        }
+        recentExecutePromptBySessionRef.current.delete(tabSessionId);
         if (claudeSid?.trim()) {
           registryBootstrapDeadlineByClaudeSidRef.current.delete(claudeSid.trim());
         }
@@ -474,8 +470,22 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     opts?: ClaudeComposerExecuteBubbleOptions,
   ): Promise<void> => {
     const session = sessionsRef.current.find((s) => s.id === sessionId);
-    if (!session) return Promise.resolve();
-
+    if (!session) return Promise.reject(new Error("会话已关闭，请重新选择会话。"));
+    if (executionTeardownByTabRef.current.has(sessionId)) return Promise.reject(new Error("正在停止上一轮执行，请稍后重试。"));
+    if (!prompt.trim()) return Promise.reject(new Error("请输入消息内容。"));
+    const checker = claudeSessionsOptionsRef.current?.beforeSpawnClaudeRef?.current;
+    if (checker) {
+      const gate = checker(session);
+      if (!gate.ok) {
+        claudeSessionsOptionsRef.current?.onClaudeSpawnBlocked?.(gate.message);
+        return Promise.reject(new Error(gate.message));
+      }
+    }
+    dispatchAbortByTabRef.current.get(sessionId)?.abort();
+    const dispatchAbort = new AbortController();
+    dispatchAbortByTabRef.current.set(sessionId, dispatchAbort);
+    const turnToken = beginSessionTurn(sessionId);
+    const ownsTurn = () => peekSessionTurn(sessionId)?.turnId === turnToken;
     const outboundPrompt = normalizeClaudeNativeSlashPrompt(prompt);
 
     notificationHub.clearTodos(sessionId);
@@ -490,17 +500,9 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     lastUserSendNonceRef.current = streamTurnSeqRef.current;
     assistantStreamTextByTabRef.current.set(sessionId, "");
 
-    const checker = claudeSessionsOptionsRef.current?.beforeSpawnClaudeRef?.current;
-    if (checker) {
-      const gate = checker(session);
-      if (!gate.ok) {
-        claudeSessionsOptionsRef.current?.onClaudeSpawnBlocked?.(gate.message);
-        return Promise.resolve();
-      }
-    }
-
     expectedTurnNonceByTabIdRef.current.set(sessionId, lastUserSendNonceRef.current);
     markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSessionId);
+    scheduleStreamStallTimer(sessionId);
     setSessions((prev) =>
       opts?.replaceUserBubbleAtIndex !== undefined && Number.isFinite(opts.replaceUserBubbleAtIndex)
         ? setSessionRunningReplacingUserBubbleAtIndex(prev, sessionId, opts.replaceUserBubbleAtIndex, prompt)
@@ -541,15 +543,18 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     return (async () => {
       try {
         await runClaudeTurnWithContextGuard({
+          signal: dispatchAbort.signal,
           tabSessionId: sessionId,
           turnNonce,
           invokeConc,
           repositoryPath: session.repositoryPath,
-          prompt,
+          prompt: outboundPrompt,
           modelArg,
           resumeClaudeSid: claudeSessionId,
+          codexContextExecutionEngine,
         });
       } catch (err) {
+        if (!ownsTurn()) return;
         const ctx = pendingTurnFailoverRef.current;
         const errText = err instanceof Error ? err.message : String(err);
         if (
@@ -564,7 +569,12 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
             /* fall through */
           }
         }
-        pendingTurnFailoverRef.current = null;
+        if (!ownsTurn()) return;
+        if (pendingTurnFailoverRef.current?.tabSessionId === sessionId) {
+          pendingTurnFailoverRef.current = null;
+        }
+        clearStreamStallTimer(sessionId);
+        endSessionTurn(sessionId, turnToken);
         if (claudeSessionId?.trim()) {
           registryBootstrapDeadlineByClaudeSidRef.current.delete(claudeSessionId.trim());
         }
@@ -580,7 +590,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
 
   const sendMessage = (prompt: string) => {
     if (!activeSessionId) return;
-    sendMessageToSession(activeSessionId, prompt);
+    void sendMessageToSession(activeSessionId, prompt).catch(() => { /* failure is shown in session */ });
   };
 
   const closeSession = (sessionId: string) => {
@@ -588,27 +598,15 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     if (victim && isTerminalWorkerWiseTab(victim)) {
       clearTerminalDefaultWorkerTabIfMatch(sessionId);
     }
+    const victimSid = victim?.claudeSessionId?.trim() ?? sessionIdMapRef.current.get(sessionId)?.trim();
+    void teardownExecution(sessionId, victimSid ?? null);
+    endSessionTurn(sessionId);
+    if (pendingTurnFailoverRef.current?.tabSessionId === sessionId) pendingTurnFailoverRef.current = null;
+    recentExecutePromptBySessionRef.current.delete(sessionId);
     purgeStreamSidecarsForSession(sessionId, victim?.claudeSessionId);
     clearStreamStallTimer(sessionId);
     detachClaudeInvocationsForSessionKey(sessionId);
-    // Release persistent Cursor ACP process for this tab.
-    void import("../services/cursorAcp")
-      .then(({ shutdownCursorAcp }) => shutdownCursorAcp(sessionId))
-      .catch(() => {
-        /* no active ACP session */
-      });
-    // Release persistent OpenCode ACP process for this tab.
-    void import("../services/opencodeAcp")
-      .then(({ shutdownOpencodeAcp }) => shutdownOpencodeAcp(sessionId))
-      .catch(() => {
-        /* no active opencode ACP session */
-      });
-    const victimSid = victim?.claudeSessionId?.trim() ?? sessionIdMapRef.current.get(sessionId)?.trim();
-    if (victimSid) {
-      void closeStreamingSession(victimSid).catch(() => {
-        /* 进程可能已结束 */
-      });
-    }
+    // 长驻 ACP 进程须在共享停止屏障内释放，不能让迟到的 shutdown 命中新轮次。
     deleteStreamingProcessEntry(
       streamingProcessByTabRef.current,
       streamingProcessActivityByTabRef.current,
@@ -639,22 +637,19 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     const session = sessionsRef.current.find((s) => s.id === sessionId);
     const realSessionId = session?.claudeSessionId ?? sessionIdMapRef.current.get(sessionId) ?? null;
 
+    recentExecutePromptBySessionRef.current.delete(sessionId);
+    if (pendingTurnFailoverRef.current?.tabSessionId === sessionId) pendingTurnFailoverRef.current = null;
     expectedTurnNonceByTabIdRef.current.delete(sessionId);
     if (realSessionId?.trim()) {
       expectedTurnNonceByTabIdRef.current.delete(realSessionId.trim());
     }
-    // 取消是确定性终态：同步注销轮次，队列下一次 flush 立刻可派发，
-    // 不必等 cancelled 状态渲染出来。
-    endSessionTurn(sessionId);
+    void teardownExecution(sessionId, realSessionId);
+    // teardownExecution 已更换轮次令牌：旧回调失效，停止完成后再唤醒待执行队列。
     const refT = streamingTargetIdRef.current;
     if (refT !== null && (refT === sessionId || refT === realSessionId?.trim())) {
       streamingTargetIdRef.current = null;
     }
 
-    void cancelHostExecutionForTab(sessionId, realSessionId);
-    void closeStreamingSession(realSessionId ?? sessionId).catch(() => {
-      /* 长驻进程可能已退出 */
-    });
     deleteStreamingProcessEntry(
       streamingProcessByTabRef.current,
       streamingProcessActivityByTabRef.current,

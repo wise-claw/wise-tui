@@ -155,96 +155,94 @@ export async function executeSessionEngineAndWait(params: {
     complete: completeEvent,
   } = claudeInvocationStreamEvents(invocationKey);
 
-  let resolveDone: ((value: ClaudeInvocationResult) => void) | null = null;
+  let resolveDone!: (value: ClaudeInvocationResult) => void;
   let drainHandle: ReturnType<typeof setTimeout> | null = null;
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
   let completedSuccess: boolean | null = null;
+  let disposed = false;
+  let timedOut = false;
+  let spawnStarted = false;
+  const unlisteners: Array<() => void> = [];
   const donePromise = new Promise<ClaudeInvocationResult>((resolve) => {
     resolveDone = resolve;
   });
-
+  const result = (success: boolean): ClaudeInvocationResult => ({
+    success,
+    outputLines: [...outputLines],
+    errorLines: [...errorLines],
+    invocationKey,
+  });
+  const cancelHost = async () => {
+    try {
+      if (engine === "codex-rpc") await shutdownCodexRpc(invocationKey);
+      else await cancelClaudeInvocation(invocationKey);
+    } catch {
+      /* 超时结果不依赖取消 IPC 是否可用。 */
+    }
+  };
   const settle = (success: boolean) => {
+    if (disposed) return;
     if (drainHandle != null) globalThis.clearTimeout(drainHandle);
     drainHandle = globalThis.setTimeout(() => {
       drainHandle = null;
-      resolveDone?.({
-        success,
-        outputLines: [...outputLines],
-        errorLines: [...errorLines],
-        invocationKey,
-      });
+      resolveDone(result(success));
     }, INVOCATION_OUTPUT_DRAIN_MS);
   };
-
-  const unlistenOutput = await listen<string>(outputEvent, (event) => {
-    if (outputLines.length >= MAX_CAPTURED_LINES) return;
-    const raw = typeof event.payload === "string" ? event.payload : String(event.payload ?? "");
-    outputLines.push(
-      raw.length > MAX_SINGLE_LINE_CHARS ? `${raw.slice(0, MAX_SINGLE_LINE_CHARS)}…[truncated]` : raw,
-    );
+  const capture = (lines: string[], payload: unknown) => {
+    if (disposed || lines.length >= MAX_CAPTURED_LINES) return;
+    const raw = typeof payload === "string" ? payload : String(payload ?? "");
+    lines.push(raw.length > MAX_SINGLE_LINE_CHARS
+      ? `${raw.slice(0, MAX_SINGLE_LINE_CHARS)}…[truncated]` : raw);
     if (completedSuccess !== null) settle(completedSuccess);
-  });
-  const unlistenError = await listen<string>(errorEvent, (event) => {
-    if (errorLines.length >= MAX_CAPTURED_LINES) return;
-    const raw = typeof event.payload === "string" ? event.payload : String(event.payload ?? "");
-    errorLines.push(
-      raw.length > MAX_SINGLE_LINE_CHARS ? `${raw.slice(0, MAX_SINGLE_LINE_CHARS)}…[truncated]` : raw,
-    );
-    if (completedSuccess !== null) settle(completedSuccess);
-  });
-  const unlistenComplete = await listen<{ success?: boolean }>(completeEvent, (event) => {
-    completedSuccess = resolveClaudeCompleteSuccess(event.payload);
-    settle(completedSuccess);
-  });
-
-  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  };
+  const attach = async <T>(eventName: string, handler: (payload: T) => void) => {
+    if (disposed) return;
+    const unlisten = await listen<T>(eventName, (event) => {
+      if (!disposed) handler(event.payload);
+    });
+    // listen 的 IPC 也可能晚于超时返回，必须立即释放迟到的订阅。
+    if (disposed) safeUnlisten(unlisten);
+    else unlisteners.push(unlisten);
+  };
 
   try {
-    await spawnSessionEngineOneshot({
-      engine,
-      repositoryPath: params.repositoryPath,
-      prompt: params.prompt,
-      model: params.model,
-      invocationKey,
-      // Codex RPC 的取消以 session id 定位；短任务直接复用 invocation key，
-      // 其它引擎也因此获得独立且可追踪的运行槽位。
-      tabSessionId: invocationKey,
-    });
-
-    const timeoutPromise = new Promise<ClaudeInvocationResult>((resolve) => {
-      timeoutHandle = globalThis.setTimeout(() => {
-        void (async () => {
-          let cancelledHost = false;
-          try {
-            if (engine === "codex-rpc") {
-              await shutdownCodexRpc(invocationKey);
-              cancelledHost = true;
-            } else {
-              // 此命令使用所有 CLI 引擎共享的 invocation 子进程注册表，
-              // 名称虽沿用 Claude，实际也可终止 Codex/Cursor/OpenCode/Qoder。
-              cancelledHost = await cancelClaudeInvocation(invocationKey);
-            }
-          } catch {
-            /* 非 Tauri、已结束或命令失败：仍以超时结果为准 */
-          }
-          const cancelHint = cancelledHost
-            ? "execution terminated"
-            : "no matching execution found (IPC unavailable or already exited)";
-          resolve({
-            success: false,
-            outputLines: [...outputLines],
-            errorLines: [...errorLines, `Invocation timeout after ${timeoutMs}ms (${cancelHint})`],
-            invocationKey,
-          });
-        })();
-      }, timeoutMs);
-    });
-
-    return await Promise.race([donePromise, timeoutPromise]);
+    // 截止时间覆盖监听注册、启动 IPC 和输出等待；取消 IPC 卡住不能延长用户等待。
+    timeoutHandle = globalThis.setTimeout(() => {
+      timedOut = true;
+      errorLines.push(`Invocation timeout after ${timeoutMs}ms (cancellation requested)`);
+      resolveDone(result(false));
+      if (spawnStarted) void cancelHost();
+    }, timeoutMs);
+    const start = (async () => {
+      await attach<string>(outputEvent, (payload) => capture(outputLines, payload));
+      await attach<string>(errorEvent, (payload) => capture(errorLines, payload));
+      await attach<{ success?: boolean }>(completeEvent, (payload) => {
+        if (completedSuccess !== null) return;
+        completedSuccess = resolveClaudeCompleteSuccess(payload);
+        settle(completedSuccess);
+      });
+      if (disposed || timedOut) return donePromise;
+      spawnStarted = true;
+      try {
+        await spawnSessionEngineOneshot({
+          engine,
+          repositoryPath: params.repositoryPath,
+          prompt: params.prompt,
+          model: params.model,
+          invocationKey,
+          tabSessionId: invocationKey,
+        });
+      } finally {
+        // 启动可能在首次取消之后才注册进程，迟到返回时再次回收同一 invocation。
+        if (timedOut) void cancelHost();
+      }
+      return donePromise;
+    })();
+    return await Promise.race([donePromise, start]);
   } finally {
+    disposed = true;
     if (timeoutHandle != null) globalThis.clearTimeout(timeoutHandle);
     if (drainHandle != null) globalThis.clearTimeout(drainHandle);
-    safeUnlisten(unlistenOutput);
-    safeUnlisten(unlistenError);
-    safeUnlisten(unlistenComplete);
+    unlisteners.forEach(safeUnlisten);
   }
 }

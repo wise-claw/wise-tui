@@ -107,6 +107,7 @@ mock.module("../../services/dingtalkStreamGateway", () => ({
 mock.module("../../services/repositoryFiles", () => ({
   searchRepositoryFiles: mock(async () => []),
   listRepositoryExplorerEntries: mock(async () => []),
+  listRepositoryExplorerChildren: mock(async () => []),
 }));
 
 mock.module("@tauri-apps/plugin-opener", () => ({

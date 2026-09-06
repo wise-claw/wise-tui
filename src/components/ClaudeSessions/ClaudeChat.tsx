@@ -872,17 +872,16 @@ export function ClaudeChatInner({
             ...queued,
             executeBubbleOptions: executeOptions ?? queued.executeBubbleOptions,
           });
-          return;
+          return true;
         }
         if (typeof consumePending === "string") {
           removeTask(consumePending);
         }
         if (dispatchTarget && dispatchTarget.targetType !== "main") {
-          onExecute(sessionId, prompt, dispatchTarget, executeOptions);
-          return;
+          return onExecute(sessionId, prompt, dispatchTarget, executeOptions);
         }
       }
-      onExecute(sessionId, prompt, dispatchTarget, executeOptions);
+      return onExecute(sessionId, prompt, dispatchTarget, executeOptions);
     },
     [dispatchPendingTask, onExecute, removeTask, session.repositoryPath],
   );

@@ -67,3 +67,21 @@ export function safeUnlistenPromise(unlistenPromise: Promise<UnlistenFn> | undef
       /* listen never registered */
     });
 }
+
+/** 并行注册监听时，任一路失败都释放已成功及稍后才成功的订阅。 */
+export async function collectTauriListeners(pending: Promise<UnlistenFn>[]): Promise<UnlistenFn[]> {
+  const registered: UnlistenFn[] = [];
+  let failed = false;
+  try {
+    return await Promise.all(pending.map(async (registration) => {
+      const unlisten = await registration;
+      if (failed) safeUnlisten(unlisten);
+      else registered.push(unlisten);
+      return unlisten;
+    }));
+  } catch (error) {
+    failed = true;
+    registered.forEach(safeUnlisten);
+    throw error;
+  }
+}

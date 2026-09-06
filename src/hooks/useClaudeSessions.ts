@@ -452,6 +452,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const [tabsHydrated, setTabsHydrated] = useState(false);
   const workflowRunBySessionRef = useRef<Map<string, string>>(new Map());
   const sessionIdMapRef = useRef<Map<string, string>>(new Map());
+  const dispatchAbortByTabRef = useRef<Map<string, AbortController>>(new Map());
+  const executionTeardownByTabRef = useRef<Map<string, Promise<void>>>(new Map());
   const executeSessionRetryCountRef = useRef<Map<string, number>>(new Map());
   /** 防止同一会话在极短时间内重复追加相同用户气泡（双触发发送兜底）。 */
   const recentExecutePromptBySessionRef = useRef<Map<string, { prompt: string; at: number }>>(
@@ -830,6 +832,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   } = useMemo(
     () =>
       createClaudeEngineHandlers({
+        dispatchAbortByTabRef,
         streamRuntimeRef,
         sessionIdMapRef,
         sessionsRef,
@@ -1500,6 +1503,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   const runClaudeTurnWithContextGuard = useCallback(
     async (params: {
+      signal: AbortSignal;
       tabSessionId: string;
       turnNonce: number;
       invokeConc:
@@ -1515,15 +1519,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       cursorAttachments?: CursorSdkAttachment[];
       codexContextExecutionEngine?: SessionExecutionEngine;
     }) => {
-      const { tabSessionId, prompt, repositoryPath: repositoryPathInput, ...invokeRest } = params;
+      const { tabSessionId, prompt, signal, repositoryPath: repositoryPathInput, ...invokeRest } = params;
       const session = sessionsRef.current.find((s) => s.id === tabSessionId);
       const pathResolver = claudeSessionsOptionsRef.current?.resolveExecutionRepositoryPathRef?.current;
       const repositoryPath =
         session && pathResolver ? pathResolver(session) : repositoryPathInput;
-      if (!session) {
-        await invokeClaudeTurn({ ...params, repositoryPath });
-        return;
-      }
+      // 异步准备跨越取消/关闭时，禁止继续启动旧轮次。
+      const isCurrentTurn = () =>
+        sessionsRef.current.some((row) => row.id === tabSessionId) &&
+        !signal.aborted;
+      if (!session || !isCurrentTurn()) return;
 
       const resolveClaudeSid = (): string | null => {
         const live = sessionsRef.current.find((s) => s.id === tabSessionId);
@@ -1654,6 +1659,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
 
       const runOnce = async (outbound: string) => {
+        if (!isCurrentTurn()) throw new Error("会话轮次已结束");
         const cc = params.forceNewClaudeConversation
           ? null
           : (params.resumeClaudeSid ?? resolveClaudeSid());
@@ -1675,7 +1681,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         await bgState.inFlight.catch(() => undefined);
       }
 
+      if (!isCurrentTurn()) return;
       const metrics = await resolveSessionContextMetricsForSend(session, loadClaudeSessionJsonl);
+      if (!isCurrentTurn()) return;
       const refreshedBgState = backgroundCompactStateRef.current.get(tabSessionId);
       const pre = planAutoCompactBeforeSend(
         session,
@@ -1714,6 +1722,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           appendContextOverflowFailureHint(tabSessionId);
         }
       } catch (err) {
+        if (!isCurrentTurn()) return;
         const errText = err instanceof Error ? err.message : String(err);
         const ctx = pendingTurnFailoverRef.current;
         if (
@@ -2334,7 +2343,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (cancelled) return;
       // 须在全局 listen 就绪后再暴露 runtime，否则首包 invoke 可能无人消费 `claude-output` / complete。
       streamRuntimeRef.current = runtime;
-    })();
+    })().catch((error) => {
+      // 初始化只成功一部分时释放监听；执行入口会给出“引擎尚未就绪”的可重试提示。
+      unlisteners.splice(0).forEach(safeUnlisten);
+      if (!cancelled) console.error("Failed to initialize session stream listeners:", error);
+    });
 
     return () => {
       cancelled = true;
@@ -3190,6 +3203,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     () =>
       createSessionActionHandlers({
         sessionsRef,
+        executionTeardownByTabRef,
+        dispatchAbortByTabRef,
         sessionIdMapRef,
         executeSessionRetryCountRef,
         recentExecutePromptBySessionRef,

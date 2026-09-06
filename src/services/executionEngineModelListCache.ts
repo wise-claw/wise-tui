@@ -4,11 +4,10 @@ import type { CodexModelListItem } from "./codex";
 import type { CursorModelListItem } from "./cursorAgent";
 import type { OpencodeModelListItem } from "./opencode";
 import type { QoderModelListItem } from "./qoder";
-import { getAppSetting, setAppSetting } from "./appSettingsStore";
+import { createLocalModelPreferenceCache } from "./localModelPreferenceCache";
 
 /**
- * 各执行环境的模型列表缓存。Composer 挂载 / 新建会话只读这里；
- * 用户点开模型选择器后再打 CLI 刷新。
+ * 各执行环境的模型列表缓存。先显示本地缓存，再后台拉取并按差异更新。
  */
 export const WISE_EXECUTION_ENGINE_MODEL_LISTS_KEY =
   "wise.executionEngineModelLists.v1";
@@ -27,10 +26,6 @@ export interface ExecutionEngineModelLists {
   qoder?: QoderModelListItem[];
   claude?: ClaudeModelPickerOptions;
 }
-
-let cachedLists: ExecutionEngineModelLists = {};
-let loaded = false;
-let loadPromise: Promise<ExecutionEngineModelLists> | null = null;
 
 export function executionEngineModelListKind(
   engine: SessionExecutionEngine,
@@ -156,49 +151,38 @@ function cloneLists(lists: ExecutionEngineModelLists): ExecutionEngineModelLists
   };
 }
 
-/** 读取并缓存各环境模型列表；重复调用不再产生 IPC。 */
+const lists = createLocalModelPreferenceCache(WISE_EXECUTION_ENGINE_MODEL_LISTS_KEY, parseLists);
+
 export async function loadExecutionEngineModelLists(): Promise<ExecutionEngineModelLists> {
-  if (loaded) return cloneLists(cachedLists);
-  if (!loadPromise) {
-    loadPromise = getAppSetting(WISE_EXECUTION_ENGINE_MODEL_LISTS_KEY)
-      .then((raw) => {
-        // 刷新写入可能先于这次读取完成；勿用过期磁盘值盖掉刚缓存的列表。
-        if (loaded) return cloneLists(cachedLists);
-        cachedLists = parseLists(raw);
-        loaded = true;
-        return cloneLists(cachedLists);
-      })
-      .finally(() => {
-        loadPromise = null;
-      });
-  }
-  return loadPromise;
+  return cloneLists(await lists.load());
 }
 
-/** 测试用：清空内存缓存，避免用例之间串状态。 */
 export function resetExecutionEngineModelListsForTests(): void {
-  cachedLists = {};
-  loaded = false;
-  loadPromise = null;
+  lists.reset();
 }
 
 export function getCachedCursorModels(): CursorModelListItem[] | null {
+  const cachedLists = lists.read();
   return cachedLists.cursor?.length ? cachedLists.cursor.slice() : null;
 }
 
 export function getCachedCodexModels(): CodexModelListItem[] | null {
+  const cachedLists = lists.read();
   return cachedLists.codex?.length ? cachedLists.codex.slice() : null;
 }
 
 export function getCachedOpencodeModels(): OpencodeModelListItem[] | null {
+  const cachedLists = lists.read();
   return cachedLists.opencode?.length ? cachedLists.opencode.slice() : null;
 }
 
 export function getCachedQoderModels(): QoderModelListItem[] | null {
+  const cachedLists = lists.read();
   return cachedLists.qoder?.length ? cachedLists.qoder.slice() : null;
 }
 
 export function getCachedClaudeModelPickerOptions(): ClaudeModelPickerOptions | null {
+  const cachedLists = lists.read();
   return cachedLists.claude
     ? {
         defaultModel: cachedLists.claude.defaultModel,
@@ -207,38 +191,29 @@ export function getCachedClaudeModelPickerOptions(): ClaudeModelPickerOptions | 
     : null;
 }
 
-async function persistLists(): Promise<void> {
-  loaded = true;
-  await setAppSetting(WISE_EXECUTION_ENGINE_MODEL_LISTS_KEY, JSON.stringify(cachedLists));
-}
-
 /** 空列表视为拉取失败，保留已有缓存，避免把可用模型冲掉。 */
 export async function saveCachedCursorModels(items: CursorModelListItem[]): Promise<void> {
   const parsed = parseModelList(items) as CursorModelListItem[] | undefined;
   if (!parsed) return;
-  cachedLists = { ...cachedLists, cursor: parsed };
-  await persistLists();
+  await lists.update("cursor", parsed);
 }
 
 export async function saveCachedCodexModels(items: CodexModelListItem[]): Promise<void> {
   const parsed = parseModelList(items) as CodexModelListItem[] | undefined;
   if (!parsed) return;
-  cachedLists = { ...cachedLists, codex: parsed };
-  await persistLists();
+  await lists.update("codex", parsed);
 }
 
 export async function saveCachedOpencodeModels(items: OpencodeModelListItem[]): Promise<void> {
   const parsed = parseModelList(items) as OpencodeModelListItem[] | undefined;
   if (!parsed) return;
-  cachedLists = { ...cachedLists, opencode: parsed };
-  await persistLists();
+  await lists.update("opencode", parsed);
 }
 
 export async function saveCachedQoderModels(items: QoderModelListItem[]): Promise<void> {
   const parsed = parseModelList(items) as QoderModelListItem[] | undefined;
   if (!parsed) return;
-  cachedLists = { ...cachedLists, qoder: parsed };
-  await persistLists();
+  await lists.update("qoder", parsed);
 }
 
 export async function saveCachedClaudeModelPickerOptions(
@@ -246,6 +221,5 @@ export async function saveCachedClaudeModelPickerOptions(
 ): Promise<void> {
   const parsed = parseClaudePicker(options);
   if (!parsed) return;
-  cachedLists = { ...cachedLists, claude: parsed };
-  await persistLists();
+  await lists.update("claude", parsed);
 }

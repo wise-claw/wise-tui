@@ -172,7 +172,7 @@ export interface UseClaudeSessionsReturn {
   /** 仅写入用户气泡（不调用 Claude），供批量 OMC 等在标签内展示派发正文 */
   appendUserMessage: (sessionId: string, text: string) => void;
   sendMessage: (prompt: string) => void;
-  sendMessageToSession: (sessionId: string, prompt: string, opts?: ClaudeComposerExecuteBubbleOptions) => void;
+  sendMessageToSession: (sessionId: string, prompt: string, opts?: ClaudeComposerExecuteBubbleOptions) => Promise<void>;
   closeSession: (sessionId: string) => void;
   /**
    * 物理删除磁盘 jsonl（`~/.claude/projects/<encoded>/<sid>.jsonl`）并清理内存标签。

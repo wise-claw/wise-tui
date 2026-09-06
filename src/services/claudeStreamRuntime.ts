@@ -216,7 +216,6 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   const deferredStreamTabIds = new Set<string>();
   const deferredSystemErrors: Array<{ tid: string; msg: string }> = [];
   const deferredStderrErrors: Array<{ tid: string; msg: string }> = [];
-  const deferredCompletes: Array<{ tid: string; payload: unknown; turnNonce: number }> = [];
   const pendingOneshotCompletes = new Map<
     string,
     { payload: unknown; turnNonce: number; payloadSuccess: boolean; storedAt: number }
@@ -417,11 +416,6 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, msg));
     }
     deferredStderrErrors.length = 0;
-
-    for (const item of deferredCompletes) {
-      applySessionComplete(item.tid, item.payload, item.turnNonce, { uiOnly: true });
-    }
-    deferredCompletes.length = 0;
 
     for (const tid of deferredStreamTabIds) {
       reloadTranscriptForTab(tid);
@@ -771,6 +765,8 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     turnNonce: number,
     payloadSuccess: boolean,
   ): void {
+    // 双通道重复完成不能不断延长强制收尾的截止时间。
+    if (pendingOneshotCompletes.get(tid)?.turnNonce === turnNonce) return;
     pendingOneshotCompletes.set(tid, {
       payload,
       turnNonce,
@@ -859,7 +855,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     tid: string,
     payload: unknown,
     turnNonce: number,
-    opts?: { uiOnly?: boolean; force?: boolean },
+    opts?: { force?: boolean },
   ): boolean {
     const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
     const executionEngine = session
@@ -930,15 +926,8 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       }
       return false;
     }
-    if (!opts?.uiOnly) {
-      notifyCompletion({ tid, success: uiSuccess, nonce: turnNonce, previewRaw, structuredVerdict });
-      // 消费本轮 expected nonce：同一 nonce 的 complete 只接受一次投递，双通道二次送达被门禁拦截。
-      consumeExpectedTurnNonceForTab(tid, turnNonce);
-      if (shouldDeferClaudeStreamUi()) {
-        pushDeferred(deferredCompletes, { tid, payload, turnNonce });
-        return true;
-      }
-    }
+    // 终态必须在后台也同步提交；先消费 nonce，防止完成回调重入导致重复收尾。
+    consumeExpectedTurnNonceForTab(tid, turnNonce);
     setSessions((prev) => {
       const sessions = prev.map((s) => {
         if (s.id !== tid && s.claudeSessionId !== tid) return s;
@@ -1035,6 +1024,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         }
       }
     }
+    notifyCompletion({ tid, success: uiSuccess, nonce: turnNonce, previewRaw, structuredVerdict });
     return true;
   }
 
@@ -1129,7 +1119,6 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     deferredStreamTabIds.clear();
     deferredSystemErrors.length = 0;
     deferredStderrErrors.length = 0;
-    deferredCompletes.length = 0;
     for (const tid of [...pendingOneshotCompletes.keys()]) {
       clearPendingOneshotComplete(tid);
     }

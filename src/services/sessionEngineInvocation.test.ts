@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
+let failListenPrefix: string | null = null;
+let delayListenPrefix: string | null = null;
+let releaseListen: (() => void) | null = null;
+let releaseSpawn: (() => void) | null = null;
+let hangCancellation = false;
 const listeners = new Map<string, (event: { payload: unknown }) => void>();
 const invoke = mock(async (cmd: string, args?: Record<string, unknown>) => {
-  if (cmd === "cancel_claude_invocation") return false;
+  if (cmd === "cancel_claude_invocation") return hangCancellation ? new Promise(() => {}) : false;
   if (cmd === "shutdown_codex_rpc") return undefined;
   const rpcParams = args?.params as Record<string, unknown> | undefined;
   const invocationKey = typeof args?.invocationKey === "string"
@@ -11,6 +16,8 @@ const invoke = mock(async (cmd: string, args?: Record<string, unknown>) => {
       ? rpcParams.invocationKey
       : undefined;
   if (!invocationKey) return undefined;
+  if (args?.prompt === "hung-spawn") return new Promise<void>((resolve) => { releaseSpawn = resolve; });
+  if (args?.prompt === "failed-spawn") throw new Error("spawn rejected");
   if (args?.prompt === "never-complete" || rpcParams?.prompt === "never-complete") {
     return undefined;
   }
@@ -42,6 +49,10 @@ mock.module("@tauri-apps/api/core", () => ({
 
 mock.module("@tauri-apps/api/event", () => ({
   listen: async (event: string, handler: (event: { payload: unknown }) => void) => {
+    if (failListenPrefix && event.startsWith(failListenPrefix)) throw new Error("listen rejected");
+    if (delayListenPrefix && event.startsWith(delayListenPrefix)) {
+      await new Promise<void>((resolve) => { releaseListen = resolve; });
+    }
     listeners.set(event, handler);
     return () => {
       listeners.delete(event);
@@ -57,6 +68,11 @@ describe("sessionEngineInvocation", () => {
   beforeEach(() => {
     listeners.clear();
     invoke.mockClear();
+    failListenPrefix = null;
+    delayListenPrefix = null;
+    releaseListen = null;
+    releaseSpawn = null;
+    hangCancellation = false;
   });
 
   it("reports gemini as unsupported for oneshot wait", () => {
@@ -146,4 +162,71 @@ describe("sessionEngineInvocation", () => {
       && (call[1]?.params as Record<string, unknown>)?.sessionId === invocationKey
     )).toBe(true);
   });
+  it("releases partial subscriptions when registration fails", async () => {
+    failListenPrefix = "claude-error";
+    await expect(executeSessionEngineAndWait({
+      executionEngine: "codex", repositoryPath: "/tmp/repo", prompt: "hello",
+    })).rejects.toThrow("listen rejected");
+    expect(listeners.size).toBe(0);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("releases all subscriptions when spawn fails", async () => {
+    await expect(executeSessionEngineAndWait({
+      executionEngine: "codex", repositoryPath: "/tmp/repo", prompt: "failed-spawn",
+    })).rejects.toThrow("spawn rejected");
+    expect(listeners.size).toBe(0);
+  });
+
+  it("bounds startup IPC and retries cancellation when startup returns late", async () => {
+    const result = await executeSessionEngineAndWait({
+      executionEngine: "codex", repositoryPath: "/tmp/repo", prompt: "hung-spawn", timeoutMs: 10,
+    });
+    expect(result.success).toBe(false);
+    expect(listeners.size).toBe(0);
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "cancel_claude_invocation")).toHaveLength(1);
+    releaseSpawn?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "cancel_claude_invocation")).toHaveLength(2);
+  });
+
+  it("returns timeout even if cancellation IPC never settles", async () => {
+    hangCancellation = true;
+    const result = await executeSessionEngineAndWait({
+      executionEngine: "codex", repositoryPath: "/tmp/repo", prompt: "never-complete", timeoutMs: 10,
+    });
+    expect(result.success).toBe(false);
+    expect(result.errorLines.join(" ")).toContain("timeout");
+    expect(listeners.size).toBe(0);
+  }, 1000);
+
+  it("cleans late listener registrations and never spawns after setup times out", async () => {
+    delayListenPrefix = "claude-error";
+    const result = await executeSessionEngineAndWait({
+      executionEngine: "codex", repositoryPath: "/tmp/repo", prompt: "hello", timeoutMs: 10,
+    });
+    expect(result.success).toBe(false);
+    expect(listeners.size).toBe(0);
+    releaseListen?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(listeners.size).toBe(0);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("drains trailing output and ignores duplicate completion events", async () => {
+    const pending = executeSessionEngineAndWait({
+      executionEngine: "codex", repositoryPath: "/tmp/repo", prompt: "never-complete", timeoutMs: 1000,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const complete = [...listeners.entries()].find(([name]) => name.startsWith("claude-complete"))![1];
+    const output = [...listeners.entries()].find(([name]) => name.startsWith("claude-output"))![1];
+    complete({ payload: { success: true } });
+    complete({ payload: { success: false } });
+    output({ payload: "tail output" });
+    const result = await pending;
+    expect(result.success).toBe(true);
+    expect(result.outputLines).toContain("tail output");
+    expect(listeners.size).toBe(0);
+  });
+
 });
