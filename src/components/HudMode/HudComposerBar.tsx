@@ -314,6 +314,7 @@ export function HudComposerBar({
   const [quickActionsOverlay, setQuickActionsOverlay] = useState(false);
   const [previewImage, setPreviewImage] = useState<ImageAttachmentPart | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsDismissed, setDetailsDismissed] = useState(false);
   const detailsOpenRef = useRef(detailsOpen);
   detailsOpenRef.current = detailsOpen;
   const contextOverlayRef = useRef(contextOverlay);
@@ -326,7 +327,7 @@ export function HudComposerBar({
   const suppressEditorFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const running = snapshot.busy;
   /** 常驻详情收起后仍保留两行可滚动摘要；未配置常驻时仅在展开后显示。 */
-  const detailsVisible = Boolean(session) && (persistentDetailsEnabled || detailsOpen);
+  const detailsVisible = Boolean(session) && !detailsDismissed && (persistentDetailsEnabled || detailsOpen);
 
   const setContextOverlayWanted = useCallback((wanted: boolean) => {
     contextOverlayRef.current = wanted;
@@ -370,6 +371,7 @@ export function HudComposerBar({
   useEffect(() => {
     // 常驻详情默认从紧凑的两行高度开始，而非占满整个 HUD。
     setDetailsOpen(false);
+    setDetailsDismissed(false);
   }, [persistentDetailsEnabled, detailsPreferenceRevision, session?.id]);
 
   useEffect(() => {
@@ -537,19 +539,34 @@ export function HudComposerBar({
           <img src={previewImage.dataUrl} alt={previewImage.filename} />
         </button>
       ) : null}
-      <HudCompletionToasts toasts={toasts} onDismiss={onDismissToast ?? (() => undefined)} />
+      {!detailsOpen ? (
+        <HudCompletionToasts toasts={toasts} onDismiss={onDismissToast ?? (() => undefined)} />
+      ) : null}
       {detailsVisible && !previewImage ? (
         <div className={`app-hud-session-details${detailsOpen ? "" : " app-hud-session-details--compact"}`}>
-          <div className="app-hud-session-details__header">
-            <span>会话详情</span>
+          <div className="app-hud-session-details__actions">
             <button
               type="button"
-              className="app-hud-session-details__collapse"
+              className="app-hud-session-details__collapse app-hud-session-details__collapse--icon"
               aria-label={detailsOpen ? "收起会话详情" : "展开会话详情"}
               title={detailsOpen ? "收起详情" : "展开详情"}
               onClick={() => setDetailsOpen((open) => !open)}
             >
-              {detailsOpen ? "收起" : "展开"}
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d={detailsOpen ? "m3.5 10 4.5-4.5 4.5 4.5" : "m3.5 6 4.5 4.5L12.5 6"} />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="app-hud-session-details__close"
+              aria-label="关闭会话详情"
+              title="关闭详情"
+              onClick={() => {
+                setDetailsOpen(false);
+                setDetailsDismissed(true);
+              }}
+            >
+              ×
             </button>
           </div>
           {session ? (
@@ -581,6 +598,7 @@ export function HudComposerBar({
             detailsOpen={detailsOpen}
             disabled={!session}
             onToggle={() => {
+              setDetailsDismissed(false);
               setDetailsOpen((open) => {
                 const next = !open;
                 detailsOpenRef.current = next;

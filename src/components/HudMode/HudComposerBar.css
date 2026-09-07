@@ -431,26 +431,24 @@
 
 /* 常驻态只露出两行消息；消息区本身仍可滚动回看完整内容。 */
 .app-hud-session-details--compact {
-  flex: 0 0 76px;
-  height: 76px;
-  min-height: 76px;
-  max-height: 76px;
+  flex: 0 0 56px;
+  height: 56px;
+  min-height: 56px;
+  max-height: 56px;
 }
 
-.app-hud-session-details__header {
-  flex: 0 0 auto;
+.app-hud-session-details__actions {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  min-height: 28px;
-  padding: 0 8px 0 12px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.07);
-  color: #52525b;
-  font-size: 12px;
-  font-weight: 600;
+  gap: 4px;
 }
 
-.app-hud-session-details__collapse {
+.app-hud-session-details__collapse,
+.app-hud-session-details__close {
   appearance: none;
   border: 0;
   padding: 2px 4px;
@@ -461,8 +459,35 @@
   cursor: pointer;
 }
 
+.app-hud-session-details__collapse--icon {
+  width: 20px;
+  height: 20px;
+  padding: 3px;
+}
+
+.app-hud-session-details__collapse svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-hud-session-details__close {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 18px;
+}
+
 .app-hud-session-details__collapse:hover,
-.app-hud-session-details__collapse:focus-visible {
+.app-hud-session-details__collapse:focus-visible,
+.app-hud-session-details__close:hover,
+.app-hud-session-details__close:focus-visible {
   background: rgba(15, 23, 42, 0.06);
   color: #18181b;
   outline: none;
@@ -1375,17 +1400,15 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
-:root[data-wise-theme="dark"] .app-hud-session-details__header {
-  border-bottom-color: rgba(255, 255, 255, 0.08);
-  color: #d4d4d8;
-}
-
-:root[data-wise-theme="dark"] .app-hud-session-details__collapse {
+:root[data-wise-theme="dark"] .app-hud-session-details__collapse,
+:root[data-wise-theme="dark"] .app-hud-session-details__close {
   color: #a1a1aa;
 }
 
 :root[data-wise-theme="dark"] .app-hud-session-details__collapse:hover,
-:root[data-wise-theme="dark"] .app-hud-session-details__collapse:focus-visible {
+:root[data-wise-theme="dark"] .app-hud-session-details__collapse:focus-visible,
+:root[data-wise-theme="dark"] .app-hud-session-details__close:hover,
+:root[data-wise-theme="dark"] .app-hud-session-details__close:focus-visible {
   background: rgba(255, 255, 255, 0.08);
   color: #fafafa;
 }
