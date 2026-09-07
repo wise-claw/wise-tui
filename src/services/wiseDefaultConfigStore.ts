@@ -209,6 +209,9 @@ export type FeaturePanelChromeDefaults = Pick<
   | "showFeaturePanelScheduledTasks"
 >;
 
+/** HUD 顶部会话详情的常驻显示方式。 */
+export type HudDetailsDefaults = Pick<WiseDefaultConfigV1, "showHudPersistentDetails">;
+
 export interface WiseDefaultConfigV1 {
   version: 1;
   connectionKind: ClaudeSessionConnectionKind;
@@ -336,6 +339,8 @@ export interface WiseDefaultConfigV1 {
   showFeaturePanelHistoryMessages: boolean;
   /** 会话功能面板「定时任务」按钮；默认显示。 */
   showFeaturePanelScheduledTasks: boolean;
+  /** 进入 HUD 后在输入条上方显示当前会话的两行常驻详情。 */
+  showHudPersistentDetails: boolean;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -400,6 +405,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showFeaturePanelHistorySessions: true,
   showFeaturePanelHistoryMessages: true,
   showFeaturePanelScheduledTasks: true,
+  showHudPersistentDetails: false,
   openInTerminalShortcut: "",
   openInEditorShortcut: "",
   terminalThemeMode: "follow",
@@ -765,6 +771,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.showFeaturePanelScheduledTasks === undefined
           ? DEFAULT_CONFIG.showFeaturePanelScheduledTasks
           : normalizeBoolean(parsed.showFeaturePanelScheduledTasks),
+      showHudPersistentDetails:
+        parsed.showHudPersistentDetails === undefined
+          ? DEFAULT_CONFIG.showHudPersistentDetails
+          : normalizeBoolean(parsed.showHudPersistentDetails),
       openInTerminalShortcut:
         typeof parsed.openInTerminalShortcut === "string"
           ? normalizeChord(parsed.openInTerminalShortcut)
@@ -944,6 +954,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showFeaturePanelHistorySessions: DEFAULT_CONFIG.showFeaturePanelHistorySessions,
     showFeaturePanelHistoryMessages: DEFAULT_CONFIG.showFeaturePanelHistoryMessages,
     showFeaturePanelScheduledTasks: DEFAULT_CONFIG.showFeaturePanelScheduledTasks,
+    showHudPersistentDetails: DEFAULT_CONFIG.showHudPersistentDetails,
     openInTerminalShortcut: DEFAULT_CONFIG.openInTerminalShortcut,
     openInEditorShortcut: DEFAULT_CONFIG.openInEditorShortcut,
     terminalThemeMode: DEFAULT_CONFIG.terminalThemeMode,
@@ -1259,6 +1270,7 @@ export async function saveWiseDefaultConfig(
       | "showFeaturePanelHistorySessions"
       | "showFeaturePanelHistoryMessages"
       | "showFeaturePanelScheduledTasks"
+      | "showHudPersistentDetails"
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceTodosPanel"
       | "fileTreeOpenInNewPane"
@@ -1414,6 +1426,8 @@ export async function saveWiseDefaultConfig(
       patch.showFeaturePanelHistoryMessages ?? current.showFeaturePanelHistoryMessages,
     showFeaturePanelScheduledTasks:
       patch.showFeaturePanelScheduledTasks ?? current.showFeaturePanelScheduledTasks,
+    showHudPersistentDetails:
+      patch.showHudPersistentDetails ?? current.showHudPersistentDetails,
     openInTerminalShortcut:
       patch.openInTerminalShortcut !== undefined
         ? normalizeChord(patch.openInTerminalShortcut)
@@ -2466,6 +2480,17 @@ export async function loadFeaturePanelChromeDefaultsFromStore(): Promise<Feature
 
 export async function saveFeaturePanelChromeDefaultsToStore(
   patch: Partial<FeaturePanelChromeDefaults>,
+): Promise<void> {
+  await saveWiseDefaultConfig(patch);
+}
+
+export async function loadHudDetailsDefaultsFromStore(): Promise<HudDetailsDefaults> {
+  const config = await loadWiseDefaultConfig();
+  return { showHudPersistentDetails: config.showHudPersistentDetails };
+}
+
+export async function saveHudDetailsDefaultsToStore(
+  patch: Partial<HudDetailsDefaults>,
 ): Promise<void> {
   await saveWiseDefaultConfig(patch);
 }

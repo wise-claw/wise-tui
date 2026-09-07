@@ -15,6 +15,8 @@ mock.module("./appSettingsStore", () => ({
 
 import {
   loadWiseDefaultConfig,
+  loadHudDetailsDefaultsFromStore,
+  saveHudDetailsDefaultsToStore,
   getCachedDefaultExecutionEngine,
   saveWiseDefaultConfig,
   WISE_DEFAULT_CONFIG_KEY,
@@ -614,6 +616,20 @@ describe("wiseDefaultConfigStore", () => {
     );
     const config = await loadWiseDefaultConfig();
     expect(config.workspaceSidebarRowPreviewLimit).toBe(3);
+  });
+
+  test("HUD 常驻详情默认关闭，保存后可读取", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({ version: 1, connectionKind: "streaming" });
+      }
+      return null;
+    });
+    expect(await loadHudDetailsDefaultsFromStore()).toEqual({ showHudPersistentDetails: false });
+    await saveHudDetailsDefaultsToStore({ showHudPersistentDetails: true });
+    const lastCall = setAppSetting.mock.calls.at(-1);
+    expect(JSON.parse(String(lastCall?.[1]))).toMatchObject({ showHudPersistentDetails: true });
   });
 
   test("save workspace sidebar row preview limit clamps and dispatches event", async () => {

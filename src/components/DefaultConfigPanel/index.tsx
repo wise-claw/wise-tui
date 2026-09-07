@@ -35,6 +35,7 @@ import { EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS } from "../../consta
 import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useComposerFooterChromeDefaultSetting } from "./useComposerFooterChromeDefaultSetting";
 import { useFeaturePanelChromeDefaultSetting } from "./useFeaturePanelChromeDefaultSetting";
+import { useHudDetailsSetting } from "./useHudDetailsSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
 import { useDefaultExecutionEngineSetting } from "./useDefaultExecutionEngineSetting";
 import { useTerminalThemeModeSetting } from "./useTerminalThemeModeSetting";
@@ -89,6 +90,7 @@ export function DefaultConfigPanel() {
   const topbarChrome = useTopbarChromeDefaultSetting();
   const composerFooterChrome = useComposerFooterChromeDefaultSetting();
   const featurePanelChrome = useFeaturePanelChromeDefaultSetting();
+  const hudDetails = useHudDetailsSetting();
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
   const monitorPanel = useMonitorPanelSetting();
   const leftSidebarWorkspaceList = useLeftSidebarWorkspaceListSetting();
@@ -1167,6 +1169,28 @@ export function DefaultConfigPanel() {
               disabled={featurePanelChrome.loading || featurePanelChrome.saving}
               options={featurePanelOptions}
               onToggle={handleFeaturePanelToggle}
+            />
+          }
+        />
+      ),
+    },
+    {
+      key: "hud",
+      title: "HUD",
+      content: (
+        <DefaultConfigRow
+          title="常驻详情"
+          hint="HUD 输入条上方"
+          detail="进入 HUD 后在输入条上方常驻两行可滚动详情；可随时展开为完整详情或收起回两行高度"
+          control={
+            <Switch
+              size="small"
+              checked={hudDetails.enabled}
+              loading={hudDetails.saving}
+              disabled={hudDetails.loading || hudDetails.saving}
+              onChange={(checked) => {
+                void hudDetails.save(checked);
+              }}
             />
           }
         />

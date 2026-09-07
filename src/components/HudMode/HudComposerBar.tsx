@@ -38,6 +38,10 @@ export type HudOverlayMode = "none" | "images" | "menu" | "details";
 
 export interface HudComposerBarProps {
   snapshot: WiseHudSessionSnapshot;
+  /** 配置启用时，每次进入 HUD 或切换会话显示两行常驻详情。 */
+  persistentDetailsEnabled?: boolean;
+  /** 配置在 HUD 重新激活时会重新读取，用该版本号同步展开状态。 */
+  detailsPreferenceRevision?: number;
   toasts?: readonly HudCompletionToastView[];
   onDismissToast?: (id: string) => void;
   onOverlayOpenChange?: (mode: HudOverlayMode) => void;
@@ -207,8 +211,8 @@ function HudRunStatusChip({
   const title = disabled
     ? label
     : detailsOpen
-      ? `${label}，点击关闭会话详情`
-      : `${label}，点击打开会话详情`;
+      ? `${label}，点击收起会话详情`
+      : `${label}，点击展开会话详情`;
   return (
     <button
       type="button"
@@ -297,6 +301,8 @@ function HudStopButton() {
 
 export function HudComposerBar({
   snapshot,
+  persistentDetailsEnabled = false,
+  detailsPreferenceRevision = 0,
   toasts = [],
   onDismissToast,
   onOverlayOpenChange,
@@ -319,6 +325,8 @@ export function HudComposerBar({
   const suppressEditorFocusRef = useRef(false);
   const suppressEditorFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const running = snapshot.busy;
+  /** 常驻详情收起后仍保留两行可滚动摘要；未配置常驻时仅在展开后显示。 */
+  const detailsVisible = Boolean(session) && (persistentDetailsEnabled || detailsOpen);
 
   const setContextOverlayWanted = useCallback((wanted: boolean) => {
     contextOverlayRef.current = wanted;
@@ -360,8 +368,9 @@ export function HudComposerBar({
   }, [session?.id]);
 
   useEffect(() => {
-    if (!session) setDetailsOpen(false);
-  }, [session]);
+    // 常驻详情默认从紧凑的两行高度开始，而非占满整个 HUD。
+    setDetailsOpen(false);
+  }, [persistentDetailsEnabled, detailsPreferenceRevision, session?.id]);
 
   useEffect(() => {
     if (menuOverlay || contextOverlay || quickActionsOverlay) setPreviewImage(null);
@@ -380,8 +389,8 @@ export function HudComposerBar({
   }, [menuOverlay, contextOverlay, quickActionsOverlay, previewImage, detailsOpen, onOverlayOpenChange]);
 
   useEffect(() => {
-    void wiseHudSetDetailsOpen(detailsOpen);
-  }, [detailsOpen]);
+    void wiseHudSetDetailsOpen(detailsVisible);
+  }, [detailsVisible]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -488,7 +497,9 @@ export function HudComposerBar({
         });
         const u2 = await listen<unknown>(WISE_HUD_ACTIVE_EVENT, (event) => {
           const active = parseWiseHudActiveChanged(event.payload);
-          if (active === true && !contextOverlayRef.current) focusEditor();
+          if (active === true) {
+            if (!contextOverlayRef.current) focusEditor();
+          }
           else if (active === false) setDetailsOpen(false);
         });
         if (cancelled) {
@@ -527,8 +538,20 @@ export function HudComposerBar({
         </button>
       ) : null}
       <HudCompletionToasts toasts={toasts} onDismiss={onDismissToast ?? (() => undefined)} />
-      {detailsOpen && !previewImage ? (
-        <div className="app-hud-session-details">
+      {detailsVisible && !previewImage ? (
+        <div className={`app-hud-session-details${detailsOpen ? "" : " app-hud-session-details--compact"}`}>
+          <div className="app-hud-session-details__header">
+            <span>会话详情</span>
+            <button
+              type="button"
+              className="app-hud-session-details__collapse"
+              aria-label={detailsOpen ? "收起会话详情" : "展开会话详情"}
+              title={detailsOpen ? "收起详情" : "展开详情"}
+              onClick={() => setDetailsOpen((open) => !open)}
+            >
+              {detailsOpen ? "收起" : "展开"}
+            </button>
+          </div>
           {session ? (
             <ClaudeSessionMessagesColumn
               session={session}

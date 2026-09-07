@@ -11,6 +11,7 @@ import { bootstrapAppTheme, startSystemThemeWatch, useAppTheme } from "./stores/
 import { buildAppThemeConfig } from "./constants/appThemeTokens";
 import { ensureTauriEventUnlistenPatched, safeUnlisten } from "./utils/safeTauriUnlisten";
 import { overlayHeightFor } from "./utils/hudOverlayHeight";
+import { loadHudDetailsDefaultsFromStore } from "./services/wiseDefaultConfigStore";
 import { useHudClickThrough } from "./hooks/useHudClickThrough";
 import { useHudCompletionToasts } from "./hooks/useHudCompletionToasts";
 import {
@@ -49,6 +50,8 @@ function HudApp() {
     buildWiseHudSessionSnapshot(null),
   );
   const [overlayMode, setOverlayMode] = useState<HudOverlayMode>("none");
+  const [persistentDetailsEnabled, setPersistentDetailsEnabled] = useState(false);
+  const [detailsPreferenceRevision, setDetailsPreferenceRevision] = useState(0);
   const overlayModeRef = useRef(overlayMode);
   overlayModeRef.current = overlayMode;
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,6 +81,15 @@ function HudApp() {
     const unsubs: UnlistenFn[] = [];
     void (async () => {
       await wiseHudRequestState();
+      void loadHudDetailsDefaultsFromStore()
+        .then((defaults) => {
+          setPersistentDetailsEnabled(defaults.showHudPersistentDetails);
+          setDetailsPreferenceRevision((revision) => revision + 1);
+        })
+        .catch(() => {
+          setPersistentDetailsEnabled(false);
+          setDetailsPreferenceRevision((revision) => revision + 1);
+        });
       void wiseHudIsActive()
         .then((active) => setWiseHudModeActive(active))
         .catch(() => setWiseHudModeActive(false));
@@ -89,6 +101,14 @@ function HudApp() {
         const active = parseWiseHudActiveChanged(event.payload);
         if (active == null) return;
         setWiseHudModeActive(active);
+        if (active) {
+          void loadHudDetailsDefaultsFromStore()
+            .then((defaults) => {
+              setPersistentDetailsEnabled(defaults.showHudPersistentDetails);
+              setDetailsPreferenceRevision((revision) => revision + 1);
+            })
+            .catch(() => undefined);
+        }
       });
       if (cancelled) {
         safeUnlisten(u1);
@@ -138,6 +158,8 @@ function HudApp() {
   return (
     <HudComposerBar
       snapshot={snapshot}
+      persistentDetailsEnabled={persistentDetailsEnabled}
+      detailsPreferenceRevision={detailsPreferenceRevision}
       toasts={toasts}
       onDismissToast={dismiss}
       onOverlayOpenChange={setOverlayMode}

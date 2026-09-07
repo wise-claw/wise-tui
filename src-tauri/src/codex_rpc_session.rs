@@ -224,6 +224,7 @@ impl CodexRpcSession {
     pub async fn resume_thread(&mut self, thread_id: &str) -> Result<()> {
         let params = ThreadResumeParams {
             thread_id: thread_id.to_string(),
+            exclude_turns: true,
         };
         let params_value =
             serde_json::to_value(&params).context("Failed to serialize thread/resume params")?;
@@ -1023,6 +1024,7 @@ impl CodexRpcSession {
         let params = ThreadForkParams {
             thread_id: thread_id.to_string(),
             name: name.map(str::to_string),
+            exclude_turns: true,
         };
         let params_value =
             serde_json::to_value(&params).context("Failed to serialize thread/fork params")?;
@@ -1050,7 +1052,10 @@ impl CodexRpcSession {
 
     /// Read a thread via `thread/read`.
     pub async fn read_thread(&mut self, thread_id: &str) -> Result<serde_json::Value> {
-        let params = ThreadReadParams { thread_id: thread_id.to_string() };
+        let params = ThreadReadParams {
+            thread_id: thread_id.to_string(),
+            include_turns: false,
+        };
         let params_value =
             serde_json::to_value(&params).context("Failed to serialize thread/read params")?;
 

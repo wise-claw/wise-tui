@@ -166,7 +166,10 @@ export function useWiseHudBridge({
       runningCount,
       runStatus: resolveHudRunStatus(runningCount, hadRunningInHudRef.current),
       repositoryRunStatus: repositoryRunStatusRef.current,
-      includeMessages: detailsOpenRef.current,
+      // 常驻详情是“显示但未展开”，不能只按 detailsOpenRef 判断；否则 HUD
+      // 会拿到空 messages 并错误显示“暂无消息”。HUD 激活期间详情可能可见，
+      // 退出后仍保持轻量快照，避免主窗口后台持续传输完整会话记录。
+      includeMessages: detailsOpenRef.current || getWiseHudModeActive(),
     });
   };
 

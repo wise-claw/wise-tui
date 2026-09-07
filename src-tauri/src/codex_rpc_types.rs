@@ -97,6 +97,9 @@ pub struct ThreadStartResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ThreadResumeParams {
     pub thread_id: String,
+    /// Wise 从本地转录记录恢复会话 UI，不需要 app-server 回填完整 turns。
+    /// 避免 paginated threads 的 full-history hydration 弃用提醒。
+    pub exclude_turns: bool,
 }
 
 /// Response payload from `thread/resume` (same envelope as `thread/start`).
@@ -1917,6 +1920,8 @@ pub struct ThreadForkParams {
     pub thread_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Fork 后由需要历史的调用方分页加载 turns/items，避免全量回填。
+    pub exclude_turns: bool,
 }
 
 /// Parameters for `thread/read`.
@@ -1924,6 +1929,8 @@ pub struct ThreadForkParams {
 #[serde(rename_all = "camelCase")]
 pub struct ThreadReadParams {
     pub thread_id: String,
+    /// 只读取元数据；历史消息应按 turns/items 分页读取。
+    pub include_turns: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -2064,6 +2071,31 @@ fn parse_thread_item(v: Option<&Value>) -> ThreadItem {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn serializes_thread_metadata_requests_without_full_history_hydration() {
+        let resume = serde_json::to_value(ThreadResumeParams {
+            thread_id: "thr_resume".to_string(),
+            exclude_turns: true,
+        })
+        .expect("serialize resume");
+        assert_eq!(resume["excludeTurns"], true);
+
+        let fork = serde_json::to_value(ThreadForkParams {
+            thread_id: "thr_fork".to_string(),
+            name: None,
+            exclude_turns: true,
+        })
+        .expect("serialize fork");
+        assert_eq!(fork["excludeTurns"], true);
+
+        let read = serde_json::to_value(ThreadReadParams {
+            thread_id: "thr_read".to_string(),
+            include_turns: false,
+        })
+        .expect("serialize read");
+        assert_eq!(read["includeTurns"], false);
+    }
 
     #[test]
     fn parses_thread_start_response_envelope() {

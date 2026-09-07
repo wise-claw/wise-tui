@@ -13,7 +13,7 @@ const HUD_BOUNDS_SETTING_KEY: &str = "wise.hud.window.v1";
 const DEFAULT_HUD_WIDTH: f64 = 720.0;
 /// 与前端 `HUD_RESTING_OVERLAY_HEIGHT` 对齐：空闲态也保持菜单高度，点按钮不再拉伸窗口。
 const DEFAULT_HUD_HEIGHT: f64 = 420.0;
-const HUD_COMPACT_LOGICAL_HEIGHT: f64 = 64.0;
+const HUD_COMPACT_LOGICAL_HEIGHT: f64 = 54.0;
 const HUD_BOTTOM_MARGIN: i32 = 48;
 
 /// 只改高度，保持窗口底边不动，避免胶囊在屏幕上跳。

@@ -1,7 +1,7 @@
 import { hudToastStackExtraHeight } from "./hudCompletionToast";
 
 /** 胶囊可视高度（含 shell padding），不是窗口高度。 */
-export const HUD_VISUAL_COMPACT_HEIGHT = 64;
+export const HUD_VISUAL_COMPACT_HEIGHT = 54;
 
 /**
  * 空闲 / 菜单 / 详情共用窗口高度。

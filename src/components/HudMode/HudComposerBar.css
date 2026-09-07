@@ -2,7 +2,7 @@
   position: relative;
   box-sizing: border-box;
   height: 100%;
-  padding: 8px 12px;
+  padding: 6px 10px;
   overflow: hidden;
   background: transparent;
   display: flex;
@@ -21,21 +21,21 @@
 }
 
 .app-hud-bar {
-  --app-hud-control-size: 28px;
-  --app-hud-icon-size: 16px;
-  --app-hud-control-gap: 4px;
-  --app-hud-run-glyph-size: 20px;
-  --app-hud-run-glyph-stroke: 2px;
+  --app-hud-control-size: 26px;
+  --app-hud-icon-size: 15px;
+  --app-hud-control-gap: 3px;
+  --app-hud-run-glyph-size: 18px;
+  --app-hud-run-glyph-stroke: 1.75px;
   position: relative;
   z-index: 1;
   flex: 0 0 auto;
-  height: 48px;
-  min-height: 48px;
-  max-height: 48px;
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px 0 8px;
+  gap: 6px;
+  padding: 0 10px 0 6px;
   border-radius: 999px;
   overflow: visible;
   pointer-events: auto;
@@ -418,9 +418,9 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  margin: 0 12px 8px;
+  margin: 0 10px 6px;
   overflow: hidden;
-  border-radius: 16px;
+  border-radius: 14px;
   pointer-events: auto;
   border: 1px solid rgba(15, 23, 42, 0.08);
   background: #fff;
@@ -429,14 +429,58 @@
     0 12px 32px rgba(15, 23, 42, 0.14);
 }
 
+/* 常驻态只露出两行消息；消息区本身仍可滚动回看完整内容。 */
+.app-hud-session-details--compact {
+  flex: 0 0 76px;
+  height: 76px;
+  min-height: 76px;
+  max-height: 76px;
+}
+
+.app-hud-session-details__header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+  color: #52525b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-hud-session-details__collapse {
+  appearance: none;
+  border: 0;
+  padding: 2px 4px;
+  border-radius: 6px;
+  background: transparent;
+  color: #71717a;
+  font: inherit;
+  cursor: pointer;
+}
+
+.app-hud-session-details__collapse:hover,
+.app-hud-session-details__collapse:focus-visible {
+  background: rgba(15, 23, 42, 0.06);
+  color: #18181b;
+  outline: none;
+}
+
 .app-hud-session-details .app-claude-chat,
 .app-hud-session-details .app-claude-messages {
   background: transparent;
 }
 
+.app-hud-session-details .app-claude-chat {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
 .app-hud-session-details .app-claude-messages {
   margin-top: 0;
-  padding: 10px 12px 12px;
+  padding: 6px 10px 8px;
 }
 
 .app-hud-session-details__empty {
@@ -894,7 +938,7 @@ body > .app-claude-slash-popover--inline {
   position: fixed !important;
   left: 12px !important;
   right: 12px !important;
-  bottom: 64px !important;
+  bottom: 54px !important;
   top: auto !important;
   width: auto !important;
   max-height: 280px !important;
@@ -1329,6 +1373,21 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
   background: #2a2a2e;
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-wise-theme="dark"] .app-hud-session-details__header {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  color: #d4d4d8;
+}
+
+:root[data-wise-theme="dark"] .app-hud-session-details__collapse {
+  color: #a1a1aa;
+}
+
+:root[data-wise-theme="dark"] .app-hud-session-details__collapse:hover,
+:root[data-wise-theme="dark"] .app-hud-session-details__collapse:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fafafa;
 }
 
 :root[data-wise-theme="dark"] .app-hud-session-details__empty {
