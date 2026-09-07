@@ -31,6 +31,8 @@ import {
   parseWiseHudActivateAssistantPayload,
   parseWiseHudSetDetailsOpenPayload,
   parseWiseHudToggleRepositoryRunPayload,
+  parseWiseHudAddRepositoryPayload,
+  WISE_HUD_ADD_REPOSITORY_RESULT_EVENT,
   resolveHudRunStatus,
   resolveHudSubmitSessionId,
   WISE_HUD_ACTIVE_EVENT,
@@ -46,6 +48,7 @@ import {
   WISE_HUD_STATE_EVENT,
   WISE_HUD_SUBMIT_EVENT,
   WISE_HUD_TOGGLE_REPOSITORY_RUN_EVENT,
+  WISE_HUD_ADD_REPOSITORY_EVENT,
   type WiseHudSessionSnapshot,
 } from "../utils/wiseHudSnapshot";
 
@@ -63,6 +66,8 @@ interface UseWiseHudBridgeInput {
   setModel: (sessionId: string, model: string) => void;
   activateAssistant: (assistant: AssistantEntry) => void | Promise<void>;
   openBuiltinAssistant: (assistantId: string) => void;
+  /** HUD 选择目录后登记为不归属工作区的单仓。 */
+  addFloatingRepositoryFromPath: (folderPath: string) => void | Promise<void>;
 }
 
 function snapshotKey(snapshot: WiseHudSessionSnapshot): string {
@@ -83,6 +88,7 @@ export function useWiseHudBridge({
   setModel,
   activateAssistant,
   openBuiltinAssistant,
+  addFloatingRepositoryFromPath,
 }: UseWiseHudBridgeInput): void {
   const activeRepositoryId = activeRepository?.id ?? null;
   const subscribeRepositoryRunStatus = useCallback(
@@ -117,6 +123,7 @@ export function useWiseHudBridge({
   const setModelRef = useRef(setModel);
   const activateAssistantRef = useRef(activateAssistant);
   const openBuiltinAssistantRef = useRef(openBuiltinAssistant);
+  const addFloatingRepositoryFromPathRef = useRef(addFloatingRepositoryFromPath);
   const lastKeyRef = useRef("");
   const publishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hadRunningInHudRef = useRef(false);
@@ -137,6 +144,7 @@ export function useWiseHudBridge({
   setModelRef.current = setModel;
   activateAssistantRef.current = activateAssistant;
   openBuiltinAssistantRef.current = openBuiltinAssistant;
+  addFloatingRepositoryFromPathRef.current = addFloatingRepositoryFromPath;
   repositoryRunStatusRef.current = repositoryRunStatus;
 
   const buildSnapshot = (): WiseHudSessionSnapshot => {
@@ -312,6 +320,22 @@ export function useWiseHudBridge({
           publishNow();
         })();
       });
+      const u12 = await listen<unknown>(WISE_HUD_ADD_REPOSITORY_EVENT, (event) => {
+        const payload = parseWiseHudAddRepositoryPayload(event.payload);
+        if (!payload) return;
+        void Promise.resolve(addFloatingRepositoryFromPathRef.current(payload.folderPath)).then(
+          () => emit(WISE_HUD_ADD_REPOSITORY_RESULT_EVENT, { folderPath: payload.folderPath, ok: true }),
+          (error: unknown) => {
+            console.error("Failed to add repository from HUD:", error);
+            const detail = error instanceof Error ? error.message : String(error);
+            return emit(WISE_HUD_ADD_REPOSITORY_RESULT_EVENT, {
+              folderPath: payload.folderPath,
+              ok: false,
+              error: detail,
+            });
+          },
+        );
+      });
       if (cancelled) {
         safeUnlisten(u1);
         safeUnlisten(u2);
@@ -324,6 +348,7 @@ export function useWiseHudBridge({
         safeUnlisten(u9);
         safeUnlisten(u10);
         safeUnlisten(u11);
+        safeUnlisten(u12);
         return;
       }
       unsubs.push(
@@ -338,6 +363,7 @@ export function useWiseHudBridge({
         () => safeUnlisten(u9),
         () => safeUnlisten(u10),
         () => safeUnlisten(u11),
+        () => safeUnlisten(u12),
       );
     })();
     return () => {

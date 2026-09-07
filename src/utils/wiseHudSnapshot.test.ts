@@ -14,6 +14,8 @@ import {
   parseWiseHudActivateAssistantPayload,
   parseWiseHudSetDetailsOpenPayload,
   parseWiseHudToggleRepositoryRunPayload,
+  parseWiseHudAddRepositoryPayload,
+  parseWiseHudAddRepositoryResultPayload,
   parseWiseHudSubmitPayload,
   isWiseHudForwardEvent,
   resolveHudAssistantPreview,
@@ -255,6 +257,7 @@ describe("parseWiseHud payloads", () => {
     expect(isWiseHudForwardEvent("wise-hud-set-details-open")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-activate-assistant")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-toggle-repository-run")).toBe(true);
+    expect(isWiseHudForwardEvent("wise-hud-add-repository")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-state")).toBe(false);
     expect(isWiseHudForwardEvent("wise-hud-session-complete")).toBe(false);
   });
@@ -283,6 +286,20 @@ describe("parseWiseHud payloads", () => {
     expect(parseWiseHudActivateAssistantPayload(null)).toBeNull();
     expect(parseWiseHudToggleRepositoryRunPayload({ repositoryId: 42 })).toEqual({ repositoryId: 42 });
     expect(parseWiseHudToggleRepositoryRunPayload({ repositoryId: 0 })).toBeNull();
+    expect(parseWiseHudAddRepositoryPayload({ folderPath: " /tmp/example " })).toEqual({
+      folderPath: "/tmp/example",
+    });
+    expect(parseWiseHudAddRepositoryPayload({ folderPath: "  " })).toBeNull();
+    expect(parseWiseHudAddRepositoryPayload(null)).toBeNull();
+    expect(parseWiseHudAddRepositoryResultPayload({ folderPath: "/tmp/example", ok: true })).toEqual({
+      folderPath: "/tmp/example",
+      ok: true,
+    });
+    expect(parseWiseHudAddRepositoryResultPayload({ folderPath: "/tmp/example", ok: false, error: " denied " })).toEqual({
+      folderPath: "/tmp/example",
+      ok: false,
+      error: "denied",
+    });
   });
 
   it("parses snapshot and active flag", () => {

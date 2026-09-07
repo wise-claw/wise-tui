@@ -13,6 +13,7 @@ import {
   WISE_HUD_SET_DETAILS_OPEN_EVENT,
   WISE_HUD_SUBMIT_EVENT,
   WISE_HUD_TOGGLE_REPOSITORY_RUN_EVENT,
+  WISE_HUD_ADD_REPOSITORY_EVENT,
 } from "../utils/wiseHudSnapshot";
 
 /** HUD 窗不能用全局 emit：主窗隐藏后收不到。经 Rust 打到 `main`，失败再 emitTo。 */
@@ -124,6 +125,24 @@ export async function wiseHudActivateAssistant(assistantId: string): Promise<voi
 
 export async function wiseHudToggleRepositoryRun(repositoryId: number): Promise<void> {
   await emitToPrimaryMain(WISE_HUD_TOGGLE_REPOSITORY_RUN_EVENT, { repositoryId });
+}
+
+/** HUD 目录选择完成后，交由主窗口复用统一的单仓登记流程。 */
+export async function wiseHudAddRepository(folderPath: string): Promise<void> {
+  const trimmed = folderPath.trim();
+  if (!trimmed) return;
+  await emitToPrimaryMain(WISE_HUD_ADD_REPOSITORY_EVENT, { folderPath: trimmed });
+}
+
+/** HUD 的原生目录选择器；取消时返回 null。 */
+export async function pickHudRepositoryFolder(): Promise<string | null> {
+  try {
+    const result = await open({ directory: true, multiple: false });
+    if (typeof result === "string") return result;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /** 选择本地文件，路径供 HUD 以 `@path` 附到草稿。 */

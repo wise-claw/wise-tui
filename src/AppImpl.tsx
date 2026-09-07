@@ -2047,6 +2047,8 @@ export default function App() {
     },
     activateAssistant,
     openBuiltinAssistant,
+    addFloatingRepositoryFromPath: (folderPath) =>
+      handleAddFloatingRepository("frontend", undefined, undefined, folderPath),
   });
 
   const fileEditorRootPath = useMemo(() => {

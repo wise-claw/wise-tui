@@ -470,6 +470,7 @@ const HUD_FORWARD_EVENTS: &[&str] = &[
     "wise-hud-set-details-open",
     "wise-hud-activate-assistant",
     "wise-hud-toggle-repository-run",
+    "wise-hud-add-repository",
 ];
 
 fn is_hud_forward_event(event: &str) -> bool {
@@ -577,6 +578,7 @@ mod tests {
         assert!(is_hud_forward_event("wise-hud-set-details-open"));
         assert!(is_hud_forward_event("wise-hud-toggle-repository-run"));
         assert!(is_hud_forward_event("wise-hud-activate-assistant"));
+        assert!(is_hud_forward_event("wise-hud-add-repository"));
         assert!(!is_hud_forward_event("wise-hud-active-changed"));
         assert!(!is_hud_forward_event("wise-hud-state"));
         assert!(!is_hud_forward_event(""));

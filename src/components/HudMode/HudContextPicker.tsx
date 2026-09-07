@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { App, Input, Popover } from "antd";
+import { listen } from "@tauri-apps/api/event";
 import { useHudOverlaySelectOpen } from "../../hooks/useHudOverlaySelectOpen";
 import { useAgentRegistryCodexAvailable } from "../../hooks/useAgentRegistryCodexAvailable";
 import { useAgentRegistryCursorAvailable } from "../../hooks/useAgentRegistryCursorAvailable";
@@ -27,7 +28,13 @@ import { listQoderModels, type QoderModelListItem } from "../../services/qoder";
 import { getClaudeModelProfileStore } from "../../services/claudeModelProfiles";
 import { getCachedModelProfileStore } from "../../stores/modelProfileStoreCache";
 import type { ClaudeModelProfile } from "../../types/claudeModelProfile";
-import { wiseHudSelectRepository, wiseHudSetEngine, wiseHudSetModel } from "../../services/wiseHud";
+import {
+  pickHudRepositoryFolder,
+  wiseHudAddRepository,
+  wiseHudSelectRepository,
+  wiseHudSetEngine,
+  wiseHudSetModel,
+} from "../../services/wiseHud";
 import {
   isSessionExecutionEngine,
   SESSION_EXECUTION_ENGINE_LABELS,
@@ -63,7 +70,11 @@ import {
   showRepositoryTerminalOpenMenuItem,
 } from "../../utils/repositoryTerminalOpenMenu";
 import type { Repository } from "../../types";
-import type { WiseHudSessionSnapshot } from "../../utils/wiseHudSnapshot";
+import {
+  parseWiseHudAddRepositoryResultPayload,
+  WISE_HUD_ADD_REPOSITORY_RESULT_EVENT,
+  type WiseHudSessionSnapshot,
+} from "../../utils/wiseHudSnapshot";
 import "./HudComposerBar.css";
 
 export interface HudContextPickerProps {
@@ -238,6 +249,7 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
   const hudSelect = useHudOverlaySelectOpen(true);
   const [tab, setTab] = useState<HudContextPickerTab>("repo");
   const [query, setQuery] = useState("");
+  const [addingRepositoryPath, setAddingRepositoryPath] = useState<string | null>(null);
   const [optimisticEngine, setOptimisticEngine] = useState<SessionExecutionEngine | null>(null);
   const [optimisticModel, setOptimisticModel] = useState<string | null>(null);
   const [claudePicker, setClaudePicker] = useState<ClaudeModelPickerOptions | null>(
@@ -314,6 +326,25 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
       return;
     }
   }, [hudSelect.open]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    void listen<unknown>(WISE_HUD_ADD_REPOSITORY_RESULT_EVENT, (event) => {
+      const result = parseWiseHudAddRepositoryResultPayload(event.payload);
+      if (!result || result.folderPath !== addingRepositoryPath) return;
+      setAddingRepositoryPath(null);
+      if (result.ok) message.success("仓库已添加");
+      else message.error(result.error || "添加仓库失败");
+    }).then((next) => {
+      if (cancelled) next();
+      else unlisten = next;
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [addingRepositoryPath, message]);
 
   useEffect(() => {
     if (!hudSelect.open || tab !== "model") return;
@@ -539,6 +570,18 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
     setQuery("");
   }, []);
 
+  const handleAddRepository = useCallback(async () => {
+    const folderPath = await pickHudRepositoryFolder();
+    if (!folderPath) return;
+    setAddingRepositoryPath(folderPath);
+    try {
+      await wiseHudAddRepository(folderPath);
+    } catch (error) {
+      setAddingRepositoryPath(null);
+      message.error(error instanceof Error ? error.message : "添加仓库失败");
+    }
+  }, [message]);
+
   const retainPopupPointer = useCallback((event: MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
@@ -705,6 +748,20 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
         onChange={(event) => setQuery(event.target.value)}
       />
       {list}
+      {tab === "repo" ? (
+        <button
+          type="button"
+          className="app-hud-context-add-repository"
+          disabled={addingRepositoryPath != null}
+          onMouseDown={retainPopupPointer}
+          onClick={(event) => {
+            event.stopPropagation();
+            void handleAddRepository();
+          }}
+        >
+          {addingRepositoryPath ? "正在添加仓库…" : "+ 添加仓库"}
+        </button>
+      ) : null}
     </div>
   );
 

@@ -1272,6 +1272,31 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
   font-size: 12px;
 }
 
+.app-hud-context-add-repository {
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 7px;
+  background: transparent;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-hud-context-add-repository:hover:not(:disabled) {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.app-hud-context-add-repository:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 :root[data-wise-theme="dark"] .app-hud-bar {
   background: #2a2a2e;
   border-color: rgba(96, 165, 250, 0.35);
@@ -1445,6 +1470,16 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
 
 :root[data-wise-theme="dark"] .app-hud-context-empty {
   color: #71717a;
+}
+
+:root[data-wise-theme="dark"] .app-hud-context-add-repository {
+  border-color: rgba(147, 197, 253, 0.34);
+  color: #93c5fd;
+}
+
+:root[data-wise-theme="dark"] .app-hud-context-add-repository:hover:not(:disabled) {
+  border-color: rgba(147, 197, 253, 0.58);
+  background: rgba(59, 130, 246, 0.16);
 }
 
 :root[data-wise-theme="dark"] .app-hud-context-search.ant-input-affix-wrapper,

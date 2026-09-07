@@ -28,6 +28,10 @@ export const WISE_HUD_SESSION_COMPLETE_EVENT = "wise-hud-session-complete";
 export const WISE_HUD_SET_DETAILS_OPEN_EVENT = "wise-hud-set-details-open";
 export const WISE_HUD_ACTIVATE_ASSISTANT_EVENT = "wise-hud-activate-assistant";
 export const WISE_HUD_TOGGLE_REPOSITORY_RUN_EVENT = "wise-hud-toggle-repository-run";
+/** HUD 选择一个本地目录后，请主窗口将其登记为单仓。 */
+export const WISE_HUD_ADD_REPOSITORY_EVENT = "wise-hud-add-repository";
+/** 主窗口完成 HUD 仓库登记后回传结果给 HUD。 */
+export const WISE_HUD_ADD_REPOSITORY_RESULT_EVENT = "wise-hud-add-repository-result";
 
 export const HUD_ASSISTANT_PREVIEW_MAX_LEN = 280;
 
@@ -99,6 +103,7 @@ const HUD_FORWARD_EVENTS = [
   WISE_HUD_SET_DETAILS_OPEN_EVENT,
   WISE_HUD_ACTIVATE_ASSISTANT_EVENT,
   WISE_HUD_TOGGLE_REPOSITORY_RUN_EVENT,
+  WISE_HUD_ADD_REPOSITORY_EVENT,
 ] as const;
 
 export type WiseHudForwardEvent = (typeof HUD_FORWARD_EVENTS)[number];
@@ -131,6 +136,15 @@ export interface WiseHudActivateAssistantPayload {
 
 export interface WiseHudToggleRepositoryRunPayload {
   repositoryId: number;
+}
+
+export interface WiseHudAddRepositoryPayload {
+  folderPath: string;
+}
+
+export interface WiseHudAddRepositoryResultPayload extends WiseHudAddRepositoryPayload {
+  ok: boolean;
+  error?: string;
 }
 
 export interface BuildWiseHudSessionSnapshotExtras {
@@ -573,6 +587,27 @@ export function parseWiseHudToggleRepositoryRunPayload(
   const repositoryId = Number((raw as { repositoryId?: unknown }).repositoryId);
   if (!Number.isInteger(repositoryId) || repositoryId <= 0) return null;
   return { repositoryId };
+}
+
+/** HUD 只允许把明确选择的非空目录路径交给主窗口登记。 */
+export function parseWiseHudAddRepositoryPayload(
+  raw: unknown,
+): WiseHudAddRepositoryPayload | null {
+  const obj = asSubmitObject(raw);
+  const folderPath = obj?.folderPath;
+  if (typeof folderPath !== "string") return null;
+  const trimmed = folderPath.trim();
+  return trimmed ? { folderPath: trimmed } : null;
+}
+
+export function parseWiseHudAddRepositoryResultPayload(
+  raw: unknown,
+): WiseHudAddRepositoryResultPayload | null {
+  const obj = asSubmitObject(raw);
+  const request = parseWiseHudAddRepositoryPayload(obj);
+  if (!request || typeof obj?.ok !== "boolean") return null;
+  const error = typeof obj.error === "string" && obj.error.trim() ? obj.error.trim() : undefined;
+  return obj.ok ? { ...request, ok: true } : { ...request, ok: false, error };
 }
 
 export function parseWiseHudActiveChanged(raw: unknown): boolean | null {
