@@ -438,6 +438,10 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
       sessionModel,
     ],
   );
+  const activeModelLabel =
+    modelOptions.find((item) => item.value === sessionModel.trim())?.label?.trim() ||
+    sessionModel.trim() ||
+    "默认";
 
   const engineItems = useMemo(() => {
     return SESSION_EXECUTION_ENGINES_OFFERED.filter((key) => {
@@ -788,7 +792,7 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
           className={`app-hud-context-pill${hudSelect.open ? " app-hud-context-pill--open" : ""}`}
           aria-expanded={hudSelect.open}
           aria-label="切换仓库、执行环境和模型"
-          title={`${activeRepoLabel} · ${SESSION_EXECUTION_ENGINE_LABELS[engine].title}`}
+          title={`${activeRepoLabel} · ${SESSION_EXECUTION_ENGINE_LABELS[engine].title} · ${activeModelLabel}`}
         >
           <span className="app-hud-context-pill__name">{activeRepoLabel}</span>
           <span className="app-hud-context-pill__stack" aria-hidden>
