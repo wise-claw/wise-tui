@@ -17,6 +17,8 @@ const COPY_ICON =
 const CLOSE_ICON =
   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
 
+const toolbarListeners = new WeakMap<HTMLElement, () => void>();
+
 function createZoomButton(
   doc: Document,
   action: string,
@@ -66,12 +68,29 @@ export function createMermaidToolbar(doc: Document, opts?: { includeExpand?: boo
   return toolbar;
 }
 
+function bindMermaidToolbarActions(block: HTMLElement, toolbar: HTMLElement): void {
+  toolbarListeners.get(block)?.();
+
+  const onClick = (event: MouseEvent) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-mermaid-action]");
+    if (!button || !toolbar.contains(button)) return;
+    const action = button.getAttribute("data-mermaid-action");
+    if (!action) return;
+    handleMermaidAction(block, action, button);
+  };
+
+  toolbar.addEventListener("click", onClick);
+  toolbarListeners.set(block, () => toolbar.removeEventListener("click", onClick));
+}
+
 export function mountRenderedMermaidDiagram(
   block: HTMLElement,
   svg: string,
   doc: Document = document,
 ): void {
   destroyMermaidDiagramViewport(block);
+  toolbarListeners.get(block)?.();
+  toolbarListeners.delete(block);
 
   const existingSource = block.querySelector<HTMLElement>(".app-markdown-mermaid__source");
   const sourceText = existingSource?.textContent ?? "";
@@ -103,6 +122,7 @@ export function mountRenderedMermaidDiagram(
   block.classList.add("app-markdown-mermaid--rendered");
   block.setAttribute("data-mermaid-rendered", "true");
   block.setAttribute("aria-label", "流程图");
+  bindMermaidToolbarActions(block, toolbar);
   bindMermaidDiagramViewport(block, { mode: "inline", initialScale: 1 });
 }
 
@@ -115,9 +135,16 @@ function readMermaidCanvasHtml(block: Element): string {
   return svg ? svg.outerHTML : "";
 }
 
+type MermaidLightboxOverlay = HTMLElement & { __mermaidKeyDown?: (event: KeyboardEvent) => void };
+
 function closeMermaidLightbox(overlay: HTMLElement): void {
   const panel = overlay.querySelector<HTMLElement>(".app-markdown-mermaid-lightbox__panel");
   if (panel) destroyMermaidDiagramViewport(panel);
+  const keyHandler = (overlay as MermaidLightboxOverlay).__mermaidKeyDown;
+  if (keyHandler) {
+    document.removeEventListener("keydown", keyHandler);
+    delete (overlay as MermaidLightboxOverlay).__mermaidKeyDown;
+  }
   overlay.remove();
   if (!document.querySelector(".app-markdown-mermaid-lightbox")) {
     document.body.style.overflow = "";
@@ -187,6 +214,12 @@ export function openMermaidLightbox(block: Element): void {
     handleMermaidAction(panel, action ?? "", actionEl as HTMLButtonElement);
   });
 
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") closeMermaidLightbox(overlay);
+  };
+  (overlay as MermaidLightboxOverlay).__mermaidKeyDown = onKeyDown;
+  document.addEventListener("keydown", onKeyDown);
+
   document.body.appendChild(overlay);
   document.body.style.overflow = "hidden";
   if (panel) bindMermaidDiagramViewport(panel, { mode: "lightbox" });
@@ -209,34 +242,9 @@ async function copyMermaidSourceFromBlock(block: Element, button: HTMLButtonElem
   }
 }
 
-/** 绑定流程图工具栏交互（缩放 / 复制 / 全屏）。 */
-export function attachMermaidViewerInteractions(container: HTMLElement): () => void {
-  const onClick = (event: MouseEvent) => {
-    const target = event.target as HTMLElement;
-    const button = target.closest<HTMLButtonElement>("[data-mermaid-action]");
-    if (!button) return;
-
-    const block = button.closest<HTMLElement>(".app-markdown-mermaid");
-    const lightboxPanel = button.closest<HTMLElement>(".app-markdown-mermaid-lightbox__panel");
-    const host = block ?? lightboxPanel;
-    if (!host) return;
-    if (block && !container.contains(block)) return;
-
-    const action = button.getAttribute("data-mermaid-action");
-    if (!action) return;
-    handleMermaidAction(host, action, button);
-  };
-
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key !== "Escape") return;
-    const overlay = document.querySelector<HTMLElement>(".app-markdown-mermaid-lightbox");
-    if (overlay) closeMermaidLightbox(overlay);
-  };
-
-  container.addEventListener("click", onClick);
-  document.addEventListener("keydown", onKeyDown);
-  return () => {
-    container.removeEventListener("click", onClick);
-    document.removeEventListener("keydown", onKeyDown);
-  };
+/**
+ * @deprecated 工具栏与全屏预览已在 mount/open 时自绑定；保留空实现以免旧调用方报错。
+ */
+export function attachMermaidViewerInteractions(_container: HTMLElement): () => void {
+  return () => {};
 }
