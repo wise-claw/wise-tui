@@ -194,6 +194,7 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
           messageListProfile={messageListProfile}
           companionMessageListWindow={companionMessageListWindow}
           onWindowExhausted={handleWindowExhausted}
+          pinUserMessages
         />
       )}
     </div>

@@ -58,6 +58,10 @@ export const UserMessageDisplayBody = memo(function UserMessageDisplayBody({ msg
           ) : (
             <UserMessagePlainText text={visibleText} />
           )}
+        </div>
+      </UserMessageCollapsibleBody>
+      {display.attachmentPaths.length > 0 || display.hasStrippedContext ? (
+        <div className="app-claude-user-message-meta-row">
           {display.attachmentPaths.length > 0 ? (
             <div
               className="app-claude-user-message-attachments"
@@ -66,17 +70,17 @@ export const UserMessageDisplayBody = memo(function UserMessageDisplayBody({ msg
               {display.attachmentPaths.length} 张附图
             </div>
           ) : null}
+          {display.hasStrippedContext ? (
+            <button
+              type="button"
+              className="app-claude-user-message-collapsible__toggle"
+              onClick={() => setShowFullInput((prev) => !prev)}
+              title="包含被精简的规则 / 上下文等原始输入"
+            >
+              {showFullInput ? "收起原始输入" : "显示原始输入"}
+            </button>
+          ) : null}
         </div>
-      </UserMessageCollapsibleBody>
-      {display.hasStrippedContext ? (
-        <button
-          type="button"
-          className="app-claude-user-message-collapsible__toggle"
-          onClick={() => setShowFullInput((prev) => !prev)}
-          title="包含被精简的规则 / 上下文等原始输入"
-        >
-          {showFullInput ? "收起原始输入" : "显示原始输入"}
-        </button>
       ) : null}
     </div>
   );

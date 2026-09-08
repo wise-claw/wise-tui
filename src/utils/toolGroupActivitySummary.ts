@@ -145,9 +145,7 @@ export function buildToolGroupActivitySummary(
   if (!label) {
     label = toolCount > 0 ? `${toolCount} 个工具` : "工具调用";
   }
-  if (running) {
-    label = `${label}…`;
-  } else if (errorCount > 0) {
+  if (errorCount > 0) {
     label = `${label}，${errorCount} 失败`;
   }
 

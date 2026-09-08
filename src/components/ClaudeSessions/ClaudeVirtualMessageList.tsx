@@ -26,6 +26,8 @@ interface Props {
   companionMessageListWindow?: { initialVisible: number; loadStep: number };
   /** 内存窗口耗尽时衔接磁盘全量重载（仅主窗格 chat 变体传入） */
   onWindowExhausted?: () => void;
+  /** 非 HUD 主会话置顶当前用户消息；HUD 详情会显式关闭。 */
+  pinUserMessages?: boolean;
 }
 
 export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHandle, Props>(
@@ -45,6 +47,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
       messageListProfile = "primary",
       companionMessageListWindow,
       onWindowExhausted,
+      pinUserMessages = true,
     },
     ref,
   ) {
@@ -74,6 +77,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
           companionMessageListWindow={companionMessageListWindow}
           onWindowExhausted={onWindowExhausted}
           transcriptMemoryUnlimited={session.transcriptMemoryUnlimited}
+          pinUserMessages={pinUserMessages}
         />
       </ChatRepositoryProvider>
     );

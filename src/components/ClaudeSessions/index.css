@@ -4953,6 +4953,16 @@
   max-width: 100%;
 }
 
+.app-claude-user-message-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 4px;
+}
+
 .app-claude-user-message-plain {
   margin: 0;
   white-space: pre-wrap;
@@ -5003,7 +5013,6 @@
 }
 
 .app-claude-user-message-attachments {
-  margin-top: 4px;
   font-size: 11px;
   line-height: 1.4;
   color: var(--ant-color-text-tertiary);
@@ -5033,7 +5042,7 @@
 }
 
 .app-claude-user-message-collapsible__toggle {
-  margin-top: 4px;
+  margin-top: 0;
   padding: 0;
   border: none;
   background: transparent;
@@ -5489,9 +5498,10 @@
 
 .app-message-parts__tool-group-summary__label {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* 执行中 / 思考中：从左到右光波划过（略慢，避免抢视线） */

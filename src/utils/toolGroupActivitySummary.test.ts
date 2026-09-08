@@ -54,11 +54,11 @@ describe("buildToolGroupActivitySummary", () => {
     expect(summary.removedLines).toBeGreaterThan(0);
   });
 
-  test("marks running groups with ellipsis", () => {
+  test("keeps running group statistics complete", () => {
     const summary = buildToolGroupActivitySummary([
       tool("Read", { file_path: "/repo/a.ts" }, "running"),
     ]);
     expect(summary.running).toBe(true);
-    expect(summary.label.endsWith("…")).toBe(true);
+    expect(summary.label).toBe("探索了 a.ts");
   });
 });
