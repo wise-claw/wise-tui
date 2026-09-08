@@ -247,14 +247,16 @@ fn apply_hud_size(win: &WebviewWindow, width: f64) -> Result<(), String> {
 }
 
 fn place_hud_default(win: &WebviewWindow) -> Result<(), String> {
-    let _ = apply_hud_size(win, DEFAULT_HUD_WIDTH);
+    place_hud_centered(win, DEFAULT_HUD_WIDTH)
+}
+
+/// 将 HUD 固定放在主显示器工作区底部上方，并保持水平居中。
+fn place_hud_centered(win: &WebviewWindow, width: f64) -> Result<(), String> {
+    let _ = apply_hud_size(win, width);
     let size = win.outer_size().map_err(|e| e.to_string())?;
     let win_w = size.width as i32;
     let win_h = size.height as i32;
-    let cursor = win.cursor_position().ok();
-    let mon = cursor
-        .and_then(|pos| win.monitor_from_point(pos.x, pos.y).ok().flatten())
-        .or_else(|| win.primary_monitor().ok().flatten());
+    let mon = win.primary_monitor().ok().flatten();
     let Some(m) = mon else {
         return Ok(());
     };
@@ -269,11 +271,8 @@ fn place_hud_default(win: &WebviewWindow) -> Result<(), String> {
 fn apply_saved_or_default_bounds(win: &WebviewWindow, db: &WiseDb) -> Result<(), String> {
     if let Some(bounds) = load_hud_bounds(db) {
         let width = bounds.width.unwrap_or(DEFAULT_HUD_WIDTH).max(DEFAULT_HUD_WIDTH);
-        let _ = apply_hud_size(win, width);
-        let (nx, ny) = clamp_hud_to_monitor(win, bounds.x, bounds.y)?;
-        win.set_position(tauri::Position::Physical(PhysicalPosition::new(nx, ny)))
-            .map_err(|e| e.to_string())?;
-        return Ok(());
+        // 进入 HUD 时不恢复历史坐标，始终固定到 Dock 上方居中位置。
+        return place_hud_centered(win, width);
     }
     place_hud_default(win)
 }
