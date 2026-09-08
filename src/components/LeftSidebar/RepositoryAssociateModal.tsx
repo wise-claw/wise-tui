@@ -1,10 +1,8 @@
 import { FolderOpenOutlined } from "@ant-design/icons";
 import { Button, Input, Modal, Space, Typography } from "antd";
 import type { AddRepositoryOptions } from "../../types";
-import type { WorkspaceBootstrapSelection } from "../../constants/workspaceBootstrapAddons";
 import type { RepositoryAcquireMode } from "../../utils/repositoryAcquire";
 import { deriveFolderNameFromGitUrl } from "../../utils/repositoryAcquire";
-import { WorkspaceBootstrapPicker } from "../WorkspaceBootstrapPicker";
 import "./RepositoryAssociateModal.css";
 
 interface RepositoryAssociateModalProps {
@@ -20,8 +18,6 @@ interface RepositoryAssociateModalProps {
   gitUrl: string;
   onGitUrlChange: (value: string) => void;
   submitOkText: string;
-  workspaceBootstrapSelection: WorkspaceBootstrapSelection;
-  onWorkspaceBootstrapSelectionChange: (value: WorkspaceBootstrapSelection) => void;
   onCancel: () => void;
   onSubmit: () => void;
 }
@@ -73,8 +69,6 @@ export function RepositoryAssociateModal({
   gitUrl,
   onGitUrlChange,
   submitOkText,
-  workspaceBootstrapSelection,
-  onWorkspaceBootstrapSelectionChange,
   onCancel,
   onSubmit,
 }: RepositoryAssociateModalProps) {
@@ -197,25 +191,11 @@ export function RepositoryAssociateModal({
             </>
           ) : null}
         </div>
-
-        <div>
-          {!floatingMode ? (
-            <div className="app-add-repo-field-label">SDD 与内置能力</div>
-          ) : null}
-          <WorkspaceBootstrapPicker
-            selection={workspaceBootstrapSelection}
-            onChange={onWorkspaceBootstrapSelectionChange}
-          />
-        </div>
       </Space>
     </Modal>
   );
 }
 
-export function buildAddRepositoryOptions({
-  bootstrap,
-}: {
-  bootstrap?: WorkspaceBootstrapSelection;
-}): AddRepositoryOptions {
-  return { bootstrap };
+export function buildAddRepositoryOptions(): AddRepositoryOptions {
+  return {};
 }

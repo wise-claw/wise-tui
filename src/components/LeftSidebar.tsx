@@ -1418,8 +1418,6 @@ export function LeftSidebar({
         gitUrl={repositoryAssociateModal.gitUrl}
         onGitUrlChange={repositoryAssociateModal.setGitUrl}
         submitOkText={repositoryAssociateModal.submitOkText}
-        workspaceBootstrapSelection={repositoryAssociateModal.workspaceBootstrapSelection}
-        onWorkspaceBootstrapSelectionChange={repositoryAssociateModal.setWorkspaceBootstrapSelection}
         onCancel={repositoryAssociateModal.close}
         onSubmit={repositoryAssociateModal.submit}
       />

@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from "react";
 import { App as AntdApp } from "antd";
 import type { AddRepositoryOptions, ProjectItem, Repository } from "../../types";
 import type { RepositoryAcquireMode, RepositoryAcquireParams } from "../../utils/repositoryAcquire";
-import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../../constants/workspaceBootstrapAddons";
 import { pickFolder, resolveRepositoryAcquirePath } from "../../services/repository";
 import {
   deriveFolderNameFromGitUrl,
@@ -47,9 +46,6 @@ export function useRepositoryAssociateModalController({
   const { message } = AntdApp.useApp();
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [floatingMode, setFloatingMode] = useState(false);
-  const [workspaceBootstrapSelection, setWorkspaceBootstrapSelection] = useState(
-    () => ({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION }),
-  );
   const [acquireMode, setAcquireMode] = useState<RepositoryAcquireMode>("pick_existing");
   const [parentPath, setParentPath] = useState("");
   const [folderName, setFolderName] = useState("");
@@ -63,7 +59,6 @@ export function useRepositoryAssociateModalController({
   const defaultParentPath = pendingProject?.rootPath?.trim() ?? "";
 
   const resetDraft = useCallback(() => {
-    setWorkspaceBootstrapSelection({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION });
     setAcquireMode("pick_existing");
     setParentPath("");
     setFolderName("");
@@ -124,9 +119,7 @@ export function useRepositoryAssociateModalController({
 
   const submit = useCallback(() => {
     if (!pendingProjectId && !floatingMode) return;
-    const options = buildAddRepositoryOptions({
-      bootstrap: workspaceBootstrapSelection,
-    });
+    const options = buildAddRepositoryOptions();
     const acquire = buildAcquireParams();
     const validationError = validateRepositoryAcquireParams(acquire);
     if (validationError) {
@@ -209,7 +202,6 @@ export function useRepositoryAssociateModalController({
     onAddFloatingRepository,
     onAddRepositoryToProject,
     pendingProjectId,
-    workspaceBootstrapSelection,
   ]);
 
   const open = Boolean(pendingProjectId) || floatingMode;
@@ -237,8 +229,6 @@ export function useRepositoryAssociateModalController({
     defaultParentPath,
     pickParentPath,
     submitOkText,
-    workspaceBootstrapSelection,
-    setWorkspaceBootstrapSelection,
     openAddRepositoryModal,
     openAddFloatingRepositoryModal,
     close,
