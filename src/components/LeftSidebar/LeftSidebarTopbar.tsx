@@ -7,6 +7,8 @@ import { NewMainWindowTopbarTrigger } from "./NewMainWindowTopbarTrigger";
 import { IconSettings } from "../icons/IconSettings";
 import { IconFileTreeExplorer } from "../WorkspaceFileTreeRail/IconFileTreeExplorer";
 import type { AuthorPane } from "../../types/viewMode";
+import { resetOverlayDragCursorOnInteractiveHover } from "../../services/windowChromeDrag";
+import { useCallback, type PointerEvent as ReactPointerEvent } from "react";
 import "./NewMainWindowTopbarTrigger.css";
 
 interface LeftSidebarTopbarProps {
@@ -28,6 +30,10 @@ export function LeftSidebarTopbar({
   onToggleFileTreeRail,
   onOpenAuthor,
 }: LeftSidebarTopbarProps) {
+  const handleActionsPointerOver = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    resetOverlayDragCursorOnInteractiveHover(event.target);
+  }, []);
+
   return (
     <div className="app-left-sidebar-topbar">
       <WindowChromeDragUnderlay className="app-left-sidebar-topbar-drag-underlay" />
@@ -36,7 +42,10 @@ export function LeftSidebarTopbar({
           W
         </span>
       </div>
-      <div className="app-left-sidebar-topbar-actions">
+      <div
+        className="app-left-sidebar-topbar-actions"
+        onPointerOver={handleActionsPointerOver}
+      >
         <HoverHint title={authorDisabled ? authorTooltip : "工作台配置"}>
           <button
             type="button"
