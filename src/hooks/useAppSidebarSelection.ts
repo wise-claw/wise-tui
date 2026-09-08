@@ -1,14 +1,7 @@
-import {
-  startTransition,
-  useCallback,
-  useEffect,
-  useRef,
-  type MutableRefObject,
-  type RefObject,
-} from "react";
+import { startTransition, useCallback, useEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import { message } from "antd";
 import type { ClaudeSession, ProjectItem, Repository } from "../types";
-import { prefetchGitStatus } from "../services/gitStatusWarmCache";
+import { prefetchRepositoryWorkspace } from "../services/repositoryWorkspacePrefetch";
 import { migratePromptContextSessionKey } from "../components/ClaudeChatInput/prompt-context";
 import {
   releaseClaudeHostProcessesForProjectScope,
@@ -28,7 +21,10 @@ import {
   pickProjectMainSessionForSidebarSelect,
   pickSessionForRepositorySidebarSelect,
 } from "../utils/claudeSessionSelection";
-import { pickFirstRepositoryOwnedSidebarHistorySession } from "../utils/repositoryWorkspaceTree";
+import {
+  pickFirstRepositoryOwnedSidebarHistorySession,
+  pickPreferredRepositoryOwnedSidebarSession,
+} from "../utils/repositoryWorkspaceTree";
 import { shouldKeepRestoredActiveSessionOnStartup } from "../utils/startupRepoSelection";
 import {
   isProjectRootSessionDisplayName,
@@ -59,16 +55,6 @@ import {
 } from "../utils/newSessionComposerDefaults";
 import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 
-/** 侧栏选中后推迟主会话切换，让工作区/仓库高亮与 Git 面板先绘制。 */
-function scheduleSidebarMainSessionEnsure(work: () => Promise<string | null>): void {
-  queueMicrotask(() => {
-    startTransition(() => {
-      void work();
-    });
-  });
-}
-
-/** 复用空白主会话时顶到侧栏：bump createdAt，并套用已保存的执行环境 / 模型 / 推理强度。 */
 function promoteReusableEmptyMainSession(
   sessionId: string,
   sessionsLatestRef: RefObject<ClaudeSession[]>,
@@ -261,10 +247,6 @@ export function useAppSidebarSelection({
     const target = resolveSidebarSelectionTarget({ repository });
     // 成员仓不得优先激活嵌套 scope 带入的 Project 根会话，否则会跨仓共享绑定。
     const first = pickFirstRepositoryOwnedSidebarHistorySession(sessionsNow, target.path);
-    if (first) {
-      switchSessionIfNeeded(first.id);
-      return first.id;
-    }
     const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, target.path);
     const boundId = resolveBoundMainSessionId(
       target.path,
@@ -272,19 +254,21 @@ export function useAppSidebarSelection({
       sessionsNow,
       mainOwnerPick,
     );
-    if (boundId) {
-      switchSessionIfNeeded(boundId);
-      return boundId;
-    }
+    const bound = boundId ? (sessionsNow.find((item) => item.id === boundId) ?? null) : null;
     const latestForRepo = pickSessionForRepositorySidebarSelect(
       sessionsNow,
       target.path,
       sessionOwnerHintsRef.current,
       { mainOwnerAgentName: mainOwnerPick },
     );
-    if (latestForRepo) {
-      switchSessionIfNeeded(latestForRepo.id);
-      return latestForRepo.id;
+    // 优先已有正文的会话，避免切到空磁盘占位后再等 1–2s hydrate。
+    const preferred = pickPreferredRepositoryOwnedSidebarSession(
+      [first, bound, latestForRepo],
+      target.path,
+    );
+    if (preferred) {
+      switchSessionIfNeeded(preferred.id);
+      return preferred.id;
     }
     return null;
   }
@@ -737,8 +721,8 @@ export function useAppSidebarSelection({
       if (!repository) {
         return;
       }
-      prefetchGitStatus(repository.path);
       const leavingOverlay = viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect;
+      prefetchRepositoryWorkspace(repository.path);
       if (!leavingOverlay && tryRouteSidebarSelectionToFocusedPane("repository", repositoryId)) {
         return;
       }
@@ -752,26 +736,22 @@ export function useAppSidebarSelection({
           switchRepositoryDisplaySession(repository);
           return;
         }
-        scheduleSidebarMainSessionEnsure(() => ensureRepositoryMainSession(repository));
+        void ensureRepositoryMainSession(repository);
         return;
       }
-      const selectionEpoch = ++sidebarSelectionEpochRef.current;
+      ++sidebarSelectionEpochRef.current;
       setActiveRepositoryWithOwner(repository.id);
       if (leavingOverlay) {
-        startTransition(() => viewMode.back());
+        viewMode.back();
       } else if (!viewMode.isChat) {
-        startTransition(() => {
-          viewMode.enter({ kind: "chat" });
-        });
-      }
-      if (sidebarSelectionEpochRef.current !== selectionEpoch) {
-        return;
+        viewMode.enter({ kind: "chat" });
       }
       if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
         switchRepositoryDisplaySession(repository);
         return;
       }
-      scheduleSidebarMainSessionEnsure(() => ensureRepositoryMainSession(repository));
+      // 已有会话与仓库选中在同一次点击中更新，避免 transition 继续展示上一仓库。
+      void ensureRepositoryMainSession(repository);
     },
     [
       activeRepositoryId,
@@ -849,6 +829,10 @@ export function useAppSidebarSelection({
         return;
       }
       const leavingOverlay = viewMode.isAuthor || viewMode.isInspect || viewMode.isCockpit;
+      const anchor = resolveProjectMainSessionAnchor(project, repositories);
+      if (anchor.path) {
+        prefetchRepositoryWorkspace(anchor.path);
+      }
       if (!leavingOverlay && tryRouteSidebarSelectionToFocusedPane("project", projectId)) {
         return;
       }
@@ -872,12 +856,13 @@ export function useAppSidebarSelection({
       if (sidebarSelectionEpochRef.current !== selectionEpoch) {
         return;
       }
-      scheduleSidebarMainSessionEnsure(() => ensureProjectMainSession(project));
+      void ensureProjectMainSession(project);
     },
     [
       activeProjectId,
       activeWorkspaceFocus,
       projects,
+      repositories,
       setActiveProjectId,
       suppressProjectSelectToChatRef,
       tryRouteSidebarSelectionToFocusedPane,

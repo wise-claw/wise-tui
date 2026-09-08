@@ -42,7 +42,10 @@ export function ClaudeChatMessagesLiveHost({
   const sessionRef = useRef(session);
   sessionRef.current = session;
   const deferredSession = useDeferredValue(session);
-  const renderSession = userPausedFollow ? deferredSession : session;
+  // 仅同一会话的流式更新可以延后；跨仓切换不能保留上一会话的正文。
+  const renderSession = userPausedFollow && deferredSession?.id === session?.id
+    ? deferredSession
+    : session;
 
   const {
     messagesScrollRef,

@@ -52,8 +52,13 @@ mock.module("../services/git", () => ({
   gitStatus: (path: string) => gitStatusMock(path),
 }));
 
+let resolvedStatus: GitStatusResponse | null = null;
+
 mock.module("../services/gitStatusWarmCache", () => ({
+  peekWarmGitStatus: () => null,
   consumeWarmGitStatus: () => null,
+  rememberGitStatus: () => undefined,
+  getResolvedGitStatus: () => resolvedStatus,
 }));
 
 mock.module("@tauri-apps/api/event", () => ({
@@ -87,6 +92,7 @@ const {
 describe("gitRepositoryExplorerStatusStore refresh race", () => {
   beforeEach(() => {
     resetGitRepositoryExplorerStatusStoreForTests();
+    resolvedStatus = null;
     gitStatusMock.mockReset();
     gitStatusMock.mockImplementation(async () => emptyStatus);
     listenMock.mockReset();
@@ -148,5 +154,17 @@ describe("gitRepositoryExplorerStatusStore refresh race", () => {
     await flushMicrotasks();
 
     expect(unlistenMock).toHaveBeenCalled();
+  });
+
+  test("resolved warm cache seeds explorer colors without an immediate git_status", async () => {
+    resolvedStatus = statusWithFile("cached.ts");
+    const unsub = subscribeGitRepositoryExplorerStatus("/repo-warm", () => undefined);
+    await flushMicrotasks();
+
+    expect(gitStatusMock).not.toHaveBeenCalled();
+    expect(getGitRepositoryExplorerStatusSnapshot("/repo-warm").fileStatusByPath.get("cached.ts")).toBe("M");
+    expect(getGitRepositoryExplorerStatusGeneration("/repo-warm")).toBeGreaterThan(0);
+
+    unsub();
   });
 });

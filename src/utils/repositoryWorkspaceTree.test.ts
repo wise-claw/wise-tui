@@ -17,6 +17,7 @@ import {
   listWorkspaceSidebarHistorySessions,
   pickFirstWorkspaceSidebarHistorySession,
   pickFirstRepositoryOwnedSidebarHistorySession,
+  pickPreferredRepositoryOwnedSidebarSession,
 } from "./repositoryWorkspaceTree";
 
 function makeRepo(id: number, name: string, path: string): Repository {
@@ -112,6 +113,20 @@ describe("listWorkspaceSidebarHistorySessions", () => {
     ]);
     expect(pickFirstWorkspaceSidebarHistorySession(sessions, "/work/a")?.id).toBe("proj");
     expect(pickFirstRepositoryOwnedSidebarHistorySession(sessions, "/work/a")?.id).toBe("member");
+  });
+
+  test("pickPreferredRepositoryOwnedSidebarSession prefers a session that already has messages", () => {
+    const emptyFirst = makeSession("empty", "/work/a", { createdAt: 400 });
+    const withMessages = makeSession("warm", "/work/a", { createdAt: 200, content: "hello" });
+    const otherRepo = makeSession("other", "/work/b", { createdAt: 500, content: "nope" });
+    const picked = pickPreferredRepositoryOwnedSidebarSession(
+      [emptyFirst, withMessages, otherRepo],
+      "/work/a",
+    );
+    expect(picked?.id).toBe("warm");
+    expect(
+      pickPreferredRepositoryOwnedSidebarSession([emptyFirst, otherRepo], "/work/a")?.id,
+    ).toBe("empty");
   });
 
   test("recycled hello session stays above empty draft after sort-activity bump", () => {

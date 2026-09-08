@@ -24,7 +24,7 @@ import {
   resolveClaudeProjectSkillsScopePath,
 } from "../utils/workspaceSelectionState";
 import { runWhenIdle } from "../utils/deferIdle";
-import { prefetchGitStatus } from "../services/gitStatusWarmCache";
+import { prefetchRepositoryWorkspace, prefetchNeighborRepositoryWorkspaces } from "../services/repositoryWorkspacePrefetch";
 import {
   WISE_EXPLORER_FOCUS_REQUESTED,
   type ExplorerFocusRequestedDetail,
@@ -921,7 +921,7 @@ export function LeftSidebar({
       }
       const repository = repositories.find((item) => item.id === repositoryId);
       if (repository?.path) {
-        prefetchGitStatus(repository.path);
+        prefetchRepositoryWorkspace(repository.path);
       }
       setRepoPanelTreeSelection({ kind: "repository", repositoryId });
       onRepositorySelect(repositoryId);
@@ -929,12 +929,21 @@ export function LeftSidebar({
     [onRepositorySelect, repositories],
   );
 
+  const workspacePrefetchPathsKey = repositories
+    .map((item) => item.path.trim())
+    .filter(Boolean)
+    .join("\0");
+
   useEffect(() => {
     setRepositoryFileTreeSearch("");
-    if (effectiveRepoPanelPath.trim()) {
-      prefetchGitStatus(effectiveRepoPanelPath);
-    }
-  }, [effectiveRepoPanelPath]);
+    const path = effectiveRepoPanelPath.trim();
+    if (!path) return;
+    prefetchRepositoryWorkspace(path);
+    return prefetchNeighborRepositoryWorkspaces(
+      path,
+      workspacePrefetchPathsKey ? workspacePrefetchPathsKey.split("\0") : [],
+    );
+  }, [effectiveRepoPanelPath, workspacePrefetchPathsKey]);
 
   const lastHandledWorkspaceCreateRequestRef = useRef(0);
   const lastHandledStandaloneRepoAddRequestRef = useRef(0);

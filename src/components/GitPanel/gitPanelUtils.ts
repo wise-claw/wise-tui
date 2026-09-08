@@ -21,6 +21,12 @@ export const GIT_PANEL_VIRTUAL_LIST_THRESHOLD = 48;
 /** 文档/测试用参考：超大变更集仍可走列表虚拟滚动，树状视图默认仅渲染已展开目录。 */
 export const GIT_PANEL_LARGE_CHANGE_COUNT = 200;
 
+/** 切仓命中 git status 缓存后，延后静默刷新，避免与 transcript / 文件树抢 IPC。 */
+export const GIT_STATUS_BACKGROUND_REFRESH_MS = 800;
+
+/** 切仓后延后启动 file watcher，让出 git_status / 文件树首屏 IPC。 */
+export const GIT_WATCHER_START_DEFER_MS = 1600;
+
 /** 文件 watcher 触发 git status 刷新的防抖间隔（ms）。 */
 export const GIT_WATCHER_REFRESH_MS = 450;
 

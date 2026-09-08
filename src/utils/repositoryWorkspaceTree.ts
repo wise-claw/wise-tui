@@ -97,6 +97,26 @@ export function pickFirstRepositoryOwnedSidebarHistorySession(
   );
 }
 
+/** 切仓时优先已有正文的会话，避免每次都卡在空占位标签的磁盘 hydrate。 */
+export function pickPreferredRepositoryOwnedSidebarSession(
+  candidates: ReadonlyArray<ClaudeSession | null | undefined>,
+  repositoryPath: string,
+): ClaudeSession | null {
+  const pathKey = normalizeRepositoryPathKey(repositoryPath);
+  if (!pathKey) return null;
+  const owned: ClaudeSession[] = [];
+  const seen = new Set<string>();
+  for (const session of candidates) {
+    if (!session) continue;
+    if (seen.has(session.id)) continue;
+    if (isProjectRootSessionDisplayName(session.repositoryName ?? "")) continue;
+    if (normalizeRepositoryPathKey(session.repositoryPath) !== pathKey) continue;
+    seen.add(session.id);
+    owned.push(session);
+  }
+  return owned.find((session) => session.messages.length > 0) ?? owned[0] ?? null;
+}
+
 export function filterEmployeeMonitorForRepository(
   items: ReadonlyArray<EmployeeMonitorItem>,
   repositoryPath: string,

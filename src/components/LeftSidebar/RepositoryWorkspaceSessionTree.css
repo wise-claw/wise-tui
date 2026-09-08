@@ -48,13 +48,13 @@
 }
 
 .app-workspace-session-tree__row--active {
-  background: color-mix(in srgb, var(--ant-color-primary-bg) 92%, var(--ant-color-fill-content));
+  background: color-mix(in srgb, var(--ant-color-primary) 18%, var(--ant-color-bg-container));
   color: var(--ant-color-text);
   font-weight: 600;
 }
 
 .app-workspace-session-tree__row--active:hover {
-  background: color-mix(in srgb, var(--ant-color-primary-bg) 100%, var(--ant-color-fill-content));
+  background: color-mix(in srgb, var(--ant-color-primary) 24%, var(--ant-color-bg-container));
   color: var(--ant-color-text);
 }
 

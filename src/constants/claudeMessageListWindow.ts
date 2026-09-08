@@ -27,8 +27,9 @@ export const IN_MEMORY_GLOBAL_MESSAGES_BUDGET = 256;
 /**
  * 最近切换过的会话热缓存条数（含当前）。
  * 切走不清空正文，接近 Cursor 的即时切 tab；超出后再按磁盘懒加载。
+ * 工作区里来回点仓库时要覆盖常见成员数，避免第 6 个仓就掉回 2–3s 的 jsonl hydrate。
  */
-export const IN_MEMORY_RECENT_SESSION_KEEP = 5;
+export const IN_MEMORY_RECENT_SESSION_KEEP = 16;
 
 /** 热缓存中非当前会话的每会话消息上限（低于活动会话上限，控制总内存） */
 export const IN_MEMORY_RECENT_SESSION_MESSAGES_MAX = 40;

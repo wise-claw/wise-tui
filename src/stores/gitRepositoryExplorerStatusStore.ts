@@ -5,9 +5,17 @@ import {
   explorerGitStatusIndexEqual,
   type ExplorerGitStatusIndex,
 } from "../components/GitPanel/repositoryExplorerGitStatus";
-import { GIT_WATCHER_REFRESH_MS } from "../components/GitPanel/gitPanelUtils";
+import {
+  GIT_STATUS_BACKGROUND_REFRESH_MS,
+  GIT_WATCHER_REFRESH_MS,
+} from "../components/GitPanel/gitPanelUtils";
 import { gitStatus } from "../services/git";
-import { consumeWarmGitStatus } from "../services/gitStatusWarmCache";
+import {
+  getResolvedGitStatus,
+  peekWarmGitStatus,
+  rememberGitStatus,
+} from "../services/gitStatusWarmCache";
+import type { GitStatusResponse } from "../types";
 import { startAdaptiveInterval } from "../utils/adaptivePoll";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import {
@@ -25,6 +33,7 @@ type PathEntry = {
   /** 每次发起 refresh 递增；await 后仅最新 seq 可写回，防止慢请求覆盖快请求。 */
   refreshSeq: number;
   consumers: number;
+  backgroundRefreshTimer: ReturnType<typeof setTimeout> | null;
 };
 
 type Listener = () => void;
@@ -59,25 +68,17 @@ async function refreshPath(pathKey: string): Promise<void> {
   if (!entry || entry.consumers <= 0) return;
   const seq = ++entry.refreshSeq;
   try {
-    const warm = consumeWarmGitStatus(pathKey);
+    const warm = peekWarmGitStatus(pathKey);
     const status = warm ? await warm : await gitStatus(pathKey);
+    rememberGitStatus(pathKey, status);
     const current = entriesByPath.get(pathKey);
     // 路径已释放重建、或有更新的 refresh 在途时，丢弃本轮结果。
     if (!current || current !== entry || current.consumers <= 0 || current.refreshSeq !== seq) {
       return;
     }
-    applyGitRepositoryStatsFromStatus(pathKey, {
-      additions: status.additions,
-      deletions: status.deletions,
-      ahead: status.ahead,
-      behind: status.behind,
-    });
-    const nextIndex = buildExplorerGitStatusIndex(status);
-    if (explorerGitStatusIndexEqual(current.index, nextIndex)) {
+    if (!applyStatusToEntry(pathKey, current, status)) {
       return;
     }
-    current.index = nextIndex;
-    current.generation += 1;
     publish(pathKey);
   } catch {
     const current = entriesByPath.get(pathKey);
@@ -116,7 +117,7 @@ function scheduleGitChangedRefresh(): void {
 
 function ensurePollLoop(): void {
   if (disposePoll || pollConsumerPaths <= 0) return;
-  void refreshAllPaths();
+  // 首次订阅已由 acquirePath 拉 status；这里不要立刻 refreshAllPaths，否则切仓会双打 git_status。
   disposePoll = startAdaptiveInterval(
     refreshAllPaths,
     VISIBLE_POLL_INTERVAL_MS,
@@ -165,6 +166,28 @@ function releaseGitChangedListener(): void {
   }
 }
 
+function applyStatusToEntry(pathKey: string, entry: PathEntry, status: GitStatusResponse): boolean {
+  applyGitRepositoryStatsFromStatus(pathKey, {
+    additions: status.additions,
+    deletions: status.deletions,
+    ahead: status.ahead,
+    behind: status.behind,
+  });
+  const nextIndex = buildExplorerGitStatusIndex(status);
+  if (explorerGitStatusIndexEqual(entry.index, nextIndex)) {
+    return false;
+  }
+  entry.index = nextIndex;
+  entry.generation += 1;
+  return true;
+}
+
+function clearBackgroundRefreshTimer(entry: PathEntry): void {
+  if (entry.backgroundRefreshTimer == null) return;
+  clearTimeout(entry.backgroundRefreshTimer);
+  entry.backgroundRefreshTimer = null;
+}
+
 function acquirePath(pathKey: string): PathEntry {
   const existing = entriesByPath.get(pathKey);
   if (existing) {
@@ -176,13 +199,25 @@ function acquirePath(pathKey: string): PathEntry {
     generation: 0,
     refreshSeq: 0,
     consumers: 1,
+    backgroundRefreshTimer: null,
   };
+  const resolved = getResolvedGitStatus(pathKey);
+  if (resolved) {
+    applyStatusToEntry(pathKey, created, resolved);
+  }
   entriesByPath.set(pathKey, created);
   pollConsumerPaths += 1;
   gitChangedListenerConsumers += 1;
   ensurePollLoop();
   ensureGitChangedListener();
-  void refreshPath(pathKey);
+  if (resolved) {
+    created.backgroundRefreshTimer = setTimeout(() => {
+      created.backgroundRefreshTimer = null;
+      void refreshPath(pathKey);
+    }, GIT_STATUS_BACKGROUND_REFRESH_MS);
+  } else {
+    void refreshPath(pathKey);
+  }
   return created;
 }
 
@@ -191,6 +226,7 @@ function releasePath(pathKey: string): void {
   if (!entry) return;
   entry.consumers = Math.max(0, entry.consumers - 1);
   if (entry.consumers > 0) return;
+  clearBackgroundRefreshTimer(entry);
   entriesByPath.delete(pathKey);
   listenersByPath.delete(pathKey);
   pollConsumerPaths = Math.max(0, pollConsumerPaths - 1);
@@ -253,6 +289,9 @@ export function resetGitRepositoryExplorerStatusStoreForTests(): void {
     gitChangedUnlisten = null;
   }
   gitChangedListenPromise = null;
+  for (const entry of entriesByPath.values()) {
+    clearBackgroundRefreshTimer(entry);
+  }
   entriesByPath.clear();
   listenersByPath.clear();
   pollConsumerPaths = 0;

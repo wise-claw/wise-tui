@@ -9,7 +9,12 @@ import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { parseOpenAppConfigureMenuKey, repositoryEditorOpenMenuLabel, resolveEffectiveOpenAppId } from "../../utils/openAppScope";
 import { repositoryTerminalOpenAppIcon, repositoryTerminalOpenMenuLabel } from "../../utils/repositoryTerminalOpenMenu";
 import { reorderRepositoryIdsForDrop } from "./repositoryReorder";
-import { prefetchGitStatus } from "../../services/gitStatusWarmCache";
+import { prefetchRepositoryWorkspace } from "../../services/repositoryWorkspacePrefetch";
+import {
+  handleRepositoryRowPointerDown,
+  isKeyboardRepositoryRowClick,
+  isRepositoryRowNestedActionTarget,
+} from "./repositoryRowPointerActivate";
 import { FLAT_WORKSPACE_DRAG_SOURCE_ID } from "../../utils/workspaceRepositoryOrder";
 
 export interface RepositoryReorderUi {
@@ -485,14 +490,13 @@ function RepositoryRowInner({
       <div
         className={`app-repository-item app-repository-item--repo${showActiveRepository ? " app-repository-item--repo-active" : ""}`}
         onPointerEnter={() => {
-          prefetchGitStatus(repository.path);
+          prefetchRepositoryWorkspace(repository.path);
+        }}
+        onPointerDown={(event) => {
+          handleRepositoryRowPointerDown(event, () => onRepositorySelect(repository.id));
         }}
         onClick={(e) => {
-          const target = e.target as HTMLElement | null;
-          if (
-            target?.closest(".app-repository-row-actions") ||
-            target?.closest(".app-repository-row-running-status")
-          ) {
+          if (isRepositoryRowNestedActionTarget(e.target) || !isKeyboardRepositoryRowClick(e)) {
             return;
           }
           onRepositorySelect(repository.id);
@@ -842,23 +846,18 @@ function FloatingRepositoryRowInner({
         }
         onDragEnd={rowDragEnabled ? repositoryReorder?.onDragEndHandle : undefined}
         onPointerEnter={() => {
-          prefetchGitStatus(repository.path);
+          prefetchRepositoryWorkspace(repository.path);
+        }}
+        onPointerDown={(event) => {
+          handleRepositoryRowPointerDown(event, () => onRepositorySelect(repository.id), {
+            preserveDefaultForDrag: rowDragEnabled,
+          });
         }}
         onClick={(e) => {
-          const target = e.target as HTMLElement | null;
-          if (
-            target?.closest(".app-repository-row-actions") ||
-            target?.closest(".app-repository-row-running-status") ||
-            target?.closest(".app-repository-expand") ||
-            target?.closest(".app-repository-header-btn")
-          ) {
+          if (isRepositoryRowNestedActionTarget(e.target) || !isKeyboardRepositoryRowClick(e)) {
             return;
           }
           onRepositorySelect(repository.id);
-          // 选中即展开会话列表；已展开时不因选中而收起。
-          if (!expanded && onToggleExpand) {
-            onToggleExpand();
-          }
         }}
       >
         {onToggleExpand ? (

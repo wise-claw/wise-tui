@@ -19,6 +19,11 @@ import {
   gitUnstage,
   gitUnstageAll,
 } from "../../services/git";
+import {
+  getResolvedGitStatus,
+  peekWarmGitStatus,
+  rememberGitStatus,
+} from "../../services/gitStatusWarmCache";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { WISE_GIT_REPOSITORY_STATUS_REFRESH, type GitRepositoryStatusRefreshDetail } from "../../constants/gitUiEvents";
@@ -195,7 +200,9 @@ function GitRepoSectionInner({
       setLoading((prev) => ({ ...prev, status: true }));
     }
     try {
-      const result = await gitStatus(repositoryPath);
+      const warm = peekWarmGitStatus(repositoryPath);
+      const result = warm ? await warm : await gitStatus(repositoryPath);
+      rememberGitStatus(repositoryPath, result);
       if (requestId !== loadRequestIdRef.current || !mountedRef.current) return;
       const apply = () => {
         if (!mountedRef.current) return;
@@ -333,9 +340,10 @@ function GitRepoSectionInner({
   }, [loadStatus]);
 
   useEffect(() => {
-    statusRef.current = null;
+    const resolved = repositoryPath ? getResolvedGitStatus(repositoryPath) : null;
+    statusRef.current = resolved;
+    setStatus(resolved);
     headerSnapshotRef.current = null;
-    setStatus(null);
     setHeaderSnapshot(null);
   }, [repositoryPath]);
 

@@ -34,6 +34,13 @@ import {
 } from "./utils/repositoryType";
 import { runWhenIdle } from "./utils/deferIdle";
 import {
+  DISK_SESSION_INDEX_BACKGROUND_DEFER_MS,
+  DISK_SESSION_INDEX_BACKGROUND_STAGGER_MS,
+  DISK_SESSION_INDEX_SWITCH_DEFER_MS,
+  scheduleDeferredTask,
+  wasDiskSessionIndexListedRecently,
+} from "./services/diskSessionIndexSchedule";
+import {
   resolveClaudeProxyBypassForSessionSpawn,
   resolveEngineForSessionSpawn,
   resolveRepositoryPathForSessionSpawn,
@@ -1925,8 +1932,14 @@ export default function App() {
     let cancelled = false;
     const cleanups: Array<() => void> = [];
     const paths = openSessionRepositoryPathsKey.split("|").filter(Boolean);
+    const activePath =
+      (activeRepositoryId != null
+        ? repositories.find((item) => item.id === activeRepositoryId)?.path?.trim()
+        : "") ?? "";
     for (let index = 0; index < paths.length; index += 1) {
       const path = paths[index]!;
+      // 当前仓由下面的切仓延迟 effect 负责，避免 idle 时立刻扫盘堵住首屏 IPC。
+      if (activePath && repositoryPathsMatch(path, activePath)) continue;
       const repo = repositories.find((item) => repositoryPathsMatch(item.path, path));
       const keepPath =
         Boolean(repo) ||
@@ -1938,20 +1951,24 @@ export default function App() {
       if (!keepPath) continue;
       const name = repo?.name?.trim() || repositoryFolderBasename(path);
       cleanups.push(
-        runWhenIdle(
-          () => {
-            if (cancelled) return;
-            void refreshDiskSessionsForRepository(path, name);
-          },
-          { timeoutMs: 1200 + index * 500 },
-        ),
+        scheduleDeferredTask(() => {
+          if (cancelled) return;
+          if (wasDiskSessionIndexListedRecently(path)) return;
+          void refreshDiskSessionsForRepository(path, name);
+        }, DISK_SESSION_INDEX_BACKGROUND_DEFER_MS + index * DISK_SESSION_INDEX_BACKGROUND_STAGGER_MS),
       );
     }
     return () => {
       cancelled = true;
       for (const cleanup of cleanups) cleanup();
     };
-  }, [openSessionRepositoryPathsKey, repositories, refreshDiskSessionsForRepository, tabsHydrated]);
+  }, [
+    openSessionRepositoryPathsKey,
+    repositories,
+    refreshDiskSessionsForRepository,
+    tabsHydrated,
+    activeRepositoryId,
+  ]);
 
   useEffect(() => {
     void (async () => {
@@ -2094,10 +2111,11 @@ export default function App() {
     if (!tabsHydrated || !activeRepoPathForDiskRefresh) return;
     const repoPath = activeRepoPathForDiskRefresh;
     const repoName = activeRepoNameForDiskRefresh || repoPath;
-    const cancelIdle = runWhenIdle(() => {
+    // 必须用真实延迟：requestIdleCallback 在空闲时会立刻执行，同步扫 jsonl 会堵住 git_status。
+    return scheduleDeferredTask(() => {
+      if (wasDiskSessionIndexListedRecently(repoPath)) return;
       void refreshDiskSessionsForRepository(repoPath, repoName);
-    }, { timeoutMs: 800 });
-    return cancelIdle;
+    }, DISK_SESSION_INDEX_SWITCH_DEFER_MS);
   }, [activeRepoPathForDiskRefresh, activeRepoNameForDiskRefresh, refreshDiskSessionsForRepository, tabsHydrated]);
 
   const workflowModalRepositoryPath = useMemo(() => {

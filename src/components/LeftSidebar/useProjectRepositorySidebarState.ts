@@ -157,7 +157,7 @@ export function useProjectRepositorySidebarState({
     });
   }, [selectionExpandProjectId]);
 
-  /** 选中仓库时打开会话列表（不收起其它已展开仓库）。 */
+  /** 选中仓库时打开会话列表（不收起其它已展开仓库）。行点击不要再 toggle，否则会把这里刚展开的行收起。 */
   useEffect(() => {
     if (activeRepositoryId == null) return;
     setExpandedRepositoryIds((prev) => {

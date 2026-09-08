@@ -3254,6 +3254,10 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   cursor: grabbing;
 }
 
+.app-repository-item--repo .app-repository-name {
+  cursor: pointer;
+}
+
 .app-repository-drag-handle {
   width: 12px;
   height: 18px;
@@ -3659,27 +3663,15 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   background: color-mix(in srgb, var(--ant-color-primary) 24%, transparent) !important;
 }
 
-/* 当前仓库：对齐文件树选中底（primary-bg），全出血 */
+/* 当前仓库：用不透明混色，避免叠在侧栏淡蓝底上时选中态消失。 */
 .app-repository-item--repo.app-repository-item--repo-active {
-  background: color-mix(in srgb, var(--ant-color-primary-bg) 92%, var(--ant-color-fill-content)) !important;
+  background: color-mix(in srgb, var(--ant-color-primary) 18%, var(--ant-color-bg-container)) !important;
   border-color: transparent !important;
   box-shadow: none !important;
 }
 
-/* 展开且已有活跃会话时：弱化仓库行，突出会话高亮 */
-.app-repository-row:has(.app-workspace-session-tree__row--active)
-  .app-repository-item--repo.app-repository-item--repo-active {
-  background: transparent !important;
-}
-
-.app-repository-row:has(.app-workspace-session-tree__row--active)
-  .app-repository-item--repo.app-repository-item--repo-active
-  .app-repository-name {
-  font-weight: 500;
-}
-
 .app-repository-item--repo.app-repository-item--repo-active:hover {
-  background: color-mix(in srgb, var(--ant-color-primary-bg) 100%, var(--ant-color-fill-content)) !important;
+  background: color-mix(in srgb, var(--ant-color-primary) 24%, var(--ant-color-bg-container)) !important;
 }
 
 .app-repository-item--repo.app-repository-item--repo-active .app-repository-name {
@@ -3690,6 +3682,24 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-repository-item--repo.app-repository-item--repo-active .app-repository-icon {
   color: inherit;
   filter: none !important;
+}
+
+/* 子会话才是当前焦点时：弱化仓库行，避免两层选中底叠在一起。 */
+.app-repository-row:has(.app-workspace-session-tree__row--active)
+  .app-repository-item--repo.app-repository-item--repo-active {
+  background: transparent !important;
+}
+
+.app-repository-row:has(.app-workspace-session-tree__row--active)
+  .app-repository-item--repo.app-repository-item--repo-active:hover {
+  background: var(--wise-row-hover-bg) !important;
+}
+
+.app-repository-row:has(.app-workspace-session-tree__row--active)
+  .app-repository-item--repo.app-repository-item--repo-active
+  .app-repository-name {
+  font-weight: 500;
+  color: var(--ant-color-text);
 }
 
 /* 子仓库选中时弱化父项目行，避免两层灰块抢视觉 */

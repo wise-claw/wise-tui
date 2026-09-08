@@ -9,6 +9,8 @@ import {
   type SetStateAction,
 } from "react";
 import { message } from "antd";
+import { subscribeRepositorySessionPrefetch } from "../services/repositorySessionPrefetch";
+import { pickFirstRepositoryOwnedSidebarHistorySession } from "../utils/repositoryWorkspaceTree";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -84,6 +86,7 @@ import {
 import { normalizeRepositoryPathKey, repositoryPathsMatch } from "../utils/repositoryMainSessionBinding";
 import { isClaudeNativeSlashCommandText } from "../utils/composerLocalSlashCommand";
 import { pathIsAccessibleDirectoryCached } from "../utils/pathAccessibilityCache";
+import { runSharedDiskSessionIndexRefresh, markDiskSessionIndexListed } from "../services/diskSessionIndexSchedule";
 import {
   listClaudeDiskSessionsForRepositoryScope,
   normalizeSessionRepositoryPath,
@@ -1890,6 +1893,20 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [hydrateSessionTranscriptFromDisk, resolveSessionExecutionEngine],
   );
 
+  useEffect(() => subscribeRepositorySessionPrefetch((repositoryPath) => {
+    const target = pickFirstRepositoryOwnedSidebarHistorySession(sessionsRef.current, repositoryPath);
+    if (!target) return;
+    // 预读结果进入现有有界热缓存，避免后台内存整理立即清空它。
+    recentActiveSessionIdsRef.current = [
+      activeSessionIdRef.current,
+      target.id,
+      ...recentActiveSessionIdsRef.current,
+    ].filter((id, index, ids): id is string => Boolean(id) && ids.indexOf(id) === index)
+      .slice(0, IN_MEMORY_RECENT_SESSION_KEEP);
+    if (target.messages.length > 0) return;
+    requestDiskTranscriptHydration(target.id);
+  }), [requestDiskTranscriptHydration]);
+
   const loadMoreTranscriptFromDisk = useCallback(
     async (sessionKey: string) => {
       try {
@@ -2368,58 +2385,61 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const refreshDiskSessionsForRepository = useCallback(async (repositoryPath: string, repositoryName: string) => {
     const trimmedPath = repositoryPath.trim();
     if (!trimmedPath) return;
-    if (!(await pathIsAccessibleDirectoryCached(trimmedPath))) return;
-    const { disk, listingPath: mergePath } = await listClaudeDiskSessionsForRepositoryScope(
-      trimmedPath,
-      sessionsRef.current,
-    );
-    const prev = sessionsRef.current;
-    const next = mergeRepositoryDiskSessions(prev, mergePath, repositoryName, disk, "sonnet", companionSessionIdsRef.current);
-    const migrations = collectDiskMergeTabIdMigrations(prev, next, mergePath);
-    if (next !== prev) {
-      for (const migration of migrations) {
-        memoryKeepSessionIdsRef.current.add(migration.toClaudeSessionId);
-        memoryKeepSessionIdsRef.current.delete(migration.fromTabId);
-        if (activeSessionIdRef.current === migration.fromTabId) {
-          activeSessionIdRef.current = migration.toClaudeSessionId;
-        }
-      }
-      for (const row of next) {
-        if (!repositoryPathsMatch(row.repositoryPath, mergePath)) continue;
-        if (row.messages.length > 0 || row.id === activeSessionIdRef.current) {
-          memoryKeepSessionIdsRef.current.add(row.id);
-        }
-      }
-      setSessions(next);
-      for (const migration of migrations) {
-        applySessionTabIdMigration(migration.fromTabId, migration.toClaudeSessionId);
-      }
-      const activeKey = activeSessionIdRef.current?.trim();
-      if (activeKey) {
-        requestDiskTranscriptHydration(activeKey);
-      }
-    }
-
-    void (async () => {
-      const resolved = await getCachedClaudeConfigModel(mergePath);
-      if (!resolved || resolved === "sonnet") return;
-
-      const idsNeedingConfigModel = new Set(
-        disk.filter((d) => !d.modelHint?.trim()).map((d) => d.sessionId),
+    return runSharedDiskSessionIndexRefresh(trimmedPath, async () => {
+      markDiskSessionIndexListed(trimmedPath);
+      if (!(await pathIsAccessibleDirectoryCached(trimmedPath))) return;
+      const { disk, listingPath: mergePath } = await listClaudeDiskSessionsForRepositoryScope(
+        trimmedPath,
+        sessionsRef.current,
       );
-      if (idsNeedingConfigModel.size === 0) return;
+      const prev = sessionsRef.current;
+      const next = mergeRepositoryDiskSessions(prev, mergePath, repositoryName, disk, "sonnet", companionSessionIdsRef.current);
+      const migrations = collectDiskMergeTabIdMigrations(prev, next, mergePath);
+      if (next !== prev) {
+        for (const migration of migrations) {
+          memoryKeepSessionIdsRef.current.add(migration.toClaudeSessionId);
+          memoryKeepSessionIdsRef.current.delete(migration.fromTabId);
+          if (activeSessionIdRef.current === migration.fromTabId) {
+            activeSessionIdRef.current = migration.toClaudeSessionId;
+          }
+        }
+        for (const row of next) {
+          if (!repositoryPathsMatch(row.repositoryPath, mergePath)) continue;
+          if (row.messages.length > 0 || row.id === activeSessionIdRef.current) {
+            memoryKeepSessionIdsRef.current.add(row.id);
+          }
+        }
+        setSessions(next);
+        for (const migration of migrations) {
+          applySessionTabIdMigration(migration.fromTabId, migration.toClaudeSessionId);
+        }
+        const activeKey = activeSessionIdRef.current?.trim();
+        if (activeKey) {
+          requestDiskTranscriptHydration(activeKey);
+        }
+      }
 
-      setSessions((prev) => {
-        const next = prev.map((s) => {
-          if (!repositoryPathsMatch(s.repositoryPath, mergePath)) return s;
-          const sid = s.claudeSessionId ?? s.id;
-          if (!idsNeedingConfigModel.has(s.id) && !idsNeedingConfigModel.has(sid)) return s;
-          return { ...s, model: resolved };
+      void (async () => {
+        const resolved = await getCachedClaudeConfigModel(mergePath);
+        if (!resolved || resolved === "sonnet") return;
+
+        const idsNeedingConfigModel = new Set(
+          disk.filter((d) => !d.modelHint?.trim()).map((d) => d.sessionId),
+        );
+        if (idsNeedingConfigModel.size === 0) return;
+
+        setSessions((prev) => {
+          const next = prev.map((s) => {
+            if (!repositoryPathsMatch(s.repositoryPath, mergePath)) return s;
+            const sid = s.claudeSessionId ?? s.id;
+            if (!idsNeedingConfigModel.has(s.id) && !idsNeedingConfigModel.has(sid)) return s;
+            return { ...s, model: resolved };
+          });
+          sessionsRef.current = next;
+          return next;
         });
-        sessionsRef.current = next;
-        return next;
-      });
-    })();
+      })();
+    });
   }, [applySessionTabIdMigration, getCachedClaudeConfigModel, requestDiskTranscriptHydration, setSessions]);
 
   useEffect(() => {

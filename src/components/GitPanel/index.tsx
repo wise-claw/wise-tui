@@ -18,7 +18,12 @@ import {
   startGitWatcher,
   stopGitWatcher,
 } from "../../services/git";
-import { consumeWarmGitStatus } from "../../services/gitStatusWarmCache";
+import {
+  getResolvedGitStatus,
+  peekInFlightWarmGitStatus,
+  peekWarmGitStatus,
+  rememberGitStatus,
+} from "../../services/gitStatusWarmCache";
 import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { normalizeSessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { WISE_GIT_REPOSITORY_STATUS_REFRESH, type GitRepositoryStatusRefreshDetail } from "../../constants/gitUiEvents";
@@ -40,7 +45,7 @@ import { GitHistoryDrawer } from "./GitHistoryDrawer";
 import { GitPanelMoreMenu } from "./GitPanelMoreMenu";
 import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
-import { hasUnstagedFilesUnderDirectory, GIT_WATCHER_REFRESH_MS, gitStatusSnapshotEqual, workingTreeNeedsCommitMessage } from "./gitPanelUtils";
+import { hasUnstagedFilesUnderDirectory, GIT_STATUS_BACKGROUND_REFRESH_MS, GIT_WATCHER_REFRESH_MS, GIT_WATCHER_START_DEFER_MS, gitStatusSnapshotEqual, workingTreeNeedsCommitMessage } from "./gitPanelUtils";
 import { startGitPanelPush, type GitCommitDraftHandle } from "./promptGitCommitMessage";
 import { GitMultiRepoPanel } from "./GitMultiRepoPanel";
 import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
@@ -158,8 +163,13 @@ function GitSingleRepoPanel({
         setLoading((prev) => ({ ...prev, status: true }));
       }
       try {
-        const warm = silent ? null : consumeWarmGitStatus(repositoryPath);
+        const warm = force
+          ? null
+          : silent
+            ? peekInFlightWarmGitStatus(repositoryPath)
+            : peekWarmGitStatus(repositoryPath);
         const result = warm ? await warm : await gitStatus(repositoryPath);
+        rememberGitStatus(repositoryPath, result);
         const apply = () => {
           if (gitStatusSnapshotEqual(statusRef.current, result)) {
             return;
@@ -223,14 +233,37 @@ function GitSingleRepoPanel({
   }, [loadStatus]);
 
   useEffect(() => {
-    statusRef.current = null;
-    // 切仓后立即清空旧仓状态，避免点击瞬间残留上一个仓库的文件列表（无 spinner 状态）。
-    setStatus(null);
-    if (!repositoryPath) return;
+    if (!repositoryPath) {
+      statusRef.current = null;
+      setStatus(null);
+      return;
+    }
+    const resolved = getResolvedGitStatus(repositoryPath);
+    if (resolved) {
+      // 切仓先画出该仓上次 status，避免空列表等 2–3s 的 git_status。
+      if (!gitStatusSnapshotEqual(statusRef.current, resolved)) {
+        statusRef.current = resolved;
+        setStatus(resolved);
+      }
+    } else {
+      statusRef.current = null;
+      setStatus(null);
+    }
+    let cancelled = false;
+    if (resolved) {
+      // 已有缓存时不要立刻再打 git_status，把 IPC 让给 transcript / 文件树。
+      const timer = window.setTimeout(() => {
+        if (cancelled) return;
+        void loadStatus({ silent: true });
+      }, GIT_STATUS_BACKGROUND_REFRESH_MS);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(timer);
+      };
+    }
     // 旧实现包了 runWhenIdle(timeoutMs: 1200)；点击切换瞬间主线程繁忙，
     // 空闲回调会被推到 ~1.2s 后才发起 git_status，肉眼看上去就是 Git 面板「卡几秒」。
-    // 直接走微任务调度：让本帧渲染先 commit，下一 microtask 立刻发起 IPC。
-    let cancelled = false;
+    // 无缓存时走微任务：让本帧渲染先 commit，下一 microtask 立刻发起 IPC。
     queueMicrotask(() => {
       if (cancelled) return;
       void loadStatus();
@@ -250,7 +283,11 @@ function GitSingleRepoPanel({
       return;
     }
 
-    void startGitWatcher(repositoryPath).catch(() => { });
+    let watcherStartCancelled = false;
+    const watcherStartTimer = window.setTimeout(() => {
+      if (watcherStartCancelled) return;
+      void startGitWatcher(repositoryPath).catch(() => { });
+    }, GIT_WATCHER_START_DEFER_MS);
     const unlisten = listen<{ path?: string }>("git-changed", (event) => {
       const changedPath = event.payload?.path?.trim();
       if (changedPath && changedPath !== repositoryPath) return;
@@ -272,6 +309,8 @@ function GitSingleRepoPanel({
     });
 
     return () => {
+      watcherStartCancelled = true;
+      window.clearTimeout(watcherStartTimer);
       if (watcherRefreshTimer.current) {
         clearTimeout(watcherRefreshTimer.current);
         watcherRefreshTimer.current = null;

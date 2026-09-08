@@ -7,6 +7,7 @@ const MAX_WARM_ENTRIES = 24;
 type WarmEntry = {
   at: number;
   promise: Promise<GitStatusResponse>;
+  value?: GitStatusResponse;
 };
 
 function normalizePath(repositoryPath: string): string {
@@ -15,7 +16,13 @@ function normalizePath(repositoryPath: string): string {
 
 export interface GitStatusWarmCache {
   prefetch(repositoryPath: string): void;
-  consume(repositoryPath: string): Promise<GitStatusResponse> | null;
+  /** 复用进行中的预热，不驱逐条目；Git 面板与文件树可共享同一次 IPC。 */
+  peek(repositoryPath: string): Promise<GitStatusResponse> | null;
+  /** 仅返回尚未落地的预热 Promise，供后台静默刷新避免重复打已完成的缓存。 */
+  peekInFlight(repositoryPath: string): Promise<GitStatusResponse> | null;
+  /** 已完成的预热结果，切仓时可同步画出上一次 status。 */
+  getResolved(repositoryPath: string): GitStatusResponse | null;
+  remember(repositoryPath: string, value: GitStatusResponse): void;
   clear(): void;
   /** @internal 仅用于回归测试与诊断。 */
   size(): number;
@@ -25,6 +32,7 @@ export interface GitStatusWarmCache {
  * Git status 预热缓存：
  * - 给被丢弃的预取 Promise 挂拒绝处理，避免 hover 后未切仓时产生 unhandled rejection；
  * - 失败回调仅删除自己对应的 entry，避免旧请求误删同路径的新预热；
+ * - 命中后不删除，Git 面板 / 文件树 / 切回同一仓共享同一次结果；
  * - TTL + LRU 双界限，工作区长期切换大量仓库时内存不会只增不减。
  */
 export function createGitStatusWarmCache(
@@ -50,6 +58,25 @@ export function createGitStatusWarmCache(
     }
   };
 
+  const touch = (path: string, entry: WarmEntry) => {
+    entries.delete(path);
+    entries.set(path, entry);
+  };
+
+  const readFresh = (repositoryPath: string): WarmEntry | null => {
+    const path = normalizePath(repositoryPath);
+    if (!path) return null;
+    const at = now();
+    removeExpired(at);
+    const entry = entries.get(path);
+    if (!entry || at - entry.at >= ttlMs) {
+      entries.delete(path);
+      return null;
+    }
+    touch(path, entry);
+    return entry;
+  };
+
   return {
     prefetch(repositoryPath) {
       const path = normalizePath(repositoryPath);
@@ -58,32 +85,42 @@ export function createGitStatusWarmCache(
       removeExpired(at);
       const existing = entries.get(path);
       if (existing && at - existing.at < ttlMs) {
-        // Map 的插入顺序同时作为 LRU 顺序；hover 命中也刷新热度。
-        entries.delete(path);
-        entries.set(path, existing);
+        touch(path, existing);
         return;
       }
 
-      // Promise.resolve().then 同时把同步 throw 归一化为 rejection。
-      const promise = Promise.resolve().then(() => fetchStatus(path));
+      const promise = Promise.resolve()
+        .then(() => fetchStatus(path))
+        .then((value) => {
+          if (entries.get(path) === entry) entry.value = value;
+          return value;
+        });
       const entry: WarmEntry = { at, promise };
       entries.set(path, entry);
       trimToLimit();
-      // 预取允许无人消费；只观察失败并清理，不把 rethrow 后的新 Promise 留成悬空 rejection。
       void promise.catch(() => {
         if (entries.get(path) === entry) entries.delete(path);
       });
     },
-    consume(repositoryPath) {
-      const path = normalizePath(repositoryPath);
-      if (!path) return null;
-      const entry = entries.get(path);
-      if (!entry || now() - entry.at >= ttlMs) {
-        entries.delete(path);
-        return null;
-      }
-      entries.delete(path);
+    peek(repositoryPath) {
+      return readFresh(repositoryPath)?.promise ?? null;
+    },
+    peekInFlight(repositoryPath) {
+      const entry = readFresh(repositoryPath);
+      if (!entry || entry.value !== undefined) return null;
       return entry.promise;
+    },
+    getResolved(repositoryPath) {
+      return readFresh(repositoryPath)?.value ?? null;
+    },
+    remember(repositoryPath, value) {
+      const path = normalizePath(repositoryPath);
+      if (!path) return;
+      const at = now();
+      removeExpired(at);
+      const entry: WarmEntry = { at, promise: Promise.resolve(value), value };
+      entries.set(path, entry);
+      trimToLimit();
     },
     clear() {
       entries.clear();
@@ -101,9 +138,28 @@ export function prefetchGitStatus(repositoryPath: string): void {
   warmCache.prefetch(repositoryPath);
 }
 
-/** GitPanel 首屏加载时优先消费预热结果。 */
+/** Git 面板 / 文件树共享预热 Promise，不因第一次读取而丢掉。 */
+export function peekWarmGitStatus(repositoryPath: string): Promise<GitStatusResponse> | null {
+  return warmCache.peek(repositoryPath);
+}
+
+/** 后台静默刷新：只接还未完成的预热，避免把刚画出的缓存再当「新结果」吞掉真实 git_status。 */
+export function peekInFlightWarmGitStatus(repositoryPath: string): Promise<GitStatusResponse> | null {
+  return warmCache.peekInFlight(repositoryPath);
+}
+
+/** @deprecated 使用 peekWarmGitStatus；保留以免旧调用方一次消费后迫使二次 git_status。 */
 export function consumeWarmGitStatus(repositoryPath: string): Promise<GitStatusResponse> | null {
-  return warmCache.consume(repositoryPath);
+  return warmCache.peek(repositoryPath);
+}
+
+/** 切仓时同步套用最近一次成功的 git status，避免先清空再等 IPC。 */
+export function getResolvedGitStatus(repositoryPath: string): GitStatusResponse | null {
+  return warmCache.getResolved(repositoryPath);
+}
+
+export function rememberGitStatus(repositoryPath: string, value: GitStatusResponse): void {
+  warmCache.remember(repositoryPath, value);
 }
 
 export function clearGitStatusWarmCache(): void {
