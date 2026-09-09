@@ -816,6 +816,8 @@ pub fn run() {
             wise_hud::wise_hud_is_active,
             wise_hud::wise_focus_composer_surface,
             wise_hud::wise_hud_set_overlay_height,
+            wise_hud::wise_hud_load_details_height,
+            wise_hud::wise_hud_save_details_height,
             wise_hud::wise_hud_emit_to_main,
             wise_mascot::wise_notification_unread_total,
             wise_mascot::wise_notification_ingest,

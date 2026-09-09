@@ -11,6 +11,7 @@ describe("overlayHeightForMode", () => {
     expect(overlayHeightForMode("none")).toBe(HUD_RESTING_OVERLAY_HEIGHT);
     expect(overlayHeightForMode("menu")).toBe(HUD_RESTING_OVERLAY_HEIGHT);
     expect(overlayHeightForMode("details")).toBe(HUD_RESTING_OVERLAY_HEIGHT);
+    expect(overlayHeightForMode("details", 640)).toBe(640);
     expect(overlayHeightForMode("images")).toBe(HUD_IMAGE_OVERLAY_MAX);
   });
 });

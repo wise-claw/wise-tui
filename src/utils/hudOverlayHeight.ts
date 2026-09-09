@@ -13,14 +13,22 @@ export const HUD_IMAGE_OVERLAY_MAX = 780;
 
 export type HudOverlayHeightMode = "none" | "images" | "menu" | "details";
 
-export function overlayHeightForMode(mode: HudOverlayHeightMode): number {
+export function overlayHeightForMode(
+  mode: HudOverlayHeightMode,
+  detailsHeight = HUD_RESTING_OVERLAY_HEIGHT,
+): number {
   if (mode === "images") return HUD_IMAGE_OVERLAY_MAX;
+  if (mode === "details") return detailsHeight;
   return HUD_RESTING_OVERLAY_HEIGHT;
 }
 
-export function overlayHeightFor(mode: HudOverlayHeightMode, toastCount: number): number {
+export function overlayHeightFor(
+  mode: HudOverlayHeightMode,
+  toastCount: number,
+  detailsHeight = HUD_RESTING_OVERLAY_HEIGHT,
+): number {
   return Math.max(
-    overlayHeightForMode(mode),
+    overlayHeightForMode(mode, detailsHeight),
     HUD_VISUAL_COMPACT_HEIGHT + hudToastStackExtraHeight(toastCount),
   );
 }

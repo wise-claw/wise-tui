@@ -22,6 +22,10 @@ import {
 } from "../../utils/wiseHudSnapshot";
 import type { HudCompletionToastView } from "../../utils/hudCompletionToast";
 import type { ImageAttachmentPart } from "../../types";
+import {
+  HUD_DETAILS_HEIGHT_DEFAULT,
+  hudDetailsHeightFromDrag,
+} from "../../utils/hudDetailsHeight";
 import { buildRepositoryMentionOptions } from "../../utils/projectRoleTagOptions";
 import { useGitRepositoryStats } from "../../hooks/useGitRepositoryStats";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
@@ -45,6 +49,9 @@ export interface HudComposerBarProps {
   toasts?: readonly HudCompletionToastView[];
   onDismissToast?: (id: string) => void;
   onOverlayOpenChange?: (mode: HudOverlayMode) => void;
+  detailsHeight?: number;
+  onDetailsHeightChange?: (height: number) => void;
+  onDetailsHeightCommit?: (height: number) => void;
 }
 
 /** HUD 重挂载或切换会话时，仍按仓库阻止重复提交推送。 */
@@ -306,6 +313,9 @@ export function HudComposerBar({
   toasts = [],
   onDismissToast,
   onOverlayOpenChange,
+  detailsHeight = HUD_DETAILS_HEIGHT_DEFAULT,
+  onDetailsHeightChange,
+  onDetailsHeightCommit,
 }: HudComposerBarProps) {
   const session = useMemo(() => hudComposerSessionToClaudeSession(snapshot), [snapshot]);
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -354,6 +364,32 @@ export function HudComposerBar({
       suppressEditorFocusRef.current = false;
     }, HUD_CHROME_FOCUS_SUPPRESS_MS);
   }, []);
+
+  const handleDetailsResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !detailsOpen) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    suppressEditorAutofocus();
+    const startScreenY = event.screenY;
+    const startHeight = detailsHeight;
+    let latestHeight = startHeight;
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      latestHeight = hudDetailsHeightFromDrag(startHeight, startScreenY, moveEvent.screenY);
+      onDetailsHeightChange?.(latestHeight);
+    };
+    const finish = () => {
+      window.removeEventListener("pointermove", handlePointerMove, true);
+      window.removeEventListener("pointerup", finish, true);
+      window.removeEventListener("pointercancel", finish, true);
+      document.documentElement.classList.remove("app-hud-details-resizing");
+      onDetailsHeightCommit?.(latestHeight);
+    };
+    document.documentElement.classList.add("app-hud-details-resizing");
+    window.addEventListener("pointermove", handlePointerMove, true);
+    window.addEventListener("pointerup", finish, true);
+    window.addEventListener("pointercancel", finish, true);
+  }, [detailsHeight, detailsOpen, onDetailsHeightChange, onDetailsHeightCommit, suppressEditorAutofocus]);
 
   useEffect(
     () => () => {
@@ -544,6 +580,17 @@ export function HudComposerBar({
       ) : null}
       {detailsVisible && !previewImage ? (
         <div className={`app-hud-session-details${detailsOpen ? "" : " app-hud-session-details--compact"}`}>
+          {detailsOpen ? (
+            <div
+              className="app-hud-session-details__resize-handle"
+              role="separator"
+              aria-label="拖动调整会话详情高度"
+              aria-orientation="horizontal"
+              onPointerDown={handleDetailsResizeStart}
+            >
+              <span aria-hidden />
+            </div>
+          ) : null}
           <div className="app-hud-session-details__actions">
             <button
               type="button"

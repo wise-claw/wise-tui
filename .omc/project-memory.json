@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1787234229250,
+  "lastScanned": 1788961634081,
   "projectRoot": "/Users/sjl/Documents/github/wise-tui",
   "techStack": {
     "languages": [
@@ -42,15 +42,15 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "bunx tsc --noEmit 2>&1 | head -30",
-    "testCommand": "bun test > /tmp/wise-test-full.log 2>&1; echo \"exit=$?\"; grep -cE \"^\\(fail\\)\" /tmp/wise-test-full.log",
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
       "postinstall": "bun run scripts/patch-antd-modal-confirm-mask-closable.mjs && bun run scripts/patch-antd-scroll-into-view-if-needed.mjs",
       "dev": "vite",
-      "build": "tsc -p tsconfig.app.json && vite build",
-      "test": "bun test",
+      "build": "tsc -p tsconfig.app.json && vite build && bun run scripts/check-build-performance.mjs",
+      "test": "bun test --parallel=4 ./src",
       "preview": "vite preview",
       "tauri:dev": "tauri dev",
       "tauri:build": "tauri build",
@@ -86,14 +86,14 @@
       "path": "browser-extensions",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1787234229243,
+      "lastAccessed": 1788961634074,
       "keyFiles": []
     },
     "design": {
       "path": "design",
       "purpose": null,
       "fileCount": 2,
-      "lastAccessed": 1787234229244,
+      "lastAccessed": 1788961634074,
       "keyFiles": [
         "product-ux-engineering-audit-2026-05-14.md"
       ]
@@ -101,9 +101,10 @@
     "dist": {
       "path": "dist",
       "purpose": "Distribution/build output",
-      "fileCount": 4,
-      "lastAccessed": 1787234229245,
+      "fileCount": 5,
+      "lastAccessed": 1788961634076,
       "keyFiles": [
+        "hud.html",
         "index.html",
         "mascot.html",
         "tauri.svg",
@@ -114,7 +115,7 @@
       "path": "docs",
       "purpose": "Documentation",
       "fileCount": 1,
-      "lastAccessed": 1787234229245,
+      "lastAccessed": 1788961634076,
       "keyFiles": [
         "page-monitor-expansion.md"
       ]
@@ -123,14 +124,14 @@
       "path": "examples",
       "purpose": "Example code",
       "fileCount": 0,
-      "lastAccessed": 1787234229245,
+      "lastAccessed": 1788961634076,
       "keyFiles": []
     },
     "extras": {
       "path": "extras",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1787234229245,
+      "lastAccessed": 1788961634076,
       "keyFiles": [
         "check-prd-split-evolution.mjs"
       ]
@@ -139,7 +140,7 @@
       "path": "imgs",
       "purpose": null,
       "fileCount": 6,
-      "lastAccessed": 1787234229246,
+      "lastAccessed": 1788961634076,
       "keyFiles": [
         "add-execution-env.gif",
         "add-workspace.gif",
@@ -152,7 +153,7 @@
       "path": "public",
       "purpose": "Public files",
       "fileCount": 2,
-      "lastAccessed": 1787234229246,
+      "lastAccessed": 1788961634077,
       "keyFiles": [
         "tauri.svg",
         "vite.svg"
@@ -161,34 +162,34 @@
     "scripts": {
       "path": "scripts",
       "purpose": "Build/utility scripts",
-      "fileCount": 6,
-      "lastAccessed": 1787234229246,
+      "fileCount": 7,
+      "lastAccessed": 1788961634077,
       "keyFiles": [
         "_tmp_sim_stream.mts",
         "build-claude-settings-schema-zh.mjs",
+        "check-build-performance.mjs",
         "emit-platform-split-prompt-seed.ts",
-        "generate-dmg-background.py",
-        "patch-antd-modal-confirm-mask-closable.mjs"
+        "generate-dmg-background.py"
       ]
     },
     "src": {
       "path": "src",
       "purpose": "Source code",
-      "fileCount": 9,
-      "lastAccessed": 1787234229246,
+      "fileCount": 11,
+      "lastAccessed": 1788961634077,
       "keyFiles": [
         "App.css",
         "App.tsx",
         "AppImpl.tsx",
         "bootstrapDompurifyForTauriAssets.ts",
-        "main.tsx"
+        "hud.css"
       ]
     },
     "src-tauri": {
       "path": "src-tauri",
       "purpose": null,
-      "fileCount": 7,
-      "lastAccessed": 1787234229246,
+      "fileCount": 8,
+      "lastAccessed": 1788961634077,
       "keyFiles": [
         "Cargo.lock",
         "Cargo.toml",
@@ -197,22 +198,35 @@
         "build.rs"
       ]
     },
+    "stagehand-cli": {
+      "path": "stagehand-cli",
+      "purpose": null,
+      "fileCount": 7,
+      "lastAccessed": 1788961634077,
+      "keyFiles": [
+        "argv.d.mts",
+        "argv.mjs",
+        "assert.mjs",
+        "auth.mjs",
+        "bun.lock"
+      ]
+    },
     "dist/assets": {
       "path": "dist/assets",
       "purpose": "Static assets",
-      "fileCount": 252,
-      "lastAccessed": 1787234229247,
+      "fileCount": 292,
+      "lastAccessed": 1788961634078,
       "keyFiles": [
-        "ApiOutlined-CO0Sa8tg.js",
-        "AppImpl-DBC3ox-5.css",
-        "AppImpl-Dvm5k70X.js"
+        "ApiOutlined-DLPG9jLs.js",
+        "AppImpl-B3p-PAPI.js",
+        "AppImpl-OtE4vbXG.css"
       ]
     },
     "src/__tests__": {
       "path": "src/__tests__",
       "purpose": "Test files",
       "fileCount": 1,
-      "lastAccessed": 1787234229247,
+      "lastAccessed": 1788961634078,
       "keyFiles": [
         "codexProviderPresets.test.ts"
       ]
@@ -221,7 +235,7 @@
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 1,
-      "lastAccessed": 1787234229247,
+      "lastAccessed": 1788961634078,
       "keyFiles": [
         "react.svg"
       ]
@@ -229,8 +243,8 @@
     "src/components": {
       "path": "src/components",
       "purpose": "UI components",
-      "fileCount": 24,
-      "lastAccessed": 1787234229247,
+      "fileCount": 25,
+      "lastAccessed": 1788961634078,
       "keyFiles": [
         "AppWorkspaceLayout.lazy.ts",
         "AppWorkspaceLayout.tsx",
@@ -241,12 +255,19 @@
       "path": "src/data",
       "purpose": "Data files",
       "fileCount": 5,
-      "lastAccessed": 1787234229247,
+      "lastAccessed": 1788961634078,
       "keyFiles": [
         "claude-code-settings.schema.en.json",
         "claude-code-settings.schema.json",
         "claude-env-vars-doc-zh-CN.md"
       ]
+    },
+    "stagehand-cli/node_modules": {
+      "path": "stagehand-cli/node_modules",
+      "purpose": "Dependencies",
+      "fileCount": 0,
+      "lastAccessed": 1788961634080,
+      "keyFiles": []
     }
   },
   "hotPaths": [

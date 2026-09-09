@@ -10,10 +10,13 @@ pub const HUD_WINDOW_LABEL: &str = "hud";
 pub const HUD_ACTIVE_EVENT: &str = "wise-hud-active-changed";
 
 const HUD_BOUNDS_SETTING_KEY: &str = "wise.hud.window.v1";
+const HUD_DETAILS_HEIGHT_SETTING_KEY: &str = "wise.hud.details-height.v1";
 const DEFAULT_HUD_WIDTH: f64 = 720.0;
 /// 与前端 `HUD_RESTING_OVERLAY_HEIGHT` 对齐：空闲态也保持菜单高度，点按钮不再拉伸窗口。
 const DEFAULT_HUD_HEIGHT: f64 = 420.0;
 const HUD_COMPACT_LOGICAL_HEIGHT: f64 = 54.0;
+const HUD_DETAILS_HEIGHT_MIN: f64 = 140.0;
+const HUD_DETAILS_HEIGHT_MAX: f64 = 960.0;
 const HUD_BOTTOM_MARGIN: i32 = 48;
 
 /// 只改高度，保持窗口底边不动，避免胶囊在屏幕上跳。
@@ -201,6 +204,20 @@ fn load_hud_bounds(db: &WiseDb) -> Option<HudBounds> {
 fn save_hud_bounds_value(db: &WiseDb, bounds: &HudBounds) -> Result<(), String> {
     let raw = serde_json::to_string(bounds).map_err(|e| e.to_string())?;
     db.set_setting(HUD_BOUNDS_SETTING_KEY, &raw)
+}
+
+fn sanitize_hud_details_height(height: f64) -> Option<f64> {
+    height
+        .is_finite()
+        .then(|| height.clamp(HUD_DETAILS_HEIGHT_MIN, HUD_DETAILS_HEIGHT_MAX))
+}
+
+fn load_hud_details_height(db: &WiseDb) -> Option<f64> {
+    let raw = db
+        .get_setting(HUD_DETAILS_HEIGHT_SETTING_KEY)
+        .ok()
+        .flatten()?;
+    sanitize_hud_details_height(raw.parse::<f64>().ok()?)
 }
 
 fn clamp_hud_to_monitor(
@@ -425,6 +442,7 @@ pub fn wise_hud_snap_to_cursor(app: AppHandle, db: State<WiseDb>) -> Result<(), 
 #[tauri::command]
 pub fn wise_hud_reset_layout(app: AppHandle, db: State<WiseDb>) -> Result<(), String> {
     let _ = db.delete_setting(HUD_BOUNDS_SETTING_KEY);
+    let _ = db.delete_setting(HUD_DETAILS_HEIGHT_SETTING_KEY);
     let hud = hud_window(&app)?;
     place_hud_default(&hud)?;
     Ok(())
@@ -456,6 +474,18 @@ pub fn wise_focus_composer_surface(app: AppHandle) -> Result<(), String> {
 pub fn wise_hud_set_overlay_height(app: AppHandle, height: f64) -> Result<(), String> {
     let hud = hud_window(&app)?;
     hud_set_overlay_height(&hud, height)
+}
+
+#[tauri::command]
+pub fn wise_hud_load_details_height(db: State<WiseDb>) -> Option<f64> {
+    load_hud_details_height(&db)
+}
+
+#[tauri::command]
+pub fn wise_hud_save_details_height(db: State<WiseDb>, height: f64) -> Result<(), String> {
+    let height =
+        sanitize_hud_details_height(height).ok_or_else(|| "HUD 会话详情高度无效".to_string())?;
+    db.set_setting(HUD_DETAILS_HEIGHT_SETTING_KEY, &height.round().to_string())
 }
 
 const HUD_FORWARD_EVENTS: &[&str] = &[
@@ -566,6 +596,20 @@ mod tests {
     fn overlay_height_skips_subpixel_noop() {
         assert!(overlay_height_already_applied(400.0, 400.2));
         assert!(!overlay_height_already_applied(64.0, 400.0));
+    }
+
+    #[test]
+    fn details_height_is_clamped_before_persisting() {
+        assert_eq!(
+            sanitize_hud_details_height(100.0),
+            Some(HUD_DETAILS_HEIGHT_MIN)
+        );
+        assert_eq!(sanitize_hud_details_height(520.0), Some(520.0));
+        assert_eq!(
+            sanitize_hud_details_height(2_000.0),
+            Some(HUD_DETAILS_HEIGHT_MAX)
+        );
+        assert_eq!(sanitize_hud_details_height(f64::NAN), None);
     }
 
     #[test]

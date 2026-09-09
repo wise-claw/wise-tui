@@ -429,6 +429,40 @@
     0 12px 32px rgba(15, 23, 42, 0.14);
 }
 
+.app-hud-session-details__resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 74px;
+  z-index: 2;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.app-hud-session-details__resize-handle span {
+  width: 54px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(113, 113, 122, 0.28);
+  transition: width 120ms ease, background-color 120ms ease;
+}
+
+.app-hud-session-details__resize-handle:hover span,
+.app-hud-details-resizing .app-hud-session-details__resize-handle span {
+  width: 72px;
+  background: rgba(59, 130, 246, 0.66);
+}
+
+.app-hud-details-resizing,
+.app-hud-details-resizing * {
+  cursor: ns-resize !important;
+  user-select: none !important;
+}
+
 /* 常驻态只露出两行消息；消息区本身仍可滚动回看完整内容。 */
 .app-hud-session-details--compact {
   flex: 0 0 56px;

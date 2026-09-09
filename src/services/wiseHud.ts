@@ -61,6 +61,16 @@ export async function wiseHudSetOverlayHeight(height: number): Promise<void> {
   return invoke("wise_hud_set_overlay_height", { height });
 }
 
+/** 读取上次由用户拖动设置的会话详情高度。 */
+export async function wiseHudLoadDetailsHeight(): Promise<number | null> {
+  return invoke<number | null>("wise_hud_load_details_height");
+}
+
+/** 保存会话详情高度，供之后再次展开或重新进入 HUD 时恢复。 */
+export async function wiseHudSaveDetailsHeight(height: number): Promise<void> {
+  return invoke("wise_hud_save_details_height", { height });
+}
+
 export async function wiseHudIsActive(): Promise<boolean> {
   return invoke<boolean>("wise_hud_is_active");
 }

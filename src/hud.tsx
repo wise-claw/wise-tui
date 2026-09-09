@@ -5,12 +5,20 @@ import zhCN from "antd/locale/zh_CN";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { HudComposerBar, type HudOverlayMode } from "./components/HudMode/HudComposerBar";
-import { wiseHudIsActive, wiseHudRequestState, wiseHudSaveBounds, wiseHudSetOverlayHeight } from "./services/wiseHud";
+import {
+  wiseHudIsActive,
+  wiseHudLoadDetailsHeight,
+  wiseHudRequestState,
+  wiseHudSaveBounds,
+  wiseHudSaveDetailsHeight,
+  wiseHudSetOverlayHeight,
+} from "./services/wiseHud";
 import { setWiseHudModeActive } from "./stores/wiseHudModeStore";
 import { bootstrapAppTheme, startSystemThemeWatch, useAppTheme } from "./stores/appThemeStore";
 import { buildAppThemeConfig } from "./constants/appThemeTokens";
 import { ensureTauriEventUnlistenPatched, safeUnlisten } from "./utils/safeTauriUnlisten";
 import { overlayHeightFor } from "./utils/hudOverlayHeight";
+import { clampHudDetailsHeight, HUD_DETAILS_HEIGHT_DEFAULT } from "./utils/hudDetailsHeight";
 import { loadHudDetailsDefaultsFromStore } from "./services/wiseDefaultConfigStore";
 import { useHudClickThrough } from "./hooks/useHudClickThrough";
 import { useHudCompletionToasts } from "./hooks/useHudCompletionToasts";
@@ -52,6 +60,7 @@ function HudApp() {
   const [overlayMode, setOverlayMode] = useState<HudOverlayMode>("none");
   const [persistentDetailsEnabled, setPersistentDetailsEnabled] = useState(false);
   const [detailsPreferenceRevision, setDetailsPreferenceRevision] = useState(0);
+  const [detailsHeight, setDetailsHeight] = useState(HUD_DETAILS_HEIGHT_DEFAULT);
   const overlayModeRef = useRef(overlayMode);
   overlayModeRef.current = overlayMode;
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -60,27 +69,47 @@ function HudApp() {
   toastCountRef.current = renderedCount;
   useHudClickThrough();
   const lastOverlayHeightRef = useRef<number | null>(null);
+  const requestedOverlayHeightRef = useRef(HUD_DETAILS_HEIGHT_DEFAULT);
+  const overlayHeightSyncingRef = useRef(false);
 
-  const syncWindowHeight = useCallback(async (mode: HudOverlayMode, toastCount: number) => {
-    const height = overlayHeightFor(mode, toastCount);
-    if (lastOverlayHeightRef.current === height) return;
-    lastOverlayHeightRef.current = height;
-    try {
-      await wiseHudSetOverlayHeight(height);
-    } catch {
-      lastOverlayHeightRef.current = null;
-    }
+  const syncWindowHeight = useCallback((
+    mode: HudOverlayMode,
+    toastCount: number,
+    preferredDetailsHeight: number,
+  ) => {
+    const height = overlayHeightFor(mode, toastCount, preferredDetailsHeight);
+    requestedOverlayHeightRef.current = height;
+    if (overlayHeightSyncingRef.current || lastOverlayHeightRef.current === height) return;
+    overlayHeightSyncingRef.current = true;
+    void (async () => {
+      try {
+        while (lastOverlayHeightRef.current !== requestedOverlayHeightRef.current) {
+          const nextHeight = requestedOverlayHeightRef.current;
+          await wiseHudSetOverlayHeight(nextHeight);
+          lastOverlayHeightRef.current = nextHeight;
+        }
+      } catch {
+        lastOverlayHeightRef.current = null;
+      } finally {
+        overlayHeightSyncingRef.current = false;
+      }
+    })();
   }, []);
 
   useEffect(() => {
-    void syncWindowHeight(overlayMode, renderedCount);
-  }, [overlayMode, renderedCount, syncWindowHeight]);
+    syncWindowHeight(overlayMode, renderedCount, detailsHeight);
+  }, [overlayMode, renderedCount, detailsHeight, syncWindowHeight]);
 
   useEffect(() => {
     let cancelled = false;
     const unsubs: UnlistenFn[] = [];
     void (async () => {
       await wiseHudRequestState();
+      void wiseHudLoadDetailsHeight()
+        .then((height) => {
+          if (height != null) setDetailsHeight(clampHudDetailsHeight(height));
+        })
+        .catch(() => undefined);
       void loadHudDetailsDefaultsFromStore()
         .then((defaults) => {
           setPersistentDetailsEnabled(defaults.showHudPersistentDetails);
@@ -163,6 +192,9 @@ function HudApp() {
       toasts={toasts}
       onDismissToast={dismiss}
       onOverlayOpenChange={setOverlayMode}
+      detailsHeight={detailsHeight}
+      onDetailsHeightChange={setDetailsHeight}
+      onDetailsHeightCommit={(height) => void wiseHudSaveDetailsHeight(height)}
     />
   );
 }
