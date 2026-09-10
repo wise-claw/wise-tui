@@ -8,6 +8,7 @@ import {
   hudComposerSessionToClaudeSession,
   parseWiseHudActiveChanged,
   parseWiseHudSelectRepositoryPayload,
+  parseWiseHudSelectSessionPayload,
   parseWiseHudSessionSnapshot,
   parseWiseHudSetEnginePayload,
   parseWiseHudSetModelPayload,
@@ -50,6 +51,7 @@ describe("buildWiseHudSessionSnapshot", () => {
     expect(snap.runStatus).toBe("idle");
     expect(snap.repositoryRunStatus).toBe("idle");
     expect(snap.messages).toEqual([]);
+    expect(snap.sessionTabs).toEqual([]);
   });
 
   it("includes slim composer session and repositories", () => {
@@ -118,6 +120,26 @@ describe("buildWiseHudSessionSnapshot", () => {
     expect(buildWiseHudSessionSnapshot(session({
       messages: [{ id: 1, role: "user", content: "hi", parts: [], timestamp: 1 }],
     })).messages).toEqual([]);
+  });
+
+  it("includes lightweight switchable session tabs", () => {
+    const current = session({
+      messages: [{ id: 1, role: "user", content: "修复 HUD", parts: [], timestamp: 1 }],
+    });
+    const running = session({
+      id: "sess-2",
+      threadName: "运行中的会话",
+      repositoryName: "other",
+      status: "running",
+    });
+    const idle = session({ id: "sess-3", threadName: "空闲会话", repositoryName: "idle" });
+    const snap = buildWiseHudSessionSnapshot(current, "claude", {
+      sessions: [current, running, idle],
+    });
+    expect(snap.sessionTabs).toEqual([
+      { id: "sess-1", title: "修复 HUD", repositoryName: "demo", status: "idle" },
+      { id: "sess-2", title: "运行中的会话", repositoryName: "other", status: "running" },
+    ]);
   });
 });
 
@@ -252,6 +274,7 @@ describe("parseWiseHud payloads", () => {
   it("only forwards HUD control events to main", () => {
     expect(isWiseHudForwardEvent("wise-hud-submit")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-new-session")).toBe(true);
+    expect(isWiseHudForwardEvent("wise-hud-select-session")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-set-engine")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-set-model")).toBe(true);
     expect(isWiseHudForwardEvent("wise-hud-set-details-open")).toBe(true);
@@ -372,6 +395,8 @@ describe("parseWiseHud payloads", () => {
     ]);
     expect(parseWiseHudSelectRepositoryPayload({ repositoryId: 3 })).toEqual({ repositoryId: 3 });
     expect(parseWiseHudSelectRepositoryPayload({ repositoryId: "3" })).toBeNull();
+    expect(parseWiseHudSelectSessionPayload({ sessionId: " sess-2 " })).toEqual({ sessionId: "sess-2" });
+    expect(parseWiseHudSelectSessionPayload({ sessionId: "" })).toBeNull();
   });
 });
 

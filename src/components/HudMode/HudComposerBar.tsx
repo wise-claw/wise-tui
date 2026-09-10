@@ -3,7 +3,14 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { App } from "antd";
 import { ComposerRegion } from "../ClaudeChatInput/composer-region";
-import { wiseHudCancel, wiseHudExit, wiseHudNewSession, wiseHudSetDetailsOpen, wiseHudSubmit } from "../../services/wiseHud";
+import {
+  wiseHudCancel,
+  wiseHudExit,
+  wiseHudNewSession,
+  wiseHudSelectSession,
+  wiseHudSetDetailsOpen,
+  wiseHudSubmit,
+} from "../../services/wiseHud";
 import { HudContextPicker } from "./HudContextPicker";
 import { HudQuickActionsPicker } from "./HudQuickActionsPicker";
 import { HudCompletionToasts } from "./HudCompletionToasts";
@@ -44,7 +51,7 @@ export interface HudComposerBarProps {
   snapshot: WiseHudSessionSnapshot;
   /** 配置启用时，每次进入 HUD 或切换会话显示两行常驻详情。 */
   persistentDetailsEnabled?: boolean;
-  /** 配置在 HUD 重新激活时会重新读取，用该版本号同步展开状态。 */
+  /** 配置在 HUD 重新激活时会重新读取，用该版本号同步显示状态。 */
   detailsPreferenceRevision?: number;
   toasts?: readonly HudCompletionToastView[];
   onDismissToast?: (id: string) => void;
@@ -199,15 +206,15 @@ function HudGitActions({
 function HudRunStatusChip({
   runningCount,
   runStatus,
-  detailsOpen,
+  detailsVisible,
   disabled,
-  onToggle,
+  onOpen,
 }: {
   runningCount: number;
   runStatus: WiseHudRunStatus;
-  detailsOpen: boolean;
+  detailsVisible: boolean;
   disabled?: boolean;
-  onToggle: () => void;
+  onOpen: () => void;
 }) {
   const label =
     runStatus === "running"
@@ -217,20 +224,20 @@ function HudRunStatusChip({
         : "就绪";
   const title = disabled
     ? label
-    : detailsOpen
-      ? `${label}，点击收起会话详情`
-      : `${label}，点击展开会话详情`;
+    : detailsVisible
+      ? label
+      : `${label}，点击打开会话详情`;
   return (
     <button
       type="button"
-      className={`app-hud-run-chip app-hud-run-chip--${runStatus}${detailsOpen ? " app-hud-run-chip--open" : ""}`}
+      className={`app-hud-run-chip app-hud-run-chip--${runStatus}${detailsVisible ? " app-hud-run-chip--open" : ""}`}
       aria-label={title}
-      aria-pressed={detailsOpen}
+      aria-pressed={detailsVisible}
       title={title}
       disabled={disabled}
       onClick={() => {
         if (disabled) return;
-        onToggle();
+        if (!detailsVisible) onOpen();
       }}
     >
       {runStatus === "running" ? (
@@ -326,7 +333,6 @@ export function HudComposerBar({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsDismissed, setDetailsDismissed] = useState(false);
   const detailsOpenRef = useRef(detailsOpen);
-  detailsOpenRef.current = detailsOpen;
   const contextOverlayRef = useRef(contextOverlay);
   contextOverlayRef.current = contextOverlay;
   const quickActionsOverlayRef = useRef(quickActionsOverlay);
@@ -336,8 +342,9 @@ export function HudComposerBar({
   const suppressEditorFocusRef = useRef(false);
   const suppressEditorFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const running = snapshot.busy;
-  /** 常驻详情收起后仍保留两行可滚动摘要；未配置常驻时仅在展开后显示。 */
+  /** 配置启用时默认显示完整详情；否则由状态入口按需打开。 */
   const detailsVisible = Boolean(session) && !detailsDismissed && (persistentDetailsEnabled || detailsOpen);
+  detailsOpenRef.current = detailsVisible;
 
   const setContextOverlayWanted = useCallback((wanted: boolean) => {
     contextOverlayRef.current = wanted;
@@ -366,7 +373,7 @@ export function HudComposerBar({
   }, []);
 
   const handleDetailsResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || !detailsOpen) return;
+    if (event.button !== 0 || !detailsVisible) return;
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -389,7 +396,7 @@ export function HudComposerBar({
     window.addEventListener("pointermove", handlePointerMove, true);
     window.addEventListener("pointerup", finish, true);
     window.addEventListener("pointercancel", finish, true);
-  }, [detailsHeight, detailsOpen, onDetailsHeightChange, onDetailsHeightCommit, suppressEditorAutofocus]);
+  }, [detailsHeight, detailsVisible, onDetailsHeightChange, onDetailsHeightCommit, suppressEditorAutofocus]);
 
   useEffect(
     () => () => {
@@ -405,10 +412,14 @@ export function HudComposerBar({
   }, [session?.id]);
 
   useEffect(() => {
-    // 常驻详情默认从紧凑的两行高度开始，而非占满整个 HUD。
-    setDetailsOpen(false);
+    setDetailsOpen(persistentDetailsEnabled);
     setDetailsDismissed(false);
-  }, [persistentDetailsEnabled, detailsPreferenceRevision, session?.id]);
+  }, [persistentDetailsEnabled, detailsPreferenceRevision]);
+
+  useEffect(() => {
+    // HUD 内切换 Tab 时保持详情显示，仅恢复可能被当前会话关闭的状态。
+    setDetailsDismissed(false);
+  }, [session?.id]);
 
   useEffect(() => {
     if (menuOverlay || contextOverlay || quickActionsOverlay) setPreviewImage(null);
@@ -420,11 +431,11 @@ export function HudComposerBar({
         ? "menu"
         : previewImage
           ? "images"
-          : detailsOpen
+          : detailsVisible
             ? "details"
             : "none",
     );
-  }, [menuOverlay, contextOverlay, quickActionsOverlay, previewImage, detailsOpen, onOverlayOpenChange]);
+  }, [menuOverlay, contextOverlay, quickActionsOverlay, previewImage, detailsVisible, onOverlayOpenChange]);
 
   useEffect(() => {
     void wiseHudSetDetailsOpen(detailsVisible);
@@ -439,15 +450,16 @@ export function HudComposerBar({
         setPreviewImage(null);
         return;
       }
-      if (detailsOpen) {
+      if (detailsVisible) {
         event.preventDefault();
         event.stopPropagation();
         setDetailsOpen(false);
+        setDetailsDismissed(true);
       }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [previewImage, detailsOpen]);
+  }, [previewImage, detailsVisible]);
 
   const handleHudImagePreviewChange = useCallback((image: ImageAttachmentPart | null) => {
     setPreviewImage((prev) => {
@@ -494,20 +506,6 @@ export function HudComposerBar({
     },
     [suppressEditorAutofocus],
   );
-
-  useEffect(() => {
-    const shell = shellRef.current;
-    if (!shell) return;
-    const onFocusIn = (event: FocusEvent) => {
-      if (suppressEditorFocusRef.current) return;
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (!target.closest(".app-claude-semi-chat-input-wrap")) return;
-      setDetailsOpen(false);
-    };
-    shell.addEventListener("focusin", onFocusIn);
-    return () => shell.removeEventListener("focusin", onFocusIn);
-  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => focusEditor(), 80);
@@ -575,34 +573,21 @@ export function HudComposerBar({
           <img src={previewImage.dataUrl} alt={previewImage.filename} />
         </button>
       ) : null}
-      {!detailsOpen ? (
+      {!detailsVisible ? (
         <HudCompletionToasts toasts={toasts} onDismiss={onDismissToast ?? (() => undefined)} />
       ) : null}
       {detailsVisible && !previewImage ? (
-        <div className={`app-hud-session-details${detailsOpen ? "" : " app-hud-session-details--compact"}`}>
-          {detailsOpen ? (
-            <div
-              className="app-hud-session-details__resize-handle"
-              role="separator"
-              aria-label="拖动调整会话详情高度"
-              aria-orientation="horizontal"
-              onPointerDown={handleDetailsResizeStart}
-            >
-              <span aria-hidden />
-            </div>
-          ) : null}
+        <div className="app-hud-session-details">
+          <div
+            className="app-hud-session-details__resize-handle"
+            role="separator"
+            aria-label="拖动调整会话详情高度"
+            aria-orientation="horizontal"
+            onPointerDown={handleDetailsResizeStart}
+          >
+            <span aria-hidden />
+          </div>
           <div className="app-hud-session-details__actions">
-            <button
-              type="button"
-              className="app-hud-session-details__collapse app-hud-session-details__collapse--icon"
-              aria-label={detailsOpen ? "收起会话详情" : "展开会话详情"}
-              title={detailsOpen ? "收起详情" : "展开详情"}
-              onClick={() => setDetailsOpen((open) => !open)}
-            >
-              <svg viewBox="0 0 16 16" aria-hidden="true">
-                <path d={detailsOpen ? "m3.5 10 4.5-4.5 4.5 4.5" : "m3.5 6 4.5 4.5L12.5 6"} />
-              </svg>
-            </button>
             <button
               type="button"
               className="app-hud-session-details__close"
@@ -616,6 +601,33 @@ export function HudComposerBar({
               ×
             </button>
           </div>
+          {snapshot.sessionTabs.length > 1 ? (
+            <div className="app-hud-session-tabs" role="tablist" aria-label="会话列表">
+              {snapshot.sessionTabs.map((tab) => {
+                const active = tab.id === snapshot.sessionId;
+                const busy = tab.status === "running" || tab.status === "connecting";
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    className={`app-hud-session-tab${active ? " app-hud-session-tab--active" : ""}`}
+                    title={tab.repositoryName ? `${tab.title} · ${tab.repositoryName}` : tab.title}
+                    onClick={() => {
+                      if (!active) void wiseHudSelectSession(tab.id);
+                    }}
+                  >
+                    <span
+                      className={`app-hud-session-tab__status app-hud-session-tab__status--${busy ? "running" : tab.status}`}
+                      aria-hidden
+                    />
+                    <span className="app-hud-session-tab__title">{tab.title}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           {session ? (
             <ClaudeSessionMessagesColumn
               session={session}
@@ -642,15 +654,12 @@ export function HudComposerBar({
           <HudRunStatusChip
             runningCount={snapshot.runningCount}
             runStatus={snapshot.runStatus}
-            detailsOpen={detailsOpen}
+            detailsVisible={detailsVisible}
             disabled={!session}
-            onToggle={() => {
+            onOpen={() => {
               setDetailsDismissed(false);
-              setDetailsOpen((open) => {
-                const next = !open;
-                detailsOpenRef.current = next;
-                return next;
-              });
+              setDetailsOpen(true);
+              detailsOpenRef.current = true;
             }}
           />
         </div>

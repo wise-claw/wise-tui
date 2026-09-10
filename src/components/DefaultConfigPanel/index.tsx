@@ -1181,7 +1181,7 @@ export function DefaultConfigPanel() {
         <DefaultConfigRow
           title="常驻详情"
           hint="HUD 输入条上方"
-          detail="进入 HUD 后在输入条上方常驻两行可滚动详情；可随时展开为完整详情或收起回两行高度"
+          detail="进入 HUD 后在输入条上方默认显示完整会话详情；可拖动顶部调整高度"
           control={
             <Switch
               size="small"

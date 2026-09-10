@@ -14,6 +14,8 @@ import {
 } from "../constants/sessionExecutionEngine";
 import { formatClaudeModelLabel } from "./claudeModel";
 import { isAssistantDisplayNoiseText } from "./claudeChatMessageDisplay";
+import { resolveSessionListPreviewSource } from "./sessionListPreview";
+import { stripRedundantRepoBracketPrefix } from "./sessionRepositoryDisplay";
 
 export const WISE_HUD_STATE_EVENT = "wise-hud-state";
 export const WISE_HUD_SUBMIT_EVENT = "wise-hud-submit";
@@ -21,6 +23,7 @@ export const WISE_HUD_CANCEL_EVENT = "wise-hud-cancel";
 export const WISE_HUD_REQUEST_STATE_EVENT = "wise-hud-request-state";
 export const WISE_HUD_ACTIVE_EVENT = "wise-hud-active-changed";
 export const WISE_HUD_SELECT_REPOSITORY_EVENT = "wise-hud-select-repository";
+export const WISE_HUD_SELECT_SESSION_EVENT = "wise-hud-select-session";
 export const WISE_HUD_NEW_SESSION_EVENT = "wise-hud-new-session";
 export const WISE_HUD_SET_ENGINE_EVENT = "wise-hud-set-engine";
 export const WISE_HUD_SET_MODEL_EVENT = "wise-hud-set-model";
@@ -68,6 +71,13 @@ export interface WiseHudComposerSession {
   codexReasoningEffort?: string;
 }
 
+export interface WiseHudSessionTab {
+  id: string;
+  title: string;
+  repositoryName: string;
+  status: ClaudeSession["status"];
+}
+
 export interface WiseHudSessionSnapshot {
   sessionId: string | null;
   sessionTitle: string;
@@ -81,6 +91,7 @@ export interface WiseHudSessionSnapshot {
   repositories: WiseHudRepositoryOption[];
   activeRepositoryId: number | null;
   composerSession: WiseHudComposerSession | null;
+  sessionTabs: WiseHudSessionTab[];
   runningCount: number;
   runStatus: WiseHudRunStatus;
   repositoryRunStatus: WiseHudRepositoryRunStatus;
@@ -97,6 +108,7 @@ const HUD_FORWARD_EVENTS = [
   WISE_HUD_CANCEL_EVENT,
   WISE_HUD_REQUEST_STATE_EVENT,
   WISE_HUD_SELECT_REPOSITORY_EVENT,
+  WISE_HUD_SELECT_SESSION_EVENT,
   WISE_HUD_NEW_SESSION_EVENT,
   WISE_HUD_SET_ENGINE_EVENT,
   WISE_HUD_SET_MODEL_EVENT,
@@ -114,6 +126,10 @@ export function isWiseHudForwardEvent(event: string): event is WiseHudForwardEve
 
 export interface WiseHudSelectRepositoryPayload {
   repositoryId: number;
+}
+
+export interface WiseHudSelectSessionPayload {
+  sessionId: string;
 }
 
 export interface WiseHudSetEnginePayload {
@@ -154,6 +170,7 @@ export interface BuildWiseHudSessionSnapshotExtras {
   runStatus?: WiseHudRunStatus;
   repositoryRunStatus?: WiseHudRepositoryRunStatus;
   includeMessages?: boolean;
+  sessions?: readonly ClaudeSession[];
 }
 
 const EMPTY_SNAPSHOT: WiseHudSessionSnapshot = {
@@ -169,6 +186,7 @@ const EMPTY_SNAPSHOT: WiseHudSessionSnapshot = {
   repositories: [],
   activeRepositoryId: null,
   composerSession: null,
+  sessionTabs: [],
   runningCount: 0,
   runStatus: "idle",
   repositoryRunStatus: "idle",
@@ -224,6 +242,21 @@ export function formatHudModelLabel(
   if (model && effort) return `${model} · ${effort}`;
   if (model) return model;
   return SESSION_EXECUTION_ENGINE_LABELS[engine]?.short ?? "Wise";
+}
+
+export function buildHudSessionTabs(sessions: readonly ClaudeSession[]): WiseHudSessionTab[] {
+  return sessions.map((session) => {
+    const source = resolveSessionListPreviewSource(session);
+    const title = stripRedundantRepoBracketPrefix(source, session.repositoryName ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return {
+      id: session.id,
+      title: title || session.threadName?.trim() || session.repositoryName?.trim() || "新会话",
+      repositoryName: session.repositoryName?.trim() || "",
+      status: session.status,
+    };
+  });
 }
 
 const HUD_THINKING_PREVIEW_PREFIX = "[思考过程]";
@@ -308,6 +341,11 @@ export function buildWiseHudSessionSnapshot(
   const runStatus = extras.runStatus ?? (runningCount > 0 ? "running" : "idle");
   const repositoryRunStatus = extras.repositoryRunStatus ?? "idle";
   const messages = extras.includeMessages && session ? [...session.messages] : [];
+  const sessionTabs = buildHudSessionTabs(
+    (extras.sessions ?? (session ? [session] : [])).filter(
+      (item) => item.id === session?.id || isHudSessionBusyStatus(item.status),
+    ),
+  );
   if (!session) {
     return {
       ...EMPTY_SNAPSHOT,
@@ -317,6 +355,7 @@ export function buildWiseHudSessionSnapshot(
       runStatus,
       repositoryRunStatus,
       messages,
+      sessionTabs,
     };
   }
   const busy = session.status === "running" || session.status === "connecting";
@@ -341,6 +380,7 @@ export function buildWiseHudSessionSnapshot(
     repositories,
     activeRepositoryId,
     composerSession: buildHudComposerSession(session, engine),
+    sessionTabs,
     runningCount,
     runStatus,
     repositoryRunStatus,
@@ -429,6 +469,24 @@ function parseHudRepositories(raw: unknown): WiseHudRepositoryOption[] {
       name: value.name,
       path: value.path,
       openAppId: typeof value.openAppId === "string" ? value.openAppId : null,
+    });
+  }
+  return out;
+}
+
+function parseHudSessionTabs(raw: unknown): WiseHudSessionTab[] {
+  if (!Array.isArray(raw)) return [];
+  const out: WiseHudSessionTab[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const value = item as { id?: unknown; title?: unknown; repositoryName?: unknown; status?: unknown };
+    const status = parseHudSessionStatus(value.status);
+    if (typeof value.id !== "string" || !value.id.trim() || typeof value.title !== "string" || !status) continue;
+    out.push({
+      id: value.id.trim(),
+      title: value.title.trim() || "新会话",
+      repositoryName: typeof value.repositoryName === "string" ? value.repositoryName : "",
+      status,
     });
   }
   return out;
@@ -524,6 +582,7 @@ export function parseWiseHudSessionSnapshot(raw: unknown): WiseHudSessionSnapsho
     repositories: parseHudRepositories(value.repositories),
     activeRepositoryId,
     composerSession: parseHudComposerSession(value.composerSession),
+    sessionTabs: parseHudSessionTabs(value.sessionTabs),
     runningCount: parseHudRunningCount(value.runningCount),
     runStatus: parseHudRunStatus(value.runStatus),
     repositoryRunStatus: parseHudRepositoryRunStatus(value.repositoryRunStatus),
@@ -538,6 +597,13 @@ export function parseWiseHudSelectRepositoryPayload(
   const repositoryId = (raw as { repositoryId?: unknown }).repositoryId;
   if (typeof repositoryId !== "number" || !Number.isFinite(repositoryId)) return null;
   return { repositoryId };
+}
+
+export function parseWiseHudSelectSessionPayload(raw: unknown): WiseHudSelectSessionPayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const sessionId = (raw as { sessionId?: unknown }).sessionId;
+  if (typeof sessionId !== "string" || !sessionId.trim()) return null;
+  return { sessionId: sessionId.trim() };
 }
 
 function parseOptionalSessionId(raw: unknown): string | undefined {

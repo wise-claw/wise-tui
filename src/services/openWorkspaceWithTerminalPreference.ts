@@ -51,7 +51,8 @@ export async function tryOpenWorkspaceInDefaultTerminal(
  * 在默认终端中打开工作目录并执行用户配置的运行指令。
  *
  * - macOS：调用后端 `macos_open_terminal_with_command`，由后端按终端类型分发
- *   AppleScript / `open -a --args` 路径，新窗口先 `cd` 再跑命令。
+ *   AppleScript / `open -a --args` 路径。新窗口以工作区为工作目录后执行命令
+ *   （能原生设 cwd 的终端不再注入 `cd`）。
  * - 其它平台 / 未配置默认终端：直接退化为 `tryOpenWorkspaceInDefaultTerminal`
  *   （只打开终端，不注入命令）。
  */

@@ -19,7 +19,10 @@ use crate::{
 };
 #[cfg(target_os = "macos")]
 use crate::macos_terminal_detect;
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use tauri::{Emitter, Manager};
 
 /// 系统菜单「功能 → 打开 WebView 控制台…」项 id（与 `on_menu_event` 匹配）。
@@ -167,9 +170,16 @@ pub fn run() {
 
             // ⌥H / Alt+H：切换 HUD 模式（全局，应用未聚焦也可打开）。
             let toggle_hud_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::KeyH);
+            let hud_shortcut_pressed = Arc::new(AtomicBool::new(false));
             app.global_shortcut()
-                .on_shortcut(toggle_hud_shortcut, |app_handle, _shortcut, event| {
+                .on_shortcut(toggle_hud_shortcut, move |app_handle, _shortcut, event| {
                     if event.state() != ShortcutState::Pressed {
+                        hud_shortcut_pressed.store(false, Ordering::Release);
+                        return;
+                    }
+                    // macOS 会在按键保持期间连续派发 Pressed；toggle 处理两次就会表现为
+                    // HUD 一闪而过。一次按下到释放之间只允许切换一次。
+                    if hud_shortcut_pressed.swap(true, Ordering::AcqRel) {
                         return;
                     }
                     let Some(db) = app_handle.try_state::<WiseDb>() else {

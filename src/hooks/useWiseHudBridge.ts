@@ -26,6 +26,7 @@ import {
   parseWiseHudActiveChanged,
   parseWiseHudSubmitPayload,
   parseWiseHudSelectRepositoryPayload,
+  parseWiseHudSelectSessionPayload,
   parseWiseHudSetEnginePayload,
   parseWiseHudSetModelPayload,
   parseWiseHudActivateAssistantPayload,
@@ -40,6 +41,7 @@ import {
   WISE_HUD_NEW_SESSION_EVENT,
   WISE_HUD_REQUEST_STATE_EVENT,
   WISE_HUD_SELECT_REPOSITORY_EVENT,
+  WISE_HUD_SELECT_SESSION_EVENT,
   WISE_HUD_SESSION_COMPLETE_EVENT,
   WISE_HUD_ACTIVATE_ASSISTANT_EVENT,
   WISE_HUD_SET_DETAILS_OPEN_EVENT,
@@ -61,6 +63,7 @@ interface UseWiseHudBridgeInput {
   executeSession: (sessionId: string, prompt: string) => boolean | Promise<boolean>;
   cancelSession: (sessionId: string) => void;
   selectRepository: (repositoryId: number) => void;
+  selectSession: (sessionId: string) => void;
   createNewSession: (repository: Repository) => void | Promise<void>;
   setExecutionEngine: (sessionId: string, engine: SessionExecutionEngine) => void;
   setModel: (sessionId: string, model: string) => void;
@@ -83,6 +86,7 @@ export function useWiseHudBridge({
   executeSession,
   cancelSession,
   selectRepository,
+  selectSession,
   createNewSession,
   setExecutionEngine,
   setModel,
@@ -118,6 +122,7 @@ export function useWiseHudBridge({
   const executeSessionRef = useRef(executeSession);
   const cancelSessionRef = useRef(cancelSession);
   const selectRepositoryRef = useRef(selectRepository);
+  const selectSessionRef = useRef(selectSession);
   const createNewSessionRef = useRef(createNewSession);
   const setExecutionEngineRef = useRef(setExecutionEngine);
   const setModelRef = useRef(setModel);
@@ -139,6 +144,7 @@ export function useWiseHudBridge({
   executeSessionRef.current = executeSession;
   cancelSessionRef.current = cancelSession;
   selectRepositoryRef.current = selectRepository;
+  selectSessionRef.current = selectSession;
   createNewSessionRef.current = createNewSession;
   setExecutionEngineRef.current = setExecutionEngine;
   setModelRef.current = setModel;
@@ -170,6 +176,7 @@ export function useWiseHudBridge({
       // 会拿到空 messages 并错误显示“暂无消息”。HUD 激活期间详情可能可见，
       // 退出后仍保持轻量快照，避免主窗口后台持续传输完整会话记录。
       includeMessages: detailsOpenRef.current || getWiseHudModeActive(),
+      sessions: sessionsRef.current,
     });
   };
 
@@ -339,6 +346,12 @@ export function useWiseHudBridge({
           },
         );
       });
+      const u13 = await listen<unknown>(WISE_HUD_SELECT_SESSION_EVENT, (event) => {
+        const payload = parseWiseHudSelectSessionPayload(event.payload);
+        if (!payload) return;
+        if (!sessionsRef.current.some((item) => item.id === payload.sessionId)) return;
+        selectSessionRef.current(payload.sessionId);
+      });
       if (cancelled) {
         safeUnlisten(u1);
         safeUnlisten(u2);
@@ -352,6 +365,7 @@ export function useWiseHudBridge({
         safeUnlisten(u10);
         safeUnlisten(u11);
         safeUnlisten(u12);
+        safeUnlisten(u13);
         return;
       }
       unsubs.push(
@@ -367,6 +381,7 @@ export function useWiseHudBridge({
         () => safeUnlisten(u10),
         () => safeUnlisten(u11),
         () => safeUnlisten(u12),
+        () => safeUnlisten(u13),
       );
     })();
     return () => {

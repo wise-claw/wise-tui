@@ -2041,6 +2041,7 @@ export default function App() {
   const hudCreateNewSessionRef = useRef<(repository: Repository) => void | Promise<void>>(() => {});
   const hudSetEngineRef = useRef<(sessionId: string, engine: SessionExecutionEngine) => void>(() => {});
   const hudSetModelRef = useRef<(sessionId: string, model: string) => void>(() => {});
+  const hudSelectSessionRef = useRef<(sessionId: string) => void>(() => {});
 
   useWiseHudBridge({
     sessions,
@@ -2052,6 +2053,9 @@ export default function App() {
     cancelSession,
     selectRepository: (repositoryId) => {
       hudSelectRepositoryRef.current(repositoryId);
+    },
+    selectSession: (sessionId) => {
+      hudSelectSessionRef.current(sessionId);
     },
     createNewSession: (repository) => {
       void hudCreateNewSessionRef.current(repository);
@@ -2428,6 +2432,7 @@ export default function App() {
   hudSetModelRef.current = (sessionId, model) => {
     updateSessionModel(sessionId, model);
   };
+  hudSelectSessionRef.current = jumpToSessionLeavingMcpHub;
 
   // 需求详情中的「打开关联会话」统一由根路由处理，确保无论当前在哪个 Hub 都切回对应仓库的会话窗。
   useEffect(() => {

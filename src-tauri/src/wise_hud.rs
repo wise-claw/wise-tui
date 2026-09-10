@@ -11,12 +11,14 @@ pub const HUD_ACTIVE_EVENT: &str = "wise-hud-active-changed";
 
 const HUD_BOUNDS_SETTING_KEY: &str = "wise.hud.window.v1";
 const HUD_DETAILS_HEIGHT_SETTING_KEY: &str = "wise.hud.details-height.v1";
+const WISE_DEFAULT_CONFIG_SETTING_KEY: &str = "wise.defaultConfig.v1";
 const DEFAULT_HUD_WIDTH: f64 = 720.0;
+const MIN_HUD_WIDTH: f64 = 560.0;
 /// 与前端 `HUD_RESTING_OVERLAY_HEIGHT` 对齐：空闲态也保持菜单高度，点按钮不再拉伸窗口。
 const DEFAULT_HUD_HEIGHT: f64 = 420.0;
 const HUD_COMPACT_LOGICAL_HEIGHT: f64 = 54.0;
 const HUD_DETAILS_HEIGHT_MIN: f64 = 140.0;
-const HUD_DETAILS_HEIGHT_MAX: f64 = 960.0;
+const HUD_DETAILS_HEIGHT_MAX: f64 = 780.0;
 const HUD_BOTTOM_MARGIN: i32 = 48;
 
 /// 只改高度，保持窗口底边不动，避免胶囊在屏幕上跳。
@@ -36,6 +38,13 @@ fn overlay_frame_keeping_bottom(
 
 fn overlay_height_already_applied(current: f64, desired: f64) -> bool {
     (current - desired).abs() < 0.5
+}
+
+fn clamp_hud_width(width: f64) -> f64 {
+    if !width.is_finite() {
+        return DEFAULT_HUD_WIDTH;
+    }
+    width.clamp(MIN_HUD_WIDTH, DEFAULT_HUD_WIDTH)
 }
 
 /// Cocoa 原点在左下：保持 `window_bottom`，只改高度，窗口向上长/缩。
@@ -68,6 +77,9 @@ fn hud_set_overlay_height_cross_platform(
     let scale = win.scale_factor().map_err(|e| e.to_string())?;
     let pos = win.outer_position().map_err(|e| e.to_string())?;
     let size = win.outer_size().map_err(|e| e.to_string())?;
+    let max_w = (DEFAULT_HUD_WIDTH * scale).round().max(1.0) as u32;
+    let new_w = size.width.min(max_w);
+    let new_x = pos.x + ((size.width - new_w) / 2) as i32;
     let min_h = (HUD_COMPACT_LOGICAL_HEIGHT * scale).round().max(1.0) as u32;
     let desired = (logical_height.max(HUD_COMPACT_LOGICAL_HEIGHT) * scale)
         .round()
@@ -79,19 +91,19 @@ fn hud_set_overlay_height_cross_platform(
         .map(|m| m.work_area().position.y)
         .unwrap_or(0);
     let (new_y, new_h) = overlay_frame_keeping_bottom(pos.y, size.height, desired, min_h, monitor_top);
-    if new_h == size.height && new_y == pos.y {
+    if new_h == size.height && new_y == pos.y && new_w == size.width {
         return Ok(());
     }
     let growing = new_h > size.height;
     if growing {
-        win.set_position(PhysicalPosition::new(pos.x, new_y))
+        win.set_position(PhysicalPosition::new(new_x, new_y))
             .map_err(|e| e.to_string())?;
-        win.set_size(PhysicalSize::new(size.width, new_h))
+        win.set_size(PhysicalSize::new(new_w, new_h))
             .map_err(|e| e.to_string())?;
     } else {
-        win.set_size(PhysicalSize::new(size.width, new_h))
+        win.set_size(PhysicalSize::new(new_w, new_h))
             .map_err(|e| e.to_string())?;
-        win.set_position(PhysicalPosition::new(pos.x, new_y))
+        win.set_position(PhysicalPosition::new(new_x, new_y))
             .map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -145,16 +157,19 @@ unsafe fn hud_apply_overlay_height_macos(
         frame.origin.y,
         work_area_top,
     );
-    if overlay_height_already_applied(frame.size.height, new_h) {
+    let new_w = frame.size.width.min(DEFAULT_HUD_WIDTH);
+    if overlay_height_already_applied(frame.size.height, new_h)
+        && overlay_height_already_applied(frame.size.width, new_w)
+    {
         return Ok(());
     }
     let new_frame = NSRect {
         origin: NSPoint {
-            x: frame.origin.x,
+            x: frame.origin.x + (frame.size.width - new_w) * 0.5,
             y: frame.origin.y,
         },
         size: NSSize {
-            width: frame.size.width,
+            width: new_w,
             height: new_h,
         },
     };
@@ -220,6 +235,24 @@ fn load_hud_details_height(db: &WiseDb) -> Option<f64> {
     sanitize_hud_details_height(raw.parse::<f64>().ok()?)
 }
 
+fn parse_show_hud_persistent_details(raw: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(raw)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("showHudPersistentDetails")
+                .and_then(serde_json::Value::as_bool)
+        })
+        .unwrap_or(false)
+}
+
+fn load_show_hud_persistent_details(db: &WiseDb) -> bool {
+    db.get_setting(WISE_DEFAULT_CONFIG_SETTING_KEY)
+        .ok()
+        .flatten()
+        .is_some_and(|raw| parse_show_hud_persistent_details(&raw))
+}
+
 fn clamp_hud_to_monitor(
     win: &WebviewWindow,
     mut x: i32,
@@ -257,19 +290,19 @@ fn clamp_hud_to_monitor(
     Ok((x, y))
 }
 
-fn apply_hud_size(win: &WebviewWindow, width: f64) -> Result<(), String> {
-    let w = width.clamp(560.0, 1200.0);
-    win.set_size(LogicalSize::new(w, DEFAULT_HUD_HEIGHT))
+fn apply_hud_size(win: &WebviewWindow, width: f64, height: f64) -> Result<(), String> {
+    let w = clamp_hud_width(width);
+    win.set_size(LogicalSize::new(w, height))
         .map_err(|e| e.to_string())
 }
 
 fn place_hud_default(win: &WebviewWindow) -> Result<(), String> {
-    place_hud_centered(win, DEFAULT_HUD_WIDTH)
+    place_hud_centered(win, DEFAULT_HUD_WIDTH, DEFAULT_HUD_HEIGHT)
 }
 
 /// 将 HUD 固定放在主显示器工作区底部上方，并保持水平居中。
-fn place_hud_centered(win: &WebviewWindow, width: f64) -> Result<(), String> {
-    let _ = apply_hud_size(win, width);
+fn place_hud_centered(win: &WebviewWindow, width: f64, height: f64) -> Result<(), String> {
+    apply_hud_size(win, width, height)?;
     let size = win.outer_size().map_err(|e| e.to_string())?;
     let win_w = size.width as i32;
     let win_h = size.height as i32;
@@ -286,12 +319,16 @@ fn place_hud_centered(win: &WebviewWindow, width: f64) -> Result<(), String> {
 }
 
 fn apply_saved_or_default_bounds(win: &WebviewWindow, db: &WiseDb) -> Result<(), String> {
-    if let Some(bounds) = load_hud_bounds(db) {
-        let width = bounds.width.unwrap_or(DEFAULT_HUD_WIDTH).max(DEFAULT_HUD_WIDTH);
-        // 进入 HUD 时不恢复历史坐标，始终固定到 Dock 上方居中位置。
-        return place_hud_centered(win, width);
-    }
-    place_hud_default(win)
+    let width = load_hud_bounds(db)
+        .and_then(|bounds| bounds.width)
+        .unwrap_or(DEFAULT_HUD_WIDTH);
+    let height = if load_show_hud_persistent_details(db) {
+        load_hud_details_height(db).unwrap_or(DEFAULT_HUD_HEIGHT)
+    } else {
+        DEFAULT_HUD_HEIGHT
+    };
+    // 在窗口 show() 前一次性恢复尺寸和位置，避免首帧显示后再改高度造成闪烁。
+    place_hud_centered(win, width, height)
 }
 
 fn hide_main_workspace_windows(app: &AppHandle) {
@@ -455,7 +492,9 @@ pub fn wise_hud_save_bounds(db: State<WiseDb>, x: i32, y: i32, width: Option<f64
         &HudBounds {
             x,
             y,
-            width: width.filter(|w| w.is_finite() && *w >= 560.0),
+            width: width
+                .filter(|w| w.is_finite() && *w >= MIN_HUD_WIDTH)
+                .map(clamp_hud_width),
         },
     )
 }
@@ -493,6 +532,7 @@ const HUD_FORWARD_EVENTS: &[&str] = &[
     "wise-hud-cancel",
     "wise-hud-request-state",
     "wise-hud-select-repository",
+    "wise-hud-select-session",
     "wise-hud-new-session",
     "wise-hud-set-engine",
     "wise-hud-set-model",
@@ -599,6 +639,14 @@ mod tests {
     }
 
     #[test]
+    fn hud_width_never_exceeds_product_limit() {
+        assert_eq!(clamp_hud_width(560.0), 560.0);
+        assert_eq!(clamp_hud_width(680.0), 680.0);
+        assert_eq!(clamp_hud_width(1_200.0), DEFAULT_HUD_WIDTH);
+        assert_eq!(clamp_hud_width(f64::NAN), DEFAULT_HUD_WIDTH);
+    }
+
+    #[test]
     fn details_height_is_clamped_before_persisting() {
         assert_eq!(
             sanitize_hud_details_height(100.0),
@@ -613,9 +661,22 @@ mod tests {
     }
 
     #[test]
+    fn persistent_details_default_is_parsed_for_initial_hud_size() {
+        assert!(parse_show_hud_persistent_details(
+            r#"{"showHudPersistentDetails":true}"#
+        ));
+        assert!(!parse_show_hud_persistent_details(
+            r#"{"showHudPersistentDetails":false}"#
+        ));
+        assert!(!parse_show_hud_persistent_details("{}"));
+        assert!(!parse_show_hud_persistent_details("not-json"));
+    }
+
+    #[test]
     fn only_forwards_known_hud_events() {
         assert!(is_hud_forward_event("wise-hud-submit"));
         assert!(is_hud_forward_event("wise-hud-new-session"));
+        assert!(is_hud_forward_event("wise-hud-select-session"));
         assert!(is_hud_forward_event("wise-hud-set-engine"));
         assert!(is_hud_forward_event("wise-hud-set-model"));
         assert!(is_hud_forward_event("wise-hud-set-details-open"));

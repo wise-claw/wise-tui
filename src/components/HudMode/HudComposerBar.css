@@ -416,6 +416,9 @@
   z-index: 2;
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
+  max-width: calc(100% - 20px);
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   margin: 0 10px 6px;
@@ -433,7 +436,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  right: 74px;
+  right: 42px;
   z-index: 2;
   height: 14px;
   display: flex;
@@ -463,12 +466,85 @@
   user-select: none !important;
 }
 
-/* 常驻态只露出两行消息；消息区本身仍可滚动回看完整内容。 */
-.app-hud-session-details--compact {
-  flex: 0 0 56px;
-  height: 56px;
-  min-height: 56px;
-  max-height: 56px;
+.app-hud-session-tabs {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 10px 44px 0 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.app-hud-session-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.app-hud-session-tab {
+  appearance: none;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 104px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: rgba(15, 23, 42, 0.04);
+  color: #71717a;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.app-hud-session-tab:hover {
+  background: rgba(59, 130, 246, 0.08);
+  color: #27272a;
+}
+
+.app-hud-session-tab--active {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.app-hud-session-tab__status {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #a1a1aa;
+}
+
+.app-hud-session-tab__status--running {
+  background: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.14);
+}
+
+.app-hud-session-tab__status--completed {
+  background: #22c55e;
+}
+
+.app-hud-session-tab__status--error,
+.app-hud-session-tab__status--cancelled {
+  background: #ef4444;
+}
+
+.app-hud-session-tab__title {
+  min-width: 0;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-hud-session-details__actions {
@@ -481,7 +557,6 @@
   gap: 4px;
 }
 
-.app-hud-session-details__collapse,
 .app-hud-session-details__close {
   appearance: none;
   border: 0;
@@ -493,23 +568,6 @@
   cursor: pointer;
 }
 
-.app-hud-session-details__collapse--icon {
-  width: 20px;
-  height: 20px;
-  padding: 3px;
-}
-
-.app-hud-session-details__collapse svg {
-  display: block;
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .app-hud-session-details__close {
   width: 20px;
   height: 20px;
@@ -518,8 +576,6 @@
   line-height: 18px;
 }
 
-.app-hud-session-details__collapse:hover,
-.app-hud-session-details__collapse:focus-visible,
 .app-hud-session-details__close:hover,
 .app-hud-session-details__close:focus-visible {
   background: rgba(15, 23, 42, 0.06);
@@ -1439,13 +1495,25 @@ body > .app-hud-repo-picker-dropdown.ant-select-dropdown {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
-:root[data-wise-theme="dark"] .app-hud-session-details__collapse,
+:root[data-wise-theme="dark"] .app-hud-session-tab {
+  background: rgba(255, 255, 255, 0.06);
+  color: #a1a1aa;
+}
+
+:root[data-wise-theme="dark"] .app-hud-session-tab:hover {
+  background: rgba(96, 165, 250, 0.12);
+  color: #e4e4e7;
+}
+
+:root[data-wise-theme="dark"] .app-hud-session-tab--active {
+  background: rgba(96, 165, 250, 0.18);
+  color: #93c5fd;
+}
+
 :root[data-wise-theme="dark"] .app-hud-session-details__close {
   color: #a1a1aa;
 }
 
-:root[data-wise-theme="dark"] .app-hud-session-details__collapse:hover,
-:root[data-wise-theme="dark"] .app-hud-session-details__collapse:focus-visible,
 :root[data-wise-theme="dark"] .app-hud-session-details__close:hover,
 :root[data-wise-theme="dark"] .app-hud-session-details__close:focus-visible {
   background: rgba(255, 255, 255, 0.08);

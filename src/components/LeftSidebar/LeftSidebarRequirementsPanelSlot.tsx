@@ -3,6 +3,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   LoadingOutlined,
+  MessageOutlined,
   MoreOutlined,
   SendOutlined,
   UndoOutlined,
@@ -38,6 +39,7 @@ import {
 } from "../../services/workspaceRequirementsStore";
 import {
   openWorkspaceMemoPanel,
+  openWorkspaceRequirementExecutionSession,
   requestWorkspaceRequirementCreate,
   requestWorkspaceRequirementEdit,
   toggleWorkspaceMemoPanel,
@@ -108,6 +110,8 @@ function RequirementsPanelRow({
 }) {
   const done = item.status === "done";
   const verifying = item.status === "verifying";
+  const latestExecutionSessionId =
+    item.executionSessionIds[item.executionSessionIds.length - 1] ?? null;
   const [moreOpen, setMoreOpen] = useState(false);
 
   return (
@@ -184,6 +188,47 @@ function RequirementsPanelRow({
               >
                 {dispatching ? <LoadingOutlined spin /> : <SendOutlined />}
               </button>
+            </DeferredHoverTooltip>
+          ) : null}
+          {latestExecutionSessionId ? (
+            <DeferredHoverTooltip
+              title={
+                item.executionSessionIds.length > 1
+                  ? `打开关联会话（共 ${item.executionSessionIds.length} 个）`
+                  : "打开关联执行会话"
+              }
+            >
+              {item.executionSessionIds.length > 1 ? (
+                <Dropdown
+                  trigger={["click"]}
+                  getPopupContainer={() => document.body}
+                  menu={{
+                    items: item.executionSessionIds.map((sessionId, index) => ({
+                      key: sessionId,
+                      icon: <MessageOutlined />,
+                      label: `会话 ${index + 1}${index === item.executionSessionIds.length - 1 ? "（最近）" : ""}`,
+                      onClick: () => openWorkspaceRequirementExecutionSession(sessionId),
+                    })),
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="app-left-sidebar-requirements-panel__action-btn"
+                    aria-label={`打开关联执行会话（共 ${item.executionSessionIds.length} 个）`}
+                  >
+                    <MessageOutlined />
+                  </button>
+                </Dropdown>
+              ) : (
+                <button
+                  type="button"
+                  className="app-left-sidebar-requirements-panel__action-btn"
+                  aria-label="打开关联执行会话"
+                  onClick={() => openWorkspaceRequirementExecutionSession(latestExecutionSessionId)}
+                >
+                  <MessageOutlined />
+                </button>
+              )}
             </DeferredHoverTooltip>
           ) : null}
           <DeferredHoverTooltip title="退回初始态">

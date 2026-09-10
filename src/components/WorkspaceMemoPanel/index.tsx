@@ -41,6 +41,7 @@ import {
 } from "../../services/workspaceRequirementsStore";
 import {
   closeWorkspaceMemoPanel,
+  openWorkspaceMemoPanel,
   requestWorkspaceRequirementCreate,
   requestWorkspaceRequirementEdit,
   openWorkspaceRequirementExecutionSession,
@@ -190,18 +191,36 @@ const RequirementRow = memo(function RequirementRow({
           />
         ) : null}
         {latestExecutionSessionId ? (
-          <Button
-            type="text"
-            size="small"
-            icon={<MessageOutlined />}
-            aria-label="打开关联执行会话"
-            title={
-              item.executionSessionIds.length > 1
-                ? `打开最近关联会话（共 ${item.executionSessionIds.length} 个）`
-                : "打开关联执行会话"
-            }
-            onClick={() => openWorkspaceRequirementExecutionSession(latestExecutionSessionId)}
-          />
+          item.executionSessionIds.length > 1 ? (
+            <Dropdown
+              trigger={["click"]}
+              menu={{
+                items: item.executionSessionIds.map((sessionId, index) => ({
+                  key: sessionId,
+                  icon: <MessageOutlined />,
+                  label: `会话 ${index + 1}${index === item.executionSessionIds.length - 1 ? "（最近）" : ""}`,
+                  onClick: () => openWorkspaceRequirementExecutionSession(sessionId),
+                })),
+              }}
+            >
+              <Button
+                type="text"
+                size="small"
+                icon={<MessageOutlined />}
+                aria-label={`打开关联执行会话（共 ${item.executionSessionIds.length} 个）`}
+                title={`打开关联执行会话（共 ${item.executionSessionIds.length} 个）`}
+              />
+            </Dropdown>
+          ) : (
+            <Button
+              type="text"
+              size="small"
+              icon={<MessageOutlined />}
+              aria-label="打开关联执行会话"
+              title="打开关联执行会话"
+              onClick={() => openWorkspaceRequirementExecutionSession(latestExecutionSessionId)}
+            />
+          )
         ) : null}
         {!done ? (
           <Button
@@ -332,8 +351,16 @@ export function WorkspaceMemoPanel() {
           : row,
       );
       await persist(next);
+      // 验收完成后自动跳到下一条待验收需求，避免详情仍停留在刚刚完成的条目。
+      if (item.status !== "done") {
+        const nextVerifying = next.find((row) => row.status === "verifying");
+        if (nextVerifying) {
+          if (statusFilter !== "all") setStatusFilter("all");
+          openWorkspaceMemoPanel(nextVerifying.id);
+        }
+      }
     },
-    [persist],
+    [persist, statusFilter],
   );
 
   const handleDelete = useCallback(

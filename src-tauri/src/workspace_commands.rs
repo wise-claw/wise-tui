@@ -857,17 +857,19 @@ pub(crate) fn write_text_file_absolute(path: String, contents: String) -> Result
 // ── 外部终端注入运行指令 ──
 //
 // 在用户的默认终端（Terminal / iTerm / Ghostty / Warp / Kitty / Alacritty /
-// WezTerm / Hyper）中打开新窗口，先 `cd` 到工作区路径再执行用户配置的运行
-// 指令。命令为空字符串时退化为 `cd "<path>"` 单纯打开终端，等价于只打开
-// 工作目录的行为。
-#[cfg(target_os = "macos")]
+// WezTerm / Hyper）中打开新窗口，以工作区路径作为工作目录后执行运行指令。
+// 能原生设置 cwd 的终端只注入用户命令，不再拼 `cd "<path>" && ...`，避免窗口
+// 已经在仓库里还显示一条多余的 cd。仅 Hyper 等无法设 cwd 的终端回退为 cd。
+// 命令为空字符串时只打开工作目录。
+#[cfg(any(target_os = "macos", test))]
 fn shell_single_quote(s: &str) -> String {
     // 把所有单引号换成 `'\''`，再用单引号包起来，确保 shell 解析时原样保留。
     let escaped = s.replace('\'', "'\\''");
     format!("'{escaped}'")
 }
 
-#[cfg(target_os = "macos")]
+/// 无法原生设置 cwd 时的回退：先 cd 再跑命令。
+#[cfg(any(target_os = "macos", test))]
 fn composed_cd_command(path: &str, command: &str) -> String {
     let cd = shell_single_quote(path);
     let trimmed = command.trim();
@@ -876,6 +878,23 @@ fn composed_cd_command(path: &str, command: &str) -> String {
     } else {
         format!("cd {cd} && {trimmed}")
     }
+}
+
+/// Warp URI：新窗口直接落在目标目录。路径分段编码，保留 `/` 以便 Warp 解析。
+#[cfg(any(target_os = "macos", test))]
+fn warp_new_window_uri(path: &str) -> String {
+    let encoded = path
+        .split('/')
+        .map(|seg| {
+            if seg.is_empty() {
+                String::new()
+            } else {
+                urlencoding::encode(seg).into_owned()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+    format!("warp://action/new_window?path={encoded}")
 }
 
 #[cfg(target_os = "macos")]
@@ -933,6 +952,18 @@ fn escape_for_applescript(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+/// 用 `open -a <App> <dir>` 让终端以该目录为工作目录打开（不注入 cd）。
+#[cfg(target_os = "macos")]
+fn open_app_at_directory(app_name: &str, path: &str) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg("-a")
+        .arg(app_name)
+        .arg(path)
+        .spawn()
+        .map_err(|e| format!("无法启动「{app_name}」：{e}"))?;
+    Ok(())
+}
+
 /// 用 `open -na <App> --args <...>` 强制开新实例并把参数透传给 CLI 终端
 /// (Ghostty / Kitty / Alacritty / WezTerm)。`-n` 是关键：app 已运行时
 /// `open -a` 不会开新窗口，`--args` 也会被 macOS 静默丢弃，导致点击"打开
@@ -970,28 +1001,41 @@ pub(crate) fn macos_open_terminal_with_command(
     }
     let def = find_terminal_def(&appName)
         .ok_or_else(|| format!("未知的终端应用：{appName}"))?;
+    let run_command = command.trim();
 
     match def.id {
-        // Terminal.app：AppleScript 新窗口执行 `cd && command`
+        // Terminal.app：`open -a Terminal <dir>` 把窗口直接开在工作区，再在该 tab 执行命令。
         "terminal" => {
-            let composed = composed_cd_command(path_trimmed, &command);
+            open_app_at_directory(def.open_app_name, path_trimmed)?;
+            if run_command.is_empty() {
+                return Ok(());
+            }
             let script = format!(
-                "tell application \"Terminal\" to do script \"{}\"",
-                escape_for_applescript(&composed)
+                "delay 1.0\n\
+                 tell application \"Terminal\"\n\
+                 \x20\x20activate\n\
+                 \x20\x20do script \"{}\" in selected tab of front window\n\
+                 end tell",
+                escape_for_applescript(run_command)
             );
             run_osascript(&script)
         }
 
-        // iTerm：activate 后等待窗口就绪，再创建新窗口执行命令
+        // iTerm：`open -a iTerm <dir>` 以目录为 cwd 开窗口，再 write text 用户命令。
         "iterm" => {
-            let composed = composed_cd_command(path_trimmed, &command);
+            open_app_at_directory(def.open_app_name, path_trimmed)?;
+            if run_command.is_empty() {
+                return Ok(());
+            }
             let script = format!(
-                "tell application \"iTerm\"\n\
+                "delay 1.0\n\
+                 tell application \"iTerm\"\n\
                  \x20\x20activate\n\
-                 \x20\x20delay 1.0\n\
-                 \x20\x20create window with default profile command \"{}\"\n\
+                 \x20\x20tell current session of current window\n\
+                 \x20\x20\x20\x20write text \"{}\"\n\
+                 \x20\x20end tell\n\
                  end tell",
-                escape_for_applescript(&composed),
+                escape_for_applescript(run_command),
             );
             run_osascript(&script)
         }
@@ -1000,13 +1044,12 @@ pub(crate) fn macos_open_terminal_with_command(
         // System Events keystroke，无需 macOS 辅助功能权限。
         // 参考：https://ghostty.org/docs/features/applescript
         "ghostty" => {
-            if command.trim().is_empty() {
+            if run_command.is_empty() {
                 spawn_app_with_args(
                     def.open_app_name,
                     &[format!("--working-directory={path_trimmed}").as_str()],
                 )
             } else {
-                let composed = composed_cd_command(path_trimmed, &command);
                 let script = format!(
                     "tell application \"Ghostty\"\n\
                      \x20\x20set cfg to new surface configuration\n\
@@ -1018,29 +1061,35 @@ pub(crate) fn macos_open_terminal_with_command(
                      \x20\x20send key \"enter\" to (terminal 1 of selected tab of win)\n\
                      end tell",
                     path = escape_for_applescript(path_trimmed),
-                    cmd = escape_for_applescript(&composed),
+                    cmd = escape_for_applescript(run_command),
                 );
                 run_osascript(&script)
             }
         }
 
-        // Warp：不支持 CLI 命令注入；通过 AppleScript 让 Warp 新建会话并预填 cd 命令
+        // Warp：URI 新窗口直接落在工作区；命令用 keystroke 注入（仍需辅助功能权限）。
         "warp" => {
-            let composed = composed_cd_command(path_trimmed, &command);
+            let uri = warp_new_window_uri(path_trimmed);
+            std::process::Command::new("open")
+                .arg(&uri)
+                .spawn()
+                .map_err(|e| format!("无法打开 Warp：{e}"))?;
+            if run_command.is_empty() {
+                return Ok(());
+            }
             let script = format!(
-                "tell application \"Warp\"\n\
+                "delay 1.0\n\
+                 tell application \"Warp\"\n\
                  \x20\x20activate\n\
                  end tell\n\
-                 delay 1.0\n\
+                 delay 0.3\n\
                  tell application \"System Events\"\n\
                  \x20\x20tell process \"Warp\"\n\
-                 \x20\x20\x20\x20keystroke \"l\" using {{command down}}\n\
-                 \x20\x20\x20\x20delay 0.3\n\
                  \x20\x20\x20\x20keystroke \"{}\"\n\
                  \x20\x20\x20\x20key code 36\n\
                  \x20\x20end tell\n\
                  end tell",
-                escape_for_applescript(&composed)
+                escape_for_applescript(run_command)
             );
             run_osascript(&script)
         }
@@ -1123,5 +1172,34 @@ pub(crate) fn macos_open_terminal_with_command(
         }
 
         other => Err(format!("暂不支持在该终端注入运行指令：{other}")),
+    }
+}
+
+#[cfg(test)]
+mod external_terminal_command_tests {
+    use super::{composed_cd_command, warp_new_window_uri};
+
+    #[test]
+    fn composed_cd_keeps_fallback_for_terminals_without_native_cwd() {
+        assert_eq!(
+            composed_cd_command("/Users/sjl/Documents/github/wise-tui", "bun run tauri:dev"),
+            "cd '/Users/sjl/Documents/github/wise-tui' && bun run tauri:dev"
+        );
+        assert_eq!(
+            composed_cd_command("/tmp/it's-ok", ""),
+            "cd '/tmp/it'\\''s-ok' && clear"
+        );
+    }
+
+    #[test]
+    fn warp_uri_opens_at_path_without_encoding_slashes() {
+        assert_eq!(
+            warp_new_window_uri("/Users/sjl/Documents/github/wise-tui"),
+            "warp://action/new_window?path=/Users/sjl/Documents/github/wise-tui"
+        );
+        assert_eq!(
+            warp_new_window_uri("/tmp/My Project"),
+            "warp://action/new_window?path=/tmp/My%20Project"
+        );
     }
 }

@@ -1,0 +1,328 @@
+{
+  "version": 1,
+  "jobId": "2f7201cf-0031-4443-86cb-0cf82df3c4c8",
+  "sessionId": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+  "scopeKey": "1794522a4de74d38c6b65b623ba74839d39e44661a140558badc466cdf2bdf1d",
+  "revision": 42,
+  "createdAt": "2026-09-09T13:50:50.469Z",
+  "updatedAt": "2026-09-09T14:23:04.584Z",
+  "producerGraceExpiresAt": "2026-09-09T13:51:20.469Z",
+  "bestEffortDeadlineAt": "2026-09-09T13:52:11.469Z",
+  "producers": {
+    "core": {
+      "state": "sealed",
+      "intentKey": "0f4aa58a08e61914c255c238083d4415f4772f1a1735c1eadfddf0f981807656",
+      "payloadDigest": "0f4aa58a08e61914c255c238083d4415f4772f1a1735c1eadfddf0f981807656",
+      "sealedAt": "2026-09-09T13:50:50.525Z",
+      "sealedBy": "foreground"
+    },
+    "wiki": {
+      "state": "no-op",
+      "sealedAt": "2026-09-09T13:50:50.469Z",
+      "sealedBy": "wiki-producer"
+    }
+  },
+  "actions": {
+    "foreground-cleanup": {
+      "class": "required",
+      "phase": "deferred-required",
+      "status": "completed",
+      "attempts": 0,
+      "idempotencyKey": "febf6dba2f2536433960a07f7cedce72e946b43ced0896570df80f017b8914d2",
+      "payload": {
+        "transcriptPath": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+        "cwd": "/Users/sjl/Documents/github/wise-tui",
+        "reason": "other",
+        "input": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "transcript_path": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+          "cwd": "/Users/sjl/Documents/github/wise-tui",
+          "prompt_id": "e2d42e51-1576-4b7b-97fc-ed307c32784d",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "ended_at": "2026-09-09T13:50:50.468Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {},
+        "foregroundResult": {
+          "removedTransientFiles": 1,
+          "completedAt": "2026-09-09T13:50:50.525Z"
+        }
+      },
+      "budgetMs": 9000,
+      "completedAt": "2026-09-09T13:50:50.525Z",
+      "lastOutcomeCode": "completed"
+    },
+    "wiki-capture": {
+      "class": "required",
+      "phase": "deferred-required",
+      "status": "completed",
+      "attempts": 0,
+      "idempotencyKey": "1719cd1ef5b51e0269b78c4cb8c9308c9c1f7b82fd1c067fc034c060f23863f5",
+      "payload": {},
+      "budgetMs": 9000,
+      "completedAt": "2026-09-09T13:50:50.469Z"
+    },
+    "team-cleanup": {
+      "class": "required",
+      "phase": "deferred-required",
+      "status": "completed",
+      "attempts": 1,
+      "idempotencyKey": "cee6ac31df545408e1e822247ac249b3f8182a98a5fe8e448ae3b251e55bdee1",
+      "payload": {
+        "transcriptPath": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+        "cwd": "/Users/sjl/Documents/github/wise-tui",
+        "reason": "other",
+        "input": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "transcript_path": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+          "cwd": "/Users/sjl/Documents/github/wise-tui",
+          "prompt_id": "e2d42e51-1576-4b7b-97fc-ed307c32784d",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "ended_at": "2026-09-09T13:50:50.468Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {}
+      },
+      "budgetMs": 9000,
+      "claimedAt": "2026-09-09T13:50:50.582Z",
+      "runner": {
+        "attempt": 1,
+        "runnerNonce": "8ff7e2f0-e37d-43d9-9f6c-74ccc1287ff5",
+        "phase": "terminal",
+        "deadlineAt": "2026-09-09T13:51:00.554Z"
+      },
+      "lastOutcomeCode": "completed",
+      "completedAt": "2026-09-09T13:50:50.727Z"
+    },
+    "python-cleanup": {
+      "class": "required",
+      "phase": "deferred-required",
+      "status": "completed",
+      "attempts": 1,
+      "idempotencyKey": "1f1370c4ac056606059d517e2f106b602d8cbcb04587b3fcc5f3b9f89e649cd0",
+      "payload": {
+        "transcriptPath": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+        "cwd": "/Users/sjl/Documents/github/wise-tui",
+        "reason": "other",
+        "input": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "transcript_path": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+          "cwd": "/Users/sjl/Documents/github/wise-tui",
+          "prompt_id": "e2d42e51-1576-4b7b-97fc-ed307c32784d",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "ended_at": "2026-09-09T13:50:50.468Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {}
+      },
+      "budgetMs": 9000,
+      "claimedAt": "2026-09-09T13:50:50.749Z",
+      "runner": {
+        "attempt": 1,
+        "runnerNonce": "010f9857-1355-4833-895d-6bbd1116f2b3",
+        "phase": "terminal",
+        "deadlineAt": "2026-09-09T13:51:00.554Z"
+      },
+      "lastOutcomeCode": "completed",
+      "completedAt": "2026-09-09T13:50:50.911Z"
+    },
+    "reply-cleanup": {
+      "class": "required",
+      "phase": "deferred-required",
+      "status": "completed",
+      "attempts": 1,
+      "idempotencyKey": "0b3a8b47c28b26d56aca004d4f572b96c118f16819c0d35162418816f9a5420a",
+      "payload": {
+        "transcriptPath": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+        "cwd": "/Users/sjl/Documents/github/wise-tui",
+        "reason": "other",
+        "input": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "transcript_path": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+          "cwd": "/Users/sjl/Documents/github/wise-tui",
+          "prompt_id": "e2d42e51-1576-4b7b-97fc-ed307c32784d",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "ended_at": "2026-09-09T13:50:50.468Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {}
+      },
+      "budgetMs": 9000,
+      "claimedAt": "2026-09-09T13:50:50.930Z",
+      "runner": {
+        "attempt": 1,
+        "runnerNonce": "c2942847-9d4c-4f16-83c2-8968089748f0",
+        "phase": "terminal",
+        "deadlineAt": "2026-09-09T13:51:00.554Z"
+      },
+      "lastOutcomeCode": "completed",
+      "completedAt": "2026-09-09T13:50:51.085Z"
+    },
+    "callback": {
+      "class": "best-effort",
+      "phase": "deferred-best-effort",
+      "status": "completed",
+      "attempts": 1,
+      "idempotencyKey": "d068ede2655bf89e0c0950e087d0603d7dcf45538e94f20a654d08c6f4841895",
+      "payload": {
+        "transcriptPath": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+        "cwd": "/Users/sjl/Documents/github/wise-tui",
+        "reason": "other",
+        "input": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "transcript_path": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+          "cwd": "/Users/sjl/Documents/github/wise-tui",
+          "prompt_id": "e2d42e51-1576-4b7b-97fc-ed307c32784d",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "ended_at": "2026-09-09T13:50:50.468Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {}
+      },
+      "budgetMs": 2000,
+      "claimedAt": "2026-09-09T13:50:51.105Z",
+      "runner": {
+        "attempt": 1,
+        "runnerNonce": "80d341d9-abd3-4ffc-a7b3-46d297f69ef3",
+        "phase": "terminal",
+        "deadlineAt": "2026-09-09T13:51:00.554Z"
+      },
+      "lastOutcomeCode": "completed",
+      "completedAt": "2026-09-09T13:50:51.243Z"
+    },
+    "notification": {
+      "class": "best-effort",
+      "phase": "deferred-best-effort",
+      "status": "completed",
+      "attempts": 1,
+      "idempotencyKey": "89c0438ff63097ce04beb60efb87292ff68a7af350a0ee331f3de9dbf42d62fc",
+      "payload": {
+        "transcriptPath": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+        "cwd": "/Users/sjl/Documents/github/wise-tui",
+        "reason": "other",
+        "input": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "transcript_path": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+          "cwd": "/Users/sjl/Documents/github/wise-tui",
+          "prompt_id": "e2d42e51-1576-4b7b-97fc-ed307c32784d",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "ended_at": "2026-09-09T13:50:50.468Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {}
+      },
+      "budgetMs": 2000,
+      "claimedAt": "2026-09-09T13:50:51.262Z",
+      "runner": {
+        "attempt": 1,
+        "runnerNonce": "6d1b45da-c1b5-4f0a-aecc-c43e574f115b",
+        "phase": "terminal",
+        "deadlineAt": "2026-09-09T13:51:00.554Z"
+      },
+      "lastOutcomeCode": "completed",
+      "completedAt": "2026-09-09T13:50:51.404Z"
+    },
+    "openclaw": {
+      "class": "best-effort",
+      "phase": "deferred-best-effort",
+      "status": "completed",
+      "attempts": 1,
+      "idempotencyKey": "31fe8f6e1cf204e27006de511df257326fdd98655122ca437013e8779ffc735b",
+      "payload": {
+        "transcriptPath": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+        "cwd": "/Users/sjl/Documents/github/wise-tui",
+        "reason": "other",
+        "input": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "transcript_path": "/Users/sjl/.claude/projects/-Users-sjl-Documents-github-wise-tui/7cafb9c2-9304-4453-b802-ddfbe249d494.jsonl",
+          "cwd": "/Users/sjl/Documents/github/wise-tui",
+          "prompt_id": "e2d42e51-1576-4b7b-97fc-ed307c32784d",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "7cafb9c2-9304-4453-b802-ddfbe249d494",
+          "ended_at": "2026-09-09T13:50:50.468Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {}
+      },
+      "budgetMs": 2000,
+      "claimedAt": "2026-09-09T13:50:51.426Z",
+      "runner": {
+        "attempt": 1,
+        "runnerNonce": "b1f3d5f9-d63d-4ab4-a0fe-b22227ffbc0d",
+        "phase": "terminal",
+        "deadlineAt": "2026-09-09T13:51:00.554Z"
+      },
+      "lastOutcomeCode": "completed",
+      "completedAt": "2026-09-09T13:50:51.593Z"
+    }
+  },
+  "owner": null,
+  "phase": "complete",
+  "completion": {
+    "completedAt": "2026-09-09T13:50:51.614Z",
+    "terminalDigest": "865f61eddaa3fcee628240fac7a70ca3ead5f65600d509f3d1dbbd3c89bbd58d",
+    "terminalRevision": 40
+  }
+}

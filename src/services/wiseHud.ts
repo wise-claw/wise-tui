@@ -7,6 +7,7 @@ import {
   WISE_HUD_NEW_SESSION_EVENT,
   WISE_HUD_REQUEST_STATE_EVENT,
   WISE_HUD_SELECT_REPOSITORY_EVENT,
+  WISE_HUD_SELECT_SESSION_EVENT,
   WISE_HUD_SET_ENGINE_EVENT,
   WISE_HUD_SET_MODEL_EVENT,
   WISE_HUD_ACTIVATE_ASSISTANT_EVENT,
@@ -98,6 +99,12 @@ export async function wiseHudCancel(): Promise<void> {
 
 export async function wiseHudSelectRepository(repositoryId: number): Promise<void> {
   await emitToPrimaryMain(WISE_HUD_SELECT_REPOSITORY_EVENT, { repositoryId });
+}
+
+export async function wiseHudSelectSession(sessionId: string): Promise<void> {
+  const trimmed = sessionId.trim();
+  if (!trimmed) return;
+  await emitToPrimaryMain(WISE_HUD_SELECT_SESSION_EVENT, { sessionId: trimmed });
 }
 
 export async function wiseHudNewSession(): Promise<void> {
