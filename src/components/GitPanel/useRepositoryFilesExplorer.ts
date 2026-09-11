@@ -23,6 +23,7 @@ import {
   type RepositoryExplorerEntry,
 } from "../../services/repositoryFiles";
 import { openInFinder, openWorkspaceIn } from "../../services/repository";
+import { refreshGitRepositoryUi } from "../../services/gitRepositoryUiRefresh";
 import { joinRepositoryAbsolutePath } from "../../utils/repositoryPreviewBinary";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useBusyTimeout } from "../../hooks/useBusyTimeout";
@@ -733,6 +734,7 @@ export function useRepositoryFilesExplorer({
         message.error(`删除失败：${msg}`);
         return false;
       }
+      refreshGitRepositoryUi(repositoryPath);
       setLoadedChildrenByDir((prev) => pruneLoadedChildrenMap(prev, relativePath));
       const parentDir = relativePath.includes("/")
         ? relativePath.slice(0, relativePath.lastIndexOf("/"))

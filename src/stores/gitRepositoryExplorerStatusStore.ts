@@ -63,12 +63,12 @@ function publish(pathKey: string): void {
   }
 }
 
-async function refreshPath(pathKey: string): Promise<void> {
+async function refreshPath(pathKey: string, force = false): Promise<void> {
   const entry = entriesByPath.get(pathKey);
   if (!entry || entry.consumers <= 0) return;
   const seq = ++entry.refreshSeq;
   try {
-    const warm = peekWarmGitStatus(pathKey);
+    const warm = force ? null : peekWarmGitStatus(pathKey);
     const status = warm ? await warm : await gitStatus(pathKey);
     rememberGitStatus(pathKey, status);
     const current = entriesByPath.get(pathKey);
@@ -101,7 +101,8 @@ async function refreshPath(pathKey: string): Promise<void> {
 function refreshAllPaths(): void {
   if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
   for (const pathKey of entriesByPath.keys()) {
-    void refreshPath(pathKey);
+    // 轮询 / watcher 刷新必须绕过热缓存，否则外部文件变更可能在 TTL 内不可见。
+    void refreshPath(pathKey, true);
   }
 }
 
@@ -213,7 +214,7 @@ function acquirePath(pathKey: string): PathEntry {
   if (resolved) {
     created.backgroundRefreshTimer = setTimeout(() => {
       created.backgroundRefreshTimer = null;
-      void refreshPath(pathKey);
+      void refreshPath(pathKey, true);
     }, GIT_STATUS_BACKGROUND_REFRESH_MS);
   } else {
     void refreshPath(pathKey);
@@ -266,7 +267,7 @@ export function getGitRepositoryExplorerStatusGeneration(path: string): number {
 export function refreshGitRepositoryExplorerStatus(path: string): void {
   const pathKey = normalizePath(path);
   if (!pathKey) return;
-  void refreshPath(pathKey);
+  void refreshPath(pathKey, true);
 }
 
 registerGitRepositoryStatsExplorerBridge({

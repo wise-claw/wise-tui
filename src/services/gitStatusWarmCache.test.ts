@@ -81,4 +81,16 @@ describe("gitStatusWarmCache", () => {
     expect(cache.getResolved("/repo")).toEqual(status(3));
     expect(cache.peek("/repo")).not.toBeNull();
   });
+
+  test("invalidate drops a stale snapshot so the next refresh can read Git again", async () => {
+    let calls = 0;
+    const cache = createGitStatusWarmCache(async () => status(++calls));
+    cache.remember("/repo", status(1));
+    cache.invalidate(" /repo ");
+
+    expect(cache.peek("/repo")).toBeNull();
+    cache.prefetch("/repo");
+    expect(await cache.peek("/repo")).toEqual(status(1));
+    expect(calls).toBe(1);
+  });
 });

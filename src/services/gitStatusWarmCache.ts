@@ -23,6 +23,7 @@ export interface GitStatusWarmCache {
   /** 已完成的预热结果，切仓时可同步画出上一次 status。 */
   getResolved(repositoryPath: string): GitStatusResponse | null;
   remember(repositoryPath: string, value: GitStatusResponse): void;
+  invalidate(repositoryPath: string): void;
   clear(): void;
   /** @internal 仅用于回归测试与诊断。 */
   size(): number;
@@ -122,6 +123,11 @@ export function createGitStatusWarmCache(
       entries.set(path, entry);
       trimToLimit();
     },
+    invalidate(repositoryPath) {
+      const path = normalizePath(repositoryPath);
+      if (!path) return;
+      entries.delete(path);
+    },
     clear() {
       entries.clear();
     },
@@ -160,6 +166,11 @@ export function getResolvedGitStatus(repositoryPath: string): GitStatusResponse 
 
 export function rememberGitStatus(repositoryPath: string, value: GitStatusResponse): void {
   warmCache.remember(repositoryPath, value);
+}
+
+/** 本地文件变更后丢弃该仓库的旧状态，下一次显式刷新必须重新读取 Git。 */
+export function invalidateGitStatus(repositoryPath: string): void {
+  warmCache.invalidate(repositoryPath);
 }
 
 export function clearGitStatusWarmCache(): void {

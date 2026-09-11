@@ -53,9 +53,10 @@ mock.module("../services/git", () => ({
 }));
 
 let resolvedStatus: GitStatusResponse | null = null;
+let warmStatus: GitStatusResponse | null = null;
 
 mock.module("../services/gitStatusWarmCache", () => ({
-  peekWarmGitStatus: () => null,
+  peekWarmGitStatus: () => warmStatus && Promise.resolve(warmStatus),
   consumeWarmGitStatus: () => null,
   rememberGitStatus: () => undefined,
   getResolvedGitStatus: () => resolvedStatus,
@@ -93,6 +94,7 @@ describe("gitRepositoryExplorerStatusStore refresh race", () => {
   beforeEach(() => {
     resetGitRepositoryExplorerStatusStoreForTests();
     resolvedStatus = null;
+    warmStatus = null;
     gitStatusMock.mockReset();
     gitStatusMock.mockImplementation(async () => emptyStatus);
     listenMock.mockReset();
@@ -165,6 +167,20 @@ describe("gitRepositoryExplorerStatusStore refresh race", () => {
     expect(getGitRepositoryExplorerStatusSnapshot("/repo-warm").fileStatusByPath.get("cached.ts")).toBe("M");
     expect(getGitRepositoryExplorerStatusGeneration("/repo-warm")).toBeGreaterThan(0);
 
+    unsub();
+  });
+
+  test("explicit refresh bypasses a stale warm status", async () => {
+    resolvedStatus = emptyStatus;
+    warmStatus = statusWithFile("stale.ts");
+    const unsub = subscribeGitRepositoryExplorerStatus("/repo-force", () => undefined);
+    await flushMicrotasks();
+
+    refreshGitRepositoryExplorerStatus("/repo-force");
+    await flushMicrotasks();
+
+    expect(gitStatusMock).toHaveBeenCalledWith("/repo-force");
+    expect(getGitRepositoryExplorerStatusSnapshot("/repo-force").fileStatusByPath.has("stale.ts")).toBe(false);
     unsub();
   });
 });
