@@ -378,3 +378,71 @@
 .app-workspace-requirements-edit-modal .app-tiptap-editor__paper {
   padding: 20px 28px 28px;
 }
+.app-requirement-execution-history {
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-requirement-execution-history__header,
+.app-requirement-execution-history__actions,
+.app-requirement-execution-history__list > li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.app-requirement-execution-history__hint {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+.app-requirement-execution-history__list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.app-requirement-execution-history__list > li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-requirement-execution-history__list > li > button {
+  margin-left: auto;
+}
+
+.app-requirement-execution-timeline-section {
+  margin: 16px 0;
+}
+.app-requirement-execution-timeline {
+  list-style: none;
+  padding: 0;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.app-requirement-execution-timeline > li {
+  padding: 12px;
+  margin: 8px 0;
+  border-left: 2px solid var(--ant-color-primary-border);
+  background: var(--ant-color-bg-container);
+}
+.app-requirement-execution-timeline time,
+.app-requirement-execution-timeline summary {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+}
+.app-requirement-execution-timeline__summary,
+.app-requirement-execution-timeline code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.app-requirement-execution-timeline__summary {
+  max-height: 180px;
+  overflow-y: auto;
+}

@@ -56,6 +56,9 @@ import {
 import type { WorkspaceRequirementItem, WorkspaceRequirementsPayloadV1 } from "../../types/workspaceRequirements";
 import { MarkdownBody } from "../ClaudeSessions/MarkdownElements";
 import { MonitorDrawerSessionComposer } from "../ProgressMonitorPanel/MonitorDrawerSessionComposer";
+import { useClaudeSessionsStructureSnapshot } from "../../stores/claudeSessionsLiveStore";
+import { isRequirementExecutionActive, requirementExecutionState } from "../../utils/workspaceRequirementExecution";
+import { RequirementExecutionHistory } from "./RequirementExecutionHistory";
 import "./index.css";
 
 function thumbSrc(path: string): string {
@@ -118,6 +121,8 @@ const RequirementRow = memo(function RequirementRow({
   onDispatch,
   onReject,
 }: RequirementRowProps) {
+  const sessions = useClaudeSessionsStructureSnapshot();
+  const executionActive = isRequirementExecutionActive(requirementExecutionState(item, sessions));
   const done = item.status === "done";
   const dispatching = dispatchingId === item.id;
   const latestExecutionSessionId =
@@ -160,6 +165,14 @@ const RequirementRow = memo(function RequirementRow({
             ) : null}
           </div>
         ) : null}
+        <RequirementExecutionHistory
+          item={item}
+          sessions={sessions}
+          busy={dispatching}
+          onDispatch={() => onDispatch(item)}
+          onAccept={() => onToggleDone(item)}
+          onReject={() => onReject(item)}
+        />
       </div>
       <div className="app-workspace-requirements-panel__row-actions">
         <Button
@@ -167,6 +180,7 @@ const RequirementRow = memo(function RequirementRow({
           size="small"
           icon={<CheckCircleOutlined />}
           className={`app-workspace-requirements-panel__complete-btn${done ? " app-workspace-requirements-panel__complete-btn--done" : ""}`}
+          disabled={executionActive}
           onClick={() => onToggleDone(item)}
           aria-label={done ? "标记为未完成" : "标记为已完成"}
           title={done ? "标记为未完成" : "标记为已完成"}
@@ -185,6 +199,7 @@ const RequirementRow = memo(function RequirementRow({
             type="text"
             size="small"
             icon={<CloseCircleOutlined />}
+            disabled={executionActive}
             aria-label="验收失败"
             title="验收失败并继续执行"
             onClick={() => onReject(item)}
@@ -228,6 +243,7 @@ const RequirementRow = memo(function RequirementRow({
             size="small"
             icon={<SendOutlined />}
             loading={dispatching}
+            disabled={dispatching || executionActive}
             aria-label="派发执行"
             title="派发到当前执行环境（不占主会话）"
             onClick={() => onDispatch(item)}
@@ -699,8 +715,6 @@ export function WorkspaceMemoPanel() {
                       <Tag color="success" className="app-workspace-requirements-panel__tag">已完成</Tag>
                     ) : currentItem?.status === "verifying" ? (
                       <Tag color="warning" className="app-workspace-requirements-panel__tag">待验证</Tag>
-                    ) : currentItem?.lastDispatchedAt != null ? (
-                      <Tag className="app-workspace-requirements-panel__tag">已派发</Tag>
                     ) : (
                       <Tag className="app-workspace-requirements-panel__tag">待办</Tag>
                     )}

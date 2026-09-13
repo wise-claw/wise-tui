@@ -1,3 +1,4 @@
+import { recordRequirementExecution } from "../services/requirementExecutionRecords";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { ClaudeComposerExecuteBubbleOptions, ClaudeSession } from "../types";
 import { SESSION_EXECUTION_ENGINE_LABELS } from "../constants/sessionExecutionEngine";
@@ -439,6 +440,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
         }
         // failover 重试已在上面 return，这里是本轮真正失败：立即放行该会话车道，
         // 不必等状态渲染到 error。
+        recordRequirementExecution(sessionsRef.current.find((row) => row.id === tabSessionId), "failed", errText);
         endSessionTurn(tabSessionId, turnToken);
         commitSessions((prev) =>
           applyClaudeExecuteFailureNotice(prev, tabSessionId, err, {
@@ -636,6 +638,9 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
   const cancelSession = (sessionId: string, opts?: { retractLastUserTurn?: boolean }) => {
     const session = sessionsRef.current.find((s) => s.id === sessionId);
     const realSessionId = session?.claudeSessionId ?? sessionIdMapRef.current.get(sessionId) ?? null;
+    if (session && (session.status === "running" || session.status === "connecting")) {
+      recordRequirementExecution(session, "cancelled", "用户停止执行");
+    }
 
     recentExecutePromptBySessionRef.current.delete(sessionId);
     if (pendingTurnFailoverRef.current?.tabSessionId === sessionId) pendingTurnFailoverRef.current = null;

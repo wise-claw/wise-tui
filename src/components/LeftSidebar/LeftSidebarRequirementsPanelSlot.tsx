@@ -56,6 +56,9 @@ import type {
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { ExpandIcon, PlusIcon, WorkspaceMemoIcon } from "./SidebarIcons";
+import { useClaudeSessionsStructureSnapshot } from "../../stores/claudeSessionsLiveStore";
+import { isRequirementExecutionActive, requirementExecutionState, type RequirementExecutionState } from "../../utils/workspaceRequirementExecution";
+import { RequirementExecutionBadge } from "../WorkspaceMemoPanel/RequirementExecutionHistory";
 import "./LeftSidebarRequirementsPanelSlot.css";
 
 export type LeftSidebarRequirementsPanelSlotProps = {
@@ -90,6 +93,7 @@ function RequirementsPanelRow({
   repoLabel,
   repoMissing,
   dispatching,
+  executionState,
   onOpenPanel,
   onDispatch,
   onEdit,
@@ -101,6 +105,7 @@ function RequirementsPanelRow({
   repoLabel: string;
   repoMissing: boolean;
   dispatching: boolean;
+  executionState: RequirementExecutionState;
   onOpenPanel: () => void;
   onDispatch: () => void;
   onEdit: () => void;
@@ -108,6 +113,7 @@ function RequirementsPanelRow({
   onDelete: () => void;
   onVerifyDone: () => void;
 }) {
+  const executionActive = isRequirementExecutionActive(executionState);
   const done = item.status === "done";
   const verifying = item.status === "verifying";
   const latestExecutionSessionId =
@@ -157,6 +163,7 @@ function RequirementsPanelRow({
         >
           {verifying ? "待验证" : done ? "已完成" : "待办"}
         </span>
+        {executionState !== "not_started" && <RequirementExecutionBadge state={executionState} />}
         <span className="app-left-sidebar-requirements-panel__row-title">{item.title}</span>
         <div
           className="app-left-sidebar-requirements-panel__row-actions"
@@ -167,6 +174,7 @@ function RequirementsPanelRow({
               <button
                 type="button"
                 className="app-left-sidebar-requirements-panel__action-btn"
+                disabled={executionActive}
                 aria-label="验证完成"
                 onClick={onVerifyDone}
               >
@@ -183,7 +191,7 @@ function RequirementsPanelRow({
                   (dispatching ? " app-left-sidebar-requirements-panel__action-btn--loading" : "")
                 }
                 aria-label="派发执行"
-                disabled={dispatching}
+                disabled={dispatching || executionActive}
                 onClick={onDispatch}
               >
                 {dispatching ? <LoadingOutlined spin /> : <SendOutlined />}
@@ -284,6 +292,8 @@ function LeftSidebarRequirementsPanelSlotInner({
   const scrollRootRef = useRef<HTMLDivElement>(null);
   const visibleRows = useRequirementsPanelVisibleRows();
   const memoPanelOpen = useWorkspaceMemoPanelOpen();
+  const sessions = useClaudeSessionsStructureSnapshot(visible && !sectionCollapsed);
+  const [executionFilter, setExecutionFilter] = useState<"all" | "running" | "attention">("all");
   const [statusFilters, setStatusFilters] = useState<WorkspaceRequirementStatus[]>([
     "open",
     "verifying",
@@ -367,11 +377,16 @@ function LeftSidebarRequirementsPanelSlotInner({
     () => items.filter((item) => item.status === "done"),
     [items],
   );
+  const executionStates = useMemo(() => new Map(items.map((item) => [item.id, requirementExecutionState(item, sessions)])), [items, sessions]);
   const displayItems = useMemo(
     () => [...verifyingItems, ...openItems, ...doneItems].filter((item) =>
-      statusFilters.includes(item.status),
+      executionFilter === "running"
+        ? isRequirementExecutionActive(executionStates.get(item.id)!)
+        : executionFilter === "attention"
+          ? item.status !== "done" && (item.status === "verifying" || ["error", "cancelled"].includes(executionStates.get(item.id)!))
+          : statusFilters.includes(item.status),
     ),
-    [openItems, verifyingItems, doneItems, statusFilters],
+    [openItems, verifyingItems, doneItems, statusFilters, executionFilter, executionStates],
   );
 
   const handleCreate = useCallback(() => {
@@ -679,15 +694,16 @@ function LeftSidebarRequirementsPanelSlotInner({
                 ["verifying", "待验证"],
                 ["done", "已完成"],
               ] as const).map(([value, label]) => {
-                const checked = statusFilters.includes(value);
+                const checked = executionFilter === "all" && statusFilters.includes(value);
                 return (
                   <Tag.CheckableTag
                     key={value}
                     checked={checked}
                     onChange={(nextChecked) => {
+                      setExecutionFilter("all");
                       setStatusFilters((current) =>
                         nextChecked
-                          ? [...current, value]
+                          ? [...new Set([...current, value])]
                           : current.filter((status) => status !== value),
                       );
                     }}
@@ -697,6 +713,13 @@ function LeftSidebarRequirementsPanelSlotInner({
                   </Tag.CheckableTag>
                 );
               })}
+              {([["running", "运行中"], ["attention", "需处理"]] as const).map(([value, label]) => (
+                <Tag.CheckableTag key={value} checked={executionFilter === value}
+                  onChange={(checked) => setExecutionFilter(checked ? value : "all")}
+                  className="app-left-sidebar-requirements-panel__status-tag">
+                  {label}
+                </Tag.CheckableTag>
+              ))}
             </div>
           </div>
           <div ref={scrollRootRef} className="app-left-sidebar-requirements-panel__body">
@@ -730,6 +753,7 @@ function LeftSidebarRequirementsPanelSlotInner({
                       repoLabel={repo.label}
                       repoMissing={repo.missing}
                       dispatching={dispatchingId === item.id}
+                      executionState={executionStates.get(item.id)!}
                       onOpenPanel={() => handleOpenFull(item)}
                       onDispatch={() => void handleDispatch(item)}
                       onEdit={() => handleEdit(item)}

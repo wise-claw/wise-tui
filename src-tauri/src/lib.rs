@@ -92,6 +92,7 @@ mod wise_push;
 mod workspace_commands;
 mod workspace_inspector_commands;
 mod workspace_inspector_db;
+mod requirement_execution_records;
 mod execution_environment_dispatch_commands;
 mod execution_environment_dispatch_db;
 mod session_feedback_loop_commands;

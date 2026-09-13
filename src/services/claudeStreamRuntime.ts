@@ -1,3 +1,4 @@
+import { recordRequirementExecution } from "./requirementExecutionRecords";
 import { startTransition, type MutableRefObject } from "react";
 import { sessionUsesStreamingConnection } from "../constants/claudeConnection";
 import type { ClaudeSession, MessagePart, SessionExecutionEngine } from "../types";
@@ -966,6 +967,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       previewRaw,
     });
     if (linkedRequirementId) {
+      recordRequirementExecution(sessionAfterFlush ?? session, uiSuccess ? (requirementProcessed ? "processed" : "incomplete") : "failed", previewRaw);
       if (uiSuccess && requirementProcessed) {
         void markWorkspaceRequirementVerifying(linkedRequirementId);
       } else {
