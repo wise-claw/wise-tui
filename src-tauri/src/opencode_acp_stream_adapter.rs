@@ -1,17 +1,21 @@
-//! Adapt OpenCode ACP `session/update` notifications into Claude-compatible stream JSON.
+//! Adapt ACP `session/update` notifications into Claude-compatible stream JSON.
 
 use serde_json::{json, Value};
+
+use crate::acp_engine::AcpEngine;
+use crate::opencode_acp_types::{permission_cancelled_result, permission_selected_result};
 
 use crate::claude_events::{
     emit_adapted_stream_payload, CLAUDE_STREAM_EVENT_COMPLETE, CLAUDE_STREAM_EVENT_OUTPUT,
 };
 
-/// Map one OpenCode ACP notification into zero or more Claude-compatible stream lines.
+/// Map one ACP notification into zero or more Claude-compatible stream lines.
 ///
-/// Known `session/update` kinds (verified against opencode 1.18.4):
+/// Known `session/update` kinds (verified against opencode 1.18.4 and dsh ACP):
 /// agent_thought_chunk / agent_message_chunk / tool_call / tool_call_update /
 /// available_commands_update / usage_update.
-pub fn adapt_opencode_acp_notification_to_stream_lines(
+pub fn adapt_acp_notification_to_stream_lines(
+    engine: AcpEngine,
     method: &str,
     params: Option<&Value>,
     wise_session_id: &str,
@@ -31,14 +35,16 @@ pub fn adapt_opencode_acp_notification_to_stream_lines(
     };
 
     match kind {
-        "agent_message_chunk" => map_text_chunk(update, "assistant"),
-        "agent_thought_chunk" => map_thought_chunk(update),
+        // `agent_message` / `agent_thought` are tolerant aliases for agents that
+        // send committed snapshots instead of the ACP chunk kinds.
+        "agent_message_chunk" | "agent_message" => map_text_chunk(update, "assistant"),
+        "agent_thought_chunk" | "agent_thought" | "agent_reasoning_chunk" => map_thought_chunk(update),
         "tool_call" => map_tool_call(update, "running"),
         "tool_call_update" => map_tool_call_update(update),
         "available_commands_update" | "usage_update" | "session_info_update" => vec![],
         other => {
-            if std::env::var("WISE_OPENCODE_ACP_DEBUG").ok().as_deref() == Some("1") {
-                eprintln!("[opencode_acp] unhandled sessionUpdate: {other}");
+            if std::env::var(engine.debug_env()).ok().as_deref() == Some("1") {
+                eprintln!("[{}_acp] unhandled sessionUpdate: {other}", engine.kind());
             }
             vec![]
         }
@@ -333,11 +339,11 @@ fn map_tool_name(kind: &str, title: &str) -> String {
     }
 }
 
-/// Bind line carrying the OpenCode ACP session id — the frontend stores it in
-/// `session.claudeSessionId` via `extractOpencodeResumeSessionIdFromParsed`.
-pub fn opencode_acp_bind_line(agent_id: &str) -> String {
+/// Bind line carrying the ACP session id — the frontend stores it in
+/// `session.claudeSessionId` via the engine-specific `*ResumeSessionIdFromParsed`.
+pub fn acp_bind_line(engine: AcpEngine, agent_id: &str) -> String {
     json!({
-        "type": "opencode_session",
+        "type": engine.session_bind_type(),
         "sessionId": agent_id,
     })
     .to_string()
@@ -352,17 +358,23 @@ pub fn opencode_acp_init_line(session_id: &str) -> String {
     .to_string()
 }
 
-pub fn emit_opencode_acp_complete(
+/// Complete payload for either ACP engine. The frontend keys on the bind line,
+/// so the engine name only appears in the diagnostic field.
+pub fn emit_acp_complete(
+    engine: AcpEngine,
     app: &tauri::AppHandle,
     invocation_key: Option<&str>,
     session_id: &str,
     success: bool,
-    opencode_session_id: Option<&str>,
+    acp_session_id: Option<&str>,
 ) {
     let payload = json!({
         "session_id": session_id,
         "success": success,
-        "opencodeSessionId": opencode_session_id,
+        "engine": engine.kind(),
+        "acpSessionId": acp_session_id,
+        "opencodeSessionId": acp_session_id,
+        "deepseekSessionId": acp_session_id,
     });
     emit_adapted_stream_payload(
         app,
@@ -371,6 +383,57 @@ pub fn emit_opencode_acp_complete(
         &payload,
         invocation_key,
     );
+}
+
+/// Resolve the ACP permission response for a UI decision against the option ids
+/// advertised by the agent (OpenCode uses once/always/reject, dsh uses the
+/// standard ACP option kinds). Falls back to the literal decision when unknown.
+pub fn resolve_permission_decision_result(options: Option<&Value>, decision: &str) -> Value {
+    let decision = decision.trim();
+    // `wanted` matches the option the agent advertised; `fallback` is the legacy
+    // OpenCode option id used when the request options are unavailable.
+    let (wanted, fallback): (&[&str], &str) = match decision {
+        "always" | "allow-always" | "allow_always" | "allowAlways" => (
+            &["allow_always", "allow-always", "always", "always_allow"],
+            "always",
+        ),
+        "once" | "allow-once" | "allow_once" | "allow" => (
+            &["allow_once", "allow-once", "once", "allow", "proceed_once"],
+            "once",
+        ),
+        "reject" | "reject-once" | "reject_once" | "deny" => (
+            &["reject_once", "reject-once", "reject", "deny", "refuse"],
+            "reject",
+        ),
+        "cancelled" | "cancel" => return permission_cancelled_result(),
+        other => (&[other], other),
+    };
+
+    if let Some(id) = resolve_permission_option_by_kind(options, wanted) {
+        return permission_selected_result(&id);
+    }
+    permission_selected_result(fallback)
+}
+
+fn resolve_permission_option_by_kind(options: Option<&Value>, wanted: &[&str]) -> Option<String> {
+    let options = options?.as_array()?;
+    for needle in wanted {
+        for opt in options {
+            let Some(id) = opt
+                .get("optionId")
+                .or_else(|| opt.get("option_id"))
+                .or_else(|| opt.get("id"))
+                .and_then(|v| v.as_str())
+            else {
+                continue;
+            };
+            let kind = opt.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+            if id == *needle || kind == *needle {
+                return Some(id.to_string());
+            }
+        }
+    }
+    None
 }
 
 pub fn emit_opencode_acp_output_line(
@@ -465,13 +528,28 @@ mod tests {
                 "content": { "type": "text", "text": "hi" },
             }
         });
-        let lines = adapt_opencode_acp_notification_to_stream_lines(
+        let lines = adapt_acp_notification_to_stream_lines(
+            AcpEngine::OpenCode,
             "session/update",
             Some(&params),
             "tab",
         );
         assert_eq!(lines.len(), 1);
         assert!(lines[0].contains(r#""text":"hi""#));
+    }
+
+    #[test]
+    fn maps_committed_message_alias() {
+        let params = json!({
+            "update": {
+                "sessionUpdate": "agent_message",
+                "content": { "type": "text", "text": "committed" },
+            }
+        });
+        let lines =
+            adapt_acp_notification_to_stream_lines(AcpEngine::DeepSeek, "session/update", Some(&params), "tab");
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains(r#""text":"committed""#));
     }
 
     #[test]
@@ -486,7 +564,8 @@ mod tests {
                 "content": [{ "type": "content", "content": { "type": "text", "text": "hi\n" } }],
             }
         });
-        let lines = adapt_opencode_acp_notification_to_stream_lines(
+        let lines = adapt_acp_notification_to_stream_lines(
+            AcpEngine::OpenCode,
             "session/update",
             Some(&params),
             "tab",
@@ -494,6 +573,43 @@ mod tests {
         assert_eq!(lines.len(), 2);
         assert!(lines[0].contains(r#""name":"Bash""#));
         assert!(lines[1].contains(r#""type":"tool_result""#));
+    }
+
+    #[test]
+    fn permission_decision_uses_advertised_option_id() {
+        let dsh_options = json!([
+            { "optionId": "allow-once", "kind": "allow_once", "name": "Allow once" },
+            { "optionId": "reject-once", "kind": "reject_once", "name": "Reject" }
+        ]);
+        let allow = resolve_permission_decision_result(Some(&dsh_options), "allow-once");
+        assert_eq!(
+            allow.pointer("/outcome/optionId").and_then(|v| v.as_str()),
+            Some("allow-once")
+        );
+        let deny = resolve_permission_decision_result(Some(&dsh_options), "deny");
+        assert_eq!(
+            deny.pointer("/outcome/optionId").and_then(|v| v.as_str()),
+            Some("reject-once")
+        );
+    }
+
+    #[test]
+    fn permission_decision_falls_back_to_opencode_literals() {
+        let allow = resolve_permission_decision_result(None, "allow-once");
+        assert_eq!(
+            allow.pointer("/outcome/optionId").and_then(|v| v.as_str()),
+            Some("once")
+        );
+        let always = resolve_permission_decision_result(None, "allow-always");
+        assert_eq!(
+            always.pointer("/outcome/optionId").and_then(|v| v.as_str()),
+            Some("always")
+        );
+        let cancel = resolve_permission_decision_result(None, "cancelled");
+        assert_eq!(
+            cancel.pointer("/outcome/outcome").and_then(|v| v.as_str()),
+            Some("cancelled")
+        );
     }
 
     #[test]
@@ -510,8 +626,10 @@ mod tests {
 
     #[test]
     fn bind_line_uses_opencode_session_type() {
-        let line = opencode_acp_bind_line("ses_abc");
+        let line = acp_bind_line(AcpEngine::OpenCode, "ses_abc");
         assert!(line.contains(r#""type":"opencode_session""#));
         assert!(line.contains(r#""sessionId":"ses_abc""#));
+        let ds_line = acp_bind_line(AcpEngine::DeepSeek, "dsh_1");
+        assert!(ds_line.contains(r#""type":"deepseek_session""#));
     }
 }

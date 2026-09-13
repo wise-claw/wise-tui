@@ -304,6 +304,7 @@ pub fn run() {
         .manage(codex_rpc_commands::CodexRpcSessionStore::default())
         .manage(cursor_acp_commands::CursorAcpSessionStore::default())
         .manage(opencode_acp_commands::OpencodeAcpSessionStore::default())
+        .manage(opencode_acp_commands::DeepseekAcpSessionStore::default())
         .manage(chrome_devtools_monitor::ChromeDevtoolsMonitorState::default())
         .manage(stagehand_browse::StagehandBrowseState::default());
     #[cfg(target_os = "macos")]
@@ -947,6 +948,13 @@ pub fn run() {
             opencode_acp_commands::respond_opencode_acp_permission,
             opencode_acp_commands::respond_opencode_acp_question,
             opencode_acp_commands::respond_opencode_acp_plan,
+            opencode_acp_commands::execute_deepseek_acp,
+            opencode_acp_commands::interrupt_deepseek_acp,
+            opencode_acp_commands::shutdown_deepseek_acp,
+            opencode_acp_commands::respond_deepseek_acp_permission,
+            opencode_acp_commands::respond_deepseek_acp_question,
+            opencode_acp_commands::respond_deepseek_acp_plan,
+            opencode_acp_commands::deepseek_list_models,
             mcp::commands::mcp_list_servers,
             mcp::commands::mcp_save_server,
             mcp::commands::mcp_delete_server,

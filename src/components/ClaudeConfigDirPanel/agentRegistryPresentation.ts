@@ -70,6 +70,8 @@ export function getBuiltinInstallCommand(kind: BuiltinInstallableKind): string {
       return "npm install -g @anthropic-ai/claude-code";
     case "codex":
       return "npm install -g @openai/codex";
+    case "deepseek":
+      return "npm install -g @deepseek-ai/dsh";
     case "gemini":
       return "npm install -g @google/gemini-cli";
     case "opencode":
@@ -96,6 +98,8 @@ export function getAgentKindLabel(kind: DetectedAgent["kind"]): string {
       return "Claude";
     case "codex":
       return "Codex";
+    case "deepseek":
+      return "DeepSeek Harness";
     case "gemini":
       return "Gemini";
     case "opencode":

@@ -1,9 +1,10 @@
-//! High-level OpenCode ACP session: bootstrap, session/new|load, prompt, cancel.
+//! High-level ACP session: bootstrap, session/new|load|resume, prompt, cancel.
 
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
 use tokio::sync::oneshot;
 
+use crate::acp_engine::AcpEngine;
 use crate::opencode_acp_transport::OpencodeAcpTransport;
 use crate::opencode_acp_types::{
     parse_server_request, AcpServerRequest, ClientCapabilities, ClientInfo,
@@ -13,19 +14,28 @@ use crate::opencode_acp_types::{
 };
 
 pub struct OpencodeAcpSession {
+    engine: AcpEngine,
     transport: OpencodeAcpTransport,
     pub acp_session_id: Option<String>,
     pub project_path: String,
+    /// Full configuration-option state returned by `session/new` (includes the
+    /// model catalog for engines that advertise it, e.g. DeepSeek Harness).
+    pub config_options: Option<Value>,
     /// True while a session/prompt request is in flight.
     pub prompt_in_flight: bool,
 }
 
 impl OpencodeAcpSession {
-    pub async fn bootstrap(binary_path: &str, project_path: &str) -> Result<Self> {
+    pub async fn bootstrap(
+        engine: AcpEngine,
+        binary_path: &str,
+        project_path: &str,
+    ) -> Result<Self> {
         let mut transport =
-            OpencodeAcpTransport::spawn(binary_path, Some(project_path)).await?;
+            OpencodeAcpTransport::spawn(engine, binary_path, Some(project_path)).await?;
 
-        // OpenCode ACP needs no `authenticate` step (auth is `opencode auth login`).
+        // Neither agent needs an `authenticate` handshake: auth is configured in the
+        // agent's own settings (opencode auth / dsh provider + API key).
         let init_params = InitializeParams {
             protocol_version: 1,
             client_capabilities: ClientCapabilities {
@@ -44,35 +54,41 @@ impl OpencodeAcpSession {
         let init_resp = transport
             .send_request("initialize", Some(init_value))
             .await
-            .context("OpenCode ACP initialize failed")?;
-        Self::ensure_ok(&init_resp, "initialize")?;
+            .with_context(|| format!("{} ACP initialize failed", engine.display_name()))?;
+        Self::ensure_ok(engine, &init_resp, "initialize")?;
 
         // Drain any early notifications (e.g. available_commands_update).
         while transport.poll_notification().is_some() {}
 
         Ok(Self {
+            engine,
             transport,
             acp_session_id: None,
             project_path: project_path.to_string(),
+            config_options: None,
             prompt_in_flight: false,
         })
     }
 
-    fn ensure_ok(msg: &JsonRpcMessage, method: &str) -> Result<Value> {
+    fn ensure_ok(engine: AcpEngine, msg: &JsonRpcMessage, method: &str) -> Result<Value> {
         match msg {
             JsonRpcMessage::Response {
                 result, error, ..
             } => {
                 if let Some(err) = error {
                     return Err(anyhow!(
-                        "OpenCode ACP {method} error: {} ({})",
+                        "{} ACP {method} error: {} ({})",
+                        engine.display_name(),
                         err.message,
                         err.code
                     ));
                 }
                 Ok(result.clone().unwrap_or(Value::Null))
             }
-            other => Err(anyhow!("OpenCode ACP {method}: unexpected response {other:?}")),
+            other => Err(anyhow!(
+                "{} ACP {method}: unexpected response {other:?}",
+                engine.display_name()
+            )),
         }
     }
 
@@ -85,25 +101,29 @@ impl OpencodeAcpSession {
             .transport
             .send_request("session/new", Some(serde_json::to_value(&params)?))
             .await?;
-        let result = Self::ensure_ok(&resp, "session/new")?;
+        let result = Self::ensure_ok(self.engine, &resp, "session/new")?;
         let parsed: SessionNewResult = serde_json::from_value(result)
             .context("Failed to parse session/new result")?;
+        self.config_options = parsed.config_options.clone();
         self.acp_session_id = Some(parsed.session_id.clone());
         Ok(parsed.session_id)
     }
 
+    /// Attach an existing persisted session using this engine's resume method
+    /// (`session/load` for OpenCode, `session/resume` for DeepSeek Harness).
     pub async fn session_load(&mut self, session_id: &str) -> Result<String> {
         let params = SessionLoadParams {
             session_id: session_id.to_string(),
             cwd: self.project_path.clone(),
             mcp_servers: vec![],
         };
+        let method = self.engine.resume_method();
         let resp = self
             .transport
-            .send_request("session/load", Some(serde_json::to_value(&params)?))
+            .send_request(method, Some(serde_json::to_value(&params)?))
             .await?;
-        let _ = Self::ensure_ok(&resp, "session/load")?;
-        // load may not echo sessionId; keep the requested one.
+        let _ = Self::ensure_ok(self.engine, &resp, method)?;
+        // load / resume may not echo sessionId; keep the requested one.
         let sid = session_id.to_string();
         self.acp_session_id = Some(sid.clone());
         Ok(sid)
@@ -125,7 +145,7 @@ impl OpencodeAcpSession {
                 Some(serde_json::to_value(&params)?),
             )
             .await?;
-        let _ = Self::ensure_ok(&resp, "session/set_config_option")?;
+        let _ = Self::ensure_ok(self.engine, &resp, "session/set_config_option")?;
         Ok(())
     }
 
@@ -182,6 +202,21 @@ impl OpencodeAcpSession {
         Ok(())
     }
 
+    /// Best-effort `session/close` (supported by DeepSeek Harness). Ignored when
+    /// the engine does not implement it or the process is already gone.
+    pub async fn session_close(&mut self) -> Result<()> {
+        let Some(sid) = self.acp_session_id.clone() else {
+            return Ok(());
+        };
+        let params = serde_json::json!({ "sessionId": sid });
+        let _ = self
+            .transport
+            .send_request("session/close", Some(params))
+            .await;
+        self.acp_session_id = None;
+        Ok(())
+    }
+
     pub async fn respond(&mut self, id: JsonRpcId, result: Value) -> Result<()> {
         self.transport.send_response(id, result).await
     }
@@ -195,6 +230,7 @@ impl OpencodeAcpSession {
             .poll_server_request()
             .map(|(id, method, params)| parse_server_request(id, &method, params))
     }
+
 
     pub fn mark_prompt_done(&mut self) {
         self.prompt_in_flight = false;

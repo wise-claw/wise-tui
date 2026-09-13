@@ -4,6 +4,7 @@ import type { CodexModelListItem } from "./codex";
 import type { CursorModelListItem } from "./cursorAgent";
 import type { OpencodeModelListItem } from "./opencode";
 import type { QoderModelListItem } from "./qoder";
+import type { DeepSeekModelListItem } from "./deepseek";
 import { createLocalModelPreferenceCache } from "./localModelPreferenceCache";
 
 /**
@@ -12,7 +13,13 @@ import { createLocalModelPreferenceCache } from "./localModelPreferenceCache";
 export const WISE_EXECUTION_ENGINE_MODEL_LISTS_KEY =
   "wise.executionEngineModelLists.v1";
 
-export type ExecutionEngineModelListKind = "cursor" | "codex" | "opencode" | "qoder" | "claude";
+export type ExecutionEngineModelListKind =
+  | "cursor"
+  | "codex"
+  | "opencode"
+  | "qoder"
+  | "deepseek"
+  | "claude";
 
 const MAX_LIST_ITEMS = 500;
 const MAX_CLAUDE_MODELS = 200;
@@ -24,6 +31,7 @@ export interface ExecutionEngineModelLists {
   codex?: CodexModelListItem[];
   opencode?: OpencodeModelListItem[];
   qoder?: QoderModelListItem[];
+  deepseek?: DeepSeekModelListItem[];
   claude?: ClaudeModelPickerOptions;
 }
 
@@ -34,6 +42,7 @@ export function executionEngineModelListKind(
   if (engine === "codex" || engine === "codex-rpc") return "codex";
   if (engine === "opencode") return "opencode";
   if (engine === "qoder") return "qoder";
+  if (engine === "deepseek") return "deepseek";
   if (engine === "claude") return "claude";
   return null;
 }
@@ -126,6 +135,8 @@ function parseLists(raw: string | null): ExecutionEngineModelLists {
     if (opencode) next.opencode = opencode;
     const qoder = parseModelList(rec.qoder) as QoderModelListItem[] | undefined;
     if (qoder) next.qoder = qoder;
+    const deepseek = parseModelList(rec.deepseek) as DeepSeekModelListItem[] | undefined;
+    if (deepseek) next.deepseek = deepseek;
     const claude = parseClaudePicker(rec.claude);
     if (claude) next.claude = claude;
     return next;
@@ -140,6 +151,7 @@ function cloneLists(lists: ExecutionEngineModelLists): ExecutionEngineModelLists
     ...(lists.codex ? { codex: lists.codex.slice() } : {}),
     ...(lists.opencode ? { opencode: lists.opencode.slice() } : {}),
     ...(lists.qoder ? { qoder: lists.qoder.slice() } : {}),
+    ...(lists.deepseek ? { deepseek: lists.deepseek.slice() } : {}),
     ...(lists.claude
       ? {
           claude: {
@@ -181,6 +193,11 @@ export function getCachedQoderModels(): QoderModelListItem[] | null {
   return cachedLists.qoder?.length ? cachedLists.qoder.slice() : null;
 }
 
+export function getCachedDeepseekModels(): DeepSeekModelListItem[] | null {
+  const cachedLists = lists.read();
+  return cachedLists.deepseek?.length ? cachedLists.deepseek.slice() : null;
+}
+
 export function getCachedClaudeModelPickerOptions(): ClaudeModelPickerOptions | null {
   const cachedLists = lists.read();
   return cachedLists.claude
@@ -214,6 +231,12 @@ export async function saveCachedQoderModels(items: QoderModelListItem[]): Promis
   const parsed = parseModelList(items) as QoderModelListItem[] | undefined;
   if (!parsed) return;
   await lists.update("qoder", parsed);
+}
+
+export async function saveCachedDeepseekModels(items: DeepSeekModelListItem[]): Promise<void> {
+  const parsed = parseModelList(items) as DeepSeekModelListItem[] | undefined;
+  if (!parsed) return;
+  await lists.update("deepseek", parsed);
 }
 
 export async function saveCachedClaudeModelPickerOptions(

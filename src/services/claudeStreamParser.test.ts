@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   describeWriteInputDefect,
   extractCodexResumeSessionIdFromStreamLine,
+  extractDeepseekResumeSessionIdFromStreamLine,
   extractOpencodeResumeSessionIdFromStreamLine,
   extractInitSessionIdFromInvocationStdoutLines,
   extractCursorAgentIdFromCompletePayload,
@@ -17,6 +18,7 @@ import {
   isClaudeToolInputValidationErrorText,
   parseStreamLineSessionId,
   shouldClearCodexResumeSessionFromStreamLine,
+  shouldClearDeepseekResumeSessionFromStreamLine,
   shouldClearOpencodeResumeSessionFromStreamLine,
   stripClaudeHarnessInjectedStreamText,
 } from "./claudeStreamParser";
@@ -52,6 +54,27 @@ describe("extractPartsFromStreamLine", () => {
         JSON.stringify({ type: "opencode_session", sessionId: "" }),
       ),
     ).toBe(true);
+  });
+
+  test("parses deepseek session bind and clear markers", () => {
+    expect(
+      extractDeepseekResumeSessionIdFromStreamLine(
+        JSON.stringify({
+          type: "deepseek_session",
+          sessionId: "dsh-7f3a91",
+        }),
+      ),
+    ).toBe("dsh-7f3a91");
+    expect(
+      shouldClearDeepseekResumeSessionFromStreamLine(
+        JSON.stringify({ type: "deepseek_session", sessionId: "" }),
+      ),
+    ).toBe(true);
+    expect(
+      extractDeepseekResumeSessionIdFromStreamLine(
+        JSON.stringify({ type: "opencode_session", sessionId: "ses_abc" }),
+      ),
+    ).toBeNull();
   });
 
   test("parses cursor agent bind without treating it as Claude init", () => {

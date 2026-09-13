@@ -129,10 +129,12 @@ export function isExecutionEnvironmentEngineAvailable(
     geminiAvailable: boolean;
     opencodeAvailable: boolean;
     qoderAvailable: boolean;
+    deepseekAvailable: boolean;
   },
 ): boolean {
   if (engine === "codex" || engine === "codex-rpc") return availability.codexAvailable;
   if (engine === "cursor") return availability.cursorAvailable;
+  if (engine === "deepseek") return availability.deepseekAvailable;
   if (engine === "gemini") return availability.geminiAvailable;
   if (engine === "opencode") return availability.opencodeAvailable;
   if (engine === "qoder") return availability.qoderAvailable;
@@ -145,16 +147,19 @@ export function listExecutionEnvironmentEngineMentionOptions(input: {
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
   qoderAvailable?: boolean;
+  deepseekAvailable?: boolean;
 }): ExecutionEnvironmentEngineMentionOption[] {
   const geminiAvailable = input.geminiAvailable ?? false;
   const opencodeAvailable = input.opencodeAvailable ?? false;
   const qoderAvailable = input.qoderAvailable ?? false;
+  const deepseekAvailable = input.deepseekAvailable ?? false;
   const availability = {
     codexAvailable: input.codexAvailable,
     cursorAvailable: input.cursorAvailable,
     geminiAvailable,
     opencodeAvailable,
     qoderAvailable,
+    deepseekAvailable,
   };
   return SESSION_EXECUTION_ENGINES_OFFERED.filter((engine) =>
     isExecutionEnvironmentEngineAvailable(engine, availability),
@@ -274,7 +279,7 @@ export function parseExecutionEnvironmentWorkerRepositoryName(
   if (idx < 0) return null;
   const tail = repositoryName.slice(idx + marker.length).trim();
   if (!tail) return null;
-  const enginePrefix = tail.match(/^(claude|codex|cursor|gemini|opencode|qoder):/i);
+  const enginePrefix = tail.match(/^(claude|codex|cursor|deepseek|gemini|opencode|qoder):/i);
   if (enginePrefix) {
     const engine = enginePrefix[1].toLowerCase() as SessionExecutionEngine;
     const label = tail.slice(enginePrefix[0].length).trim();

@@ -112,6 +112,7 @@ export interface TiptapMentionSuggestions {
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
   qoderAvailable?: boolean;
+  deepseekAvailable?: boolean;
 }
 
 function collapseWs(value: string): string {
@@ -780,6 +781,7 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(({
           geminiAvailable={mentionSuggestions.geminiAvailable ?? false}
           opencodeAvailable={mentionSuggestions.opencodeAvailable ?? false}
           qoderAvailable={mentionSuggestions.qoderAvailable ?? false}
+          deepseekAvailable={mentionSuggestions.deepseekAvailable ?? false}
           sessionExecutionEngine={mentionSuggestions.sessionExecutionEngine}
           zIndex={12000}
         />

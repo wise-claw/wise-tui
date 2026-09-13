@@ -19,6 +19,7 @@ import {
   extractCodexResumeSessionIdFromParsed,
   extractCursorAgentIdFromCompletePayload,
   extractCursorAgentIdFromParsed,
+  extractDeepseekResumeSessionIdFromParsed,
   extractOpencodeResumeSessionIdFromParsed,
   extractQoderResumeSessionIdFromParsed,
   extractPartsFromParsed,
@@ -32,6 +33,7 @@ import {
   isHookStartedFromParsed,
   parseStreamLineSessionIdFromParsed,
   shouldClearCodexResumeSessionFromParsed,
+  shouldClearDeepseekResumeSessionFromParsed,
   shouldClearOpencodeResumeSessionFromParsed,
   shouldClearQoderResumeSessionFromParsed,
   stripClaudeHarnessInjectedStreamText,
@@ -525,6 +527,15 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         }),
       );
     }
+    if (shouldClearDeepseekResumeSessionFromParsed(parsed)) {
+      onStreamActivity?.(tid);
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== tid && s.claudeSessionId !== tid) return s;
+          return { ...s, claudeSessionId: null };
+        }),
+      );
+    }
     const codexResumeSessionId = extractCodexResumeSessionIdFromParsed(parsed);
     if (codexResumeSessionId) {
       onStreamActivity?.(tid);
@@ -557,6 +568,17 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         }),
       );
       onClaudeSessionIdAssigned?.(tid, qoderResumeSessionId);
+    }
+    const deepseekResumeSessionId = extractDeepseekResumeSessionIdFromParsed(parsed);
+    if (deepseekResumeSessionId) {
+      onStreamActivity?.(tid);
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== tid && s.claudeSessionId !== tid) return s;
+          return { ...s, claudeSessionId: deepseekResumeSessionId };
+        }),
+      );
+      onClaudeSessionIdAssigned?.(tid, deepseekResumeSessionId);
     }
     const cursorAgentId = extractCursorAgentIdFromParsed(parsed);
     if (cursorAgentId) {

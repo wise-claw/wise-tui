@@ -71,7 +71,7 @@ test("a spawn configuration error releases all already registered listeners", as
   expect(detached).toHaveBeenCalledTimes(6);
 });
 
-for (const engine of ["codex", "codex-rpc", "opencode", "qoder", "cursor"] as const) {
+for (const engine of ["codex", "codex-rpc", "opencode", "qoder", "deepseek", "cursor"] as const) {
   test(`cancelling while ${engine} listeners register prevents process launch and stale UI updates`, async () => {
     const { abort, deps } = harness();
     delayListeners = true;
@@ -81,6 +81,7 @@ for (const engine of ["codex", "codex-rpc", "opencode", "qoder", "cursor"] as co
       : engine === "codex-rpc" ? handlers.runCodexRpcOneshotWithInvocation
       : engine === "opencode" ? handlers.runOpencodeOneshotWithInvocation
       : engine === "qoder" ? handlers.runQoderOneshotWithInvocation
+      : engine === "deepseek" ? handlers.runDeepseekOneshotWithInvocation
       : handlers.runCursorOneshotWithInvocation;
     const pending = run(input);
     await tick();

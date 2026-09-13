@@ -123,6 +123,7 @@ export interface ComposerPlainEditSurfaceProps {
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
   qoderAvailable?: boolean;
+  deepseekAvailable?: boolean;
   placeholder?: string;
   className?: string;
   autoFocus?: boolean;
@@ -147,6 +148,7 @@ export function ComposerPlainEditSurface({
   geminiAvailable = false,
   opencodeAvailable = false,
   qoderAvailable = false,
+  deepseekAvailable = false,
   placeholder = "@ 终端/工作流/文件，/ 命令，Shift+Enter 换行",
   className = "",
   autoFocus = false,
@@ -368,6 +370,7 @@ export function ComposerPlainEditSurface({
           geminiAvailable={geminiAvailable}
           opencodeAvailable={opencodeAvailable}
           qoderAvailable={qoderAvailable}
+          deepseekAvailable={deepseekAvailable}
           atMentionDefaultTarget={atMentionDefaultTarget}
           onAtMentionDefaultTargetChange={(next) => void saveAtMentionDefaultTarget(next)}
           sessionExecutionEngine={sessionExecutionEngine}

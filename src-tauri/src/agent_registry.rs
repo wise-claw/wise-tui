@@ -56,6 +56,7 @@ pub struct CustomAgent {
 pub enum DetectedAgent {
     Claude(SyntheticAgent),
     Codex(SyntheticAgent),
+    DeepSeek(SyntheticAgent),
     Gemini(SyntheticAgent),
     OpenCode(SyntheticAgent),
     Qoder(SyntheticAgent),
@@ -262,6 +263,7 @@ impl DetectedAgent {
         match self {
             DetectedAgent::Claude(agent)
             | DetectedAgent::Codex(agent)
+            | DetectedAgent::DeepSeek(agent)
             | DetectedAgent::Gemini(agent)
             | DetectedAgent::OpenCode(agent)
             | DetectedAgent::Qoder(agent)
@@ -274,6 +276,7 @@ impl DetectedAgent {
         match self {
             DetectedAgent::Claude(agent)
             | DetectedAgent::Codex(agent)
+            | DetectedAgent::DeepSeek(agent)
             | DetectedAgent::Gemini(agent)
             | DetectedAgent::OpenCode(agent)
             | DetectedAgent::Qoder(agent)
@@ -286,6 +289,7 @@ impl DetectedAgent {
         match self {
             DetectedAgent::Claude(agent)
             | DetectedAgent::Codex(agent)
+            | DetectedAgent::DeepSeek(agent)
             | DetectedAgent::Gemini(agent)
             | DetectedAgent::OpenCode(agent)
             | DetectedAgent::Qoder(agent)
@@ -298,6 +302,7 @@ impl DetectedAgent {
         match self {
             DetectedAgent::Claude(agent)
             | DetectedAgent::Codex(agent)
+            | DetectedAgent::DeepSeek(agent)
             | DetectedAgent::Gemini(agent)
             | DetectedAgent::OpenCode(agent)
             | DetectedAgent::Qoder(agent)
@@ -331,9 +336,10 @@ fn deduplicate_agents(agents: Vec<DetectedAgent>) -> Vec<DetectedAgent> {
 
 async fn detect_builtin_agents(probe: &dyn Probe, db: &Mutex<Connection>) -> Vec<DetectedAgent> {
     let empty_env = HashMap::new();
-    let (claude, codex, gemini, opencode, qoder, cursor) = tokio::join!(
+    let (claude, codex, deepseek, gemini, opencode, qoder, cursor) = tokio::join!(
         probe_builtin("claude", probe, &empty_env),
         probe_builtin("codex", probe, &empty_env),
+        probe_builtin("dsh", probe, &empty_env),
         probe_builtin("gemini", probe, &empty_env),
         probe_builtin("opencode", probe, &empty_env),
         probe_builtin("qodercli", probe, &empty_env),
@@ -342,6 +348,12 @@ async fn detect_builtin_agents(probe: &dyn Probe, db: &Mutex<Connection>) -> Vec
     vec![
         DetectedAgent::Claude(synthetic_agent("claude", "Claude Code", "claude", claude)),
         DetectedAgent::Codex(synthetic_agent("codex", "Codex CLI", "codex", codex)),
+        DetectedAgent::DeepSeek(synthetic_agent(
+            "deepseek",
+            "DeepSeek Harness",
+            "dsh",
+            deepseek,
+        )),
         DetectedAgent::Gemini(synthetic_agent("gemini", "Gemini CLI", "gemini", gemini)),
         DetectedAgent::OpenCode(synthetic_agent(
             "opencode",
@@ -398,7 +410,32 @@ async fn probe_builtin(
     }
 
     let first = probe.probe(command, env).await;
-    if first.ok || command != "claude" {
+    if first.ok {
+        return first;
+    }
+    if command == "dsh" {
+        return match crate::dsh_binary::find_dsh_binary() {
+            Ok(path) => ProbeResult {
+                ok: true,
+                error: None,
+                resolved_path: Some(path),
+                version: None,
+            },
+            Err(fallback_error) => ProbeResult {
+                ok: false,
+                error: Some(format!(
+                    "{}; {}",
+                    first
+                        .error
+                        .unwrap_or_else(|| "binary not found on PATH".to_string()),
+                    fallback_error
+                )),
+                resolved_path: first.resolved_path,
+                version: None,
+            },
+        };
+    }
+    if command != "claude" {
         return first;
     }
 
@@ -665,6 +702,7 @@ fn builtin_command_name(kind: &str) -> Option<&'static str> {
     match kind.trim().to_lowercase().as_str() {
         "claude" => Some("claude"),
         "codex" => Some("codex"),
+        "deepseek" => Some("dsh"),
         "gemini" => Some("gemini"),
         "opencode" => Some("opencode"),
         "qoder" => Some("qodercli"),
@@ -934,6 +972,9 @@ fn parse_builtin_install_kind(kind: &str) -> Result<BuiltinInstallSpec, String> 
         "codex" => Ok(BuiltinInstallSpec {
             npm_package: "@openai/codex",
         }),
+        "deepseek" => Ok(BuiltinInstallSpec {
+            npm_package: "@deepseek-ai/dsh",
+        }),
         "gemini" => Ok(BuiltinInstallSpec {
             npm_package: "@google/gemini-cli",
         }),
@@ -1141,7 +1182,9 @@ pub async fn agent_registry_update_builtin(
 
 fn parse_builtin_uninstall_kind(kind: &str) -> Result<BuiltinInstallSpec, String> {
     match kind.trim().to_lowercase().as_str() {
-        "claude" | "codex" | "gemini" | "opencode" | "qoder" => parse_builtin_install_kind(kind),
+        "claude" | "codex" | "deepseek" | "gemini" | "opencode" | "qoder" => {
+            parse_builtin_install_kind(kind)
+        }
         "cursor" => Ok(BuiltinInstallSpec {
             // Cursor CLI 非 npm；卸载仅清除 Wise 侧 API Key。
             npm_package: "cursor-agent-cli",
@@ -1342,6 +1385,7 @@ fn installed_version_from_snapshot(
         match (agent, kind) {
             (DetectedAgent::Claude(a), "claude")
             | (DetectedAgent::Codex(a), "codex")
+            | (DetectedAgent::DeepSeek(a), "deepseek")
             | (DetectedAgent::Gemini(a), "gemini")
             | (DetectedAgent::OpenCode(a), "opencode")
             | (DetectedAgent::Qoder(a), "qoder")
@@ -1462,6 +1506,7 @@ pub async fn agent_registry_check_updates(
     let mut kinds: Vec<String> = vec![
         "claude".to_string(),
         "codex".to_string(),
+        "deepseek".to_string(),
         "gemini".to_string(),
         "opencode".to_string(),
         "qoder".to_string(),
@@ -1611,6 +1656,12 @@ mod tests {
             }
         );
         assert_eq!(
+            parse_builtin_install_kind("deepseek").expect("deepseek"),
+            BuiltinInstallSpec {
+                npm_package: "@deepseek-ai/dsh",
+            }
+        );
+        assert_eq!(
             parse_builtin_install_kind("gemini").expect("gemini"),
             BuiltinInstallSpec {
                 npm_package: "@google/gemini-cli",
@@ -1703,13 +1754,13 @@ mod tests {
             .refresh_all(false, &db, &probe)
             .await
             .expect("first refresh succeeds");
-        assert_eq!(probe.call_count(), 5);
+        assert_eq!(probe.call_count(), 6);
 
         registry
             .refresh_all(false, &db, &probe)
             .await
             .expect("cached refresh succeeds");
-        assert_eq!(probe.call_count(), 5);
+        assert_eq!(probe.call_count(), 6);
     }
 
     #[tokio::test]
@@ -1727,7 +1778,7 @@ mod tests {
             .await
             .expect("forced refresh succeeds");
 
-        assert_eq!(probe.call_count(), 10);
+        assert_eq!(probe.call_count(), 12);
     }
 
     #[tokio::test]
@@ -1799,11 +1850,12 @@ mod tests {
             .await
             .expect("refresh succeeds");
 
-        assert_eq!(agents.len(), 6);
+        assert_eq!(agents.len(), 7);
         for agent in agents {
             match agent {
                 DetectedAgent::Claude(agent)
                 | DetectedAgent::Codex(agent)
+                | DetectedAgent::DeepSeek(agent)
                 | DetectedAgent::Gemini(agent)
                 | DetectedAgent::OpenCode(agent)
                 | DetectedAgent::Qoder(agent)

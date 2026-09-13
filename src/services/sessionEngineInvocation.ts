@@ -15,6 +15,7 @@ import { executeCodexCode, executeCodexRpcCode } from "./codex";
 import { shutdownCodexRpc } from "./codexRpc";
 import { executeCursorCode } from "./cursorAgentExecution";
 import { executeOpencodeCode } from "./opencode";
+import { executeDeepseekCode } from "./deepseek";
 import { executeQoderCode } from "./qoder";
 
 /** 支持 oneshot 等待的引擎；Gemini 主会话派发尚未落地。 */
@@ -25,7 +26,8 @@ export function supportsSessionEngineOneshotWait(engine: SessionExecutionEngine)
     engine === "codex-rpc" ||
     engine === "cursor" ||
     engine === "opencode" ||
-    engine === "qoder"
+    engine === "qoder" ||
+    engine === "deepseek"
   );
 }
 
@@ -82,6 +84,9 @@ async function spawnSessionEngineOneshot(input: {
         undefined,
         true,
       );
+      return;
+    case "deepseek":
+      await executeDeepseekCode(repositoryPath, prompt, model, invocationKey);
       return;
     case "qoder":
       await executeQoderCode(

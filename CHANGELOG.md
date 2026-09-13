@@ -4,12 +4,22 @@
 
 ## [Unreleased]
 
+### 🤖 DeepSeek Harness 接入
+
+- **新增 DeepSeek Harness 执行环境**：接入 `dsh`（`@deepseek-ai/dsh`）作为一等执行引擎，与 Claude Code / Codex RPC / Cursor / OpenCode / Qoder 并列，可在执行环境选择器、Composer 模型选择器和 HUD 中切换。
+- **ACP 会话链路**：主会话走 `dsh --profile acp` 的常驻 ACP 进程，复用既有 ACP 传输 / 会话 / 流适配层；续接会话使用 `session/resume`，中断、结束与权限回执均按引擎路由到 `deepseek-acp:*` 事件。
+- **模型目录**：`deepseek_list_models` 通过一次性的 ACP `session/new` 读取 dsh 广告的 `model` 配置项，作为 Composer / HUD 的可选模型；模型 id 为不透明的 `provider/model`，空值表示沿用 dsh 本地配置的默认模型。
+- **Agent 注册表**：新增 `deepseek` 内置 kind（命令 `dsh`），支持探测、一键安装/更新（npm 全局）与卸载提示，配置面板展示对应安装命令。
+
 ### 🎨 交互调整
 
 - **移除会话快捷条的「推送」按钮**：快捷条不再显示「新建会话」右侧的一体化提交/推送按钮；git 提交与推送能力保留在 Git 面板，快捷动作目录同步下线 `push` 项。
 
 ### 🐛 问题修复
 
+- **DeepSeek Harness 回合不再丢输出**：ACP 回合循环原先先读 `session/prompt` 结算、后取 `session/update` 通知。dsh 只发送「已提交」的助手消息，整轮输出与结算几乎同时到达，于是所有更新都被丢掉：转写里只剩用户消息、会话却标记为成功，界面看起来「输入了但没有会话执行」。现改为先把队列中的更新（与权限请求）全部下发给 UI，再处理结算。
+- **DeepSeek 会话按 Composer 选择的模型下发**：主发送路径的 `modelArg` 解析漏了 `deepseek`，会话模型（dsh 目录项 `["provider","model"]`）会被当成 Claude 档案模型解析并替换，`session/set_config_option` 失败后静默退回 dsh 默认模型。现与 OpenCode / Qoder 一致，直接下发会话模型。
+- **DeepSeek Harness 模型选择恢复可用**：`deepseek_list_models` 之前把 `session.config_options`（`configOptions` 数组本身）当成完整 `session/new` 结果解析，模型目录恒为空，Composer / HUD 里没有任何可选模型，底栏模型名也是空白；现按数组形态解析 dsh 广告的 provider 分组目录，并在「沿用 dsh 默认模型」时显示 `默认模型（dsh 配置）`。
 - **Codex RPC 模型选择始终包含本地配置模型**：`codex_list_models` 除运行态目录与 `~/.codex/config.toml` 外，再合并各 Codex 模型档案 config 信封里声明的模型（DeepSeek / 火山等自定义 provider）。`config.toml` 被上一次执行的目录 GPT 模型整段改写后，Composer（及 HUD）模型选择器仍能选到本机配置的 DeepSeek 模型，不再依赖「新建会话」先写回配置。
 - **模型切换一次点击即生效**：Composer 模型选择器在写盘返回前就把用户点选的模型钉住（`picked`），不再用仍是旧值的会话模型 / 档案缓存反算把选择弹回上一次；档案写盘后以返回的生效模型为准（默认档案的 config 模型可能不同于菜单项）。仅当会话模型被外部改成别的值（切档 / 其它窗口 / resume）时才让位，避免把外部改动钉死。
 

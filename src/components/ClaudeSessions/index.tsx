@@ -115,6 +115,7 @@ export interface ClaudeSessionsProps {
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
   qoderAvailable?: boolean;
+  deepseekAvailable?: boolean;
   onOpenExecutionEnvironment?: () => void;
   onExecuteSession: (
     sessionId: string,
@@ -311,6 +312,7 @@ function ClaudeSessionsShell({
   geminiAvailable = false,
   opencodeAvailable = false,
   qoderAvailable = false,
+  deepseekAvailable = false,
   onOpenExecutionEnvironment,
   onExecuteSession,
   onResumeSessionFromMonitorDrawer,
@@ -922,6 +924,7 @@ function ClaudeSessionsShell({
           geminiAvailable={geminiAvailable}
           opencodeAvailable={opencodeAvailable}
           qoderAvailable={qoderAvailable}
+          deepseekAvailable={deepseekAvailable}
           onOpenExecutionEnvironment={onOpenExecutionEnvironment}
           onExecuteSession={onExecuteSession}
           onResumeSessionFromMonitorDrawer={onResumeSessionFromMonitorDrawer}

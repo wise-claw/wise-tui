@@ -9,6 +9,7 @@ import { listCodexModels, type CodexModelListItem } from "../../services/codex";
 import { listCursorModels, type CursorModelListItem } from "../../services/cursorAgent";
 import { listOpencodeModels, type OpencodeModelListItem } from "../../services/opencode";
 import { listQoderModels, type QoderModelListItem } from "../../services/qoder";
+import { listDeepSeekModels, type DeepSeekModelListItem } from "../../services/deepseek";
 import {
   applyClaudeModelProfile,
   applyClaudeRuntimeModel,
@@ -74,6 +75,12 @@ import {
   matchesQoderModelPickerFilter,
 } from "../../utils/qoderModel";
 import {
+  DEEPSEEK_DEFAULT_MODEL,
+  buildDeepSeekModelPickerOptions,
+  formatDeepSeekModelLabel,
+  isDeepSeekModelId,
+} from "../../utils/deepseekModel";
+import {
   buildClaudeModelPickerOptions,
   formatClaudeModelLabel,
   isClaudeProfileModelId,
@@ -94,12 +101,14 @@ import {
   getCachedClaudeModelPickerOptions,
   getCachedCodexModels,
   getCachedCursorModels,
+  getCachedDeepseekModels,
   getCachedOpencodeModels,
   getCachedQoderModels,
   loadExecutionEngineModelLists,
   saveCachedClaudeModelPickerOptions,
   saveCachedCodexModels,
   saveCachedCursorModels,
+  saveCachedDeepseekModels,
   saveCachedOpencodeModels,
   saveCachedQoderModels,
 } from "../../services/executionEngineModelListCache";
@@ -253,11 +262,17 @@ function ComposerModelPickerImpl({
   const isCursorEngine = sessionExecutionEngine === "cursor";
   const isOpencodeEngine = sessionExecutionEngine === "opencode";
   const isQoderEngine = sessionExecutionEngine === "qoder";
+  const isDeepseekEngine = sessionExecutionEngine === "deepseek";
   const isCodexEngine = sessionExecutionEngine === "codex" || sessionExecutionEngine === "codex-rpc";
   const isClaudeEngine = sessionExecutionEngine === "claude";
   /** Cursor / OpenCode / Qoder / Codex / Claude：Composer 快速选择模型；Codex / Claude 另有「管理档案」入口。 */
   const isSelectOnlyEngine =
-    isCursorEngine || isOpencodeEngine || isQoderEngine || isCodexEngine || isClaudeEngine;
+    isCursorEngine ||
+    isOpencodeEngine ||
+    isQoderEngine ||
+    isDeepseekEngine ||
+    isCodexEngine ||
+    isClaudeEngine;
   const profileEngine: ModelProfileEngine | null = isCodexEngine
     ? "codex"
     : isClaudeEngine
@@ -280,6 +295,9 @@ function ComposerModelPickerImpl({
   );
   const [qoderModels, setQoderModels] = useState<QoderModelListItem[] | null>(
     () => getCachedQoderModels(),
+  );
+  const [deepseekModels, setDeepseekModels] = useState<DeepSeekModelListItem[] | null>(
+    () => getCachedDeepseekModels(),
   );
   const [profileStoreRevision, setProfileStoreRevision] = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -373,11 +391,23 @@ function ComposerModelPickerImpl({
       if (cached) setQoderModels(cached);
       return;
     }
+    if (isDeepseekEngine) {
+      const cached = getCachedDeepseekModels();
+      if (cached) setDeepseekModels(cached);
+      return;
+    }
     if (isClaudeEngine) {
       const cached = getCachedClaudeModelPickerOptions();
       if (cached) setClaudePicker(cached);
     }
-  }, [isClaudeEngine, isCodexEngine, isCursorEngine, isOpencodeEngine, isQoderEngine]);
+  }, [
+    isClaudeEngine,
+    isCodexEngine,
+    isCursorEngine,
+    isOpencodeEngine,
+    isQoderEngine,
+    isDeepseekEngine,
+  ]);
 
   const refreshClaudeModelPicker = useCallback(() => {
     const sequence = ++refreshSequence.current;
@@ -405,13 +435,28 @@ function ComposerModelPickerImpl({
         await update(listOpencodeModels, saveCachedOpencodeModels, getCachedOpencodeModels, setOpencodeModels);
       } else if (isQoderEngine) {
         await update(listQoderModels, saveCachedQoderModels, getCachedQoderModels, setQoderModels);
+      } else if (isDeepseekEngine) {
+        await update(
+          listDeepSeekModels,
+          saveCachedDeepseekModels,
+          getCachedDeepseekModels,
+          setDeepseekModels,
+        );
       } else if (isClaudeEngine) {
         await update(() => getClaudeModelPickerOptions(session.repositoryPath),
           saveCachedClaudeModelPickerOptions, getCachedClaudeModelPickerOptions, setClaudePicker);
       }
     };
     void refresh().catch(() => undefined);
-  }, [isCodexEngine, isCursorEngine, isOpencodeEngine, isQoderEngine, isClaudeEngine, session.repositoryPath]);
+  }, [
+    isCodexEngine,
+    isCursorEngine,
+    isOpencodeEngine,
+    isQoderEngine,
+    isDeepseekEngine,
+    isClaudeEngine,
+    session.repositoryPath,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -509,6 +554,26 @@ function ComposerModelPickerImpl({
     session.id,
     session.model,
     qoderModels,
+    modelDefaultsRevision,
+    syncModelIfNeeded,
+  ]);
+
+  useEffect(() => {
+    if (!isDeepseekEngine || !modelDefaultsRevision) return;
+    const fromSession = session.model?.trim();
+    if (fromSession && (fromSession === getCachedExecutionEngineDefaultModel("deepseek") ||
+      isDeepSeekModelId(fromSession, deepseekModels ?? undefined))) {
+      syncModelIfNeeded(fromSession);
+      return;
+    }
+    // 没有已保存的模型时留空，由 dsh 使用其本地配置的默认模型。
+    const savedDefault = getCachedExecutionEngineDefaultModel("deepseek")?.trim() || "";
+    syncModelIfNeeded(savedDefault || DEEPSEEK_DEFAULT_MODEL);
+  }, [
+    isDeepseekEngine,
+    session.id,
+    session.model,
+    deepseekModels,
     modelDefaultsRevision,
     syncModelIfNeeded,
   ]);
@@ -770,6 +835,27 @@ function ComposerModelPickerImpl({
       }
       return opts;
     }
+    if (isDeepseekEngine) {
+      const opts = buildDeepSeekModelPickerOptions(deepseekModels ?? []);
+      const seen = new Set(opts.map((o) => o.value));
+      const push = (value: string, displayName?: string | null) => {
+        const v = value.trim();
+        if (!v || seen.has(v)) return;
+        seen.add(v);
+        opts.push({ value: v, label: formatDeepSeekModelLabel(v, displayName) });
+      };
+      const sessionModel = session.model?.trim();
+      if (sessionModel && isDeepSeekModelId(sessionModel, deepseekModels ?? undefined)) {
+        const known = deepseekModels?.find((item) => item.id === sessionModel);
+        push(sessionModel, known?.displayName);
+      }
+      const currentModel = model.trim();
+      if (currentModel && isDeepSeekModelId(currentModel, deepseekModels ?? undefined)) {
+        const known = deepseekModels?.find((item) => item.id === currentModel);
+        push(currentModel, known?.displayName);
+      }
+      return opts;
+    }
     if (isClaudeEngine) {
       // settings.json 配置模型为权威列表；命中配置模型的档案标注公司并携带 profileId。
       return buildClaudeModelPickerOptions({
@@ -810,11 +896,13 @@ function ComposerModelPickerImpl({
     isCursorEngine,
     isOpencodeEngine,
     isQoderEngine,
+    isDeepseekEngine,
     isCodexEngine,
     isClaudeEngine,
     cursorModels,
     opencodeModels,
     qoderModels,
+    deepseekModels,
     codexModels,
     claudePicker,
     profileStoreRevision,
@@ -939,6 +1027,7 @@ function ComposerModelPickerImpl({
         return "默认";
       }
       if (isClaudeEngine) return formatClaudeModelLabel(model);
+      if (isDeepseekEngine) return formatDeepSeekModelLabel(model);
       return model;
     }
     return model;
@@ -952,6 +1041,7 @@ function ComposerModelPickerImpl({
     isSelectOnlyEngine,
     isCodexEngine,
     isClaudeEngine,
+    isDeepseekEngine,
   ]);
 
   const modelDisplayTitle = formatModelProfileDropdownPartsTitle(
@@ -972,6 +1062,10 @@ function ComposerModelPickerImpl({
     }
     // 用户刚在菜单里选中的项优先：档案 active / effective 还没跟上时也不能显示成别的模型。
     if (explicitPickParts) return explicitPickParts;
+    if (isDeepseekEngine) {
+      const known = (deepseekModels ?? []).find((item) => item.id === model.trim());
+      return { company: "", modelName: formatDeepSeekModelLabel(model, known?.displayName) };
+    }
     const profileStore = getCachedModelProfileStore();
     if (profileEngine && profileStore) {
       const activeId = resolveActiveModelProfileId(profileEngine, profileStore);
@@ -1015,6 +1109,8 @@ function ComposerModelPickerImpl({
     profileStoreRevision,
     sessionExecutionEngine,
     isClaudeEngine,
+    isDeepseekEngine,
+    deepseekModels,
   ]);
 
   const modelBarTitle = activeProxyRoute?.tooltip ?? modelDisplayTitle;
@@ -1249,7 +1345,9 @@ function ComposerModelPickerImpl({
           ? "切换 Codex 模型"
           : isClaudeEngine
             ? "切换 Claude 模型"
-            : "切换 OpenCode 模型";
+            : isDeepseekEngine
+              ? "切换 DeepSeek 模型"
+              : "切换 OpenCode 模型";
     const filterPlaceholder = isCursorEngine
       ? "过滤 Cursor 模型…"
       : isQoderEngine
@@ -1258,7 +1356,9 @@ function ComposerModelPickerImpl({
           ? "过滤 Codex 模型…"
           : isClaudeEngine
             ? "过滤 Claude 模型…"
-            : "过滤 OpenCode 模型…";
+            : isDeepseekEngine
+              ? "过滤 DeepSeek 模型…"
+              : "过滤 OpenCode 模型…";
     return (
       <div className="app-composer-model-picker">
         <div className="app-composer-model-picker__row">

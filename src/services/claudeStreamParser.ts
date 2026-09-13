@@ -232,6 +232,7 @@ function streamPartIdFromBlock(block: Record<string, unknown>): string | undefin
 const CODEX_SESSION_ID_FIELDS = ["sessionId", "session_id"] as const;
 const OPENCODE_SESSION_ID_FIELDS = ["sessionId", "session_id"] as const;
 const QODER_SESSION_ID_FIELDS = ["sessionId", "session_id"] as const;
+const DEEPSEEK_SESSION_ID_FIELDS = ["sessionId", "session_id"] as const;
 const CURSOR_AGENT_ID_FIELDS = ["agentId", "agent_id"] as const;
 
 export function extractCodexResumeSessionIdFromParsed(obj: unknown): string | null {
@@ -256,6 +257,14 @@ export function extractQoderResumeSessionIdFromParsed(obj: unknown): string | nu
 
 export function shouldClearQoderResumeSessionFromParsed(obj: unknown): boolean {
   return shouldClearExternalAgentIdFromParsed(obj, "qoder_session", QODER_SESSION_ID_FIELDS);
+}
+
+export function extractDeepseekResumeSessionIdFromParsed(obj: unknown): string | null {
+  return extractExternalAgentIdFromParsed(obj, "deepseek_session", DEEPSEEK_SESSION_ID_FIELDS);
+}
+
+export function shouldClearDeepseekResumeSessionFromParsed(obj: unknown): boolean {
+  return shouldClearExternalAgentIdFromParsed(obj, "deepseek_session", DEEPSEEK_SESSION_ID_FIELDS);
 }
 
 export function extractCursorAgentIdFromParsed(obj: unknown): string | null {
@@ -311,6 +320,14 @@ export function extractQoderResumeSessionIdFromStreamLine(line: string): string 
 
 export function shouldClearQoderResumeSessionFromStreamLine(line: string): boolean {
   return shouldClearQoderResumeSessionFromParsed(safeJsonParse(line));
+}
+
+export function extractDeepseekResumeSessionIdFromStreamLine(line: string): string | null {
+  return extractDeepseekResumeSessionIdFromParsed(safeJsonParse(line));
+}
+
+export function shouldClearDeepseekResumeSessionFromStreamLine(line: string): boolean {
+  return shouldClearDeepseekResumeSessionFromParsed(safeJsonParse(line));
 }
 
 export function extractCursorAgentIdFromStreamLine(line: string): string | null {

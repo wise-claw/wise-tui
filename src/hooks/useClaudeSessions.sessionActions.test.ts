@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { ClaudeSession } from "../types";
 import type { SessionActionHandlersDeps } from "./useClaudeSessions.sessionActions";
 import { beginSessionTurn, endSessionTurn, hasActiveSessionTurn, observeSessionTurnStatus, subscribeSessionTurns, resetSessionTurnStoreForTests } from "../stores/sessionTurnStore";
+import { seedModelProfileStoreCache } from "../stores/modelProfileStoreCache";
 
 mock.module("@tauri-apps/api/core", () => ({
   invoke: async () => undefined,
@@ -185,6 +186,36 @@ describe("session dispatch lifecycle", () => {
     const { deps, actions } = harness();
     await actions.sendMessageToSession("tab", "  /compact  ");
     expect(deps.runClaudeTurnWithContextGuard).toHaveBeenCalledWith(expect.objectContaining({ prompt: "/compact" }));
+  });
+
+  test("deepseek keeps the dsh catalog model instead of the Claude profile model", async () => {
+    const { deps } = harness();
+    seedModelProfileStoreCache({
+      profiles: [],
+      activeProfileId: null,
+      activeCodexProfileId: null,
+      activeOpencodeProfileId: null,
+      effectiveModel: "claude-opus-4-8",
+      effectiveCodexModel: null,
+      effectiveOpencodeModel: null,
+    });
+    const dshModel = '["deepseek-official","deepseek-flash"]';
+    deps.sessionsRef.current[0] = {
+      ...deps.sessionsRef.current[0]!,
+      executionEngine: "deepseek",
+      model: dshModel,
+    };
+    deps.resolveSessionExecutionEngine = () => "deepseek";
+    const run = deferred();
+    deps.runClaudeTurnWithContextGuard = mock(() => run.promise);
+    const actions = createSessionActionHandlers(deps);
+    actions.executeSession("tab", "hello");
+    await tick();
+    expect(deps.runClaudeTurnWithContextGuard).toHaveBeenCalledWith(
+      expect.objectContaining({ modelArg: dshModel }),
+    );
+    run.resolve();
+    await tick();
   });
 
 });

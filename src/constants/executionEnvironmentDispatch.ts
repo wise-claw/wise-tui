@@ -13,6 +13,7 @@ export const EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES: Record<SessionExecution
   codex: SESSION_EXECUTION_ENGINE_LABELS.codex.title,
   "codex-rpc": SESSION_EXECUTION_ENGINE_LABELS["codex-rpc"].title,
   cursor: SESSION_EXECUTION_ENGINE_LABELS.cursor.title,
+  deepseek: SESSION_EXECUTION_ENGINE_LABELS.deepseek.title,
   gemini: SESSION_EXECUTION_ENGINE_LABELS.gemini.title,
   opencode: SESSION_EXECUTION_ENGINE_LABELS.opencode.title,
   qoder: SESSION_EXECUTION_ENGINE_LABELS.qoder.title,

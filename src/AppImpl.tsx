@@ -59,6 +59,7 @@ import {
 } from "./utils/pruneWorkflowTaskAuxMaps";
 import { useAgentRegistryCodexAvailable } from "./hooks/useAgentRegistryCodexAvailable";
 import { useAgentRegistryCursorAvailable } from "./hooks/useAgentRegistryCursorAvailable";
+import { useAgentRegistryDeepseekAvailable } from "./hooks/useAgentRegistryDeepseekAvailable";
 import { useAgentRegistryGeminiAvailable } from "./hooks/useAgentRegistryGeminiAvailable";
 import { useAgentRegistryOpencodeAvailable } from "./hooks/useAgentRegistryOpencodeAvailable";
 import { useAgentRegistryQoderAvailable } from "./hooks/useAgentRegistryQoderAvailable";
@@ -407,6 +408,16 @@ export default function App() {
     void import("./services/opencodeAcpControlBridge").then(
       async ({ startOpencodeAcpControlBridge }) => {
         const disposer = await startOpencodeAcpControlBridge();
+        if (disposed) {
+          disposer();
+          return;
+        }
+        stops.push(disposer);
+      },
+    );
+    void import("./services/deepseekAcpControlBridge").then(
+      async ({ startDeepseekAcpControlBridge }) => {
+        const disposer = await startDeepseekAcpControlBridge();
         if (disposed) {
           disposer();
           return;
@@ -883,6 +894,7 @@ export default function App() {
   const geminiAvailable = useAgentRegistryGeminiAvailable();
   const opencodeAvailable = useAgentRegistryOpencodeAvailable();
   const qoderAvailable = useAgentRegistryQoderAvailable();
+  const deepseekAvailable = useAgentRegistryDeepseekAvailable();
 
   const handleUpdateEmployeeExecutionEngine = useCallback(
     async (employeeId: string, engine: import("./types").SessionExecutionEngine) => {
@@ -1391,6 +1403,7 @@ export default function App() {
           geminiAvailable,
           opencodeAvailable,
           qoderAvailable,
+          deepseekAvailable,
           createSession,
           executeSession: (workerTabId, prompt, opts) => executeSession(workerTabId, prompt, opts),
           appendSystemMessage,
@@ -1424,6 +1437,7 @@ export default function App() {
       geminiAvailable,
       opencodeAvailable,
       qoderAvailable,
+      deepseekAvailable,
       createSession,
       executeSession,
       appendSystemMessage,
@@ -3446,6 +3460,7 @@ export default function App() {
         geminiAvailable,
         opencodeAvailable,
         qoderAvailable,
+        deepseekAvailable,
         onOpenExecutionEnvironment: handleOpenExecutionEnvironment,
         onExecuteSession: handleComposerExecuteWithRepositoryMention,
         onResumeSessionFromMonitorDrawer: resumeSessionFromMonitorDrawer,

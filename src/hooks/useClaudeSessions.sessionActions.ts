@@ -150,6 +150,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
         closeStreamingSession(realSessionId ?? sessionId),
         import("../services/cursorAcp").then(({ shutdownCursorAcp }) => shutdownCursorAcp(sessionId)),
         import("../services/opencodeAcp").then(({ shutdownOpencodeAcp }) => shutdownOpencodeAcp(sessionId)),
+        import("../services/deepseekAcp").then(({ shutdownDeepseekAcp }) => shutdownDeepseekAcp(sessionId)),
       ]);
     })().finally(() => {
       if (executionTeardownByTabRef.current.get(sessionId) === pending) {
@@ -313,15 +314,18 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     assistantStreamTextByTabRef.current.set(tabSessionId, "");
 
     const spawnEngine = resolveSessionExecutionEngine(spawnSession);
-    // OpenCode / Cursor / Codex / Qoder / Claude：Composer 直接切换模型，以 session.model 为准。
+    // OpenCode / Cursor / Codex / Qoder / DeepSeek / Claude：Composer 直接切换模型，以 session.model 为准。
     // Claude 与 Codex 一致：会话显式选择的模型优先；仅当会话无模型时才回退 Claude 档案。
+    // DeepSeek Harness 的模型 id 是 dsh 目录项（JSON 数组字符串），一旦落到 Claude 档案
+    // 解析就会被换成 Claude 模型，set_config_option 失败后静默退回 dsh 默认模型。
     const sessionModelTrimmed = spawnSession.model?.trim() || undefined;
     const modelArg =
       spawnEngine === "opencode" ||
       spawnEngine === "cursor" ||
       spawnEngine === "codex" ||
       spawnEngine === "codex-rpc" ||
-      spawnEngine === "qoder"
+      spawnEngine === "qoder" ||
+      spawnEngine === "deepseek"
         ? sessionModelTrimmed
         : spawnEngine === "claude"
           ? sessionModelTrimmed ??

@@ -76,6 +76,7 @@ interface Props {
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
   qoderAvailable?: boolean;
+  deepseekAvailable?: boolean;
   /** 已预约在本轮 Claude 结束后自动发送队首 */
   deferredSendQueued?: boolean;
   onPin: (id: string) => void;
@@ -115,6 +116,7 @@ export function PendingTaskQueuePanel({
   geminiAvailable = false,
   opencodeAvailable = false,
   qoderAvailable = false,
+  deepseekAvailable = false,
   deferredSendQueued = false,
   onPin,
   onRemove,
@@ -363,6 +365,7 @@ export function PendingTaskQueuePanel({
               geminiAvailable={geminiAvailable}
               opencodeAvailable={opencodeAvailable}
               qoderAvailable={qoderAvailable}
+              deepseekAvailable={deepseekAvailable}
               sessionExecutionEngine={sessionExecutionEngine}
               canSend={editText.trim().length > 0}
               onMessageSend={(plain) => saveEdit(plain)}

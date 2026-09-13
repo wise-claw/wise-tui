@@ -6,18 +6,21 @@ import { useAgentRegistryCodexAvailable } from "../../hooks/useAgentRegistryCode
 import { useAgentRegistryCursorAvailable } from "../../hooks/useAgentRegistryCursorAvailable";
 import { useAgentRegistryGeminiAvailable } from "../../hooks/useAgentRegistryGeminiAvailable";
 import { useAgentRegistryOpencodeAvailable } from "../../hooks/useAgentRegistryOpencodeAvailable";
+import { useAgentRegistryDeepseekAvailable } from "../../hooks/useAgentRegistryDeepseekAvailable";
 import { useAgentRegistryQoderAvailable } from "../../hooks/useAgentRegistryQoderAvailable";
 import { getClaudeModelPickerOptions, type ClaudeModelPickerOptions } from "../../services/claude";
 import {
   getCachedClaudeModelPickerOptions,
   getCachedCodexModels,
   getCachedCursorModels,
+  getCachedDeepseekModels,
   getCachedOpencodeModels,
   getCachedQoderModels,
   loadExecutionEngineModelLists,
   saveCachedClaudeModelPickerOptions,
   saveCachedCodexModels,
   saveCachedCursorModels,
+  saveCachedDeepseekModels,
   saveCachedOpencodeModels,
   saveCachedQoderModels,
 } from "../../services/executionEngineModelListCache";
@@ -25,6 +28,8 @@ import { listCodexModels, type CodexModelListItem } from "../../services/codex";
 import { listCursorModels, type CursorModelListItem } from "../../services/cursorAgent";
 import { listOpencodeModels, type OpencodeModelListItem } from "../../services/opencode";
 import { listQoderModels, type QoderModelListItem } from "../../services/qoder";
+import { listDeepSeekModels, type DeepSeekModelListItem } from "../../services/deepseek";
+import { buildDeepSeekModelPickerOptions } from "../../utils/deepseekModel";
 import { getClaudeModelProfileStore } from "../../services/claudeModelProfiles";
 import { getCachedModelProfileStore } from "../../stores/modelProfileStoreCache";
 import type { ClaudeModelProfile } from "../../types/claudeModelProfile";
@@ -101,12 +106,14 @@ function isEngineAvailable(
   geminiAvailable: boolean,
   opencodeAvailable: boolean,
   qoderAvailable: boolean,
+  deepseekAvailable: boolean,
 ): boolean {
   if (key === "codex" || key === "codex-rpc") return codexAvailable;
   if (key === "cursor") return cursorAvailable;
   if (key === "gemini") return geminiAvailable;
   if (key === "opencode") return opencodeAvailable;
   if (key === "qoder") return qoderAvailable;
+  if (key === "deepseek") return deepseekAvailable;
   return true;
 }
 
@@ -150,6 +157,7 @@ interface HudModelListSources {
   cursorModels: readonly CursorModelListItem[];
   opencodeModels: readonly OpencodeModelListItem[];
   qoderModels: readonly QoderModelListItem[];
+  deepseekModels: readonly DeepSeekModelListItem[];
 }
 
 function collectHudModelOptions(
@@ -190,6 +198,12 @@ function collectHudModelOptions(
   if (engine === "qoder") {
     return ensureHudCurrentModelOption(
       buildQoderModelPickerOptions(sources.qoderModels),
+      current,
+    );
+  }
+  if (engine === "deepseek") {
+    return ensureHudCurrentModelOption(
+      buildDeepSeekModelPickerOptions(sources.deepseekModels),
       current,
     );
   }
@@ -270,6 +284,9 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
   const [qoderModels, setQoderModels] = useState<readonly QoderModelListItem[]>(
     () => getCachedQoderModels() ?? [],
   );
+  const [deepseekModels, setDeepseekModels] = useState<readonly DeepSeekModelListItem[]>(
+    () => getCachedDeepseekModels() ?? [],
+  );
   const pointerDownTargetRef = useRef<EventTarget | null>(null);
   const engine = optimisticEngine ?? snapshot.engine;
   const sessionModel = optimisticModel ?? snapshot.composerSession?.model ?? "";
@@ -278,6 +295,7 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
   const geminiAvailable = useAgentRegistryGeminiAvailable();
   const opencodeAvailable = useAgentRegistryOpencodeAvailable();
   const qoderAvailable = useAgentRegistryQoderAvailable();
+  const deepseekAvailable = useAgentRegistryDeepseekAvailable();
   const showTerminalOpen = showRepositoryTerminalOpenMenuItem();
   const terminalActionLabel = repositoryTerminalOpenMenuLabel();
   const terminalIconSrc = repositoryTerminalOpenAppIcon();
@@ -407,6 +425,15 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
             void saveCachedQoderModels(models);
             setQoderModels(models);
           }
+          return;
+        }
+        if (engine === "deepseek") {
+          const models = await listDeepSeekModels();
+          if (cancelled) return;
+          if (models.length > 0) {
+            void saveCachedDeepseekModels(models);
+            setDeepseekModels(models);
+          }
         }
       } catch {
         /* 保留已hydrate的缓存列表 */
@@ -426,11 +453,13 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
         cursorModels,
         opencodeModels,
         qoderModels,
+        deepseekModels,
       }),
     [
       claudePicker,
       codexModels,
       cursorModels,
+      deepseekModels,
       engine,
       opencodeModels,
       profiles,
@@ -453,6 +482,7 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
         geminiAvailable,
         opencodeAvailable,
         qoderAvailable,
+        deepseekAvailable,
       );
     }).map((key) => ({
       key,
@@ -469,6 +499,7 @@ export function HudContextPicker({ snapshot, onOverlayWantedChange }: HudContext
     geminiAvailable,
     opencodeAvailable,
     qoderAvailable,
+    deepseekAvailable,
   ]);
 
   const repoItems = useMemo(

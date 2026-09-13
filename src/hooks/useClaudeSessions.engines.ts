@@ -10,6 +10,7 @@ import {
 } from "../services/claude";
 import { executeCodexCode, executeCodexRpcCode } from "../services/codex";
 import { executeOpencodeCode } from "../services/opencode";
+import { executeDeepseekCode } from "../services/deepseek";
 import { executeQoderCode } from "../services/qoder";
 import { executeCursorCode } from "../services/cursorAgentExecution";
 import { getCachedDefaultExecutionEngine } from "../services/wiseDefaultConfigStore";
@@ -22,6 +23,8 @@ import { resolveOpencodeExecModelId } from "../utils/opencodeModel";
 import { resolveOpencodeResumeSessionId } from "../utils/opencodeSessionId";
 import { resolveQoderResumeSessionId } from "../utils/qoderSessionId";
 import { formatQoderModelLabel, resolveQoderExecModelId } from "../utils/qoderModel";
+import { formatDeepSeekModelLabel, resolveDeepseekExecModelId } from "../utils/deepseekModel";
+import { resolveDeepseekResumeSessionId } from "../utils/deepseekSessionId";
 import { getCachedModelProfileStore } from "../stores/modelProfileStoreCache";
 import {
   getCodexRpcReasoningEffort,
@@ -622,6 +625,83 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     }
   };
 
+  const runDeepseekOneshotWithInvocation = async (params: {
+    tabSessionId: string;
+    turnNonce: number;
+    repositoryPath: string;
+    prompt: string;
+    modelArg: string | undefined;
+    deepseekResumeSessionId?: string | null;
+    forceNewClaudeConversation?: boolean;
+  }) => {
+    const {
+      tabSessionId,
+      turnNonce,
+      repositoryPath,
+      prompt,
+      modelArg,
+      deepseekResumeSessionId,
+    } = params;
+    const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
+    await waitForStreamRuntime(streamRuntimeRef, signal);
+    assertCanSpawn(tabSessionId, signal);
+    notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
+    const rt = streamRuntimeRef.current;
+    let detach: (() => void) | null = null;
+    const inv = crypto.randomUUID();
+    if (rt) {
+      try {
+        detach = await attachClaudeInvocationStream(
+          inv,
+          tabSessionId,
+          rt,
+          turnNonce,
+          () => {
+            claudeInvocationInflightRef.current.delete(inv);
+          },
+          (tabId, bound) => expectedTurnNonceByTabIdRef.current.get(tabId) ?? bound,
+          keepInvocationStreamAfterTurnComplete,
+        );
+        claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
+      } catch {
+        detach = null;
+      }
+    }
+    try {
+      assertCanSpawn(tabSessionId, signal);
+    } catch (error) {
+      detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
+      throw error;
+    }
+    const invocationKey = detach ? inv : undefined;
+    const deepseekModel = resolveDeepseekExecModelId(modelArg);
+    const deepseekModelLabel = formatDeepSeekModelLabel(modelArg);
+    const resumeLabel = deepseekResumeSessionId?.trim() ? "续接会话" : "新会话";
+    commitSessions((prev) =>
+      appendSystemMessageBySessionId(
+        prev,
+        tabSessionId,
+        `DeepSeek Harness 执行中（${resumeLabel}，模型：${deepseekModelLabel}）…`,
+      ),
+    );
+    try {
+      assertCanSpawn(tabSessionId, signal);
+      await executeDeepseekCode(
+        repositoryPath,
+        prompt,
+        deepseekModel,
+        invocationKey,
+        tabSessionId,
+        deepseekResumeSessionId ?? undefined,
+      );
+    } catch (e) {
+      detach?.();
+      claudeInvocationInflightRef.current.delete(inv);
+      throw e;
+    }
+  };
+
   const runCursorOneshotWithInvocation = async (params: {
     tabSessionId: string;
     turnNonce: number;
@@ -948,6 +1028,22 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       });
       return;
     }
+    if (engine === "deepseek") {
+      const deepseekResumeSessionId =
+        params.forceNewClaudeConversation || !session
+          ? null
+          : resolveDeepseekResumeSessionId(session, params.tabSessionId, sessionIdMapRef.current);
+      await runDeepseekOneshotWithInvocation({
+        tabSessionId: params.tabSessionId,
+        turnNonce: params.turnNonce,
+        repositoryPath: params.repositoryPath,
+        prompt: params.prompt,
+        modelArg: params.modelArg,
+        deepseekResumeSessionId,
+        forceNewClaudeConversation: params.forceNewClaudeConversation,
+      });
+      return;
+    }
     if (engine === "qoder") {
       const qoderResumeSessionId =
         params.forceNewClaudeConversation || !session
@@ -977,6 +1073,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     runCodexRpcOneshotWithInvocation,
     runOpencodeOneshotWithInvocation,
     runQoderOneshotWithInvocation,
+    runDeepseekOneshotWithInvocation,
     runCursorOneshotWithInvocation,
     runClaudeStreamingWithInvocation,
     invokeClaudeTurn,

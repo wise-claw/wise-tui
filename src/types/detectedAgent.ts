@@ -6,6 +6,7 @@
 export type DetectedAgentKind =
   | "claude"
   | "codex"
+  | "deepseek"
   | "gemini"
   | "opencode"
   | "qoder"
@@ -27,6 +28,7 @@ type SharedFields = {
 type KindFields = {
   claude: { command: "claude" };
   codex: { command: "codex" };
+  deepseek: { command: "dsh" };
   gemini: { command: "gemini" };
   opencode: { command: "opencode" };
   qoder: { command: "qodercli" };

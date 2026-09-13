@@ -16,6 +16,7 @@ interface PickerSectionProps {
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
   qoderAvailable?: boolean;
+  deepseekAvailable?: boolean;
   onEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
 }
@@ -32,12 +33,14 @@ function isEngineAvailable(
   geminiAvailable: boolean,
   opencodeAvailable: boolean,
   qoderAvailable: boolean,
+  deepseekAvailable: boolean,
 ): boolean {
   if (key === "codex" || key === "codex-rpc") return codexAvailable;
   if (key === "cursor") return cursorAvailable;
   if (key === "gemini") return geminiAvailable;
   if (key === "opencode") return opencodeAvailable;
   if (key === "qoder") return qoderAvailable;
+  if (key === "deepseek") return deepseekAvailable;
   return true;
 }
 
@@ -57,6 +60,7 @@ export function buildSessionExecutionEngineMenuItems({
   geminiAvailable = false,
   opencodeAvailable = false,
   qoderAvailable = false,
+  deepseekAvailable = false,
   engines,
 }: PickerSectionProps & {
   engines?: readonly SessionExecutionEngine[];
@@ -66,7 +70,7 @@ export function buildSessionExecutionEngineMenuItems({
     .filter((key) => {
       // 只显示已探测到或已安装的引擎
       if (key === "claude") return true; // Claude 始终可用
-      return isEngineAvailable(key, codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, qoderAvailable);
+      return isEngineAvailable(key, codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, qoderAvailable, deepseekAvailable);
     })
     .map((key) => {
     const itemMeta = SESSION_EXECUTION_ENGINE_LABELS[key];
@@ -183,6 +187,7 @@ export function SessionExecutionEngineChip({
   geminiAvailable = false,
   opencodeAvailable = false,
   qoderAvailable = false,
+  deepseekAvailable = false,
   onEngineChange,
   onOpenExecutionEnvironment,
   disabled = false,
@@ -198,6 +203,7 @@ export function SessionExecutionEngineChip({
     geminiAvailable,
     opencodeAvailable,
     qoderAvailable,
+    deepseekAvailable,
   );
 
   const menuItems = useMemo(

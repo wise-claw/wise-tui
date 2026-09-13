@@ -3,6 +3,7 @@ import { normalizeSessionExecutionEngine } from "../constants/sessionExecutionEn
 import { CURSOR_SDK_DEFAULT_MODEL } from "../constants/cursorSdk";
 import { OPENCODE_DEFAULT_MODEL } from "./opencodeModel";
 import { QODER_DEFAULT_MODEL } from "./qoderModel";
+import { DEEPSEEK_DEFAULT_MODEL } from "./deepseekModel";
 import { normalizeClaudeReasoningEffort } from "../constants/claudeReasoningEffort";
 import { normalizeCodexReasoningEffort } from "../constants/codexReasoningEffort";
 import {
@@ -40,6 +41,7 @@ export function engineDefaultComposerModel(engine: SessionExecutionEngine): stri
   if (engine === "cursor") return CURSOR_SDK_DEFAULT_MODEL;
   if (engine === "opencode") return OPENCODE_DEFAULT_MODEL;
   if (engine === "qoder") return QODER_DEFAULT_MODEL;
+  if (engine === "deepseek") return DEEPSEEK_DEFAULT_MODEL;
   return "sonnet";
 }
 

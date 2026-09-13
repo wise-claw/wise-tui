@@ -1,4 +1,8 @@
-//! Tauri commands for OpenCode ACP integration (persistent per-tab sessions).
+//! Tauri commands for ACP-based engines (OpenCode `opencode acp`, DeepSeek Harness `dsh --profile acp`).
+//!
+//! Both engines share the whole turn pipeline (persistent per-tab session, prompt loop,
+//! stream adaptation, permission bridge); `AcpEngine` supplies the engine-specific
+//! binary, argv, resume method, and event channel names.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -9,30 +13,54 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
 
+use crate::acp_engine::AcpEngine;
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
 use crate::cursor_disk::{append_cursor_session_line, build_cursor_user_turn_line};
 use crate::opencode_acp_session::OpencodeAcpSession;
 use crate::opencode_acp_stream_adapter::{
-    adapt_opencode_acp_notification_to_stream_lines, auto_approve_option_id,
-    emit_opencode_acp_complete, emit_opencode_acp_output_line, opencode_acp_bind_line,
-    opencode_acp_init_line, permission_event_payload,
+    acp_bind_line, adapt_acp_notification_to_stream_lines, auto_approve_option_id,
+    emit_acp_complete, emit_opencode_acp_output_line, opencode_acp_init_line,
+    permission_event_payload, resolve_permission_decision_result,
 };
 use crate::opencode_acp_types::{
     permission_cancelled_result, permission_selected_result, AcpServerRequest, JsonRpcId,
     JsonRpcMessage,
 };
-use crate::opencode_binary::find_opencode_binary;
 
-/// Active ACP sessions keyed by Wise tab session id.
+/// Per-engine persistent ACP session registry keyed by Wise tab session id.
 #[derive(Default, Clone)]
-pub(crate) struct OpencodeAcpSessionStore {
+pub(crate) struct AcpSessionStore {
     pub(crate) sessions: Arc<TokioMutex<HashMap<String, Arc<TokioMutex<OpencodeAcpSession>>>>>,
     /// Tabs currently running a prompt turn (prevents overlapping prompts).
     pub(crate) busy: Arc<TokioMutex<HashMap<String, bool>>>,
     /// Monotonic turn epoch per tab. Interrupt / newer execute bumps this so a
     /// superseded prompt loop must not clear `busy` or emit complete for the new turn.
     pub(crate) turn_epoch: Arc<TokioMutex<HashMap<String, u64>>>,
+    /// Last advertised permission options per request id, so a UI decision can be
+    /// resolved against the exact option ids the agent expects.
+    pub(crate) permission_options: Arc<TokioMutex<HashMap<String, Value>>>,
 }
+
+/// Tauri state for the OpenCode engine (distinct type so it coexists with DeepSeek).
+#[derive(Default, Clone)]
+pub(crate) struct OpencodeAcpSessionStore(pub(crate) AcpSessionStore);
+
+/// Tauri state for the DeepSeek Harness engine.
+#[derive(Default, Clone)]
+pub(crate) struct DeepseekAcpSessionStore(pub(crate) AcpSessionStore);
+
+macro_rules! impl_acp_store_deref {
+    ($ty:ty) => {
+        impl std::ops::Deref for $ty {
+            type Target = AcpSessionStore;
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+    };
+}
+impl_acp_store_deref!(OpencodeAcpSessionStore);
+impl_acp_store_deref!(DeepseekAcpSessionStore);
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,25 +84,84 @@ pub(crate) struct ExecuteOpencodeAcpParams {
     auto_approve_permissions: bool,
 }
 
-fn default_true() -> bool {
-    true
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ExecuteDeepseekAcpParams {
+    prompt: String,
+    #[serde(default)]
+    project_path: String,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    invocation_key: Option<String>,
+    #[serde(default)]
+    tab_session_id: Option<String>,
+    /// Previously bound DeepSeek Harness ACP session id for session/resume.
+    #[serde(default)]
+    deepseek_session_id: Option<String>,
+    /// When true (default), auto-allow tool permissions.
+    #[serde(default = "default_true")]
+    auto_approve_permissions: bool,
+}
+
+/// Engine-neutral turn parameters shared by every ACP command entry point.
+#[derive(Debug, Clone)]
+pub(crate) struct AcpTurnParams {
+    pub prompt: String,
+    pub project_path: String,
+    pub model: Option<String>,
+    pub invocation_key: Option<String>,
+    pub tab_session_id: Option<String>,
+    pub resume_session_id: Option<String>,
+    pub mode: Option<String>,
+    pub auto_approve_permissions: bool,
+}
+
+impl From<ExecuteOpencodeAcpParams> for AcpTurnParams {
+    fn from(p: ExecuteOpencodeAcpParams) -> Self {
+        Self {
+            prompt: p.prompt,
+            project_path: p.project_path,
+            model: p.model,
+            invocation_key: p.invocation_key,
+            tab_session_id: p.tab_session_id,
+            resume_session_id: p.opencode_session_id,
+            mode: p.mode,
+            auto_approve_permissions: p.auto_approve_permissions,
+        }
+    }
+}
+
+impl From<ExecuteDeepseekAcpParams> for AcpTurnParams {
+    fn from(p: ExecuteDeepseekAcpParams) -> Self {
+        Self {
+            prompt: p.prompt,
+            project_path: p.project_path,
+            model: p.model,
+            invocation_key: p.invocation_key,
+            tab_session_id: p.tab_session_id,
+            resume_session_id: p.deepseek_session_id,
+            mode: None,
+            auto_approve_permissions: p.auto_approve_permissions,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct InterruptOpencodeAcpParams {
-    session_id: String,
+pub(crate) struct InterruptAcpParams {
+    pub session_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ShutdownOpencodeAcpParams {
-    session_id: String,
+pub(crate) struct ShutdownAcpParams {
+    pub session_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RespondOpencodeAcpPermissionParams {
+pub(crate) struct RespondAcpPermissionParams {
     pub session_id: String,
     pub request_id: String,
     /// once | always | reject | cancelled
@@ -83,7 +170,7 @@ pub(crate) struct RespondOpencodeAcpPermissionParams {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RespondOpencodeAcpQuestionParams {
+pub(crate) struct RespondAcpQuestionParams {
     pub session_id: String,
     pub request_id: String,
     pub outcome: Value,
@@ -91,15 +178,19 @@ pub(crate) struct RespondOpencodeAcpQuestionParams {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RespondOpencodeAcpPlanParams {
+pub(crate) struct RespondAcpPlanParams {
     pub session_id: String,
     pub request_id: String,
     pub outcome: Value,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 fn persist_line(project_path: &str, tab_session_id: &str, line: &str) {
     if let Err(e) = append_cursor_session_line(project_path, tab_session_id, line) {
-        eprintln!("[opencode_acp] transcript append failed (tab={tab_session_id}): {e}");
+        eprintln!("[acp] transcript append failed (tab={tab_session_id}): {e}");
     }
 }
 
@@ -131,7 +222,8 @@ fn request_id_key(id: &JsonRpcId) -> String {
 }
 
 async fn get_or_create_session(
-    store: &OpencodeAcpSessionStore,
+    engine: AcpEngine,
+    store: &AcpSessionStore,
     tab_session_id: &str,
     project_path: &str,
     resume_id: Option<&str>,
@@ -148,28 +240,31 @@ async fn get_or_create_session(
         }
     }
 
-    let agent = find_opencode_binary()?;
+    let agent = engine.find_binary()?;
 
-    let mut session = OpencodeAcpSession::bootstrap(&agent, project_path)
+    let mut session = OpencodeAcpSession::bootstrap(engine, &agent, project_path)
         .await
-        .map_err(|e| format!("OpenCode ACP 启动失败: {e}"))?;
+        .map_err(|e| format!("{} ACP 启动失败: {e}", engine.display_name()))?;
 
     let acp_sid = if let Some(resume) = resume_id.map(str::trim).filter(|s| !s.is_empty()) {
         match session.session_load(resume).await {
             Ok(sid) => sid,
             Err(e) => {
-                eprintln!("[opencode_acp] session/load failed ({e}); falling back to session/new");
-                session
-                    .session_new()
-                    .await
-                    .map_err(|e2| format!("OpenCode ACP session/new 失败: {e2}"))?
+                eprintln!(
+                    "[{}_acp] {} failed ({e}); falling back to session/new",
+                    engine.kind(),
+                    engine.resume_method()
+                );
+                session.session_new().await.map_err(|e2| {
+                    format!("{} ACP session/new 失败: {e2}", engine.display_name())
+                })?
             }
         }
     } else {
         session
             .session_new()
             .await
-            .map_err(|e| format!("OpenCode ACP session/new 失败: {e}"))?
+            .map_err(|e| format!("{} ACP session/new 失败: {e}", engine.display_name()))?
     };
 
     let _ = acp_sid;
@@ -181,19 +276,54 @@ async fn get_or_create_session(
     Ok(arc)
 }
 
+/// One non-blocking message read from the ACP session.
+enum AcpPump {
+    /// `session/update` notification (assistant output, tool lifecycle, usage).
+    Update(String, Option<Value>),
+    /// Agent-initiated request that needs a client response (permission / question).
+    Request(AcpServerRequest),
+    /// Nothing queued right now.
+    Idle,
+}
+
+impl AcpPump {
+    /// Whether this message must be handled before the loop reacts to a settled
+    /// `session/prompt` result.
+    ///
+    /// Always true for queued messages. Agents that only publish committed output
+    /// (DeepSeek Harness) flush the whole assistant message and settle the prompt
+    /// in the same burst, so reacting to settlement first silently dropped every
+    /// visible update of the turn.
+    fn must_drain_before_settlement(&self) -> bool {
+        !matches!(self, AcpPump::Idle)
+    }
+}
+
+/// Read the next queued ACP message without blocking on the agent.
+async fn pump_acp_message(session_arc: &Arc<TokioMutex<OpencodeAcpSession>>) -> AcpPump {
+    let mut guard = session_arc.lock().await;
+    if let Some((method, params)) = guard.poll_notification() {
+        AcpPump::Update(method, params)
+    } else if let Some(req) = guard.poll_server_request() {
+        AcpPump::Request(req)
+    } else {
+        AcpPump::Idle
+    }
+}
+
 /// Main execute entry: persistent ACP session + one prompt turn.
-#[tauri::command]
-pub(crate) async fn execute_opencode_acp(
+async fn execute_acp_turn(
+    engine: AcpEngine,
     app: AppHandle,
-    store: tauri::State<'_, OpencodeAcpSessionStore>,
-    params: ExecuteOpencodeAcpParams,
+    store: &AcpSessionStore,
+    params: AcpTurnParams,
 ) -> Result<(), String> {
     let trimmed_prompt = params.prompt.trim();
     if trimmed_prompt.is_empty() {
-        return Err("OpenCode ACP 执行需要非空提示词".to_string());
+        return Err(format!("{} 执行需要非空提示词", engine.display_name()));
     }
     if params.project_path.trim().is_empty() {
-        return Err("OpenCode ACP 执行需要 projectPath".to_string());
+        return Err(format!("{} 执行需要 projectPath", engine.display_name()));
     }
 
     let session_id = params
@@ -202,12 +332,12 @@ pub(crate) async fn execute_opencode_acp(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("opencode-acp-{}", Uuid::new_v4().simple()));
+        .unwrap_or_else(|| format!("{}-acp-{}", engine.kind(), Uuid::new_v4().simple()));
 
     {
         let mut busy = store.busy.lock().await;
         if busy.get(&session_id).copied().unwrap_or(false) {
-            return Err("该会话已有进行中的 OpenCode ACP 回合".to_string());
+            return Err(format!("该会话已有进行中的 {} 回合", engine.display_name()));
         }
         busy.insert(session_id.clone(), true);
     }
@@ -228,7 +358,7 @@ pub(crate) async fn execute_opencode_acp(
 
     {
         let registry = app.state::<ClaudeSessionRegistry>();
-        let model_label = params.model.as_deref().unwrap_or("opencode-acp").to_string();
+        let model_label = params.model.as_deref().unwrap_or(engine.kind()).to_string();
         registry.register(session_id.clone(), params.project_path.clone(), model_label);
     }
 
@@ -241,9 +371,10 @@ pub(crate) async fn execute_opencode_acp(
             .insert(inv.to_string(), session_id.clone());
     }
 
-    let resume = params.opencode_session_id.as_deref();
+    let resume = params.resume_session_id.as_deref();
     let session_arc = match get_or_create_session(
-        &store,
+        engine,
+        store,
         &session_id,
         &params.project_path,
         resume,
@@ -266,7 +397,14 @@ pub(crate) async fn execute_opencode_acp(
             );
             let registry = app.state::<ClaudeSessionRegistry>();
             registry.mark_completed(&session_id, false);
-            emit_opencode_acp_complete(&app, invocation_key.as_deref(), &session_id, false, None);
+            emit_acp_complete(
+                engine,
+                &app,
+                invocation_key.as_deref(),
+                &session_id,
+                false,
+                None,
+            );
             return Err(e);
         }
     };
@@ -278,7 +416,10 @@ pub(crate) async fn execute_opencode_acp(
             let _ = guard.set_config_option("mode", mode).await;
         }
         if let Err(e) = guard.set_model_if_needed(params.model.as_deref()).await {
-            eprintln!("[opencode_acp] set model failed (non-fatal): {e}");
+            eprintln!(
+                "[{}_acp] set model failed (non-fatal): {e}",
+                engine.kind()
+            );
         }
         guard
             .acp_session_id
@@ -297,7 +438,7 @@ pub(crate) async fn execute_opencode_acp(
         &app,
         &params.project_path,
         &session_id,
-        &opencode_acp_bind_line(&acp_session_id),
+        &acp_bind_line(engine, &acp_session_id),
         invocation_key.as_deref(),
     );
 
@@ -310,7 +451,7 @@ pub(crate) async fn execute_opencode_acp(
             Ok((_id, rx)) => rx,
             Err(e) => {
                 store.busy.lock().await.remove(&session_id);
-                let msg = format!("OpenCode ACP prompt 失败: {e}");
+                let msg = format!("{} ACP prompt 失败: {e}", engine.display_name());
                 emit_and_persist(
                     &app,
                     &params.project_path,
@@ -324,7 +465,8 @@ pub(crate) async fn execute_opencode_acp(
                 );
                 let registry = app.state::<ClaudeSessionRegistry>();
                 registry.mark_completed(&session_id, false);
-                emit_opencode_acp_complete(
+                emit_acp_complete(
+                    engine,
                     &app,
                     invocation_key.as_deref(),
                     &session_id,
@@ -351,7 +493,7 @@ pub(crate) async fn execute_opencode_acp(
     let invocation_key_loop = invocation_key.clone();
     let acp_sid_loop = acp_session_id.clone();
     let auto_approve = params.auto_approve_permissions;
-    let store_loop = store.inner().clone();
+    let store_loop = store.clone();
     let session_arc_loop = session_arc.clone();
 
     tokio::spawn(async move {
@@ -359,13 +501,60 @@ pub(crate) async fn execute_opencode_acp(
         let mut prompt_rx = prompt_rx;
 
         loop {
-            // Check prompt completion without holding the session lock.
+            // Drain every queued agent message first. Agents that publish only
+            // committed output (DeepSeek Harness) flush the final assistant message
+            // and settle `session/prompt` in the same burst; checking the prompt
+            // result first dropped those queued updates and the turn finished with
+            // no visible output at all.
+            let mut drained_any = false;
+            loop {
+                let pump = pump_acp_message(&session_arc_loop).await;
+                if !pump.must_drain_before_settlement() {
+                    break;
+                }
+                drained_any = true;
+                match pump {
+                    AcpPump::Update(method, params) => {
+                        let lines = adapt_acp_notification_to_stream_lines(
+                            engine,
+                            &method,
+                            params.as_ref(),
+                            &session_id_loop,
+                        );
+                        for line in &lines {
+                            emit_and_persist(
+                                &app_loop,
+                                &project_path_loop,
+                                &session_id_loop,
+                                line,
+                                invocation_key_loop.as_deref(),
+                            );
+                        }
+                    }
+                    AcpPump::Request(req) => {
+                        handle_server_request(
+                            engine,
+                            &app_loop,
+                            &store_loop,
+                            &session_arc_loop,
+                            &session_id_loop,
+                            req,
+                            auto_approve,
+                        )
+                        .await;
+                    }
+                    AcpPump::Idle => {}
+                }
+            }
+
+            // Only now honor prompt settlement: everything the agent sent before
+            // answering is already on its way to the UI.
             match prompt_rx.try_recv() {
                 Ok(msg) => {
                     match msg {
                         JsonRpcMessage::Response { error: Some(err), .. } => {
                             success = false;
-                            let text = format!("OpenCode ACP 错误: {}", err.message);
+                            let text = format!("{} ACP 错误: {}", engine.display_name(), err.message);
                             emit_and_persist(
                                 &app_loop,
                                 &project_path_loop,
@@ -401,53 +590,8 @@ pub(crate) async fn execute_opencode_acp(
                 }
             }
 
-            enum Poll {
-                Notif(String, Option<Value>),
-                Req(AcpServerRequest),
-                Idle,
-            }
-
-            let poll = {
-                let mut guard = session_arc_loop.lock().await;
-                if let Some((method, params)) = guard.poll_notification() {
-                    Poll::Notif(method, params)
-                } else if let Some(req) = guard.poll_server_request() {
-                    Poll::Req(req)
-                } else {
-                    Poll::Idle
-                }
-            };
-
-            match poll {
-                Poll::Idle => {
-                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-                }
-                Poll::Notif(method, params) => {
-                    let lines = adapt_opencode_acp_notification_to_stream_lines(
-                        &method,
-                        params.as_ref(),
-                        &session_id_loop,
-                    );
-                    for line in &lines {
-                        emit_and_persist(
-                            &app_loop,
-                            &project_path_loop,
-                            &session_id_loop,
-                            line,
-                            invocation_key_loop.as_deref(),
-                        );
-                    }
-                }
-                Poll::Req(req) => {
-                    handle_server_request(
-                        &app_loop,
-                        &session_arc_loop,
-                        &session_id_loop,
-                        req,
-                        auto_approve,
-                    )
-                    .await;
-                }
+            if !drained_any {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
             }
         }
 
@@ -468,7 +612,8 @@ pub(crate) async fn execute_opencode_acp(
 
         let registry = app_loop.state::<ClaudeSessionRegistry>();
         registry.mark_completed(&session_id_loop, success);
-        emit_opencode_acp_complete(
+        emit_acp_complete(
+            engine,
             &app_loop,
             invocation_key_loop.as_deref(),
             &session_id_loop,
@@ -487,7 +632,9 @@ pub(crate) async fn execute_opencode_acp(
 }
 
 async fn handle_server_request(
+    engine: AcpEngine,
     app: &AppHandle,
+    store: &AcpSessionStore,
     session_arc: &Arc<TokioMutex<OpencodeAcpSession>>,
     wise_session_id: &str,
     req: AcpServerRequest,
@@ -504,15 +651,22 @@ async fn handle_server_request(
                     .await;
                 return;
             }
+            {
+                let mut options = store.permission_options.lock().await;
+                options.insert(key.clone(), params.clone());
+            }
             let payload = permission_event_payload(wise_session_id, &key, &params);
-            let _ = app.emit("opencode-acp:permission-request", payload);
+            let _ = app.emit(engine.permission_request_event(), payload);
         }
         AcpServerRequest::Unknown {
             request_id,
             method,
             params,
         } => {
-            eprintln!("[opencode_acp] unknown server request: {method} params={params:?}");
+            eprintln!(
+                "[{}_acp] unknown server request: {method} params={params:?}",
+                engine.kind()
+            );
             // Unblock the agent with a cancelled/empty result when possible.
             let mut guard = session_arc.lock().await;
             let _ = guard
@@ -522,24 +676,24 @@ async fn handle_server_request(
     }
 }
 
-#[tauri::command]
-pub(crate) async fn interrupt_opencode_acp(
+async fn interrupt_acp(
+    engine: AcpEngine,
     app: AppHandle,
-    store: tauri::State<'_, OpencodeAcpSessionStore>,
-    params: InterruptOpencodeAcpParams,
+    store: &AcpSessionStore,
+    session_id: &str,
 ) -> Result<(), String> {
     // Invalidate the in-flight prompt loop's finalize before unblocking waiters /
     // clearing busy, so a quick re-send cannot have its busy flag stolen.
     {
         let mut epochs = store.turn_epoch.lock().await;
-        let entry = epochs.entry(params.session_id.clone()).or_insert(0);
+        let entry = epochs.entry(session_id.to_string()).or_insert(0);
         *entry = entry.saturating_add(1);
     }
-    store.busy.lock().await.remove(&params.session_id);
+    store.busy.lock().await.remove(session_id);
 
     let session_arc = {
         let sessions = store.sessions.lock().await;
-        sessions.get(&params.session_id).cloned()
+        sessions.get(session_id).cloned()
     };
     if let Some(session_arc) = session_arc {
         let mut guard = session_arc.lock().await;
@@ -550,26 +704,19 @@ pub(crate) async fn interrupt_opencode_acp(
     }
 
     let registry = app.state::<ClaudeSessionRegistry>();
-    registry.mark_completed(&params.session_id, false);
+    registry.mark_completed(session_id, false);
 
-    let _ = app.emit(
-        "opencode-acp:interrupted",
-        json!({ "sessionId": params.session_id }),
-    );
+    let _ = app.emit(engine.interrupted_event(), json!({ "sessionId": session_id }));
     Ok(())
 }
 
-#[tauri::command]
-pub(crate) async fn shutdown_opencode_acp(
-    store: tauri::State<'_, OpencodeAcpSessionStore>,
-    params: ShutdownOpencodeAcpParams,
-) -> Result<(), String> {
+async fn shutdown_acp(store: &AcpSessionStore, session_id: &str) -> Result<(), String> {
     let session_arc = {
         let mut sessions = store.sessions.lock().await;
-        sessions.remove(&params.session_id)
+        sessions.remove(session_id)
     };
-    store.turn_epoch.lock().await.remove(&params.session_id);
-    store.busy.lock().await.remove(&params.session_id);
+    store.turn_epoch.lock().await.remove(session_id);
+    store.busy.lock().await.remove(session_id);
     if let Some(arc) = session_arc {
         let mut guard = arc.lock().await;
         let _ = guard.shutdown().await;
@@ -577,31 +724,23 @@ pub(crate) async fn shutdown_opencode_acp(
     Ok(())
 }
 
-#[tauri::command]
-pub(crate) async fn respond_opencode_acp_permission(
+async fn respond_acp_permission(
+    engine: AcpEngine,
     app: AppHandle,
-    store: tauri::State<'_, OpencodeAcpSessionStore>,
-    params: RespondOpencodeAcpPermissionParams,
+    store: &AcpSessionStore,
+    params: RespondAcpPermissionParams,
 ) -> Result<(), String> {
     let session_arc = {
         let sessions = store.sessions.lock().await;
-        sessions
-            .get(&params.session_id)
-            .cloned()
-            .ok_or_else(|| format!("No active OpenCode ACP session: {}", params.session_id))?
+        sessions.get(&params.session_id).cloned().ok_or_else(|| {
+            format!("No active {} ACP session: {}", engine.display_name(), params.session_id)
+        })?
     };
-    // Normalize UI decisions (allow-once/allow-always/reject-once) to opencode
-    // option ids (once/always/reject).
-    let decision = params.decision.trim();
-    let result = match decision {
-        "always" | "allow-always" | "allow_always" | "allowAlways" => {
-            permission_selected_result("always")
-        }
-        "once" | "allow-once" | "allow_once" | "allow" => permission_selected_result("once"),
-        "reject" | "reject-once" | "reject_once" | "deny" => permission_selected_result("reject"),
-        "cancelled" | "cancel" => permission_cancelled_result(),
-        other => permission_selected_result(other),
+    let options = {
+        let mut options = store.permission_options.lock().await;
+        options.remove(&params.request_id)
     };
+    let result = resolve_permission_decision_result(options.as_ref(), &params.decision);
     let id = parse_request_id(&params.request_id);
     {
         let mut guard = session_arc.lock().await;
@@ -611,7 +750,7 @@ pub(crate) async fn respond_opencode_acp_permission(
             .map_err(|e| format!("respond permission failed: {e}"))?;
     }
     let _ = app.emit(
-        "opencode-acp:permission-resolved",
+        engine.permission_resolved_event(),
         json!({
             "sessionId": params.session_id,
             "requestId": params.request_id,
@@ -621,18 +760,17 @@ pub(crate) async fn respond_opencode_acp_permission(
     Ok(())
 }
 
-#[tauri::command]
-pub(crate) async fn respond_opencode_acp_question(
+async fn respond_acp_question(
+    engine: AcpEngine,
     app: AppHandle,
-    store: tauri::State<'_, OpencodeAcpSessionStore>,
-    params: RespondOpencodeAcpQuestionParams,
+    store: &AcpSessionStore,
+    params: RespondAcpQuestionParams,
 ) -> Result<(), String> {
     let session_arc = {
         let sessions = store.sessions.lock().await;
-        sessions
-            .get(&params.session_id)
-            .cloned()
-            .ok_or_else(|| format!("No active OpenCode ACP session: {}", params.session_id))?
+        sessions.get(&params.session_id).cloned().ok_or_else(|| {
+            format!("No active {} ACP session: {}", engine.display_name(), params.session_id)
+        })?
     };
     let id = parse_request_id(&params.request_id);
     {
@@ -643,7 +781,7 @@ pub(crate) async fn respond_opencode_acp_question(
             .map_err(|e| format!("respond question failed: {e}"))?;
     }
     let _ = app.emit(
-        "opencode-acp:ask-question-resolved",
+        engine.question_resolved_event(),
         json!({
             "sessionId": params.session_id,
             "requestId": params.request_id,
@@ -652,18 +790,17 @@ pub(crate) async fn respond_opencode_acp_question(
     Ok(())
 }
 
-#[tauri::command]
-pub(crate) async fn respond_opencode_acp_plan(
+async fn respond_acp_plan(
+    engine: AcpEngine,
     app: AppHandle,
-    store: tauri::State<'_, OpencodeAcpSessionStore>,
-    params: RespondOpencodeAcpPlanParams,
+    store: &AcpSessionStore,
+    params: RespondAcpPlanParams,
 ) -> Result<(), String> {
     let session_arc = {
         let sessions = store.sessions.lock().await;
-        sessions
-            .get(&params.session_id)
-            .cloned()
-            .ok_or_else(|| format!("No active OpenCode ACP session: {}", params.session_id))?
+        sessions.get(&params.session_id).cloned().ok_or_else(|| {
+            format!("No active {} ACP session: {}", engine.display_name(), params.session_id)
+        })?
     };
     let id = parse_request_id(&params.request_id);
     {
@@ -674,11 +811,191 @@ pub(crate) async fn respond_opencode_acp_plan(
             .map_err(|e| format!("respond plan failed: {e}"))?;
     }
     let _ = app.emit(
-        "opencode-acp:create-plan-resolved",
+        engine.plan_resolved_event(),
         json!({
             "sessionId": params.session_id,
             "requestId": params.request_id,
         }),
     );
     Ok(())
+}
+
+// ---------------------------- OpenCode commands ----------------------------
+
+#[tauri::command]
+pub(crate) async fn execute_opencode_acp(
+    app: AppHandle,
+    store: tauri::State<'_, OpencodeAcpSessionStore>,
+    params: ExecuteOpencodeAcpParams,
+) -> Result<(), String> {
+    execute_acp_turn(AcpEngine::OpenCode, app, &store.0, params.into()).await
+}
+
+#[tauri::command]
+pub(crate) async fn interrupt_opencode_acp(
+    app: AppHandle,
+    store: tauri::State<'_, OpencodeAcpSessionStore>,
+    params: InterruptAcpParams,
+) -> Result<(), String> {
+    interrupt_acp(AcpEngine::OpenCode, app, &store.0, &params.session_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn shutdown_opencode_acp(
+    store: tauri::State<'_, OpencodeAcpSessionStore>,
+    params: ShutdownAcpParams,
+) -> Result<(), String> {
+    shutdown_acp(&store.0, &params.session_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn respond_opencode_acp_permission(
+    app: AppHandle,
+    store: tauri::State<'_, OpencodeAcpSessionStore>,
+    params: RespondAcpPermissionParams,
+) -> Result<(), String> {
+    respond_acp_permission(AcpEngine::OpenCode, app, &store.0, params).await
+}
+
+#[tauri::command]
+pub(crate) async fn respond_opencode_acp_question(
+    app: AppHandle,
+    store: tauri::State<'_, OpencodeAcpSessionStore>,
+    params: RespondAcpQuestionParams,
+) -> Result<(), String> {
+    respond_acp_question(AcpEngine::OpenCode, app, &store.0, params).await
+}
+
+#[tauri::command]
+pub(crate) async fn respond_opencode_acp_plan(
+    app: AppHandle,
+    store: tauri::State<'_, OpencodeAcpSessionStore>,
+    params: RespondAcpPlanParams,
+) -> Result<(), String> {
+    respond_acp_plan(AcpEngine::OpenCode, app, &store.0, params).await
+}
+
+// ---------------------------- DeepSeek commands ----------------------------
+
+#[tauri::command]
+pub(crate) async fn execute_deepseek_acp(
+    app: AppHandle,
+    store: tauri::State<'_, DeepseekAcpSessionStore>,
+    params: ExecuteDeepseekAcpParams,
+) -> Result<(), String> {
+    execute_acp_turn(AcpEngine::DeepSeek, app, &store.0, params.into()).await
+}
+
+#[tauri::command]
+pub(crate) async fn interrupt_deepseek_acp(
+    app: AppHandle,
+    store: tauri::State<'_, DeepseekAcpSessionStore>,
+    params: InterruptAcpParams,
+) -> Result<(), String> {
+    interrupt_acp(AcpEngine::DeepSeek, app, &store.0, &params.session_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn shutdown_deepseek_acp(
+    store: tauri::State<'_, DeepseekAcpSessionStore>,
+    params: ShutdownAcpParams,
+) -> Result<(), String> {
+    shutdown_acp(&store.0, &params.session_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn respond_deepseek_acp_permission(
+    app: AppHandle,
+    store: tauri::State<'_, DeepseekAcpSessionStore>,
+    params: RespondAcpPermissionParams,
+) -> Result<(), String> {
+    respond_acp_permission(AcpEngine::DeepSeek, app, &store.0, params).await
+}
+
+#[tauri::command]
+pub(crate) async fn respond_deepseek_acp_question(
+    app: AppHandle,
+    store: tauri::State<'_, DeepseekAcpSessionStore>,
+    params: RespondAcpQuestionParams,
+) -> Result<(), String> {
+    respond_acp_question(AcpEngine::DeepSeek, app, &store.0, params).await
+}
+
+#[tauri::command]
+pub(crate) async fn respond_deepseek_acp_plan(
+    app: AppHandle,
+    store: tauri::State<'_, DeepseekAcpSessionStore>,
+    params: RespondAcpPlanParams,
+) -> Result<(), String> {
+    respond_acp_plan(AcpEngine::DeepSeek, app, &store.0, params).await
+}
+
+/// DeepSeek Harness advertises its model catalog through the ACP session config
+/// options, so listing models means starting a throwaway ACP session and reading
+/// the `session/new` result. Failures degrade to an empty list (Composer falls
+/// back to the dsh-configured default model).
+#[tauri::command]
+pub(crate) async fn deepseek_list_models(project_path: Option<String>) -> Result<Vec<Value>, String> {
+    use crate::opencode_acp_model_choices::extract_model_choices;
+
+    let engine = AcpEngine::DeepSeek;
+    let binary = match engine.find_binary() {
+        Ok(b) => b,
+        Err(_) => return Ok(vec![]),
+    };
+    let cwd = project_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .or_else(|| dirs::home_dir().map(|h| h.to_string_lossy().to_string()))
+        .unwrap_or_else(|| ".".to_string());
+
+    let probe = async move {
+        let mut session = OpencodeAcpSession::bootstrap(engine, &binary, &cwd).await?;
+        session.session_new().await?;
+        let choices = session
+            .config_options
+            .as_ref()
+            .map(extract_model_choices)
+            .unwrap_or_default();
+        let _ = session.session_close().await;
+        let _ = session.shutdown().await;
+        Ok::<Vec<Value>, anyhow::Error>(choices)
+    };
+
+    match tokio::time::timeout(std::time::Duration::from_secs(30), probe).await {
+        Ok(Ok(choices)) => Ok(choices),
+        Ok(Err(e)) => {
+            eprintln!("[deepseek_acp] list models failed: {e}");
+            Ok(vec![])
+        }
+        Err(_) => {
+            eprintln!("[deepseek_acp] list models timed out");
+            Ok(vec![])
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queued_agent_updates_outrank_prompt_settlement() {
+        // dsh flushes the committed assistant message and the `session/prompt`
+        // response together; settlement must never win that race.
+        let update = AcpPump::Update("session/update".to_string(), None);
+        assert!(update.must_drain_before_settlement());
+        assert!(!AcpPump::Idle.must_drain_before_settlement());
+    }
+
+    #[test]
+    fn permission_requests_are_drained_before_settlement() {
+        let req = AcpPump::Request(AcpServerRequest::RequestPermission {
+            request_id: JsonRpcId::Number(1),
+            params: Value::Null,
+        });
+        assert!(req.must_drain_before_settlement());
+    }
 }

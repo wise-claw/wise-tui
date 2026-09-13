@@ -35,7 +35,7 @@ Wise 的目标不是再做一个聊天窗口，而是让 AI 研发从“对话�
 | 特色 | Wise 提供的能力 |
 | --- | --- |
 | **从聊天到工作流** | 会话不再是孤立的消息记录；任务、阶段、运行状态、验收结果和执行历史都可以被组织、观察和恢复。 |
-| **多引擎统一工作台** | 在同一套工作区和会话界面中接入 Claude Code、Codex RPC、Cursor Agent、Gemini CLI、OpenCode 和 Qoder CLI；具体可用性取决于本机 CLI 与账号配置。 |
+| **多引擎统一工作台** | 在同一套工作区和会话界面中接入 Claude Code、Codex RPC、Cursor Agent、DeepSeek Harness、Gemini CLI、OpenCode 和 Qoder CLI；具体可用性取决于本机 CLI 与账号配置。 |
 | **Agent 供给可管理** | 通过助手模板、Agent 注册表、Skills、MCP、Hooks、插件与扩展，把角色、工具、权限和提示词变成可复用的研发资产。 |
 | **Hub / Channel / Automation / Artifact** | 用 Hub 管理能力，用 Channel 接收远程请求与回执，用 Automation 执行定时任务，用 Artifact 检查代码、文档和运行产物。 |
 | **本地优先且可溯源** | 仓库、会话、运行记录、配置和产物索引保存在本机；关键执行链路可追踪，适合个人开发与本地团队工作台。 |
@@ -69,6 +69,7 @@ Wise 的目标不是再做一个聊天窗口，而是让 AI 研发从“对话�
 | Gemini CLI | Gemini CLI 研发会话 |
 | OpenCode | OpenCode 会话、模型切换与配置桥接 |
 | Qoder CLI | Qoder CLI 流式研发会话 |
+| DeepSeek Harness | DeepSeek Harness（`dsh`）ACP 会话、模型目录与自动化 |
 
 ### 3. HUD 模式：随时可用的浮动 AI 入口
 
@@ -138,7 +139,7 @@ Chrome 页面监控支持通过 CDP 或 `wise-page-monitor` 扩展采集：
 - [Bun](https://bun.sh)，版本以 `package.json` 的 `packageManager` 为准（当前为 `bun@1.3.5`）；
 - Rust stable；
 - 对应平台的 [Tauri 2 前置依赖](https://v2.tauri.app/start/prerequisites/)；
-- 如需使用某个执行环境，请先在本机安装并登录对应 CLI，例如 Claude Code、Cursor Agent、OpenCode 或 Qoder。
+- 如需使用某个执行环境，请先在本机安装并登录对应 CLI，例如 Claude Code、Cursor Agent、OpenCode、Qoder 或 DeepSeek Harness（`npm install -g @deepseek-ai/dsh`）。
 
 ### 安装与运行
 

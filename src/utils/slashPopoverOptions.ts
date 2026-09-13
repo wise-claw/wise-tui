@@ -376,6 +376,7 @@ export function getFilteredAtOptions(
   geminiAvailable = false,
   opencodeAvailable = false,
   qoderAvailable = false,
+  deepseekAvailable = false,
 ): SlashOption[] {
   const teams: SlashOption[] = teamOptions.map((team) => ({
     type: "team" as const,
@@ -398,6 +399,7 @@ export function getFilteredAtOptions(
     geminiAvailable,
     opencodeAvailable,
     qoderAvailable,
+    deepseekAvailable,
   }).map((row) => ({
     type: "execution_engine" as const,
     label: row.title,

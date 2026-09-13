@@ -43,6 +43,7 @@ interface Props {
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
   qoderAvailable?: boolean;
+  deepseekAvailable?: boolean;
   onEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
   connectionKind?: ClaudeSessionConnectionKind | null;
@@ -103,6 +104,7 @@ function ComposerRuntimeSettingsTriggerImpl({
   geminiAvailable = false,
   opencodeAvailable = false,
   qoderAvailable = false,
+  deepseekAvailable = false,
   onEngineChange,
   onOpenExecutionEnvironment,
   connectionKind,
@@ -198,10 +200,10 @@ function ComposerRuntimeSettingsTriggerImpl({
 
   const showExtraPaneEngines =
     showPaneRuntimePresets &&
-    (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable || qoderAvailable);
+    (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable || qoderAvailable || deepseekAvailable);
   const showEngine =
     !showPaneRuntimePresets &&
-    (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable || qoderAvailable) &&
+    (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable || qoderAvailable || deepseekAvailable) &&
     Boolean(onEngineChange);
   // Claude Code 统一走长驻会话（全局默认 streaming）；Composer 执行环境菜单不再展示连接方式切换。
   const showConnection = false;
@@ -265,6 +267,7 @@ function ComposerRuntimeSettingsTriggerImpl({
           geminiAvailable,
           opencodeAvailable,
           qoderAvailable,
+          deepseekAvailable,
           engines: PANE_EXTRA_EXECUTION_ENGINES,
         });
         if (extraEngineItems?.length) {
@@ -282,6 +285,7 @@ function ComposerRuntimeSettingsTriggerImpl({
         geminiAvailable,
         opencodeAvailable,
         qoderAvailable,
+        deepseekAvailable,
       });
       if (engineItems?.length) {
         items.push(...engineItems);
@@ -312,6 +316,7 @@ function ComposerRuntimeSettingsTriggerImpl({
     geminiAvailable,
     opencodeAvailable,
     qoderAvailable,
+    deepseekAvailable,
     defaultConnectionKind,
     engine,
     paneMenuSelection.highlightExtraEngine,

@@ -664,6 +664,9 @@ export function resolveNoReplyFailureMessage(
   if (executionEngine === "qoder") {
     return "Qoder CLI 本轮未产出可见回复。请检查凭据、模型配置与 Qoder CLI。";
   }
+  if (executionEngine === "deepseek") {
+    return "DeepSeek Harness 本轮未产出可见回复。请检查 DeepSeek API Key、模型配置与 dsh CLI。";
+  }
   return "Claude 未成功完成本轮请求（未产出可见回复）。请检查 Hook 配置与 Claude CLI 权限。";
 }
 

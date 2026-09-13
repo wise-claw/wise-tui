@@ -1,3 +1,4 @@
+mod acp_engine;
 mod agents_explorer;
 mod app_state_commands;
 mod agent_registry;
@@ -18,10 +19,12 @@ mod codex_rpc_stream_adapter;
 mod codex_rpc_transport;
 mod codex_rpc_types;
 mod codex_stream_adapter;
+mod dsh_binary;
 mod opencode_binary;
 mod opencode_commands;
 mod opencode_stream_adapter;
 mod opencode_acp_commands;
+mod opencode_acp_model_choices;
 mod opencode_acp_session;
 mod opencode_acp_stream_adapter;
 mod opencode_acp_transport;

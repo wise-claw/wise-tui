@@ -35,7 +35,7 @@ Workspace & context → Agent / assistant → Runtime → Session / workflow →
 | Highlight | What Wise provides |
 | --- | --- |
 | **From chat to workflow** | Sessions can be organized around tasks, stages, run state, acceptance results, and execution history instead of remaining isolated transcripts. |
-| **One workbench, multiple engines** | Connect Claude Code, Codex RPC, Cursor Agent, Gemini CLI, OpenCode, and Qoder CLI in the same workspace and session experience. Availability depends on local CLI and account configuration. |
+| **One workbench, multiple engines** | Connect Claude Code, Codex RPC, Cursor Agent, DeepSeek Harness, Gemini CLI, OpenCode, and Qoder CLI in the same workspace and session experience. Availability depends on local CLI and account configuration. |
 | **Manageable Agent supply** | Turn assistant templates, Agent registries, Skills, MCP, Hooks, plugins, and extensions into reusable engineering assets. |
 | **Hub / Channel / Automation / Artifact surfaces** | Use Hubs to manage capabilities, Channels for remote requests and feedback, Automation for scheduled work, and Artifacts for inspecting results. |
 | **Local-first traceability** | Repositories, sessions, run records, configuration, and artifact indexes stay on the local machine, with important execution paths available for inspection. |
@@ -69,6 +69,7 @@ Supported execution environments include:
 | Gemini CLI | Gemini CLI coding sessions |
 | OpenCode | OpenCode sessions, model switching, and configuration bridge |
 | Qoder CLI | Qoder CLI streaming coding sessions |
+| DeepSeek Harness | DeepSeek Harness (`dsh`) ACP sessions, model catalog, and automation |
 
 ### 3. HUD mode: a floating AI entry point
 
@@ -138,7 +139,7 @@ See the [page monitor extension README](browser-extensions/wise-page-monitor/REA
 - [Bun](https://bun.sh), matching `packageManager` in `package.json` (currently `bun@1.3.5`);
 - Rust stable;
 - Platform prerequisites from the [Tauri 2 documentation](https://v2.tauri.app/start/prerequisites/);
-- The CLI and account setup for any execution environment you want to use, such as Claude Code, Cursor Agent, OpenCode, or Qoder.
+- The CLI and account setup for any execution environment you want to use, such as Claude Code, Cursor Agent, OpenCode, Qoder, or DeepSeek Harness (`npm install -g @deepseek-ai/dsh`).
 
 ### Install and run
 

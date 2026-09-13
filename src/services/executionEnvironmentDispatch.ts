@@ -20,6 +20,7 @@ export type ExecutionEnvironmentDispatchDeps = {
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
   geminiAvailable?: boolean;
+  deepseekAvailable?: boolean;
   opencodeAvailable?: boolean;
   qoderAvailable?: boolean;
   createSession: (
@@ -59,6 +60,7 @@ function resolveEngineAvailability(deps: ExecutionEnvironmentDispatchDeps) {
     geminiAvailable: deps.geminiAvailable ?? false,
     opencodeAvailable: deps.opencodeAvailable ?? false,
     qoderAvailable: deps.qoderAvailable ?? false,
+    deepseekAvailable: deps.deepseekAvailable ?? false,
   };
 }
 

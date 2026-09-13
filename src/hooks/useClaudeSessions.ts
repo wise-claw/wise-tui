@@ -47,6 +47,7 @@ import { resolveCodexProfileModelFromStore } from "../utils/codexModel";
 import { resolveCodexResumeSessionId } from "../utils/codexSessionId";
 import { resolveOpencodeResumeSessionId } from "../utils/opencodeSessionId";
 import { resolveQoderResumeSessionId } from "../utils/qoderSessionId";
+import { resolveDeepseekResumeSessionId } from "../utils/deepseekSessionId";
 import { getCachedModelProfileStore } from "../stores/modelProfileStoreCache";
 import {
   setCodexRpcReasoningEffort,
@@ -667,6 +668,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     } catch {
       /* no active opencode ACP session for this tab */
     }
+    // DeepSeek Harness ACP: same persistent-process cancel semantics.
+    try {
+      const { interruptDeepseekAcp } = await import("../services/deepseekAcp");
+      await interruptDeepseekAcp(tabSessionId);
+    } catch {
+      /* no active deepseek ACP session for this tab */
+    }
     // Codex RPC：app-server 子进程在 CodexRpcSessionStore（key 为 tab id）中，
     // 不在 Claude 进程槽位里；先发 `turn/interrupt` 再硬关子进程，确保点「结束」后
     // turn 不再继续输出。非 Codex RPC 会话（store 无匹配）静默跳过。
@@ -830,6 +838,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     runCodexRpcOneshotWithInvocation,
     runOpencodeOneshotWithInvocation,
     runQoderOneshotWithInvocation,
+    runDeepseekOneshotWithInvocation,
     runCursorOneshotWithInvocation,
     invokeClaudeTurn,
   } = useMemo(
@@ -1639,6 +1648,27 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         });
         return;
       }
+      if (resolver?.(session) === "deepseek") {
+        if (params.forceNewClaudeConversation) {
+          setSessions((prev) =>
+            prev.map((s) => (s.id === tabSessionId ? { ...s, claudeSessionId: null } : s)),
+          );
+          sessionIdMapRef.current.delete(tabSessionId);
+        }
+        const deepseekResumeSessionId = params.forceNewClaudeConversation
+          ? null
+          : resolveDeepseekResumeSessionId(session, tabSessionId, sessionIdMapRef.current);
+        await runDeepseekOneshotWithInvocation({
+          tabSessionId,
+          turnNonce: params.turnNonce,
+          repositoryPath,
+          prompt,
+          modelArg: params.modelArg,
+          deepseekResumeSessionId,
+          forceNewClaudeConversation: params.forceNewClaudeConversation,
+        });
+        return;
+      }
       if (resolver?.(session) === "qoder") {
         if (params.forceNewClaudeConversation) {
           setSessions((prev) =>
@@ -1765,6 +1795,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       runCursorOneshotWithInvocation,
       runOpencodeOneshotWithInvocation,
       runQoderOneshotWithInvocation,
+      runDeepseekOneshotWithInvocation,
       runCompactTurnAndWait,
     ],
   );
@@ -4262,6 +4293,24 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
                 ? "reject-once"
                 : "allow-once";
           await respondOpencodeAcpPermission(tabSessionId, pr.id, decision);
+          notificationHub.markRequestAnswered(pr.id);
+          notificationHub.clearPermission(ownerSessionId);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          notificationHub.markRequestFailed(pr.id, msg);
+        }
+        return;
+      }
+      if (cursorEngine === "deepseek") {
+        try {
+          const { respondDeepseekAcpPermission } = await import("../services/deepseekAcp");
+          const decision =
+            response === "allow_always"
+              ? "allow-always"
+              : response === "deny"
+                ? "reject-once"
+                : "allow-once";
+          await respondDeepseekAcpPermission(tabSessionId, pr.id, decision);
           notificationHub.markRequestAnswered(pr.id);
           notificationHub.clearPermission(ownerSessionId);
         } catch (error) {

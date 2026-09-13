@@ -306,6 +306,7 @@ interface ComposerInnerProps {
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
   qoderAvailable?: boolean;
+  deepseekAvailable?: boolean;
   onSessionExecutionEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */
@@ -661,6 +662,7 @@ function ComposerInner({
   geminiAvailable = false,
   opencodeAvailable = false,
   qoderAvailable = false,
+  deepseekAvailable = false,
   onSessionExecutionEngineChange,
   onOpenExecutionEnvironment,
   onCancel: _onCancel,
@@ -3577,6 +3579,7 @@ function ComposerInner({
             geminiAvailable={geminiAvailable}
             opencodeAvailable={opencodeAvailable}
             qoderAvailable={qoderAvailable}
+            deepseekAvailable={deepseekAvailable}
             disabled={isSessionBusy}
             onEngineChange={paneCount > 1 ? undefined : onSessionExecutionEngineChange}
             onOpenExecutionEnvironment={onOpenExecutionEnvironment}
@@ -3627,6 +3630,7 @@ function ComposerInner({
       geminiAvailable,
       opencodeAvailable,
       qoderAvailable,
+      deepseekAvailable,
       onSessionExecutionEngineChange,
       onOpenExecutionEnvironment,
       handleComposerModelChange,
@@ -3871,6 +3875,7 @@ function ComposerInner({
                 geminiAvailable={geminiAvailable}
                 opencodeAvailable={opencodeAvailable}
                 qoderAvailable={qoderAvailable}
+                deepseekAvailable={deepseekAvailable}
                 atMentionDefaultTarget={atMentionDefaultTarget}
                 onAtMentionDefaultTargetChange={(next) => void saveAtMentionDefaultTarget(next)}
                 sessionExecutionEngine={sessionExecutionEngine}
@@ -3988,6 +3993,7 @@ export interface ComposerRegionProps {
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
   qoderAvailable?: boolean;
+  deepseekAvailable?: boolean;
   onSessionExecutionEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */

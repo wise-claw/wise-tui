@@ -145,6 +145,7 @@ export type WorkspaceRequirementModalProps = {
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
   qoderAvailable?: boolean;
+  deepseekAvailable?: boolean;
 };
 
 /**
@@ -162,6 +163,7 @@ export function WorkspaceRequirementModal({
   geminiAvailable,
   opencodeAvailable,
   qoderAvailable,
+  deepseekAvailable,
 }: WorkspaceRequirementModalProps) {
   const createOpen = useWorkspaceRequirementCreateModalOpen();
   const createEpoch = useWorkspaceRequirementCreateModalEpoch();
@@ -276,6 +278,7 @@ export function WorkspaceRequirementModal({
       geminiAvailable,
       opencodeAvailable,
       qoderAvailable,
+      deepseekAvailable,
     }),
     [
       repositories,
@@ -288,6 +291,7 @@ export function WorkspaceRequirementModal({
       geminiAvailable,
       opencodeAvailable,
       qoderAvailable,
+      deepseekAvailable,
     ],
   );
 

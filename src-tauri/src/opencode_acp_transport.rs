@@ -1,4 +1,4 @@
-//! Low-level JSON-RPC 2.0 transport for OpenCode `opencode acp` over stdio.
+//! Low-level JSON-RPC 2.0 transport for ACP agents (`opencode acp`, `dsh --profile acp`) over stdio.
 
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
@@ -10,10 +10,10 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex};
 
+use crate::acp_engine::AcpEngine;
 use crate::opencode_acp_types::{JsonRpcId, JsonRpcMessage};
-use crate::opencode_binary::{apply_opencode_child_env, opencode_merged_path_env};
 
-/// Manages an `opencode acp` subprocess over stdio (NDJSON JSON-RPC 2.0).
+/// Manages an ACP agent subprocess over stdio (NDJSON JSON-RPC 2.0).
 pub struct OpencodeAcpTransport {
     child: Child,
     stdin: Mutex<tokio::process::ChildStdin>,
@@ -30,11 +30,11 @@ impl Drop for OpencodeAcpTransport {
 }
 
 impl OpencodeAcpTransport {
-    pub async fn spawn(binary_path: &str, cwd: Option<&str>) -> Result<Self> {
-        let path_env = opencode_merged_path_env();
+    pub async fn spawn(engine: AcpEngine, binary_path: &str, cwd: Option<&str>) -> Result<Self> {
+        let path_env = engine.merged_path_env();
         let mut cmd = Command::new(binary_path);
-        apply_opencode_child_env(&mut cmd, &path_env);
-        cmd.arg("acp");
+        engine.apply_child_env(&mut cmd, &path_env);
+        cmd.args(engine.spawn_args());
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
@@ -42,18 +42,18 @@ impl OpencodeAcpTransport {
             cmd.current_dir(dir);
         }
 
-        let mut child = cmd
-            .spawn()
-            .with_context(|| format!("Failed to spawn opencode acp: {binary_path}"))?;
+        let mut child = cmd.spawn().with_context(|| {
+            format!("Failed to spawn {} acp: {binary_path}", engine.display_name())
+        })?;
 
         let stdin = child
             .stdin
             .take()
-            .ok_or_else(|| anyhow!("Failed to take opencode acp stdin"))?;
+            .ok_or_else(|| anyhow!("Failed to take {} acp stdin", engine.display_name()))?;
         let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| anyhow!("Failed to take opencode acp stdout"))?;
+            .ok_or_else(|| anyhow!("Failed to take {} acp stdout", engine.display_name()))?;
 
         let pending_requests = Arc::new(Mutex::new(HashMap::new()));
         let (notification_tx, notification_rx) = mpsc::channel::<(String, Option<Value>)>(512);
@@ -61,18 +61,21 @@ impl OpencodeAcpTransport {
             mpsc::channel::<(JsonRpcId, String, Option<Value>)>(128);
 
         if let Some(stderr) = child.stderr.take() {
+            let debug_env = engine.debug_env();
+            let debug_prefix = format!("[{}_acp:stderr]", engine.kind());
             tokio::spawn(async move {
                 let reader = BufReader::new(stderr);
                 let mut lines = reader.lines();
                 while let Ok(Some(line)) = lines.next_line().await {
-                    if std::env::var("WISE_OPENCODE_ACP_DEBUG").ok().as_deref() == Some("1") {
-                        eprintln!("[opencode_acp:stderr] {line}");
+                    if std::env::var(debug_env).ok().as_deref() == Some("1") {
+                        eprintln!("{debug_prefix} {line}");
                     }
                 }
             });
         }
 
         let pending_for_reader = Arc::clone(&pending_requests);
+        let reader_engine = engine;
         tokio::spawn(async move {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
@@ -84,6 +87,7 @@ impl OpencodeAcpTransport {
                             continue;
                         }
                         Self::handle_stdout_line(
+                            reader_engine,
                             &trimmed,
                             &pending_for_reader,
                             &notification_tx,
@@ -109,6 +113,7 @@ impl OpencodeAcpTransport {
     }
 
     async fn handle_stdout_line(
+        engine: AcpEngine,
         line: &str,
         pending_requests: &Arc<Mutex<HashMap<JsonRpcId, oneshot::Sender<JsonRpcMessage>>>>,
         notification_tx: &mpsc::Sender<(String, Option<Value>)>,
@@ -117,7 +122,11 @@ impl OpencodeAcpTransport {
         let msg: JsonRpcMessage = match serde_json::from_str(line) {
             Ok(m) => m,
             Err(e) => {
-                eprintln!("[opencode_acp] Failed to parse JSON-RPC: {e}; line={}", &line[..line.len().min(200)]);
+                eprintln!(
+                    "[{}_acp] Failed to parse JSON-RPC: {e}; line={}",
+                    engine.kind(),
+                    &line[..line.len().min(200)]
+                );
                 return;
             }
         };
@@ -136,12 +145,15 @@ impl OpencodeAcpTransport {
                         error,
                     });
                 } else {
-                    eprintln!("[opencode_acp] Response for unknown id: {id:?}");
+                    eprintln!("[{}_acp] Response for unknown id: {id:?}", engine.kind());
                 }
             }
             JsonRpcMessage::Notification { method, params, .. } => {
                 if notification_tx.try_send((method.clone(), params)).is_err() {
-                    eprintln!("[opencode_acp] Notification channel full, dropping: {method}");
+                    eprintln!(
+                        "[{}_acp] Notification channel full, dropping: {method}",
+                        engine.kind()
+                    );
                 }
             }
             JsonRpcMessage::Request {
@@ -152,7 +164,10 @@ impl OpencodeAcpTransport {
                     .await
                     .is_err()
                 {
-                    eprintln!("[opencode_acp] Server-request channel closed: {method} id={id:?}");
+                    eprintln!(
+                        "[{}_acp] Server-request channel closed: {method} id={id:?}",
+                        engine.kind()
+                    );
                 }
             }
         }
@@ -200,7 +215,7 @@ impl OpencodeAcpTransport {
 
     /// Locally complete every in-flight JSON-RPC request waiter.
     ///
-    /// Used when `session/cancel` is sent: opencode may not reply to `session/prompt`
+    /// Used when `session/cancel` is sent: the agent may not reply to `session/prompt`
     /// promptly (or at all). Without forcing the oneshot closed, the prompt loop
     /// never exits and the tab `busy` flag stays stuck.
     pub async fn abort_pending_requests(&self, stop_reason: &str) {
@@ -212,7 +227,7 @@ impl OpencodeAcpTransport {
     }
 
     /// Convenience: begin + wait (no concurrent server-request handling).
-    /// Safe for initialize / session/new / session/load before a prompt.
+    /// Safe for initialize / session/new / session-load-or-resume before a prompt.
     pub async fn send_request(
         &self,
         method: &str,
@@ -274,6 +289,7 @@ impl OpencodeAcpTransport {
     pub fn is_child_exited(&mut self) -> bool {
         matches!(self.child.try_wait(), Ok(Some(_)))
     }
+
 }
 
 /// Complete local oneshot waiters with a synthetic ACP prompt result.

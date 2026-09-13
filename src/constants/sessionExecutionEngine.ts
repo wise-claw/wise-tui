@@ -3,6 +3,7 @@ export type SessionExecutionEngine =
   | "codex"
   | "codex-rpc"
   | "cursor"
+  | "deepseek"
   | "gemini"
   | "opencode"
   | "qoder";
@@ -31,6 +32,11 @@ export const SESSION_EXECUTION_ENGINE_LABELS: Record<
     short: "Cursor",
     description: "Cursor Agent ACP（agent acp）",
   },
+  deepseek: {
+    title: "DeepSeek Harness",
+    short: "DeepSeek",
+    description: "DeepSeek Harness CLI（dsh --profile acp）",
+  },
   gemini: {
     title: "Gemini CLI",
     short: "Gemini",
@@ -53,6 +59,7 @@ export const SESSION_EXECUTION_ENGINES = [
   "codex",
   "codex-rpc",
   "cursor",
+  "deepseek",
   "gemini",
   "opencode",
   "qoder",
@@ -63,6 +70,7 @@ export const SESSION_EXECUTION_ENGINES_OFFERED = [
   "claude",
   "codex-rpc",
   "cursor",
+  "deepseek",
   "gemini",
   "opencode",
   "qoder",
@@ -75,6 +83,7 @@ export function normalizeSessionExecutionEngine(
   if (normalized === "codex") return "codex";
   if (normalized === "codex-rpc") return "codex-rpc";
   if (normalized === "cursor") return "cursor";
+  if (normalized === "deepseek") return "deepseek";
   if (normalized === "gemini") return "gemini";
   if (normalized === "opencode") return "opencode";
   if (normalized === "qoder") return "qoder";
@@ -87,6 +96,7 @@ export function isSessionExecutionEngine(value: string): value is SessionExecuti
     value === "codex" ||
     value === "codex-rpc" ||
     value === "cursor" ||
+    value === "deepseek" ||
     value === "gemini" ||
     value === "opencode" ||
     value === "qoder"

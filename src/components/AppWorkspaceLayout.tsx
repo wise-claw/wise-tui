@@ -67,6 +67,7 @@ import { useAgentRegistryCodexAvailable } from "../hooks/useAgentRegistryCodexAv
 import { useAgentRegistryCursorAvailable } from "../hooks/useAgentRegistryCursorAvailable";
 import { useAgentRegistryGeminiAvailable } from "../hooks/useAgentRegistryGeminiAvailable";
 import { useAgentRegistryOpencodeAvailable } from "../hooks/useAgentRegistryOpencodeAvailable";
+import { useAgentRegistryDeepseekAvailable } from "../hooks/useAgentRegistryDeepseekAvailable";
 import { useAgentRegistryQoderAvailable } from "../hooks/useAgentRegistryQoderAvailable";
 import { hydrateOpenAppPreference } from "../services/openAppPreference";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -865,6 +866,7 @@ export function AppWorkspaceLayout({
   const geminiAvailable = useAgentRegistryGeminiAvailable();
   const opencodeAvailable = useAgentRegistryOpencodeAvailable();
   const qoderAvailable = useAgentRegistryQoderAvailable();
+  const deepseekAvailable = useAgentRegistryDeepseekAvailable();
 
   /**
    * 旧布尔派生：本组件保留按 ViewMode 内部派生的旧布尔语义（与 P0 阶段
@@ -2006,6 +2008,7 @@ export function AppWorkspaceLayout({
                 geminiAvailable={geminiAvailable}
                 opencodeAvailable={opencodeAvailable}
                 qoderAvailable={qoderAvailable}
+                deepseekAvailable={deepseekAvailable}
               />
 
               <Suspense fallback={null}>
