@@ -8,6 +8,11 @@
 
 - **移除会话快捷条的「推送」按钮**：快捷条不再显示「新建会话」右侧的一体化提交/推送按钮；git 提交与推送能力保留在 Git 面板，快捷动作目录同步下线 `push` 项。
 
+### 🐛 问题修复
+
+- **Codex RPC 模型选择始终包含本地配置模型**：`codex_list_models` 除运行态目录与 `~/.codex/config.toml` 外，再合并各 Codex 模型档案 config 信封里声明的模型（DeepSeek / 火山等自定义 provider）。`config.toml` 被上一次执行的目录 GPT 模型整段改写后，Composer（及 HUD）模型选择器仍能选到本机配置的 DeepSeek 模型，不再依赖「新建会话」先写回配置。
+- **模型切换一次点击即生效**：Composer 模型选择器在写盘返回前就把用户点选的模型钉住（`picked`），不再用仍是旧值的会话模型 / 档案缓存反算把选择弹回上一次；档案写盘后以返回的生效模型为准（默认档案的 config 模型可能不同于菜单项）。仅当会话模型被外部改成别的值（切档 / 其它窗口 / resume）时才让位，避免把外部改动钉死。
+
 ### ✨ 页面监控能力扩充
 
 - **新增 Web Vitals 采集**：`page-vitals`（LCP / CLS / INP / FCP / TTFB），经注入 PerformanceObserver 脚本经 CDP binding 回传。

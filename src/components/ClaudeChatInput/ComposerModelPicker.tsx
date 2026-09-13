@@ -293,6 +293,11 @@ function ComposerModelPickerImpl({
   modelRef.current = model;
   const pickedModelRef = useRef<string | null>(null);
   /**
+   * 最近一次同步到的会话模型（来自会话宿主 / 档案广播）。
+   * 用于区分「会话模型被外部改成别的值」与「只是宿主回显本菜单的选择」。
+   */
+  const seenSessionModelRef = useRef<string>(session.model?.trim() || "");
+  /**
    * 用户在本菜单里显式选中的那一项：底栏与同步逻辑都以它为准，
    * 直到会话切换或模型被其它来源改成别的值。解决「切到另一类模型后名称不变」。
    */
@@ -334,6 +339,18 @@ function ComposerModelPickerImpl({
     },
     [onModelChange],
   );
+
+  /**
+   * 会话模型被外部改成别的值时释放显式选择（档案切档 / 其它窗口 / resume），
+   * 避免 Composer 仍把用户早先的选择钉死；紧随本菜单选择的宿主回显不算外部改动。
+   */
+  const releasePickOnExternalSessionModelChange = useCallback(() => {
+    const current = session.model?.trim() || "";
+    if (current === seenSessionModelRef.current) return;
+    seenSessionModelRef.current = current;
+    const picked = pickedModelRef.current?.trim() || "";
+    if (picked && current && current !== picked) pickedModelRef.current = null;
+  }, [session.model]);
 
   const hydrateEngineModelListFromCache = useCallback(() => {
     if (isCodexEngine) {
@@ -421,6 +438,7 @@ function ComposerModelPickerImpl({
   //（否则从 Cursor 切到 Codex 后底栏会继续显示 Auto）。
   useEffect(() => {
     pickedModelRef.current = null;
+    seenSessionModelRef.current = session.model?.trim() || "";
     explicitPickRef.current = null;
     setExplicitPick(null);
     setSelectOnlyMenuOpen(false);
@@ -497,6 +515,7 @@ function ComposerModelPickerImpl({
 
   useEffect(() => {
     if (!isCodexEngine || !modelDefaultsRevision) return;
+    releasePickOnExternalSessionModelChange();
     const store = getCachedModelProfileStore();
     const fromProfile =
       resolveEffectiveModelForProfileEngine("codex", store)?.trim() || null;
@@ -524,11 +543,13 @@ function ComposerModelPickerImpl({
     codexModels,
     modelDefaultsRevision,
     profileStoreRevision,
+    releasePickOnExternalSessionModelChange,
     syncModelIfNeeded,
   ]);
 
   useEffect(() => {
     if (!isClaudeEngine || !modelDefaultsRevision) return;
+    releasePickOnExternalSessionModelChange();
     const store = getCachedModelProfileStore();
     const fromProfile =
       resolveEffectiveModelForProfileEngine("claude", store)?.trim() || null;
@@ -552,7 +573,16 @@ function ComposerModelPickerImpl({
       ((!fromSession || fromSession === saved) ? saved : null) ||
       fromProfile || fromSession || claudePicker?.defaultModel?.trim();
     if (nextModel) syncModelIfNeeded(nextModel);
-  }, [isClaudeEngine, session.id, session.model, claudePicker, modelDefaultsRevision, profileStoreRevision, syncModelIfNeeded]);
+  }, [
+    isClaudeEngine,
+    session.id,
+    session.model,
+    claudePicker,
+    modelDefaultsRevision,
+    profileStoreRevision,
+    releasePickOnExternalSessionModelChange,
+    syncModelIfNeeded,
+  ]);
 
   useEffect(() => {
     void getClaudeModelProfileStore()
@@ -1054,7 +1084,10 @@ function ComposerModelPickerImpl({
         const option = pickedOption as CodexModelPickerOption | undefined;
         if (option?.profileId) {
           const profileId = option.profileId;
-          pickedModelRef.current = null;
+          // 显式选择优先：写盘返回前也由它决定底栏 / 会话模型，
+          // 否则档案缓存与会话模型仍是旧值时的反算会把选择弹回上一次
+          //（表现为「切换模型要点击多次才生效」）。
+          pickedModelRef.current = modelId;
           setSelectOnlyMenuOpen(false);
           setSelectOnlyFilter("");
           flushSync(() => {
@@ -1066,9 +1099,16 @@ function ComposerModelPickerImpl({
             if (pickQueue.current() !== pickSeq) return;
             seedModelProfileStoreCache(next);
             setProfileStoreRevision((n) => n + 1);
-            pickedModelRef.current = null;
+            // 写盘后的权威模型：默认档案 config 里的模型可能与菜单项的 modelId 不同。
+            const effective = next.effectiveCodexModel?.trim() || modelId;
+            pickedModelRef.current = effective;
+            if (effective !== modelId) {
+              void saveExecutionEngineDefaultModel(sessionExecutionEngine, effective).catch(
+                () => undefined,
+              );
+            }
             dispatchModelProfileStoreChanged(next, { engine: "codex" });
-            onModelChange(modelId);
+            onModelChange(effective);
           });
           return;
         }
@@ -1078,7 +1118,8 @@ function ComposerModelPickerImpl({
         const option = pickedOption;
         if (option?.profileId) {
           const profileId = option.profileId;
-          pickedModelRef.current = null;
+          // 与 Codex 一致：显式选择优先，写盘返回后才让位给档案生效模型。
+          pickedModelRef.current = modelId;
           setSelectOnlyMenuOpen(false);
           setSelectOnlyFilter("");
           flushSync(() => {
@@ -1090,11 +1131,18 @@ function ComposerModelPickerImpl({
             if (pickQueue.current() !== pickSeq) return;
             seedModelProfileStoreCache(next);
             setProfileStoreRevision((n) => n + 1);
+            const effective = next.effectiveModel?.trim() || modelId;
+            pickedModelRef.current = effective;
+            if (effective !== modelId) {
+              void saveExecutionEngineDefaultModel(sessionExecutionEngine, effective).catch(
+                () => undefined,
+              );
+            }
             dispatchModelProfileStoreChanged(next, {
               engine: "claude",
               sessionReconnect: true,
             });
-            onModelChange(modelId);
+            onModelChange(effective);
           });
           return;
         }
