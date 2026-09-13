@@ -387,11 +387,11 @@ export function EmployeeConfigModal({
 
   const employeeFormModal = (
     <Modal
-      title={editingEmployee ? "编辑终端" : "新增终端"}
+      title={editingEmployee ? "编辑席位" : "新增席位"}
       open={formModalOpen}
       onCancel={closeFormModal}
       onOk={() => void handleSubmit()}
-      okText={editingEmployee ? "保存" : "新增终端"}
+      okText={editingEmployee ? "保存" : "新增席位"}
       cancelText="取消"
       confirmLoading={loading}
       width={480}
@@ -408,8 +408,8 @@ export function EmployeeConfigModal({
         initialValues={employeeFormInitialValues}
         className="app-employee-config-form--modal"
       >
-        <Form.Item name="name" label="终端名称" rules={[{ required: true, message: "请输入终端名称" }]}>
-          <Input placeholder="终端名称" allowClear />
+        <Form.Item name="name" label="席位名称" rules={[{ required: true, message: "请输入席位名称" }]}>
+          <Input placeholder="席位名称" allowClear />
         </Form.Item>
         <Form.Item
           name="executionEngine"
@@ -427,7 +427,7 @@ export function EmployeeConfigModal({
         <Form.Item
           name="defaultInstruction"
           label="默认指令"
-          tooltip="派发至该终端时自动前缀；优先于全局默认指令；正文已含 / 命令时不追加"
+          tooltip="派发至该席位时自动前缀；优先于全局默认指令；正文已含 / 命令时不追加"
         >
           <EmployeeDefaultInstructionInput repositoryPath={defaultInstructionRepositoryPath} />
         </Form.Item>
@@ -435,7 +435,7 @@ export function EmployeeConfigModal({
           <Form.Item
             name="ownerRepositoryId"
             label="仓库"
-            tooltip="作为该仓唯一主 Owner 的新终端将关联此仓库"
+            tooltip="作为该仓唯一主 Owner 的新席位将关联此仓库"
           >
             <Select
               allowClear
@@ -461,18 +461,18 @@ export function EmployeeConfigModal({
 
   const content = (
     <Space orientation="vertical" size={6} className="app-employee-config-modal">
-        <section className="app-employee-config-legacy-note" aria-label="Legacy 终端">
+        <section className="app-employee-config-legacy-note" aria-label="席位说明">
           <div>
             <Typography.Text className="app-employee-config-legacy-note__title">
-              Legacy 终端
+              席位
             </Typography.Text>
             <Typography.Text className="app-employee-config-legacy-note__desc">
-              Wise 当前主线为 Trellis 工作区编排；这里仅保留旧项目的 Claude Code 子会话终端、仓库 Owner 和委派协议兼容配置。
+              Wise 当前主线为 Trellis 工作区编排；这里管理派发席位、仓库 Owner 和委派协议兼容配置。
             </Typography.Text>
           </div>
           <div className="app-employee-config-legacy-note__meter">
             <strong>{enabledEmployees.length}/{employees.length}</strong>
-            <span>可用终端</span>
+            <span>可用席位</span>
           </div>
         </section>
         <div className="app-employee-config-toolbar">
@@ -483,7 +483,7 @@ export function EmployeeConfigModal({
             className="app-employee-add-btn"
             onClick={openCreateFormModal}
           >
-            新增终端
+            新增席位
           </Button>
         </div>
         <Table<EmployeeConfigTableRow>
@@ -494,7 +494,7 @@ export function EmployeeConfigModal({
           className="app-employee-config-table"
           columns={[
             {
-              title: "终端",
+              title: "席位",
               key: "name",
               render: (_, row) => {
                 if (isRepoOwnerGapRow(row)) {
@@ -602,7 +602,7 @@ export function EmployeeConfigModal({
               render: (_, row) => {
                 if (isRepoOwnerGapRow(row)) {
                   return (
-                    <Typography.Text type="secondary" style={{ fontSize: 11 }} ellipsis={{ tooltip: "在侧栏进入单个仓库后打开终端，可为终端关联仓库" }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 11 }} ellipsis={{ tooltip: "在侧栏进入单个仓库后打开席位，可为席位关联仓库" }}>
                       在单仓中关联仓库
                     </Typography.Text>
                   );
@@ -618,7 +618,7 @@ export function EmployeeConfigModal({
                       编辑
                     </Button>
                     <Popconfirm
-                      title="确认删除该终端？"
+                      title="确认删除该席位？"
                       onConfirm={() => onDelete(row.id)}
                       okText="删除"
                       cancelText="取消"
@@ -642,12 +642,12 @@ export function EmployeeConfigModal({
         {hideEmployeesAssociatedOnlyWithDefaultRepositories && defaultRepositoryIds.length > 0
         && !repositoryOwnerScopeOnly ? (
           <Typography.Text type="secondary" className="app-employee-config-footnote">
-            已从本表隐藏「仅关联当前 Workspace 内仓库」的终端（一般为各仓侧创建的配置）；Workspace 需求面板显式关联的成员、以及在本 Workspace 内仓上配置为主 Owner 的终端仍会显示。若某仓仅在仓库侧配置了主 Owner、且尚未与任何终端关联，将以「仅仓库」行展示。在侧栏进入单个仓库打开终端可查看与编辑全部终端。
+            已从本表隐藏「仅关联当前 Workspace 内仓库」的席位（一般为各仓侧创建的配置）；Workspace 需求面板显式关联的成员、以及在本 Workspace 内仓上配置为主 Owner 的席位仍会显示。若某仓仅在仓库侧配置了主 Owner、且尚未与任何席位关联，将以「仅仓库」行展示。在侧栏进入单个仓库打开席位可查看与编辑全部席位。
           </Typography.Text>
         ) : null}
         {repositoryOwnerScopeOnly && defaultRepositoryIds.length > 0 ? (
           <Typography.Text type="secondary" className="app-employee-config-footnote">
-            从侧栏仓库打开：新建时默认终端名称为该仓库目录名；保存后会自动勾选本仓库并写入仓库主 Owner，表格中「Owner 标识」列与 Workspace 需求面板规则一致。
+            从侧栏仓库打开：新建时默认席位名称为该仓库目录名；保存后会自动勾选本仓库并写入仓库主 Owner，表格中「Owner 标识」列与 Workspace 需求面板规则一致。
           </Typography.Text>
         ) : null}
     </Space>
@@ -666,7 +666,7 @@ export function EmployeeConfigModal({
   return (
     <>
       <Modal
-        title="终端"
+        title="席位"
         open={open}
         onCancel={onClose}
         footer={null}

@@ -22,12 +22,18 @@ import {
   buildArtifactAssistantBrief,
   getEnabledBundleItems,
 } from "./assistantArtifactBrief";
+import type { CockpitConversationRecord } from "../../utils/cockpitConversation";
+import { formatCockpitRunStatusLabel } from "../../utils/cockpitConversation";
+import { openWorkspaceRequirementExecutionSession } from "../../stores/workspaceMemoPanelStore";
 
 export interface AssistantConversationViewProps {
   assistantId: string;
   assistant: AssistantEntry | null;
   activeProjectId: string | null;
   activeProjectName: string | null;
+  activeRepositoryPath: string | null;
+  activeRepositoryName: string | null;
+  latestRun: CockpitConversationRecord | null;
   onClose: () => void;
   onOpenSettings: () => void;
 }
@@ -36,6 +42,9 @@ export function AssistantConversationView({
   assistant,
   activeProjectId,
   activeProjectName,
+  activeRepositoryPath,
+  activeRepositoryName,
+  latestRun,
   onOpenSettings,
 }: AssistantConversationViewProps) {
   if (!assistant) return <ConversationFallback />;
@@ -44,6 +53,9 @@ export function AssistantConversationView({
       assistant={assistant}
       activeProjectId={activeProjectId}
       activeProjectName={activeProjectName}
+      activeRepositoryPath={activeRepositoryPath}
+      activeRepositoryName={activeRepositoryName}
+      latestRun={latestRun}
       onOpenSettings={onOpenSettings}
     />
   );
@@ -61,6 +73,9 @@ interface ArtifactAssistantWorkspaceProps {
   assistant: AssistantEntry;
   activeProjectId: string | null;
   activeProjectName: string | null;
+  activeRepositoryPath: string | null;
+  activeRepositoryName: string | null;
+  latestRun: CockpitConversationRecord | null;
   onOpenSettings: () => void;
 }
 
@@ -68,6 +83,9 @@ function ArtifactAssistantWorkspace({
   assistant,
   activeProjectId,
   activeProjectName,
+  activeRepositoryPath,
+  activeRepositoryName,
+  latestRun,
   onOpenSettings,
 }: ArtifactAssistantWorkspaceProps) {
   const { message } = AntdApp.useApp();
@@ -170,6 +188,10 @@ function ArtifactAssistantWorkspace({
       message.warning("请先填写要创建或编辑的产物需求。");
       return;
     }
+    if (!activeRepositoryPath?.trim()) {
+      message.warning("请先在左栏选择仓库后再派发。");
+      return;
+    }
     if (readableSkills.length > 0 && skillInstructions.length === 0) {
       message.warning(
         skillInstructionError
@@ -185,6 +207,9 @@ function ArtifactAssistantWorkspace({
           assistantName: assistant.name,
           prompt: executionBrief,
           projectId: activeProjectId,
+          projectName: activeProjectName,
+          repositoryPath: activeRepositoryPath,
+          repositoryName: activeRepositoryName,
         },
       }),
     );
@@ -209,7 +234,31 @@ function ArtifactAssistantWorkspace({
         <div className="assistant-artifact-workspace__scope">
           <Typography.Text type="secondary">作用域</Typography.Text>
           <Typography.Text>{activeProjectName ?? "助手默认"}</Typography.Text>
+          <Typography.Text type="secondary">
+            {activeRepositoryName || activeRepositoryPath || "未选择仓库"}
+          </Typography.Text>
         </div>
+        {latestRun ? (
+          <div className="assistant-artifact-workspace__run">
+            <Typography.Text type="secondary">最近运行</Typography.Text>
+            <Typography.Text>
+              {formatCockpitRunStatusLabel(latestRun.status)} · {latestRun.title}
+            </Typography.Text>
+            {latestRun.artifactPaths.length > 0 ? (
+              <Typography.Text type="secondary">
+                已挂 {latestRun.artifactPaths.length} 个产物
+              </Typography.Text>
+            ) : null}
+            {latestRun.sessionId ? (
+              <Button
+                size="small"
+                onClick={() => openWorkspaceRequirementExecutionSession(latestRun.sessionId!)}
+              >
+                打开会话
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
         <div className="assistant-artifact-workspace__skills">
           {loading ? (
             <Spin size="small" />

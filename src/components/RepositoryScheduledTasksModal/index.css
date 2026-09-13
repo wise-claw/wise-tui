@@ -75,6 +75,17 @@
   max-width: 100%;
 }
 
+.app-scheduled-tasks-panel__pause {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .app-scheduled-tasks-panel__table .ant-table,
 .app-scheduled-tasks-modal__table .ant-table {
   font-size: 12px;

@@ -7,13 +7,21 @@ import {
   FilePdfOutlined,
   FileSearchOutlined,
   FileWordOutlined,
+  HistoryOutlined,
   Html5Outlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { Button, Empty, Input, Select, Spin } from "antd";
+import { Button, Empty, Input, Select, Spin, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Repository } from "../../types";
 import { listRepositoryExplorerEntries, searchRepositoryFiles } from "../../services/repositoryFiles";
+import {
+  hydrateCockpitConversations,
+  listCockpitConversationsForRepository,
+  useCockpitConversations,
+} from "../../services/cockpitConversationStore";
+import { formatCockpitRunStatusLabel } from "../../utils/cockpitConversation";
+import { openWorkspaceRequirementExecutionSession } from "../../stores/workspaceMemoPanelStore";
 import {
   isDocxFilePath,
   isImageFilePath,
@@ -45,7 +53,7 @@ interface PreviewLane {
   icon: ReactNode;
 }
 
-type PreviewLaneKey = "all" | "markdown" | "diff" | "image" | "pdf" | "office" | "html" | "code";
+type PreviewLaneKey = "all" | "markdown" | "diff" | "image" | "pdf" | "office" | "html" | "code" | "runs";
 
 interface ArtifactFile {
   path: string;
@@ -64,6 +72,7 @@ const PREVIEW_LANES: PreviewLane[] = [
   { key: "office", title: "Office", icon: <FileWordOutlined /> },
   { key: "html", title: "HTML", icon: <Html5Outlined /> },
   { key: "code", title: "代码文本", icon: <CodeOutlined /> },
+  { key: "runs", title: "运行", icon: <HistoryOutlined /> },
 ];
 
 function isPreviewablePath(path: string): boolean {
@@ -131,6 +140,11 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
   const [matchedFiles, setMatchedFiles] = useState<string[]>([]);
   const [repositoryFiles, setRepositoryFiles] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const conversations = useCockpitConversations();
+
+  useEffect(() => {
+    void hydrateCockpitConversations();
+  }, []);
 
   useEffect(() => {
     if (activeRepositoryId != null) {
@@ -180,38 +194,62 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
   const repositoryArtifacts = useMemo(() => repositoryFiles.map(artifactFor), [repositoryFiles]);
   const matchedArtifacts = useMemo(() => matchedFiles.map(artifactFor), [matchedFiles]);
 
+  const repositoryRuns = useMemo(
+    () => listCockpitConversationsForRepository(selectedRepository?.path?.trim() ?? ""),
+    [conversations.records, selectedRepository?.path],
+  );
+
   const laneCounts = useMemo(() => {
     const counts = new Map<PreviewLaneKey, number>(PREVIEW_LANES.map((lane) => [lane.key, 0]));
     counts.set("all", repositoryArtifacts.length);
     for (const artifact of repositoryArtifacts) {
       counts.set(artifact.lane, (counts.get(artifact.lane) ?? 0) + 1);
     }
+    counts.set("runs", repositoryRuns.length);
     return counts;
-  }, [repositoryArtifacts]);
+  }, [repositoryArtifacts, repositoryRuns.length]);
 
   const visibleArtifacts = useMemo(() => {
+    if (selectedLane === "runs") return [];
     const filtered = selectedLane === "all"
       ? matchedArtifacts
       : matchedArtifacts.filter((artifact) => artifact.lane === selectedLane);
     return [...filtered].sort((a, b) => a.path.localeCompare(b.path));
   }, [matchedArtifacts, selectedLane]);
 
+  const visibleRuns = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return repositoryRuns;
+    return repositoryRuns.filter((run) =>
+      [run.title, run.assistantName, run.promptPreview, ...run.artifactPaths].join(" ").toLowerCase().includes(q),
+    );
+  }, [query, repositoryRuns]);
+
   const activeLane = PREVIEW_LANES.find((lane) => lane.key === selectedLane) ?? PREVIEW_LANES[0];
+  const showingRuns = selectedLane === "runs";
 
   const emptyDescription = !selectedRepository
     ? "请先在右上角选择仓库"
+    : showingRuns
+      ? visibleRuns.length === 0 && query.trim()
+        ? `没有匹配「${query.trim()}」的运行`
+        : "还没有挂到该仓库的助手运行。从助手 Hub 发送需求后，完成后的改动会出现在这里。"
     : query.trim()
       ? `没有匹配「${query.trim()}」的可打开产物`
       : visibleArtifacts.length === 0 && repositoryArtifacts.length > 0
         ? `${activeLane.title} 分类下暂无产物，试试切换筛选`
         : "当前仓库暂无可预览的产物文件";
 
+  const showEmpty = showingRuns
+    ? !selectedRepository || visibleRuns.length === 0
+    : !selectedRepository || visibleArtifacts.length === 0;
+
   return (
     <AuthorPanelPageShell
       className="app-artifacts-panel"
       icon={<FileSearchOutlined />}
       title="产物检查台"
-      subtitle="浏览并打开仓库内的 Markdown、Diff、图片、PDF、Office 等可预览产物"
+      subtitle="浏览仓库可预览文件，或打开助手 Hub 派发后挂在运行上的产物"
       toolbarLayout="stacked"
       actions={
         <>
@@ -253,24 +291,69 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
         </AuthorPanelHubTabs>
       }
     >
-      {selectedRepository && repositoryArtifacts.length > 0 ? (
+      {selectedRepository && (showingRuns ? repositoryRuns.length > 0 : repositoryArtifacts.length > 0) ? (
         <div className="app-artifacts-panel__status" aria-live="polite">
           <span className="app-artifacts-panel__status-repo">{selectedRepository.name || selectedRepository.path}</span>
           <span>
-            {activeLane.title} · {visibleArtifacts.length}
-            {query.trim() ? ` / ${matchedArtifacts.length} 匹配` : ` / ${repositoryArtifacts.length} 可预览`}
+            {activeLane.title} · {showingRuns ? visibleRuns.length : visibleArtifacts.length}
+            {showingRuns
+              ? ` / ${repositoryRuns.length} 次运行`
+              : query.trim()
+                ? ` / ${matchedArtifacts.length} 匹配`
+                : ` / ${repositoryArtifacts.length} 可预览`}
           </span>
         </div>
       ) : null}
 
-      {loading && visibleArtifacts.length === 0 && selectedRepository ? (
+      {loading && visibleArtifacts.length === 0 && selectedRepository && !showingRuns ? (
         <div className="author-panel-page__loading">
           <Spin size="small" />
         </div>
-      ) : !selectedRepository || visibleArtifacts.length === 0 ? (
+      ) : showEmpty ? (
         <AuthorPanelEmptyShell>
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyDescription} />
         </AuthorPanelEmptyShell>
+      ) : showingRuns ? (
+        <AuthorPanelListShell>
+          <HubItems>
+            {visibleRuns.map((run) => (
+              <div key={run.id} className="app-artifacts-panel__run">
+                <HubItem
+                  avatarText={run.assistantName}
+                  title={run.title}
+                  path={`${formatCockpitRunStatusLabel(run.status)} · ${run.assistantName}`}
+                  tags={<HubTag tone={run.status === "failed" ? "warning" : run.status === "running" ? "primary" : "success"}>{formatCockpitRunStatusLabel(run.status)}</HubTag>}
+                  onClick={() => {
+                    if (run.sessionId) openWorkspaceRequirementExecutionSession(run.sessionId);
+                  }}
+                />
+                {run.artifactPaths.length > 0 ? (
+                  <ul className="app-artifacts-panel__run-files">
+                    {run.artifactPaths.map((path) => (
+                      <li key={path}>
+                        <button
+                          type="button"
+                          className="app-artifacts-panel__run-file"
+                          onClick={() => {
+                            if (!selectedRepository) return;
+                            onOpenRepositoryFile(selectedRepository, path);
+                          }}
+                        >
+                          {fileBaseName(path)}
+                          <Typography.Text type="secondary"> {path}</Typography.Text>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <Typography.Text type="secondary" className="app-artifacts-panel__run-empty">
+                    运行结束后会挂上当时的仓库改动
+                  </Typography.Text>
+                )}
+              </div>
+            ))}
+          </HubItems>
+        </AuthorPanelListShell>
       ) : (
         <AuthorPanelListShell>
           <HubItems>

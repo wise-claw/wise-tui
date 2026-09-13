@@ -737,6 +737,8 @@ export interface AppWorkspaceLayoutProps {
   /** Cockpit hub/conversation 子状态决策(Stage 3 Wave A 引入)。 */
   cockpitSurfaceActiveProjectId: string | null;
   cockpitSurfaceActiveProjectName: string | null;
+  cockpitSurfaceActiveRepositoryPath: string | null;
+  cockpitSurfaceActiveRepositoryName: string | null;
   /** 显式 FAB 入口已触发 → 直接进入 conversation 子态,跳过 hub。 */
   cockpitSurfaceHasInitialTarget: boolean;
   /** 会话快捷条指定内置助手 id，直达该助手对话页。 */
@@ -792,6 +794,8 @@ export function AppWorkspaceLayout({
   workspaceWelcomeProps,
   cockpitSurfaceActiveProjectId,
   cockpitSurfaceActiveProjectName,
+  cockpitSurfaceActiveRepositoryPath,
+  cockpitSurfaceActiveRepositoryName,
   cockpitSurfaceHasInitialTarget,
   cockpitSurfaceInitialAssistantId,
   cockpitSurfaceResumeAssistantId,
@@ -1945,6 +1949,8 @@ export function AppWorkspaceLayout({
                               <CockpitSurface
                                 activeProjectId={cockpitSurfaceActiveProjectId}
                                 activeProjectName={cockpitSurfaceActiveProjectName}
+                                activeRepositoryPath={cockpitSurfaceActiveRepositoryPath}
+                                activeRepositoryName={cockpitSurfaceActiveRepositoryName}
                                 hasInitialTarget={cockpitSurfaceHasInitialTarget}
                                 initialAssistantId={cockpitSurfaceInitialAssistantId}
                                 resumeAssistantId={cockpitSurfaceResumeAssistantId}

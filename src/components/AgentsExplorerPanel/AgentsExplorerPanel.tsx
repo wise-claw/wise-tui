@@ -326,7 +326,7 @@ export function AgentsExplorerPanel({ repositoryPath, onClose }: AgentsExplorerP
   return (
     <AuthorPanelPageShell
       icon={<CompassOutlined />}
-      title="Agents 探索"
+      title="仓库智能体"
       subtitle="浏览仓库 .agents 目录下的命令、技能、智能体与资产（只读）"
       actions={
         <Space size={8} wrap>

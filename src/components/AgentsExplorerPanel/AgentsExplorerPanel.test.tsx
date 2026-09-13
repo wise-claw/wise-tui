@@ -59,7 +59,7 @@ describe("AgentsExplorerPanel", () => {
       </AntApp>,
     );
 
-    expect(html).toContain("Agents 探索");
+    expect(html).toContain("仓库智能体");
     expect(html).toContain("浏览仓库 .agents 目录下的命令、技能、智能体与资产");
     expect(html).toContain("命令");
     expect(html).toContain("技能");

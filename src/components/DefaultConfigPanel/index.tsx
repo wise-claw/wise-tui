@@ -129,7 +129,7 @@ export function DefaultConfigPanel() {
     }));
     const terminals = terminalEmployees.map((employee) => ({
       value: encodeAtMentionDefaultSelectValue({ kind: "terminal", employeeName: employee.name }),
-      label: `终端 · ${employee.name}`,
+      label: `席位 · ${employee.name}`,
     }));
     return [...engines, ...terminals];
   }, [terminalEmployees]);
@@ -149,7 +149,7 @@ export function DefaultConfigPanel() {
       rows.push({
         target: { kind: "terminal", employeeName: employee.name },
         label: employee.name,
-        group: "终端",
+        group: "席位",
       });
     }
     return rows;
@@ -436,7 +436,7 @@ export function DefaultConfigPanel() {
           <DefaultConfigRow
             title="默认执行环境"
             hint="新建会话默认"
-            detail="新建会话默认；仓库 / 终端单独设置过的执行引擎不变"
+            detail="新建会话默认；仓库 / 席位单独设置过的执行引擎不变"
             control={
               <Select
                 size="small"
@@ -840,7 +840,7 @@ export function DefaultConfigPanel() {
           <DefaultConfigRow
             title="会话预览"
             hint="展开默认条数"
-            detail="工作区展开后默认展示的会话与运行行数（终端 / 派发 / 工作流 + 会话）；超出可点 More 加载更多"
+            detail="工作区展开后默认展示的会话与运行行数（席位 / 派发 / 工作流 + 会话）；超出可点 More 加载更多"
             control={
               <Select
                 size="small"
@@ -903,13 +903,13 @@ export function DefaultConfigPanel() {
         </>
       ),
     },
-    // 运行面板：左栏独立区块（终端 / 派发 / 工作流）。
+    // 运行面板：左栏独立区块（席位 / 派发 / 工作流）。
     {
       key: "monitor",
       title: "运行面板",
       content: (
         <DefaultConfigRow
-          title="终端 / 派发 / 工作流"
+          title="席位 / 派发 / 工作流"
           hint="显隐 · 栏位 · 行数"
           detail="左栏独立运行面板；关闭后不再显示"
           control={

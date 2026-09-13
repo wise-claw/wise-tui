@@ -9,6 +9,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RepositoryScheduledClaudeTask, WorkflowTemplateItem } from "../../types";
 import { PromptRichTextField } from "../PromptRichTextField";
 import {
+  hydrateAutomationPause,
+  setRepositoryAutomationPause,
+  useAutomationPause,
+} from "../../services/automationPauseStore";
+import {
   initialLastScheduledSlotForCron,
   readRepositoryScheduledClaudeTasks,
   writeRepositoryScheduledClaudeTasks,
@@ -31,6 +36,10 @@ import {
   resolveScheduledTaskScriptSource,
   type ScheduledTaskScriptSource,
 } from "../../utils/scheduledTaskScript";
+import {
+  formatScheduledTaskLastKindLabel,
+  resolveScheduledTaskLastKind,
+} from "../../utils/scheduledTaskReliability";
 import { ScheduledTaskCronField } from "./ScheduledTaskCronField";
 import { ScheduledTaskScriptFileSelect } from "./ScheduledTaskScriptFileSelect";
 import "./index.css";
@@ -100,6 +109,12 @@ export function RepositoryScheduledTasksModal({
   const watchedExecutionKind = Form.useWatch("executionKind", form) ?? "claude";
   const watchedScriptSource = Form.useWatch("scriptSource", form) ?? "inline";
   const watchedDispatchTargetKey = Form.useWatch("dispatchTargetKey", form);
+  const automationPause = useAutomationPause();
+  const repositoryPaused = automationPause.repositoryPaths.includes(repositoryPath.trim());
+
+  useEffect(() => {
+    if (open) void hydrateAutomationPause();
+  }, [open]);
 
   const scheduledTaskDispatchSelectOptions = useMemo(() => {
     const currentKey =
@@ -405,16 +420,31 @@ export function RepositoryScheduledTasksModal({
     {
       title: "最近",
       key: "last",
-      width: 96,
+      width: 148,
       ellipsis: true,
       render: (_, row) => {
         if (!row.lastExecutedAt) return <span className="app-scheduled-tasks-modal__mono-muted">—</span>;
-        const ok = row.lastExecuteOk !== false;
+        const kind = resolveScheduledTaskLastKind(row);
+        const kindLabel = formatScheduledTaskLastKindLabel(kind);
+        const messageText = row.lastExecuteMessage?.trim() ?? "";
+        const type = kind === "failed" ? "danger" : kind === "retrying" ? "warning" : "secondary";
+        const stamp = new Date(row.lastExecutedAt).toLocaleString("zh-CN", {
+          hour12: false,
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
         return (
-          <Space size={4} orientation="vertical" style={{ lineHeight: 1.2 }}>
-            <Typography.Text type={ok ? "secondary" : "danger"} style={{ fontSize: 11 }}>
-              {new Date(row.lastExecutedAt).toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+          <Space size={0} orientation="vertical" style={{ lineHeight: 1.2, maxWidth: "100%" }}>
+            <Typography.Text type={type} style={{ fontSize: 11 }}>
+              {kindLabel} · {stamp}
             </Typography.Text>
+            {messageText ? (
+              <Typography.Text ellipsis={{ tooltip: messageText }} type="secondary" style={{ fontSize: 11, maxWidth: 140 }}>
+                {messageText}
+              </Typography.Text>
+            ) : null}
           </Space>
         );
       },
@@ -439,9 +469,19 @@ export function RepositoryScheduledTasksModal({
   ];
 
   const tableScrollY = tableBodyScrollHeight(presentation);
+  const pauseControl = (
+    <label className="app-scheduled-tasks-panel__pause">
+      <Switch
+        size="small"
+        checked={repositoryPaused}
+        onChange={(checked) => void setRepositoryAutomationPause(repositoryPath, checked)}
+      />
+      <span>仓级暂停</span>
+    </label>
+  );
   const hint = (
     <Typography.Paragraph className="app-scheduled-tasks-panel__hint" style={{ marginBottom: 0 }}>
-      按 Cron 在后台触发：Claude 可新建会话或派发团队工作流；脚本支持内联命令或仓库文件。应用需保持运行。
+      按 Cron 在后台触发：Claude 可新建会话或派发团队工作流；脚本支持内联命令或仓库文件。应用需保持运行。暂停期间不消耗触发槽，恢复后补跑最近一档。
     </Typography.Paragraph>
   );
   const tableNode = (
@@ -474,6 +514,7 @@ export function RepositoryScheduledTasksModal({
             ) : null}
           </div>
           <Space size={8}>
+            {pauseControl}
             <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
               新建
             </Button>
@@ -497,9 +538,12 @@ export function RepositoryScheduledTasksModal({
     <>
       <div className="app-scheduled-tasks-modal__toolbar">
         {hint}
-        <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
-          新建
-        </Button>
+        <Space size={8}>
+          {pauseControl}
+          <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
+            新建
+          </Button>
+        </Space>
       </div>
       {tableNode}
     </>

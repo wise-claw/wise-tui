@@ -1,13 +1,28 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
-import { CronExpressionParser } from "cron-parser";
 import type { PendingExecutionTask, Repository, WorkflowTemplateItem } from "../types";
 import { buildClaudeOutgoingPrompt } from "../services/claudeComposerPrompt";
+import {
+  hydrateAutomationPause,
+  isGlobalAutomationPaused,
+  isRepositoryAutomationPaused,
+} from "../services/automationPauseStore";
 import { patchRepositoryScheduledClaudeTask, readRepositoryScheduledClaudeTasks } from "../services/repositoryScheduledClaudeTasksStore";
 import { runShellCommand } from "../services/terminal";
 import {
   resolveScheduledTaskExecutionKind,
 } from "../utils/scheduledTaskExecution";
 import { buildScheduledTaskScriptCommand } from "../utils/scheduledTaskScript";
+import {
+  SCHEDULED_TASK_RETRY_BUSY,
+  SCHEDULED_TASK_RETRY_DISPATCH,
+  SCHEDULED_TASK_SKIP_CRON,
+  SCHEDULED_TASK_SKIP_EMPTY,
+  SCHEDULED_TASK_SKIP_PROMPT_EMPTY,
+  SCHEDULED_TASK_SKIP_WORKFLOW,
+  buildScheduledTaskResultPatch,
+  evaluateScheduledTaskGate,
+  type ScheduledTaskLastKind,
+} from "../utils/scheduledTaskReliability";
 import { startAdaptiveInterval } from "../utils/adaptivePoll";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 
@@ -56,9 +71,31 @@ function buildScheduledTaskSessionName(repoName: string, taskTitle: string, suff
   return `${base}/定时任务:${mid}·${stamp}`;
 }
 
+async function recordScheduledTaskResult(
+  repoPath: string,
+  task: { id: string; cronExpression: string },
+  input: {
+    nextFireMs?: number;
+    nowMs: number;
+    consumeSlot: boolean;
+    kind: ScheduledTaskLastKind;
+    message?: string;
+  },
+): Promise<void> {
+  await patchRepositoryScheduledClaudeTask(
+    repoPath,
+    task.id,
+    buildScheduledTaskResultPatch({
+      ...input,
+      cronExpression: task.cronExpression,
+    }),
+  );
+}
+
 /**
  * 按侧栏仓库列表轮询：到达 cron 下一档时执行仓库定时任务（Claude 提示词 / Shell 脚本）。
  * Claude：默认新建独立会话；若配置了 workflowId 则按团队工作流派发。
+ * 忙时 / 暂停不消耗 Cron 槽，空闲或恢复后补跑一档。
  */
 export function useScheduledClaudeTaskRunner({
   repositoriesRef,
@@ -73,6 +110,7 @@ export function useScheduledClaudeTaskRunner({
   useEffect(() => {
     let cancelled = false;
     if (!isCurrentPrimaryMainWorkspaceWindowSync()) return;
+    let stopPoll: (() => void) | null = null;
     const tick = async () => {
       if (cancelled || inFlightRef.current) return;
       inFlightRef.current = true;
@@ -84,10 +122,12 @@ export function useScheduledClaudeTaskRunner({
         const executeWithDispatch = executeWithDispatchRef.current;
         const closeSession = closeSessionRef.current;
         const now = Date.now();
+        if (isGlobalAutomationPaused()) return;
 
         for (const repo of repos) {
           const repoPath = repo.path.trim();
           if (!repoPath) continue;
+          if (isRepositoryAutomationPaused(repoPath)) continue;
 
           let tasks: Awaited<ReturnType<typeof readRepositoryScheduledClaudeTasks>>;
           try {
@@ -98,32 +138,41 @@ export function useScheduledClaudeTaskRunner({
           if (tasks.length === 0) continue;
 
           for (const task of tasks) {
-            if (!task.enabled) continue;
-            const cron = task.cronExpression.trim();
-            if (!cron) continue;
-
-            let nextFireMs: number;
-            try {
-              const iter = CronExpressionParser.parse(cron, {
-                currentDate: new Date(task.lastScheduledSlotAt ?? 0),
-              });
-              nextFireMs = iter.next().getTime();
-            } catch {
+            const gate = evaluateScheduledTaskGate({
+              enabled: task.enabled,
+              cronExpression: task.cronExpression,
+              lastScheduledSlotAt: task.lastScheduledSlotAt,
+              nowMs: now,
+              pausedGlobal: false,
+              pausedRepository: false,
+            });
+            if (gate.status === "disabled" || gate.status === "hold" || gate.status === "paused") {
+              continue;
+            }
+            if (gate.status === "invalid_cron") {
+              if (task.lastExecuteKind !== "skipped" || task.lastExecuteMessage !== SCHEDULED_TASK_SKIP_CRON) {
+                await recordScheduledTaskResult(repoPath, task, {
+                  nowMs: now,
+                  consumeSlot: false,
+                  kind: "skipped",
+                  message: SCHEDULED_TASK_SKIP_CRON,
+                });
+              }
               continue;
             }
 
-            if (nextFireMs > now) continue;
-
+            const nextFireMs = gate.nextFireMs;
             const executionKind = resolveScheduledTaskExecutionKind(task);
 
             if (executionKind === "script") {
               const built = buildScheduledTaskScriptCommand(task);
               if (!built.ok) {
-                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                  lastScheduledSlotAt: nextFireMs,
-                  lastExecutedAt: now,
-                  lastExecuteOk: false,
-                  lastExecuteMessage: `${built.reason}，已跳过`,
+                await recordScheduledTaskResult(repoPath, task, {
+                  nextFireMs,
+                  nowMs: now,
+                  consumeSlot: true,
+                  kind: "skipped",
+                  message: `${built.reason}，已跳过`,
                 });
                 continue;
               }
@@ -141,19 +190,21 @@ export function useScheduledClaudeTaskRunner({
                 ]
                   .filter(Boolean)
                   .join("；");
-                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                  lastScheduledSlotAt: nextFireMs,
-                  lastExecutedAt: now,
-                  lastExecuteOk: ok,
-                  lastExecuteMessage: ok ? undefined : detail,
+                await recordScheduledTaskResult(repoPath, task, {
+                  nextFireMs,
+                  nowMs: now,
+                  consumeSlot: true,
+                  kind: ok ? "ok" : "failed",
+                  message: ok ? undefined : detail,
                 });
               } catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
-                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                  lastScheduledSlotAt: nextFireMs,
-                  lastExecutedAt: now,
-                  lastExecuteOk: false,
-                  lastExecuteMessage: `脚本执行失败：${msg}`,
+                await recordScheduledTaskResult(repoPath, task, {
+                  nextFireMs,
+                  nowMs: now,
+                  consumeSlot: true,
+                  kind: "failed",
+                  message: `脚本执行失败：${msg}`,
                 });
               }
               continue;
@@ -161,11 +212,12 @@ export function useScheduledClaudeTaskRunner({
 
             const md = task.contentMarkdown.trim();
             if (!md) {
-              await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                lastScheduledSlotAt: nextFireMs,
-                lastExecutedAt: now,
-                lastExecuteOk: false,
-                lastExecuteMessage: "执行内容为空，已跳过",
+              await recordScheduledTaskResult(repoPath, task, {
+                nextFireMs,
+                nowMs: now,
+                consumeSlot: true,
+                kind: "skipped",
+                message: SCHEDULED_TASK_SKIP_EMPTY,
               });
               continue;
             }
@@ -180,21 +232,23 @@ export function useScheduledClaudeTaskRunner({
               });
             } catch (e) {
               const msg = e instanceof Error ? e.message : String(e);
-              await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                lastScheduledSlotAt: nextFireMs,
-                lastExecutedAt: now,
-                lastExecuteOk: false,
-                lastExecuteMessage: `组装提示失败：${msg}`,
+              await recordScheduledTaskResult(repoPath, task, {
+                nextFireMs,
+                nowMs: now,
+                consumeSlot: true,
+                kind: "failed",
+                message: `组装提示失败：${msg}`,
               });
               continue;
             }
 
             if (!outbound.trim()) {
-              await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                lastScheduledSlotAt: nextFireMs,
-                lastExecutedAt: now,
-                lastExecuteOk: false,
-                lastExecuteMessage: "组装提示结果为空",
+              await recordScheduledTaskResult(repoPath, task, {
+                nextFireMs,
+                nowMs: now,
+                consumeSlot: true,
+                kind: "skipped",
+                message: SCHEDULED_TASK_SKIP_PROMPT_EMPTY,
               });
               continue;
             }
@@ -205,11 +259,12 @@ export function useScheduledClaudeTaskRunner({
               if (wfId) {
                 const wf = workflowTemplates.find((t) => t.id === wfId);
                 if (!wf) {
-                  await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                    lastScheduledSlotAt: nextFireMs,
-                    lastExecutedAt: now,
-                    lastExecuteOk: false,
-                    lastExecuteMessage: "所选团队工作流不存在或不可用，已跳过",
+                  await recordScheduledTaskResult(repoPath, task, {
+                    nextFireMs,
+                    nowMs: now,
+                    consumeSlot: true,
+                    kind: "skipped",
+                    message: SCHEDULED_TASK_SKIP_WORKFLOW,
                   });
                   continue;
                 }
@@ -223,11 +278,22 @@ export function useScheduledClaudeTaskRunner({
                   targetWorkflowId: wf.id,
                   targetWorkflowName: wf.name.trim(),
                 });
-                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                  lastScheduledSlotAt: nextFireMs,
-                  lastExecutedAt: now,
-                  lastExecuteOk: ok,
-                  lastExecuteMessage: ok ? undefined : "工作流派发失败或未启动",
+                if (ok === false) {
+                  void closeSession(workerSessionId);
+                  await recordScheduledTaskResult(repoPath, task, {
+                    nextFireMs,
+                    nowMs: now,
+                    consumeSlot: false,
+                    kind: "retrying",
+                    message: SCHEDULED_TASK_RETRY_DISPATCH,
+                  });
+                  continue;
+                }
+                await recordScheduledTaskResult(repoPath, task, {
+                  nextFireMs,
+                  nowMs: now,
+                  consumeSlot: true,
+                  kind: "ok",
                 });
                 continue;
               }
@@ -240,28 +306,30 @@ export function useScheduledClaudeTaskRunner({
               const ok = executeSession(workerSessionId, outbound);
               if (ok === false) {
                 void closeSession(workerSessionId);
-                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                  lastScheduledSlotAt: nextFireMs,
-                  lastExecutedAt: now,
-                  lastExecuteOk: false,
-                  lastExecuteMessage: "新建会话未启动（可能已达并发上限）",
+                await recordScheduledTaskResult(repoPath, task, {
+                  nextFireMs,
+                  nowMs: now,
+                  consumeSlot: false,
+                  kind: "retrying",
+                  message: SCHEDULED_TASK_RETRY_BUSY,
                 });
                 continue;
               }
-              await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                lastScheduledSlotAt: nextFireMs,
-                lastExecutedAt: now,
-                lastExecuteOk: true,
-                lastExecuteMessage: undefined,
+              await recordScheduledTaskResult(repoPath, task, {
+                nextFireMs,
+                nowMs: now,
+                consumeSlot: true,
+                kind: "ok",
               });
             } catch (e) {
               if (workerSessionId) void closeSession(workerSessionId);
               const msg = e instanceof Error ? e.message : String(e);
-              await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                lastScheduledSlotAt: nextFireMs,
-                lastExecutedAt: now,
-                lastExecuteOk: false,
-                lastExecuteMessage: `执行失败：${msg}`,
+              await recordScheduledTaskResult(repoPath, task, {
+                nextFireMs,
+                nowMs: now,
+                consumeSlot: true,
+                kind: "failed",
+                message: `执行失败：${msg}`,
               });
             }
           }
@@ -271,11 +339,19 @@ export function useScheduledClaudeTaskRunner({
       }
     };
 
-    const stopPoll = startAdaptiveInterval(tick, TICK_MS, TICK_MS_HIDDEN);
-    void tick();
+    void hydrateAutomationPause().then(() => {
+      if (cancelled) return;
+      stopPoll = startAdaptiveInterval(tick, TICK_MS, TICK_MS_HIDDEN);
+      if (cancelled) {
+        stopPoll();
+        stopPoll = null;
+        return;
+      }
+      void tick();
+    });
     return () => {
       cancelled = true;
-      stopPoll();
+      stopPoll?.();
     };
   }, [
     closeSessionRef,

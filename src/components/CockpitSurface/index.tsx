@@ -1,6 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { App as AntdApp } from "antd";
 import { listAssistants } from "../../services/assistants";
 import type { AssistantEntry } from "../../types/assistant";
+import {
+  WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF,
+  type RunAssistantBriefDetail,
+} from "../../constants/workflowUiEvents";
+import {
+  hydrateCockpitConversations,
+  latestCockpitConversationForAssistant,
+  useCockpitConversations,
+} from "../../services/cockpitConversationStore";
+import { useCockpitRunFinalizer } from "../../hooks/useCockpitRunFinalizer";
+import { openWorkspaceRequirementExecutionSession } from "../../stores/workspaceMemoPanelStore";
+import type { CockpitConversationRecord } from "../../utils/cockpitConversation";
 import { AssistantConversationView } from "./AssistantConversationView";
 import { AssistantHeader } from "./AssistantHeader";
 import { AssistantHub } from "./AssistantHub";
@@ -29,6 +42,8 @@ export interface CockpitSurfaceProps {
   onActiveAssistantIdChange?: (assistantId: string | null) => void;
   activeProjectId: string | null;
   activeProjectName: string | null;
+  activeRepositoryPath: string | null;
+  activeRepositoryName: string | null;
   hasInitialTarget: boolean;
   initialAssistantId?: string | null;
   openRequestKey: number;
@@ -40,6 +55,8 @@ export interface CockpitSurfaceProps {
 export function CockpitSurface({
   activeProjectId,
   activeProjectName,
+  activeRepositoryPath,
+  activeRepositoryName,
   hasInitialTarget,
   initialAssistantId = null,
   openRequestKey,
@@ -48,6 +65,7 @@ export function CockpitSurface({
   onActiveAssistantIdChange,
   onClearInitialAssistant,
 }: CockpitSurfaceProps) {
+  const { message } = AntdApp.useApp();
   const [subMode, setSubMode] = useState<CockpitSubMode>(() =>
     cockpitSubModeFromEntry(hasInitialTarget, initialAssistantId),
   );
@@ -55,6 +73,12 @@ export function CockpitSurface({
   const [settingsAssistantId, setSettingsAssistantId] = useState<string | null>(null);
   const resumeAssistantIdRef = useRef(resumeAssistantId);
   resumeAssistantIdRef.current = resumeAssistantId;
+  const conversations = useCockpitConversations();
+  useCockpitRunFinalizer();
+
+  useEffect(() => {
+    void hydrateCockpitConversations();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,6 +126,55 @@ export function CockpitSurface({
     setSubMode({ kind: "hub" });
   }, [onClearInitialAssistant]);
 
+  const handleOpenRecent = useCallback(
+    (record: CockpitConversationRecord) => {
+      onClearInitialAssistant?.();
+      setSubMode({ kind: "conversation", assistantId: record.assistantId });
+      if (record.sessionId) {
+        openWorkspaceRequirementExecutionSession(record.sessionId);
+      }
+    },
+    [onClearInitialAssistant],
+  );
+
+  const handleSendBrief = useCallback(
+    (assistantId: string, request: string) => {
+      const assistant = assistants?.find((item) => item.id === assistantId);
+      if (!assistant) {
+        message.warning("找不到所选助手");
+        return;
+      }
+      if (!activeRepositoryPath?.trim()) {
+        message.warning("请先在左栏选择仓库");
+        return;
+      }
+      onClearInitialAssistant?.();
+      setSubMode({ kind: "conversation", assistantId });
+      window.dispatchEvent(
+        new CustomEvent<RunAssistantBriefDetail>(WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF, {
+          detail: {
+            assistantId: assistant.id,
+            assistantName: assistant.name,
+            prompt: request,
+            projectId: activeProjectId,
+            projectName: activeProjectName,
+            repositoryPath: activeRepositoryPath,
+            repositoryName: activeRepositoryName,
+          },
+        }),
+      );
+    },
+    [
+      activeProjectId,
+      activeProjectName,
+      activeRepositoryName,
+      activeRepositoryPath,
+      assistants,
+      message,
+      onClearInitialAssistant,
+    ],
+  );
+
   const handleOpenSettings = useCallback((assistantId: string) => {
     setSettingsAssistantId(assistantId);
   }, []);
@@ -135,9 +208,15 @@ export function CockpitSurface({
           <AssistantHub
             activeProjectId={activeProjectId}
             activeProjectName={activeProjectName}
+            activeRepositoryPath={activeRepositoryPath}
+            activeRepositoryName={activeRepositoryName}
+            recentConversations={conversations.records}
+            lastAssistantId={conversations.lastAssistantId}
             onOpenChat={onClose}
             onSelectAssistant={handleSelectAssistant}
             onOpenAssistantSettings={handleOpenSettings}
+            onSendBrief={handleSendBrief}
+            onOpenRecent={handleOpenRecent}
           />
         ) : (
           <AssistantConversationView
@@ -145,6 +224,11 @@ export function CockpitSurface({
             assistant={activeAssistant}
             activeProjectId={activeProjectId}
             activeProjectName={activeProjectName}
+            activeRepositoryPath={activeRepositoryPath}
+            activeRepositoryName={activeRepositoryName}
+            latestRun={
+              activeAssistant ? latestCockpitConversationForAssistant(activeAssistant.id) : null
+            }
             onClose={onClose}
             onOpenSettings={handleOpenActiveSettings}
           />

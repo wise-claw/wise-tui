@@ -26,7 +26,12 @@ function isRepositoryScheduledClaudeTask(x: unknown): x is RepositoryScheduledCl
     (o.ccWorkflowId === undefined || o.ccWorkflowId === null || typeof o.ccWorkflowId === "string") &&
     typeof o.enabled === "boolean" &&
     typeof o.createdAt === "number" &&
-    typeof o.updatedAt === "number"
+    typeof o.updatedAt === "number" &&
+    (o.lastExecuteKind === undefined ||
+      o.lastExecuteKind === "ok" ||
+      o.lastExecuteKind === "failed" ||
+      o.lastExecuteKind === "skipped" ||
+      o.lastExecuteKind === "retrying")
   );
 }
 

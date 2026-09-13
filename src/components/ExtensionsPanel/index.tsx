@@ -126,11 +126,11 @@ function ExtensionsUsageGuide() {
                 <li>放入或更新文件后，点击「重新扫描」加载扩展；加载失败会出现在「异常」筛选中。</li>
                 <li>用列表右侧开关启用或禁用扩展；可展开卡片查看该扩展具体贡献了哪些能力。</li>
                 <li>
-                  已启用的技能、MCP 等会分别出现在「技能市场」「MCP 工具」「助手模板」等页面，无需重复安装。
+                  已启用的技能、MCP 等会分别出现在「技能」「MCP 工具」「助手模板」等页面，无需重复安装。
                 </li>
               </ol>
               <Typography.Paragraph type="secondary" className="app-extensions-panel__guide-note">
-                与侧栏「插件市场」不同：扩展市场管理的是 Wise 扩展目录；插件市场面向 Claude Code 官方/精选插件目录。
+                与侧栏「插件」不同：扩展市场管理的是 Wise 扩展目录；插件面向各执行环境的官方/精选插件目录。
               </Typography.Paragraph>
             </div>
           ),

@@ -3,6 +3,9 @@ export const WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL = "wise:focus-task-tool";
 /** 仓库定时任务列表变更或叠层关闭后，请求侧栏刷新角标汇总 */
 export const WISE_UI_EVENT_SCHEDULED_TASKS_CHANGED = "wise:scheduled-tasks-changed";
 
+/** 全局或仓库级自动化暂停开关变更后，请求面板刷新。 */
+export const WISE_UI_EVENT_AUTOMATION_PAUSE_CHANGED = "wise:automation-pause-changed";
+
 export const WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT = "wise:apply-starter-prompt";
 
 export type ApplyStarterPromptInsertMode = "replace" | "append";
@@ -146,6 +149,9 @@ export interface RunAssistantBriefDetail {
   assistantName: string;
   prompt: string;
   projectId?: string | null;
+  projectName?: string | null;
+  repositoryPath?: string | null;
+  repositoryName?: string | null;
 }
 
 export const WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED = "wise:omc-batch-runtime-changed";

@@ -106,9 +106,15 @@ export function AuthorPanel({
         return <WorkspacesTab {...workspacesTabProps} />;
       case "agents":
         return employeeConfigProps ? (
-          <EmployeeConfigModal {...employeeConfigProps} open inline />
+          <AuthorPanelPageShell
+            icon={activeTab.icon}
+            title={activeTab.label}
+            subtitle={activeTab.description}
+          >
+            <EmployeeConfigModal {...employeeConfigProps} open inline />
+          </AuthorPanelPageShell>
         ) : (
-          <AuthorUnavailable label="员工角色" />
+          <AuthorUnavailable label="席位" />
         );
       case "workflows":
         return workflowConfigProps ? (
@@ -225,7 +231,15 @@ export function AuthorPanel({
       case "shortcuts":
         return <AppShortcutsPopoverBody density="default" />;
       case "sandbox":
-        return <ClaudeSandboxHelpPopoverBody />;
+        return (
+          <AuthorPanelPageShell
+            icon={activeTab.icon}
+            title={activeTab.label}
+            subtitle={activeTab.description}
+          >
+            <ClaudeSandboxHelpPopoverBody />
+          </AuthorPanelPageShell>
+        );
       default:
         return <AuthorUnavailable label="工作台配置" />;
     }

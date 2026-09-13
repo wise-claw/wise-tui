@@ -103,6 +103,7 @@ import { useMacTerminalDetectionBootstrap } from "./hooks/useMacTerminalDetectio
 import { useBackgroundScriptRuntimeSync } from "./hooks/useBackgroundScriptRuntimeSync";
 import type { ScheduledTasksOverlayTarget } from "./components/RepositoryScheduledTasksModal";
 import { activateAssistantTemplate } from "./services/assistantTemplateActivation";
+import { dispatchCockpitAssistantBrief } from "./services/cockpitBriefDispatch";
 import type { AssistantEntry } from "./types/assistant";
 import {
   readAuthorPaneFromSettings,
@@ -147,10 +148,12 @@ import {
   WORKFLOW_UI_EVENT_OPEN_ASSISTANT,
   WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE,
   WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG,
+  WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF,
   WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED,
   type OpenAssistantDetail,
   type OpenRepositoryFileDetail,
   type OpenWorkflowConfigDetail,
+  type RunAssistantBriefDetail,
   type WorkflowGraphChangedDetail,
 } from "./constants/workflowUiEvents";
 import { listEmployeeTaskCounts, listEmployees, createEmployee, updateEmployee, deleteEmployee, moveEmployeeDisplayOrder } from "./services/employees";
@@ -2877,6 +2880,55 @@ export default function App() {
   }, [openBuiltinAssistant, openRequirementAssistant]);
 
   useEffect(() => {
+    const handleRunAssistantBrief = (event: Event) => {
+      const detail = (event as CustomEvent<RunAssistantBriefDetail>).detail;
+      if (!detail?.assistantId?.trim() || !detail.prompt?.trim()) return;
+      const repoPath = detail.repositoryPath?.trim()
+        || (activeRepositoryIdLatestRef.current != null
+          ? repositoriesLatestRef.current.find((item) => item.id === activeRepositoryIdLatestRef.current)?.path
+          : null);
+      const repo = repoPath
+        ? repositoriesLatestRef.current.find((item) => item.path.trim() === repoPath.trim())
+        : null;
+      void (async () => {
+        const result = await dispatchCockpitAssistantBrief(
+          {
+            createSession: createSessionRef.current,
+            executeSession: executeSessionRef.current,
+            closeSession: closeSessionRef.current,
+          },
+          {
+            ...detail,
+            repositoryPath: repoPath,
+            repositoryName: detail.repositoryName ?? repo?.name ?? null,
+          },
+        );
+        if (!result.ok) {
+          if (result.reason === "no_repository") {
+            message.warning("请先在左栏选择仓库后再派发助手任务");
+            return;
+          }
+          if (result.reason === "busy") {
+            message.warning("会话忙或已达并发上限，请稍后再派发");
+            return;
+          }
+          if (result.reason === "empty_prompt") {
+            message.warning("执行内容为空");
+            return;
+          }
+          message.error(`助手派发失败：${result.reason ?? "未知错误"}`);
+          return;
+        }
+        message.success("已派发到 Claude，完成后产物会出现在检查台「运行」");
+      })();
+    };
+    window.addEventListener(WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF, handleRunAssistantBrief as EventListener);
+    return () => {
+      window.removeEventListener(WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF, handleRunAssistantBrief as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     function handleWorkflowConfigEvent(event: Event) {
       const detail = (event as CustomEvent<OpenWorkflowConfigDetail>).detail;
@@ -3555,6 +3607,8 @@ export default function App() {
       }}
       cockpitSurfaceActiveProjectId={activeProjectId ?? null}
       cockpitSurfaceActiveProjectName={activeProject?.name ?? null}
+      cockpitSurfaceActiveRepositoryPath={activeRepository?.path ?? null}
+      cockpitSurfaceActiveRepositoryName={activeRepository?.name ?? null}
       cockpitSurfaceHasInitialTarget={Boolean(
         assistantInitialTarget?.projectId || assistantInitialTarget?.repositoryId,
       )}

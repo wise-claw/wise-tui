@@ -309,16 +309,16 @@ describe("AuthorPanel", () => {
     const { props } = buildProps();
     const html = renderAuthorPanel(props);
     for (const label of [
-      "终端",
+      "席位",
       "工作流",
       "我的扩展",
       "扩展市场",
       "助手模板",
       "MCP 工具",
-      "技能市场",
-      "Agents 探索",
-      "Hooks",
-      "插件市场",
+      "技能",
+      "仓库智能体",
+      "钩子",
+      "插件",
       "执行环境",
       "默认配置",
       "数据清理",
@@ -327,11 +327,17 @@ describe("AuthorPanel", () => {
       "定时自动化",
       "远程入口",
       "快捷键",
-      "Claude 沙箱",
+      "沙箱",
+      "产物检查台",
+      "能力",
+      "自动化",
+      "通道",
+      "产物",
+      "运行",
     ]) {
       expect(html).toContain(label);
     }
-    expect(html).not.toContain("产物检查台");
+    expect(html).not.toContain("Claude Code");
     expect(html).not.toContain("委派协议");
   });
 
@@ -359,6 +365,19 @@ describe("AuthorPanel", () => {
 
   test("keeps direct-entry workspaces pane routable", () => {
     expect(resolveAuthorNavPane("workspaces")).toBe("workspaces");
+  });
+
+  test("artifacts pane is a visible configuration center route", () => {
+    expect(resolveAuthorNavPane("artifacts")).toBe("artifacts");
+    const { props } = buildProps({ pane: "artifacts" });
+    const html = renderAuthorPanel(props);
+    expect(html).toContain("产物检查台");
+  });
+
+  test("persists artifacts pane through the settings store", async () => {
+    const { setAppSetting } = await import("../../services/appSettingsStore");
+    writeAuthorPaneToStorage("artifacts");
+    expect(setAppSetting).toHaveBeenCalledWith("wise.author.lastPane", "artifacts");
   });
 
   test("workspaces pane renders the workspace list", () => {

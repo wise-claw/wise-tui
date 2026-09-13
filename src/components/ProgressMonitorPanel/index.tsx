@@ -145,12 +145,12 @@ function MonitorPanelHeadConfigActions({
         <button
           type="button"
           className="app-monitor-panel__head-config-btn"
-          title="配置终端"
-          aria-label="配置终端"
+          title="配置席位"
+          aria-label="配置席位"
           onClick={() => onOpenEmployeeConfig()}
         >
           <CodeOutlined aria-hidden />
-          <span className="app-monitor-panel__head-config-label">终端</span>
+          <span className="app-monitor-panel__head-config-label">席位</span>
         </button>
       ) : null}
       {onOpenWorkflowConfig ? (
@@ -1044,8 +1044,8 @@ const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
             <button
               type="button"
               className="app-monitor-panel__item-action-icon-btn app-monitor-panel__item-action-icon-btn--stop"
-              title="结束终端"
-              aria-label="结束终端"
+              title="结束席位"
+              aria-label="结束席位"
               onClick={(event) => {
                 event.stopPropagation();
                 onStopEmployee?.(item.employeeId);
@@ -1978,7 +1978,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
               className="app-monitor-panel__empty-add-btn"
               onClick={() => onOpenEmployeeConfig()}
             >
-              配置终端
+              配置席位
             </button>
           ) : null}
         </div>

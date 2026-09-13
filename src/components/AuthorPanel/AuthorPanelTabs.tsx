@@ -7,6 +7,7 @@ import {
   AuditOutlined,
   BranchesOutlined,
   FieldTimeOutlined,
+  FileSearchOutlined,
   FolderOpenOutlined,
   GatewayOutlined,
   SlidersOutlined,
@@ -34,55 +35,67 @@ export const AUTHOR_TAB_STORAGE_KEY = "wise.author.lastPane";
 
 export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinition[] }> = [
   {
-    title: "工作台",
+    title: "能力",
     items: [
-      { key: "agents", label: "终端", description: "终端供给、职责和默认仓库", icon: <RobotOutlined /> },
+      { key: "agents", label: "席位", description: "职责、默认仓库和派发目标", icon: <RobotOutlined /> },
       { key: "workflows", label: "工作流", description: "阶段派发、验收和工作流画布", icon: <BranchesOutlined /> },
-    ],
-  },
-  {
-    title: "Claude Code",
-    items: [
+      { key: "assistants", label: "助手模板", description: "角色模板、模型和系统提示词", icon: <UserOutlined /> },
+      { key: "engine-registry", label: "执行环境", description: "本机 CLI 与 Agent 运行入口", icon: <ThunderboltOutlined /> },
+      {
+        key: "agents-explorer",
+        label: "仓库智能体",
+        description: "仓库 .agents 下的命令、技能与智能体",
+        icon: <CompassOutlined />,
+      },
+      { key: "mcp", label: "MCP 工具", description: "服务器、推荐项和扩展工具协议", icon: <ApiOutlined /> },
+      { key: "skills", label: "技能", description: "skills.sh、外部目录和扩展技能", icon: <ToolOutlined /> },
       {
         key: "my-extensions",
         label: "我的扩展",
-        description: "全局或仓库级 MCP、技能、插件、Hooks 与脚本",
+        description: "全局或仓库级 MCP、技能、插件、钩子与脚本",
         icon: <AppstoreOutlined />,
       },
       { key: "extensions", label: "扩展市场", description: "本地扩展、远程索引和贡献能力", icon: <AppstoreAddOutlined /> },
-      { key: "assistants", label: "助手模板", description: "角色模板、模型和系统提示词", icon: <UserOutlined /> },
-      { key: "mcp", label: "MCP 工具", description: "服务器、推荐项和扩展工具协议", icon: <ApiOutlined /> },
-      { key: "skills", label: "技能市场", description: "skills.sh、外部目录和扩展技能", icon: <ToolOutlined /> },
-      { key: "hooks", label: "Hooks", description: "工具链事件、权限和自动化", icon: <ApartmentOutlined /> },
+      { key: "hooks", label: "钩子", description: "工具链事件、权限和自动化", icon: <ApartmentOutlined /> },
       {
         key: "claude-plugins",
-        label: "插件市场",
-        description: "精选 50+ 插件，一键安装 oh-my-claudecode 等",
+        label: "插件",
+        description: "精选插件与 oh-my-claudecode 等安装源",
         icon: <BlockOutlined />,
       },
     ],
   },
   {
-    title: "生态",
+    title: "自动化",
     items: [
-      { key: "agents-explorer", label: "Agents 探索", description: "仓库 .agents 下的命令、技能与智能体", icon: <CompassOutlined /> },
-      { key: "engine-registry", label: "执行环境", description: "本机 CLI（含 Cursor Agent）", icon: <ThunderboltOutlined /> },
+      { key: "automation", label: "定时自动化", description: "Cron、Mission 和会话续跑", icon: <FieldTimeOutlined /> },
     ],
   },
   {
-    title: "运行设置",
+    title: "通道",
+    items: [
+      { key: "channels", label: "远程入口", description: "通知、回执与远程控制", icon: <GatewayOutlined /> },
+    ],
+  },
+  {
+    title: "产物",
+    items: [
+      {
+        key: "artifacts",
+        label: "产物检查台",
+        description: "按仓库浏览 Markdown、Diff、图片、文档与代码",
+        icon: <FileSearchOutlined />,
+      },
+    ],
+  },
+  {
+    title: "运行",
     items: [
       {
         key: "defaults",
         label: "默认配置",
         description: "主会话连接方式、运行项、右侧面板与顶栏工具显示",
         icon: <SlidersOutlined />,
-      },
-      {
-        key: "data-cleanup",
-        label: "数据清理",
-        description: "清理 ~/.wise 图片缓存、PRD 快照与子进程配置",
-        icon: <DeleteOutlined />,
       },
       {
         key: "auto-approve",
@@ -96,16 +109,20 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
         description: "推送前门闸、默认范围、结果复用与过期标注策略",
         icon: <AuditOutlined />,
       },
-      { key: "automation", label: "定时自动化", description: "Cron、Mission 和会话续跑", icon: <FieldTimeOutlined /> },
-      { key: "channels", label: "远程入口", description: "钉钉、飞书、企微和 Telegram", icon: <GatewayOutlined /> },
+      { key: "sandbox", label: "沙箱", description: "权限、隔离和运行说明", icon: <IconClaudeSandboxHelp /> },
       { key: "shortcuts", label: "快捷键", description: "桌面操作和窗口控制", icon: <IconKeyboardShortcuts /> },
-      { key: "sandbox", label: "Claude 沙箱", description: "权限、隔离和运行说明", icon: <IconClaudeSandboxHelp /> },
+      {
+        key: "data-cleanup",
+        label: "数据清理",
+        description: "清理 ~/.wise 图片缓存、PRD 快照与子进程配置",
+        icon: <DeleteOutlined />,
+      },
     ],
   },
 ];
 
 export const AUTHOR_TABS: AuthorTabDefinition[] = [
-  // 「工作区」已从工作台分组中移除，但保留为可路由 AuthorPane，
+  // 「工作区」已从导航分组中移除，但保留为可路由 AuthorPane，
   // 以兼容深链跳转、isAuthorPane 校验与 AuthorPanel 路由分支。
   {
     key: "workspaces",

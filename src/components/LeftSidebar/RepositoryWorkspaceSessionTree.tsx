@@ -181,7 +181,7 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
             >
               <WorkspaceSessionRowStatusSlot liveStatus={item.status} />
               <span className="app-workspace-session-tree__kind" data-kind="terminal">
-                终端
+                席位
               </span>
               <span className="app-workspace-session-tree__title" title={item.name}>
                 {item.name}
@@ -194,7 +194,7 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
                   className="app-workspace-session-tree__stop"
                   role="button"
                   tabIndex={0}
-                  aria-label="结束终端"
+                  aria-label="结束席位"
                   onPointerDown={(event) =>
                     handleNestedActionPointerDown(event, () => {
                       props.onStopEmployeeMonitor?.(item.employeeId);

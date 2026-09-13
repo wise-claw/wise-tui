@@ -27,7 +27,7 @@ export const LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS: Record<LeftSidebarHubQuickEntr
   skills: "技能",
   automation: "自动化",
   assistants: "助手",
-  "claude-plugins": "插件市场",
+  "claude-plugins": "插件",
 };
 
 const ALLOWED = new Set<string>(LEFT_SIDEBAR_HUB_QUICK_ENTRY_ORDER);

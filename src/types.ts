@@ -746,6 +746,11 @@ export interface RepositoryScheduledClaudeTask {
   lastExecutedAt?: number;
   lastExecuteOk?: boolean;
   lastExecuteMessage?: string;
+  /**
+   * 最近一次触发结果：成功 / 失败 / 配置跳过 / 忙时待补跑。
+   * 缺省时由 `lastExecuteOk` 推断（旧数据）。
+   */
+  lastExecuteKind?: "ok" | "failed" | "skipped" | "retrying";
 }
 
 /** 会话输入区「待执行队列」单条（持久化在数据库 app_settings，按 sessionId + 仓库路径分桶） */

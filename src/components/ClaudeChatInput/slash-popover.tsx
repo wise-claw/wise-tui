@@ -75,7 +75,7 @@ interface SlashPopoverProps {
   deepseekAvailable?: boolean;
   /** @ 空查询打开时默认高亮项（配置中心可改）。 */
   atMentionDefaultTarget?: AtMentionDefaultTarget;
-  /** 在菜单内将执行环境 / 终端设为 @ 默认。 */
+  /** 在菜单内将执行环境 / 席位设为 @ 默认。 */
   onAtMentionDefaultTargetChange?: (target: AtMentionDefaultTarget) => void | Promise<void>;
   /** 当前会话执行引擎：决定 `/` 补全展示哪套内置命令。 */
   sessionExecutionEngine?: SessionExecutionEngine;
@@ -114,7 +114,7 @@ function MentionKindEmployeeIcon() {
       strokeLinecap="round"
       strokeLinejoin="round"
       role="img"
-      aria-label="终端"
+      aria-label="席位"
     >
       <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
       <circle cx="12" cy="7" r="4" />
@@ -658,7 +658,7 @@ export function SlashPopover({
                 <div className="app-claude-slash-popover-group-title">执行环境</div>
               ) : null}
               {showEmployeeTitle ? (
-                <div className="app-claude-slash-popover-group-title">终端</div>
+                <div className="app-claude-slash-popover-group-title">席位</div>
               ) : null}
               {showRepositoryTitle ? (
                 <div className="app-claude-slash-popover-group-title">仓库 · 选择后派发任务</div>
@@ -882,7 +882,7 @@ function renderOptionContent(opt: SlashOption, isAtMentionDefault = false) {
           <span className="app-claude-slash-popover-item__default-badge">默认</span>
         ) : null}
         {opt.type === "agent" && (
-          <span className="app-claude-slash-popover__kind" title="终端">
+          <span className="app-claude-slash-popover__kind" title="席位">
             <MentionKindEmployeeIcon />
           </span>
         )}

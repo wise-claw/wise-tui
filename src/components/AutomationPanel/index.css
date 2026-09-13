@@ -564,9 +564,45 @@
   font-weight: 500;
 }
 
-.app-automation-repo-card__meta-item--recent {
+.app-automation-panel__pause {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin-inline-end: 4px;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.app-automation-repo-card__pause {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: none;
+  margin-top: 2px;
   color: var(--ant-color-text-tertiary);
-  margin-left: auto;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.app-automation-repo-card__status-badge--paused {
+  background: color-mix(in srgb, var(--ant-color-warning-bg) 70%, transparent);
+  color: var(--ant-color-warning);
+  border: 1px solid color-mix(in srgb, var(--ant-color-warning-border) 40%, transparent);
+}
+
+.app-automation-repo-card__meta-item--retrying {
+  color: var(--ant-color-warning) !important;
+  font-weight: 500;
+}
+
+.app-automation-repo-card__meta-item--skipped {
+  color: var(--ant-color-text-secondary);
 }
 
 /* 呼吸动画 keyframes */

@@ -6,15 +6,22 @@ import {
   PlayCircleOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { Button, Empty, Select, message } from "antd";
+import { Button, Empty, Select, Switch, message } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { openCodeReviewDrawer } from "../../constants/workflowUiEvents";
 import type { Repository, RepositoryScheduledClaudeTask, WorkflowTemplateItem } from "../../types";
+import {
+  hydrateAutomationPause,
+  setGlobalAutomationPause,
+  setRepositoryAutomationPause,
+  useAutomationPause,
+} from "../../services/automationPauseStore";
 import { readRepositoryScheduledClaudeTasks } from "../../services/repositoryScheduledClaudeTasksStore";
 import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import { RepositoryScheduledTasksModal } from "../RepositoryScheduledTasksModal";
 import { mapWithConcurrency } from "../../utils/mapWithConcurrency";
+import { summarizeScheduledTaskKinds } from "../../utils/scheduledTaskReliability";
 import "./index.css";
 
 interface AutomationPanelProps {
@@ -79,6 +86,11 @@ export function AutomationPanel({
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const refreshSequenceRef = useRef(0);
+  const automationPause = useAutomationPause();
+
+  useEffect(() => {
+    void hydrateAutomationPause();
+  }, []);
 
   useEffect(() => {
     if (activeRepositoryId != null) {
@@ -157,6 +169,14 @@ export function AutomationPanel({
       subtitle="Cron、Mission、会话续跑与推送前代码审查"
       actions={
         <>
+        <label className="app-automation-panel__pause">
+          <Switch
+            size="small"
+            checked={automationPause.global}
+            onChange={(checked) => void setGlobalAutomationPause(checked)}
+          />
+          <span>全局暂停</span>
+        </label>
         <Select
           className="app-automation-panel__repo-select"
           size="small"
@@ -224,15 +244,24 @@ export function AutomationPanel({
         <div className="app-automation-console__repos" aria-label="自动化仓库">
           {visibleSummaries.map(({ repository, tasks }) => {
             const enabled = tasks.filter((task) => task.enabled).length;
-            const failed = tasks.filter((task) => task.lastExecuteOk === false).length;
+            const { failed, skipped, retrying } = summarizeScheduledTaskKinds(tasks);
             const selected = repository.id === selectedRepositoryId;
             const name = repository.name || repository.path;
+            const repoOnlyPaused = automationPause.repositoryPaths.includes(repository.path.trim());
+            const repoPaused = automationPause.global || repoOnlyPaused;
             return (
-              <button
+              <div
                 key={repository.id}
-                type="button"
-                className={`app-automation-repo-card${selected ? " app-automation-repo-card--selected" : ""}`}
+                role="button"
+                tabIndex={0}
+                className={`app-automation-repo-card${selected ? " app-automation-repo-card--selected" : ""}${repoPaused ? " app-automation-repo-card--paused" : ""}`}
                 onClick={() => openRepositoryTasks(repository.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openRepositoryTasks(repository.id);
+                  }
+                }}
                 style={{ "--repo-gradient": getAvatarGradient(name) } as React.CSSProperties}
               >
                 <div className="app-automation-repo-card__avatar-wrap">
@@ -243,7 +272,11 @@ export function AutomationPanel({
                 <div className="app-automation-repo-card__content">
                   <div className="app-automation-repo-card__top">
                     <strong title={name}>{name}</strong>
-                    {enabled > 0 ? (
+                    {repoPaused ? (
+                      <span className="app-automation-repo-card__status-badge app-automation-repo-card__status-badge--paused">
+                        {automationPause.global ? "全局暂停" : "仓级暂停"}
+                      </span>
+                    ) : enabled > 0 ? (
                       <span className="app-automation-repo-card__status-badge app-automation-repo-card__status-badge--enabled">
                         <span className="app-automation-repo-card__pulse-dot app-automation-repo-card__pulse-dot--success" />
                         {enabled} 启用
@@ -277,12 +310,35 @@ export function AutomationPanel({
                         </>
                       )}
                     </span>
+                    {retrying > 0 ? (
+                      <span className="app-automation-repo-card__meta-item app-automation-repo-card__meta-item--retrying">
+                        {retrying} 待补跑
+                      </span>
+                    ) : null}
+                    {skipped > 0 ? (
+                      <span className="app-automation-repo-card__meta-item app-automation-repo-card__meta-item--skipped">
+                        {skipped} 已跳过
+                      </span>
+                    ) : null}
                     <span className="app-automation-repo-card__meta-item app-automation-repo-card__meta-item--recent">
                       最近: {formatShortDateTime(latestExecutedAt(tasks))}
                     </span>
                   </div>
                 </div>
-              </button>
+                <div
+                  className="app-automation-repo-card__pause"
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
+                  <Switch
+                    size="small"
+                    checked={repoOnlyPaused}
+                    onChange={(checked) => void setRepositoryAutomationPause(repository.path, checked)}
+                    aria-label={`${name} 仓级暂停`}
+                  />
+                  <span>暂停</span>
+                </div>
+              </div>
             );
           })}
         </div>

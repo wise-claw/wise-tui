@@ -30,6 +30,38 @@
   color: var(--ant-color-text-tertiary);
 }
 
+.app-artifacts-panel__run {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-artifacts-panel__run-files {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-artifacts-panel__run-file {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ant-color-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.app-artifacts-panel__run-file:hover {
+  color: var(--ant-color-primary);
+}
+
 .app-artifacts-panel__status-repo {
   min-width: 0;
   overflow: hidden;
