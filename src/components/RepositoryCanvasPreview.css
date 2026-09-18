@@ -1,0 +1,26 @@
+.app-canvas { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.app-canvas__toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--wise-border-color, #e8e8e8); }
+.app-canvas__viewport { flex: 1; min-height: 0; overflow: auto; background: var(--wise-bg-secondary, #f3f4f6); }
+.app-canvas__viewport iframe { display: block; height: 100%; min-height: 240px; margin: 0 auto; border: 0; background: white; }
+.app-canvas__hint { padding: 6px 12px; font-size: 11px; color: var(--ant-color-text-secondary, #777); }
+
+.app-canvas--expanded { position: fixed; inset: 32px 12px 12px; z-index: 3200; border: 1px solid var(--wise-border-color, #e8e8e8); border-radius: 10px; overflow: hidden; background: var(--ant-color-bg-container, white); box-shadow: 0 12px 48px #0004; }
+.app-canvas__actions { display: flex; align-items: center; gap: 8px; }
+.app-canvas__actions .ant-select { width: 84px; }
+.app-canvas__loading { display: flex; justify-content: center; align-items: center; gap: 8px; height: 100%; }
+.app-canvas__warnings { flex-shrink: 0; max-height: 130px; overflow: auto; padding: 6px 12px; font-size: 12px; color: var(--ant-color-warning-text, #9e6b00); }
+.app-canvas__warnings summary { cursor: pointer; }
+.app-canvas__warnings li { overflow-wrap: anywhere; }
+.app-canvas__hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.app-canvas__document { box-sizing: border-box; min-height: 100%; margin: 0 auto; padding: 24px; }
+.app-canvas__paper { box-sizing: border-box; max-width: 960px; min-height: 100%; margin: 0 auto; padding: 32px 40px; background: var(--ant-color-bg-container, white); color: var(--ant-color-text, #222); border-radius: 8px; box-shadow: 0 2px 12px #0001; overflow-wrap: anywhere; }
+.app-canvas__paper table { display: block; max-width: 100%; overflow: auto; }
+.app-canvas__source { flex: 1; min-height: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; }
+@media (max-width: 600px) { .app-canvas__document { padding: 8px; } .app-canvas__paper { padding: 16px; } }
+
+.app-canvas__paper { line-height: 1.75; }
+.app-canvas__paper th, .app-canvas__paper td { padding: 8px 14px; border: 1px solid var(--ant-color-border-secondary, #e5e7eb); text-align: left; }
+.app-canvas__paper table { border-collapse: collapse; }
+.app-canvas__paper th { background: var(--ant-color-fill-quaternary, #f8fafc); }
+.app-canvas__toolbar select { margin-left: 8px; padding: 4px 8px; border: 1px solid var(--ant-color-border, #d9d9d9); border-radius: 6px; color: inherit; background: var(--ant-color-bg-container, white); }

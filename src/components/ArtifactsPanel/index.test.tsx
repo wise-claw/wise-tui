@@ -27,6 +27,7 @@ describe("ArtifactsPanel", () => {
     );
 
     expect(html).toContain("Markdown");
+    expect(html).toContain("画布");
     expect(html).toContain("Diff");
     expect(html).toContain("Office");
     expect(html).toContain("运行");

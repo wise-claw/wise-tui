@@ -188,7 +188,7 @@ export function monacoLanguageFromRepositoryPath(path: string | null): string {
   if (ext === "xml" || ext === "svg") return "xml";
   if (ext === "sql") return "sql";
   if (["css", "less", "scss"].includes(ext)) return "css";
-  if (ext === "html") return "html";
+  if (ext === "html" || ext === "htm") return "html";
   if (ext === "vue") return "html";
   if (ext === "rs") return "rust";
   if (ext === "go") return "go";

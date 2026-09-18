@@ -70,7 +70,7 @@ const PREVIEW_LANES: PreviewLane[] = [
   { key: "image", title: "图片", icon: <FileImageOutlined /> },
   { key: "pdf", title: "PDF", icon: <FilePdfOutlined /> },
   { key: "office", title: "Office", icon: <FileWordOutlined /> },
-  { key: "html", title: "HTML", icon: <Html5Outlined /> },
+  { key: "html", title: "画布 · 页面与方案", icon: <Html5Outlined /> },
   { key: "code", title: "代码文本", icon: <CodeOutlined /> },
   { key: "runs", title: "运行", icon: <HistoryOutlined /> },
 ];
@@ -121,7 +121,7 @@ function artifactFor(path: string): ArtifactFile {
     return { path, kind: "Markdown", lane: "markdown", tone: "success", icon: <FileMarkdownOutlined /> };
   }
   if (isHtmlPath(path)) {
-    return { path, kind: "HTML", lane: "html", tone: "warning", icon: <Html5Outlined /> };
+    return { path, kind: "画布", lane: "html", tone: "warning", icon: <Html5Outlined /> };
   }
   if (isDiffArtifactPath(path)) {
     return { path, kind: "Diff", lane: "diff", tone: "primary", icon: <DiffOutlined /> };
@@ -204,6 +204,7 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
     counts.set("all", repositoryArtifacts.length);
     for (const artifact of repositoryArtifacts) {
       counts.set(artifact.lane, (counts.get(artifact.lane) ?? 0) + 1);
+      if (artifact.lane === "markdown") counts.set("html", (counts.get("html") ?? 0) + 1);
     }
     counts.set("runs", repositoryRuns.length);
     return counts;
@@ -213,7 +214,7 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
     if (selectedLane === "runs") return [];
     const filtered = selectedLane === "all"
       ? matchedArtifacts
-      : matchedArtifacts.filter((artifact) => artifact.lane === selectedLane);
+      : matchedArtifacts.filter((artifact) => artifact.lane === selectedLane || (selectedLane === "html" && artifact.lane === "markdown"));
     return [...filtered].sort((a, b) => a.path.localeCompare(b.path));
   }, [matchedArtifacts, selectedLane]);
 

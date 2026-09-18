@@ -36,7 +36,11 @@ import { useGitRepositoryExplorerStatus } from "../hooks/useGitRepositoryExplore
 import { useMonacoCodeReviewFindingDecorations } from "../hooks/useMonacoCodeReviewFindingDecorations";
 import { useMonacoGitModifiedLineDecorations } from "../hooks/useMonacoGitModifiedLineDecorations";
 import { MarkdownBody } from "./ClaudeSessions/MarkdownElements";
+import { isCanvasDocumentPath } from "../utils/canvasArtifacts";
+import { DocumentCanvasPreview } from "./DocumentCanvasPreview";
 import rehypeRaw from "rehype-raw";
+import { isRepositoryCanvasPath } from "../utils/repositoryCanvas";
+import { RepositoryCanvasPreview } from "./RepositoryCanvasPreview";
 
 const MonacoEditor = lazy(() =>
   import("../utils/preloadMonacoEditor").then((m) => m.loadMonacoEditorReact()),
@@ -196,9 +200,13 @@ function RepositoryFileEditorTabSurface({
     () => tab.relativePath.endsWith(".md") || tab.relativePath.endsWith(".mdx"),
     [tab.relativePath],
   );
+  const isCanvasFile = isRepositoryCanvasPath(tab.relativePath);
+  const [canvasRequested, setCanvasRequested] = useState(true);
+  const canvasBlocked = contentLength >= MONACO_LARGE_FILE_CHAR_THRESHOLD;
+  const canvasPreview = isCanvasFile && canvasRequested && !canvasBlocked;
   // 大文件全量 Markdown + rehypeRaw 会卡死主线程，禁止预览。
   const mdPreviewBlocked = isMdFile && contentLength >= MONACO_LARGE_FILE_CHAR_THRESHOLD;
-  const mdPreview = isMdFile && mdPreviewRequested && !mdPreviewBlocked;
+  const mdPreview = !isCanvasFile && isMdFile && mdPreviewRequested && !mdPreviewBlocked;
 
   // 预览态无 Monaco textarea：把焦点留在预览容器内，否则 ⌘W 的 panel.contains(target) 会失败。
   useEffect(() => {
@@ -574,7 +582,7 @@ function RepositoryFileEditorTabSurface({
             </Button>
           </div>
         ) : null}
-        {isActive ? (
+        {isActive && !canvasPreview && !mdPreview ? (
           <MonacoSelectionChatToolbar
             editor={monacoEditorSurface?.editor ?? null}
             monaco={monacoEditorSurface?.monaco ?? null}
@@ -583,7 +591,16 @@ function RepositoryFileEditorTabSurface({
             sessionId={activeSessionId}
           />
         ) : null}
-        {isMdFile && isActive ? (
+        {isCanvasFile && isActive ? (
+          <div className="app-file-editor-md-toggle">
+            <Button size="small" type={canvasPreview ? "primary" : "default"} icon={<EyeOutlined />}
+              disabled={canvasBlocked} title={canvasBlocked ? "文件较大，请查看源码" : undefined}
+              onClick={() => setCanvasRequested(true)}>画布</Button>
+            <Button size="small" type={canvasPreview ? "default" : "primary"} icon={<EditOutlined />}
+              onClick={() => setCanvasRequested(false)}>源码</Button>
+          </div>
+        ) : null}
+        {isMdFile && !isCanvasFile && isActive ? (
           <div className="app-file-editor-md-toggle">
             <Button
               type={mdPreview ? "default" : "primary"}
@@ -616,7 +633,11 @@ function RepositoryFileEditorTabSurface({
             </span>
           </div>
         ) : null}
-        {mdPreview && isActive ? (
+        {canvasPreview ? (
+          isActive ? (isCanvasDocumentPath(tab.relativePath)
+            ? <DocumentCanvasPreview content={tab.content} path={tab.relativePath} />
+            : <RepositoryCanvasPreview content={tab.content} path={tab.relativePath} root={tab.rootPath || repositoryPath || undefined} />) : null
+        ) : mdPreview && isActive ? (
           <div
             ref={mdPreviewRef}
             className="app-file-editor-md-preview"
