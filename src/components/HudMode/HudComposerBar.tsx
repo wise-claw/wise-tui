@@ -19,6 +19,7 @@ import { safeUnlisten } from "../../utils/safeTauriUnlisten";
 import {
   HUD_CHROME_FOCUS_SUPPRESS_MS,
   isHudChromeControl,
+  shouldCloseHudDetailsForChromeTarget,
 } from "../../utils/hudSelectPopup";
 import {
   hudComposerSessionToClaudeSession,
@@ -33,6 +34,11 @@ import {
   HUD_DETAILS_HEIGHT_DEFAULT,
   hudDetailsHeightFromDrag,
 } from "../../utils/hudDetailsHeight";
+import {
+  hudSessionDetailsLeaveDurationMs,
+  prefersHudReducedMotion,
+  shouldRenderHudSessionDetails,
+} from "../../utils/hudSessionDetailsMotion";
 import { buildRepositoryMentionOptions } from "../../utils/projectRoleTagOptions";
 import { useGitRepositoryStats } from "../../hooks/useGitRepositoryStats";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
@@ -332,7 +338,10 @@ export function HudComposerBar({
   const [previewImage, setPreviewImage] = useState<ImageAttachmentPart | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsDismissed, setDetailsDismissed] = useState(false);
+  const [detailsLeaving, setDetailsLeaving] = useState(false);
   const detailsOpenRef = useRef(detailsOpen);
+  const detailsLeavingRef = useRef(false);
+  const detailsLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contextOverlayRef = useRef(contextOverlay);
   contextOverlayRef.current = contextOverlay;
   const quickActionsOverlayRef = useRef(quickActionsOverlay);
@@ -344,7 +353,36 @@ export function HudComposerBar({
   const running = snapshot.busy;
   /** 配置启用时默认显示完整详情；否则由状态入口按需打开。 */
   const detailsVisible = Boolean(session) && !detailsDismissed && (persistentDetailsEnabled || detailsOpen);
+  const detailsRendered = shouldRenderHudSessionDetails(detailsVisible, detailsLeaving);
   detailsOpenRef.current = detailsVisible;
+
+  const cancelDetailsLeave = useCallback(() => {
+    if (detailsLeaveTimerRef.current != null) {
+      clearTimeout(detailsLeaveTimerRef.current);
+      detailsLeaveTimerRef.current = null;
+    }
+    detailsLeavingRef.current = false;
+    setDetailsLeaving(false);
+  }, []);
+
+  const closeSessionDetails = useCallback(() => {
+    if (detailsLeavingRef.current || !detailsOpenRef.current) return;
+    detailsOpenRef.current = false;
+    setDetailsOpen(false);
+    setDetailsDismissed(true);
+    const leaveMs = hudSessionDetailsLeaveDurationMs(prefersHudReducedMotion());
+    if (leaveMs <= 0) {
+      cancelDetailsLeave();
+      return;
+    }
+    detailsLeavingRef.current = true;
+    setDetailsLeaving(true);
+    detailsLeaveTimerRef.current = setTimeout(() => {
+      detailsLeaveTimerRef.current = null;
+      detailsLeavingRef.current = false;
+      setDetailsLeaving(false);
+    }, leaveMs);
+  }, [cancelDetailsLeave]);
 
   const setContextOverlayWanted = useCallback((wanted: boolean) => {
     contextOverlayRef.current = wanted;
@@ -403,6 +441,9 @@ export function HudComposerBar({
       if (suppressEditorFocusTimerRef.current) {
         clearTimeout(suppressEditorFocusTimerRef.current);
       }
+      if (detailsLeaveTimerRef.current != null) {
+        clearTimeout(detailsLeaveTimerRef.current);
+      }
     },
     [],
   );
@@ -412,18 +453,22 @@ export function HudComposerBar({
   }, [session?.id]);
 
   useEffect(() => {
+    cancelDetailsLeave();
     setDetailsOpen(persistentDetailsEnabled);
     setDetailsDismissed(false);
-  }, [persistentDetailsEnabled, detailsPreferenceRevision]);
+  }, [cancelDetailsLeave, persistentDetailsEnabled, detailsPreferenceRevision]);
 
   useEffect(() => {
     // HUD 内切换 Tab 时保持详情显示，仅恢复可能被当前会话关闭的状态。
+    cancelDetailsLeave();
     setDetailsDismissed(false);
-  }, [session?.id]);
+  }, [cancelDetailsLeave, session?.id]);
 
   useEffect(() => {
-    if (menuOverlay || contextOverlay || quickActionsOverlay) setPreviewImage(null);
-  }, [menuOverlay, contextOverlay, quickActionsOverlay]);
+    if (!(menuOverlay || contextOverlay || quickActionsOverlay)) return;
+    setPreviewImage(null);
+    closeSessionDetails();
+  }, [closeSessionDetails, menuOverlay, contextOverlay, quickActionsOverlay]);
 
   useEffect(() => {
     onOverlayOpenChange?.(
@@ -431,11 +476,18 @@ export function HudComposerBar({
         ? "menu"
         : previewImage
           ? "images"
-          : detailsVisible
+          : detailsRendered
             ? "details"
             : "none",
     );
-  }, [menuOverlay, contextOverlay, quickActionsOverlay, previewImage, detailsVisible, onOverlayOpenChange]);
+  }, [
+    menuOverlay,
+    contextOverlay,
+    quickActionsOverlay,
+    previewImage,
+    detailsRendered,
+    onOverlayOpenChange,
+  ]);
 
   useEffect(() => {
     void wiseHudSetDetailsOpen(detailsVisible);
@@ -453,13 +505,12 @@ export function HudComposerBar({
       if (detailsVisible) {
         event.preventDefault();
         event.stopPropagation();
-        setDetailsOpen(false);
-        setDetailsDismissed(true);
+        closeSessionDetails();
       }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [previewImage, detailsVisible]);
+  }, [closeSessionDetails, previewImage, detailsVisible]);
 
   const handleHudImagePreviewChange = useCallback((image: ImageAttachmentPart | null) => {
     setPreviewImage((prev) => {
@@ -484,6 +535,7 @@ export function HudComposerBar({
     return (
       suppressEditorFocusRef.current ||
       detailsOpenRef.current ||
+      detailsLeavingRef.current ||
       contextOverlayRef.current ||
       quickActionsOverlayRef.current ||
       menuOverlayRef.current
@@ -503,8 +555,11 @@ export function HudComposerBar({
       if (event.button !== 0) return;
       if (!isHudChromeControl(event.target)) return;
       suppressEditorAutofocus();
+      if (shouldCloseHudDetailsForChromeTarget(event.target)) {
+        closeSessionDetails();
+      }
     },
-    [suppressEditorAutofocus],
+    [closeSessionDetails, suppressEditorAutofocus],
   );
 
   useEffect(() => {
@@ -573,11 +628,13 @@ export function HudComposerBar({
           <img src={previewImage.dataUrl} alt={previewImage.filename} />
         </button>
       ) : null}
-      {!detailsVisible ? (
+      {!detailsRendered ? (
         <HudCompletionToasts toasts={toasts} onDismiss={onDismissToast ?? (() => undefined)} />
       ) : null}
-      {detailsVisible && !previewImage ? (
-        <div className="app-hud-session-details">
+      {detailsRendered && !previewImage ? (
+        <div
+          className={`app-hud-session-details${detailsLeaving ? " app-hud-session-details--leaving" : ""}`}
+        >
           <div
             className="app-hud-session-details__resize-handle"
             role="separator"
@@ -599,8 +656,7 @@ export function HudComposerBar({
               aria-label="关闭会话详情"
               title="关闭详情"
               onClick={() => {
-                setDetailsOpen(false);
-                setDetailsDismissed(true);
+                closeSessionDetails();
               }}
             >
               ×
@@ -635,6 +691,7 @@ export function HudComposerBar({
             detailsVisible={detailsVisible}
             disabled={!session}
             onOpen={() => {
+              cancelDetailsLeave();
               setDetailsDismissed(false);
               setDetailsOpen(true);
               detailsOpenRef.current = true;

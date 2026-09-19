@@ -431,6 +431,36 @@
   box-shadow:
     0 1px 2px rgba(15, 23, 42, 0.04),
     0 12px 32px rgba(15, 23, 42, 0.14);
+  transform-origin: 50% 100%;
+  animation: app-hud-session-details-in 0.24s ease both;
+}
+
+.app-hud-session-details--leaving {
+  /* 时长与 HUD_SESSION_DETAILS_LEAVE_MS 保持一致 */
+  animation: app-hud-session-details-out 0.24s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes app-hud-session-details-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes app-hud-session-details-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
 }
 
 .app-hud-session-details__resize-handle {
@@ -581,7 +611,9 @@
   }
 
   .app-hud-toast,
-  .app-hud-toast--leaving {
+  .app-hud-toast--leaving,
+  .app-hud-session-details,
+  .app-hud-session-details--leaving {
     animation: none;
   }
 

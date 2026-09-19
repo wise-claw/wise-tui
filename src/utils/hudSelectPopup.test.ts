@@ -4,6 +4,7 @@ import {
   isHudChromeControl,
   isInsideHudContextPicker,
   isInsideHudQuickActionsPicker,
+  shouldCloseHudDetailsForChromeTarget,
   shouldScheduleHudOverlayOpen,
 } from "./hudSelectPopup";
 
@@ -73,6 +74,37 @@ describe("shouldScheduleHudOverlayOpen", () => {
     expect(shouldScheduleHudOverlayOpen(true, false)).toBe(false);
     expect(shouldScheduleHudOverlayOpen(false, true)).toBe(false);
     expect(shouldScheduleHudOverlayOpen(true, true)).toBe(false);
+  });
+});
+
+describe("shouldCloseHudDetailsForChromeTarget", () => {
+  test("closes details for picker and quick-action buttons", () => {
+    const button = document.createElement("button");
+    button.className = "app-hud-quick-actions-btn";
+    document.body.appendChild(button);
+    expect(shouldCloseHudDetailsForChromeTarget(button)).toBe(true);
+    button.remove();
+
+    const pill = document.createElement("button");
+    pill.className = "app-hud-context-pill";
+    document.body.appendChild(pill);
+    expect(shouldCloseHudDetailsForChromeTarget(pill)).toBe(true);
+    pill.remove();
+  });
+
+  test("keeps details open when clicking the status chip", () => {
+    const chip = document.createElement("button");
+    chip.className = "app-hud-run-chip";
+    const count = document.createElement("span");
+    chip.appendChild(count);
+    document.body.appendChild(chip);
+    expect(shouldCloseHudDetailsForChromeTarget(chip)).toBe(false);
+    expect(shouldCloseHudDetailsForChromeTarget(count)).toBe(false);
+    chip.remove();
+  });
+
+  test("ignores clicks outside HUD chrome", () => {
+    expect(shouldCloseHudDetailsForChromeTarget(document.body)).toBe(false);
   });
 });
 

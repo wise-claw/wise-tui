@@ -74,6 +74,15 @@ export function isHudChromeControl(target: EventTarget | null): boolean {
   return Boolean(asClosestHost(target)?.closest(HUD_CHROME_CONTROL_SELECTOR));
 }
 
+/** 状态入口本身负责打开会话详情，点它不应把已打开的详情关掉。 */
+const HUD_DETAILS_KEEP_OPEN_SELECTOR = ".app-hud-run-chip";
+
+/** 点胶囊里会弹出第二层浮层的按钮时，应先关掉会话详情，避免两个框叠在一起。 */
+export function shouldCloseHudDetailsForChromeTarget(target: EventTarget | null): boolean {
+  if (!isHudChromeControl(target)) return false;
+  return !asClosestHost(target)?.closest(HUD_DETAILS_KEEP_OPEN_SELECTOR);
+}
+
 function asClosestHost(
   target: EventTarget | null,
 ): { closest: (selector: string) => { className?: string } | null } | null {
