@@ -28,6 +28,106 @@ export type CenterViewSlotPresence = {
   hasTerminal: boolean;
 };
 
+export type CenterSwitcherOption = { label: string; value: CenterView };
+
+/** 顶栏「消息 / 文件 / …」Segmented 选项：消息恒在，其余按 slot 有无追加。 */
+export function buildCenterSwitcherOptions(slots: CenterViewSlotPresence): CenterSwitcherOption[] {
+  const opts: CenterSwitcherOption[] = [{ label: "消息", value: "messages" }];
+  if (slots.hasFiles) opts.push({ label: "文件", value: "files" });
+  if (slots.hasRequirements) opts.push({ label: "需求", value: "requirements" });
+  if (slots.hasQuickActions) opts.push({ label: "快捷操作", value: "quickActions" });
+  if (slots.hasTerminal) opts.push({ label: "终端", value: "terminal" });
+  return opts;
+}
+
+export function resolveEffectiveCenterView(input: {
+  centerView: CenterView;
+  hasFilesPanel: boolean;
+  hasRequirementsPanel: boolean;
+  hasQuickActionsPanel: boolean;
+  hasTerminalPanel: boolean;
+}): CenterView {
+  const { centerView, hasFilesPanel, hasRequirementsPanel, hasQuickActionsPanel, hasTerminalPanel } =
+    input;
+  if (centerView === "messages") return "messages";
+  if (centerView === "files" && hasFilesPanel) return "files";
+  if (centerView === "requirements" && hasRequirementsPanel) return "requirements";
+  if (centerView === "quickActions" && hasQuickActionsPanel) return "quickActions";
+  if (centerView === "terminal" && hasTerminalPanel) return "terminal";
+  if (hasFilesPanel) return "files";
+  if (hasRequirementsPanel) return "requirements";
+  if (hasQuickActionsPanel) return "quickActions";
+  if (hasTerminalPanel) return "terminal";
+  return "messages";
+}
+
+function fallbackAuxView(input: {
+  hasFilesPanel: boolean;
+  hasRequirementsPanel: boolean;
+  hasQuickActionsPanel: boolean;
+  hasTerminalPanel: boolean;
+}): CenterView {
+  if (input.hasFilesPanel) return "files";
+  if (input.hasRequirementsPanel) return "requirements";
+  if (input.hasQuickActionsPanel) return "quickActions";
+  if (input.hasTerminalPanel) return "terminal";
+  return "messages";
+}
+
+/**
+ * 会话右栏（文件/需求/快捷操作/终端）与消息区的工作台布局。
+ * - 并排：消息常驻，右栏在会话区右侧。
+ * - 顶部 Tab：互斥占满消息区，由顶栏 Segmented 切换。
+ */
+export function resolveSessionAuxWorkbench(input: {
+  reuseInCenterTabs: boolean;
+  hideMessages: boolean;
+  hasFilesPanel: boolean;
+  hasRequirementsPanel: boolean;
+  hasQuickActionsPanel: boolean;
+  hasTerminalPanel: boolean;
+  centerView: CenterView;
+}): {
+  effectiveCenterView: CenterView;
+  sideBySideAux: boolean;
+  exclusiveCenterTabs: boolean;
+  messagesPaneVisible: boolean;
+  filesPaneVisible: boolean;
+  requirementsPaneVisible: boolean;
+  quickActionsPaneVisible: boolean;
+  terminalPaneVisible: boolean;
+  auxView: CenterView;
+} {
+  const hasAnyAuxPanel =
+    input.hasFilesPanel ||
+    input.hasRequirementsPanel ||
+    input.hasQuickActionsPanel ||
+    input.hasTerminalPanel;
+  const effectiveCenterView = resolveEffectiveCenterView(input);
+  const exclusiveCenterTabs = hasAnyAuxPanel && input.reuseInCenterTabs && !input.hideMessages;
+  const sideBySideAux = hasAnyAuxPanel && !input.hideMessages && !input.reuseInCenterTabs;
+  const auxView =
+    effectiveCenterView === "messages" && sideBySideAux
+      ? fallbackAuxView(input)
+      : effectiveCenterView;
+  const auxMatches = (view: CenterView) =>
+    input.hideMessages || (exclusiveCenterTabs ? effectiveCenterView === view : auxView === view);
+
+  return {
+    effectiveCenterView,
+    sideBySideAux,
+    exclusiveCenterTabs,
+    messagesPaneVisible: input.hideMessages
+      ? false
+      : !exclusiveCenterTabs || effectiveCenterView === "messages",
+    filesPaneVisible: input.hasFilesPanel && auxMatches("files"),
+    requirementsPaneVisible: input.hasRequirementsPanel && auxMatches("requirements"),
+    quickActionsPaneVisible: input.hasQuickActionsPanel && auxMatches("quickActions"),
+    terminalPaneVisible: input.hasTerminalPanel && auxMatches("terminal"),
+    auxView,
+  };
+}
+
 function isCenterViewSlotAvailable(view: CenterView, slots: CenterViewSlotPresence): boolean {
   switch (view) {
     case "messages":

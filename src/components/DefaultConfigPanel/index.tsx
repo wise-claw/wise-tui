@@ -49,6 +49,7 @@ import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
 import { KeyShortcutCapture } from "./KeyShortcutCapture";
 import type { AtMentionDefaultTarget } from "../../constants/atMentionDefault";
 import { useFileTreeOpenInNewPaneSetting } from "./useFileTreeOpenInNewPaneSetting";
+import { useSessionAuxReuseInCenterTabsSetting } from "./useSessionAuxReuseInCenterTabsSetting";
 import { useMarkdownDefaultOpenModeSetting } from "./useMarkdownDefaultOpenModeSetting";
 import type { MarkdownDefaultOpenMode } from "../../services/wiseDefaultConfigStore";
 import { useRepoPanelPlacementSetting } from "./useRepoPanelPlacementSetting";
@@ -103,6 +104,7 @@ export function DefaultConfigPanel() {
   const defaultTerminal = useDefaultTerminalSetting();
   const terminalThemeMode = useTerminalThemeModeSetting();
   const fileTreeOpenInNewPane = useFileTreeOpenInNewPaneSetting();
+  const sessionAuxReuseInCenterTabs = useSessionAuxReuseInCenterTabsSetting();
   const markdownDefaultOpenMode = useMarkdownDefaultOpenModeSetting();
   const feedbackLoop = useSessionFeedbackLoopSetting();
   const openInTerminalShortcut = useOpenInTerminalShortcutSetting();
@@ -1035,6 +1037,25 @@ export function DefaultConfigPanel() {
                 ]}
                 onChange={(value) => {
                   void fileTreeOpenInNewPane.save(value === "new-pane");
+                }}
+              />
+            }
+          />
+          <DefaultConfigRow
+            title="会话右栏"
+            hint="消息区复用"
+            detail="将文件 / 需求 / 终端等右栏内容复用到会话消息区，顶部 Tab 切换"
+            control={
+              <DefaultConfigOptionPick<"rail" | "tabs">
+                aria-label="会话右栏展示方式"
+                disabled={sessionAuxReuseInCenterTabs.loading || sessionAuxReuseInCenterTabs.saving}
+                value={sessionAuxReuseInCenterTabs.enabled ? "tabs" : "rail"}
+                options={[
+                  { label: "并排", value: "rail" },
+                  { label: "顶部 Tab", value: "tabs" },
+                ]}
+                onChange={(value) => {
+                  void sessionAuxReuseInCenterTabs.save(value === "tabs");
                 }}
               />
             }

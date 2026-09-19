@@ -33,7 +33,7 @@ import { ClaudeChatQuickActionsChrome } from "./ClaudeChatQuickActionsChrome";
 import { composerRegionChunk } from "./ClaudeChatComposerTray";
 import type { CenterView } from "../../stores/paneCenterViewControlStore";
 import { adjustMainWindowLogicalWidthByDelta } from "../../services/mainWindowLayout";
-import { useCenterViewControl } from "./claudeChatHelpers";
+import { useSessionAuxReuseInCenterTabs } from "../../hooks/useSessionAuxReuseInCenterTabs";
 
 /** 会话功能栏默认宽度；比窗口扩展量略大，让右栏打开时消息区适度收窄。 */
 const SESSION_AUX_RAIL_DEFAULT_WIDTH_PX = 640;
@@ -110,7 +110,9 @@ import {
   extractEmployeeNameFromBracketPreview,
   notificationConversationInSessionInboxScope,
   notificationRowInSessionInboxScope,
+  resolveSessionAuxWorkbench,
   sessionRepoPathKey,
+  useCenterViewControl,
 } from "./claudeChatHelpers";
 
 import {
@@ -302,7 +304,7 @@ interface Props {
   hideSessionTools?: boolean;
   /** 中栏当前视图（由顶栏切换器控制）。无对应 panel 时忽略。 */
   centerView?: CenterView;
-  /** 右侧功能栏当前功能变化；消息固定展示，不再参与切换。 */
+  /** 中栏视图变化（顶栏 Tab 或并排右栏内 Tab）。 */
   onCenterViewChange?: (view: CenterView) => void;
   /**
    * 中栏「消息通知」浮层；默认关闭（有未读也不展示）。顶栏铃铛收件箱不受影响。
@@ -1843,6 +1845,26 @@ export function ClaudeChatInner({
   const hasTerminalPanel = Boolean(panelBelowTerminal);
   const hasAnyAuxPanel =
     hasFilesPanel || hasRequirementsPanel || hasQuickActionsPanel || hasTerminalPanel;
+  const reuseInCenterTabs = useSessionAuxReuseInCenterTabs();
+  const auxWorkbench = resolveSessionAuxWorkbench({
+    reuseInCenterTabs,
+    hideMessages,
+    hasFilesPanel,
+    hasRequirementsPanel,
+    hasQuickActionsPanel,
+    hasTerminalPanel,
+    centerView,
+  });
+  const {
+    sideBySideAux,
+    exclusiveCenterTabs,
+    messagesPaneVisible,
+    filesPaneVisible,
+    requirementsPaneVisible,
+    quickActionsPaneVisible,
+    terminalPaneVisible,
+    auxView,
+  } = auxWorkbench;
   const auxRailWindowDeltaRef = useRef(0);
   const centerViewControl = useCenterViewControl();
   const workbenchRef = useRef<HTMLDivElement | null>(null);
@@ -1864,10 +1886,10 @@ export function ClaudeChatInner({
     updateFit();
     window.addEventListener("resize", updateFit);
     return () => window.removeEventListener("resize", updateFit);
-  }, [hasAnyAuxPanel]);
+  }, [sideBySideAux]);
 
   const shouldExpandWindowForAuxRail =
-    paneIndex === 0 && hasAnyAuxPanel && !hideMessages && !auxRailFitsWindow;
+    paneIndex === 0 && sideBySideAux && !auxRailFitsWindow;
 
   useEffect(() => {
     if (shouldExpandWindowForAuxRail && auxRailWindowDeltaRef.current === 0) {
@@ -1936,39 +1958,6 @@ export function ClaudeChatInner({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   }, []);
-  const effectiveCenterView: CenterView = (() => {
-    if (centerView === "messages") return "messages";
-    if (centerView === "files" && hasFilesPanel) return "files";
-    if (centerView === "requirements" && hasRequirementsPanel) return "requirements";
-    if (centerView === "quickActions" && hasQuickActionsPanel) return "quickActions";
-    if (centerView === "terminal" && hasTerminalPanel) return "terminal";
-    if (hasFilesPanel) return "files";
-    if (hasRequirementsPanel) return "requirements";
-    if (hasQuickActionsPanel) return "quickActions";
-    if (hasTerminalPanel) return "terminal";
-    return "messages";
-  })();
-
-  const effectiveAuxView: CenterView = effectiveCenterView === "messages"
-    ? hasFilesPanel
-      ? "files"
-      : hasRequirementsPanel
-        ? "requirements"
-        : hasQuickActionsPanel
-          ? "quickActions"
-          : hasTerminalPanel
-            ? "terminal"
-            : "messages"
-    : effectiveCenterView;
-  const messagesPaneVisible = !hideMessages;
-  const filesPaneVisible =
-    hasFilesPanel && (hideMessages || effectiveAuxView === "files");
-  const requirementsPaneVisible =
-    hasRequirementsPanel && (hideMessages || effectiveAuxView === "requirements");
-  const quickActionsPaneVisible =
-    hasQuickActionsPanel && (hideMessages || effectiveAuxView === "quickActions");
-  const terminalPaneVisible =
-    hasTerminalPanel && (hideMessages || effectiveAuxView === "terminal");
   const auxOptions = [
     hasFilesPanel ? { label: "文件", value: "files" as const } : null,
     hasRequirementsPanel ? { label: "需求", value: "requirements" as const } : null,
@@ -1988,9 +1977,9 @@ export function ClaudeChatInner({
 
       <div
         ref={workbenchRef}
-        className={`app-claude-chat-workbench${hasAnyAuxPanel && !hideMessages ? " has-aux-rail" : ""}`}
+        className={`app-claude-chat-workbench${sideBySideAux ? " has-aux-rail" : ""}${exclusiveCenterTabs ? " has-center-tabs" : ""}`}
         style={
-          hasAnyAuxPanel && !hideMessages
+          sideBySideAux
             ? ({ "--app-session-aux-rail-width": `${auxRailWidth}px` } as CSSProperties)
             : undefined
         }
@@ -2026,7 +2015,7 @@ export function ClaudeChatInner({
           />
         ) : null}
       </div>
-      {hasAnyAuxPanel && !hideMessages ? (
+      {sideBySideAux ? (
         <div
           className="app-claude-chat-aux-resizer"
           role="separator"
@@ -2040,16 +2029,18 @@ export function ClaudeChatInner({
       ) : null}
       {hasAnyAuxPanel ? (
         <aside
-          className={`app-claude-chat-aux-rail${hideMessages ? " is-full-width" : ""}`}
+          className={`app-claude-chat-aux-rail${hideMessages || exclusiveCenterTabs ? " is-full-width" : ""}${exclusiveCenterTabs && messagesPaneVisible ? " is-hidden" : ""}`}
           aria-label="会话功能栏"
-          style={hideMessages ? undefined : { flexBasis: auxRailWidth, width: auxRailWidth }}
+          inert={exclusiveCenterTabs && messagesPaneVisible ? true : undefined}
+          aria-hidden={exclusiveCenterTabs && messagesPaneVisible ? true : undefined}
+          style={sideBySideAux ? { flexBasis: auxRailWidth, width: auxRailWidth } : undefined}
         >
-          {!hideMessages && auxOptions.length > 1 ? (
+          {sideBySideAux && auxOptions.length > 1 ? (
             <div className="app-claude-chat-aux-rail__tabs" role="tablist" aria-label="会话功能">
               {auxOptions.map((option) => (
                 <button key={option.value} type="button" role="tab"
-                  aria-selected={effectiveAuxView === option.value}
-                  className={`app-claude-chat-aux-rail__tab${effectiveAuxView === option.value ? " is-active" : ""}`}
+                  aria-selected={auxView === option.value}
+                  className={`app-claude-chat-aux-rail__tab${auxView === option.value ? " is-active" : ""}`}
                   onClick={() => {
                     (centerViewControl ?? onCenterViewChange)?.(option.value);
                   }}>
@@ -2095,7 +2086,7 @@ export function ClaudeChatInner({
       {showPendingTaskQueue ? (
         <div
           className="app-pending-task-queue-anchor"
-          style={hasAnyAuxPanel && !hideMessages ? { width: `calc(100% - ${auxRailWidth + 9}px)` } : undefined}
+          style={sideBySideAux ? { width: `calc(100% - ${auxRailWidth + 9}px)` } : undefined}
         >
           <PendingTaskQueuePanel
             sessionId={session.id}
@@ -2145,7 +2136,7 @@ export function ClaudeChatInner({
 
       <div
         className="app-claude-chat-bottom"
-        style={hasAnyAuxPanel && !hideMessages ? { width: `calc(100% - ${auxRailWidth + 9}px)` } : undefined}
+        style={sideBySideAux ? { width: `calc(100% - ${auxRailWidth + 9}px)` } : undefined}
       >
         {!deferHeavySubtree ? (
           <ClaudeChatQuickActionsChrome

@@ -33,6 +33,7 @@ import {
   WISE_WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_CHANGED,
   WISE_TERMINAL_THEME_MODE_CHANGED,
   WISE_MARKDOWN_DEFAULT_OPEN_MODE_CHANGED,
+  WISE_SESSION_AUX_REUSE_IN_CENTER_TABS_CHANGED,
 } from "./wiseDefaultConfigStore";
 
 function installWindowLocalStorageStub(): Storage {
@@ -111,6 +112,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showRemoteEntryTopbar).toBe(true);
     expect(config.showTopbarRepositoryName).toBe(false);
     expect(config.fileTreeOpenInNewPane).toBe(false);
+    expect(config.sessionAuxReuseInCenterTabs).toBe(false);
     expect(config.markdownDefaultOpenMode).toBe("edit");
     expect(config.showComposerFooterAttachButton).toBe(true);
     expect(config.showComposerFooterScreenshotButton).toBe(true);
@@ -653,5 +655,26 @@ describe("wiseDefaultConfigStore", () => {
     const next = await saveWiseDefaultConfig({ workspaceSidebarRowPreviewLimit: 99 });
     expect(next.workspaceSidebarRowPreviewLimit).toBe(10);
     expect(seen).toEqual([10]);
+  });
+
+  test("save session aux reuse in center tabs dispatches event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+        });
+      }
+      return null;
+    });
+    const seen: boolean[] = [];
+    window.addEventListener(WISE_SESSION_AUX_REUSE_IN_CENTER_TABS_CHANGED, (e: Event) => {
+      const enabled = (e as CustomEvent<{ enabled?: boolean }>).detail?.enabled;
+      if (typeof enabled === "boolean") seen.push(enabled);
+    });
+    const next = await saveWiseDefaultConfig({ sessionAuxReuseInCenterTabs: true });
+    expect(next.sessionAuxReuseInCenterTabs).toBe(true);
+    expect(seen).toEqual([true]);
   });
 });

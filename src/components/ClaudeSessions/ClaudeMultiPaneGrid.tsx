@@ -53,7 +53,7 @@ import { runPaneCreateTask } from "./paneCreateLoading";
 import type { RefreshHistorySessionsScope } from "./ClaudeChat";
 import type { PaneAuxLayout, ResolvePaneAuxLayout } from "./paneAuxLayout";
 import { IconClosePane, Topbar, type PaneTopbarSharedProps } from "./Topbar";
-import { CenterViewControlContext, useCenterView } from "./claudeChatHelpers";
+import { buildCenterSwitcherOptions, CenterViewControlContext, useCenterView } from "./claudeChatHelpers";
 import { registerPaneCenterViewSetter, syncPaneCenterView } from "../../stores/paneCenterViewControlStore";
 import { useWorkspaceMemoPanelOpen } from "../../stores/workspaceMemoPanelStore";
 import { useWorkspaceQuickActionsPanelOpen } from "../../stores/workspaceQuickActionsPanelStore";
@@ -412,6 +412,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
     centerView,
     setCenterView,
     requestCenterView,
+    visible: centerSwitcherVisible,
   } = useCenterView(
     {
       hasFiles: Boolean(panelBelowMessages),
@@ -420,6 +421,16 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
       hasTerminal: terminalMounted,
     },
     paneAuxLayout.hideMessages,
+  );
+  const centerSwitcherOptions = useMemo(
+    () =>
+      buildCenterSwitcherOptions({
+        hasFiles: Boolean(panelBelowMessages),
+        hasRequirements: Boolean(panelBelowRequirements),
+        hasQuickActions: Boolean(panelBelowQuickActions),
+        hasTerminal: terminalMounted,
+      }),
+    [panelBelowMessages, panelBelowRequirements, panelBelowQuickActions, terminalMounted],
   );
   // useMemo 稳定引用：否则每次 grid 重渲都新建数组，Topbar 的 memo(topbarPropsEqual) 对
   // 数组做 Object.is 比较恒 false，memo 永不命中、每个 pane 重渲都整棵重渲 Topbar chrome。
@@ -469,6 +480,8 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
           terminalCollapsed={!terminalVisible}
           centerView={centerView}
           onCenterViewChange={handleCenterViewChange}
+          centerSwitcherVisible={centerSwitcherVisible}
+          centerSwitcherOptions={centerSwitcherOptions}
         />
       ) : null}
       <CenterViewControlContext.Provider value={requestCenterView}>
@@ -715,6 +728,7 @@ const MultiPaneExtraPaneCell = memo(
       centerView,
       setCenterView,
       requestCenterView,
+      visible: centerSwitcherVisible,
     } = useCenterView(
       {
         hasFiles: Boolean(panelBelowMessages),
@@ -723,6 +737,16 @@ const MultiPaneExtraPaneCell = memo(
         hasTerminal: terminalMounted,
       },
       hidePaneMessages,
+    );
+    const centerSwitcherOptions = useMemo(
+      () =>
+        buildCenterSwitcherOptions({
+          hasFiles: Boolean(panelBelowMessages),
+          hasRequirements: false,
+          hasQuickActions: false,
+          hasTerminal: terminalMounted,
+        }),
+      [panelBelowMessages, terminalMounted],
     );
     // useMemo 稳定引用：让 pane 级 Topbar 的 memo 恢复命中（数组 Object.is 恒 false 会击穿）。
     const handleCenterViewChange = useCallback(
@@ -860,6 +884,8 @@ const MultiPaneExtraPaneCell = memo(
               onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(resolvedRepo?.path ?? "")}
               centerView={centerView}
               onCenterViewChange={handleCenterViewChange}
+              centerSwitcherVisible={centerSwitcherVisible}
+              centerSwitcherOptions={centerSwitcherOptions}
               showWindowTopbarControls={false}
             />
           ) : null}

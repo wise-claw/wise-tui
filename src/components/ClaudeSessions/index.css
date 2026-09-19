@@ -2150,7 +2150,8 @@
   display: flex;
   flex-direction: column;
 }
-.app-claude-chat-center-pane.is-hidden {
+.app-claude-chat-center-pane.is-hidden,
+.app-claude-chat-aux-rail.is-hidden {
   position: absolute;
   inset: 0;
   visibility: hidden;
@@ -2158,6 +2159,16 @@
   z-index: 0;
   /* 脱离 flex 流，让可见 pane 独占主区高度；自身仍按 inset 保持实尺寸 */
   flex: none;
+}
+
+.app-claude-chat-workbench.has-center-tabs {
+  position: relative;
+}
+
+.app-claude-chat-workbench.has-center-tabs > .app-claude-chat-aux-rail {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
 }
 
 /* 消息区与底部（快捷条 + 输入）的分界 */

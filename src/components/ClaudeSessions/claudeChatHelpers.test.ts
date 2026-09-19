@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ClaudeSession, GitStatusResponse, TaskItem } from "../../types";
 import {
   buildAiCommitSummary,
+  buildCenterSwitcherOptions,
   buildTaskExecutionPrompt,
   extractEmployeeNameFromBracketPreview,
   extractOmcCommandFromUserPrompt,
@@ -13,6 +14,7 @@ import {
   getSessionPreview,
   normalizeSplitTaskListFlowStatus,
   resolveCenterViewAfterSlotChange,
+  resolveSessionAuxWorkbench,
   sameLogicalClaudeSession,
   sessionRepoPathKey,
   splitTaskListBinaryLabel,
@@ -214,5 +216,69 @@ describe("claudeChatHelpers", () => {
         pending: null,
       }),
     ).toEqual({ centerView: "quickActions", pending: null });
+  });
+
+  test("buildCenterSwitcherOptions always starts with messages", () => {
+    expect(buildCenterSwitcherOptions({
+      hasFiles: false,
+      hasRequirements: false,
+      hasQuickActions: false,
+      hasTerminal: false,
+    })).toEqual([{ label: "消息", value: "messages" }]);
+    expect(
+      buildCenterSwitcherOptions({
+        hasFiles: true,
+        hasRequirements: true,
+        hasQuickActions: false,
+        hasTerminal: true,
+      }).map((option) => option.value),
+    ).toEqual(["messages", "files", "requirements", "terminal"]);
+  });
+
+  test("resolveSessionAuxWorkbench keeps side-by-side rail by default", () => {
+    const layout = resolveSessionAuxWorkbench({
+      reuseInCenterTabs: false,
+      hideMessages: false,
+      hasFilesPanel: true,
+      hasRequirementsPanel: false,
+      hasQuickActionsPanel: false,
+      hasTerminalPanel: false,
+      centerView: "messages",
+    });
+    expect(layout.sideBySideAux).toBe(true);
+    expect(layout.exclusiveCenterTabs).toBe(false);
+    expect(layout.messagesPaneVisible).toBe(true);
+    expect(layout.filesPaneVisible).toBe(true);
+    expect(layout.auxView).toBe("files");
+  });
+
+  test("resolveSessionAuxWorkbench exclusive tabs hide files while viewing messages", () => {
+    const onMessages = resolveSessionAuxWorkbench({
+      reuseInCenterTabs: true,
+      hideMessages: false,
+      hasFilesPanel: true,
+      hasRequirementsPanel: false,
+      hasQuickActionsPanel: false,
+      hasTerminalPanel: true,
+      centerView: "messages",
+    });
+    expect(onMessages.sideBySideAux).toBe(false);
+    expect(onMessages.exclusiveCenterTabs).toBe(true);
+    expect(onMessages.messagesPaneVisible).toBe(true);
+    expect(onMessages.filesPaneVisible).toBe(false);
+    expect(onMessages.terminalPaneVisible).toBe(false);
+
+    const onFiles = resolveSessionAuxWorkbench({
+      reuseInCenterTabs: true,
+      hideMessages: false,
+      hasFilesPanel: true,
+      hasRequirementsPanel: false,
+      hasQuickActionsPanel: false,
+      hasTerminalPanel: true,
+      centerView: "files",
+    });
+    expect(onFiles.messagesPaneVisible).toBe(false);
+    expect(onFiles.filesPaneVisible).toBe(true);
+    expect(onFiles.terminalPaneVisible).toBe(false);
   });
 });

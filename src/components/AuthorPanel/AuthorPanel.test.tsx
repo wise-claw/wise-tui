@@ -441,6 +441,8 @@ describe("AuthorPanel", () => {
     expect(html).toContain("左栏");
     expect(html).toContain("栏位");
     expect(html).toContain("右侧面板");
+    expect(html).toContain("会话右栏");
+    expect(html).toContain("顶部 Tab");
     expect(html).toContain("图标与按钮");
     expect(html).toContain("FCC 流量");
     expect(html).toContain("LLM 代理");

@@ -5,9 +5,10 @@ import { AppearanceThemeToggle } from "../AppearanceThemeToggle";
 import { IconHud } from "../icons/IconHud";
 import { wiseHudToggle } from "../../services/wiseHud";
 import { useWiseHudModeActive } from "../../stores/wiseHudModeStore";
-import { message, Popover, Spin } from "antd";
+import { message, Popover, Segmented, Spin } from "antd";
 import { lazy, Suspense, memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
+import { useSessionAuxReuseInCenterTabs } from "../../hooks/useSessionAuxReuseInCenterTabs";
 import { RemoteEntryTopbarStrip } from "../RemoteEntryTopbarStrip";
 import { WorkspaceQuickActionsTopbarStrip } from "../WorkspaceQuickActionsTopbarStrip";
 import { OpenAppMenu } from "../OpenAppMenu";
@@ -262,9 +263,19 @@ export const Topbar = memo(function Topbar({
   onClosePane,
   showWindowTopbarControls = true,
   onOpenRemoteChannels,
+  centerView = "messages",
+  onCenterViewChange,
+  centerSwitcherVisible = false,
+  centerSwitcherOptions = [],
 }: TopbarProps) {
   const topbarChrome = useWiseTopbarChromeVisibility();
   const hudActive = useWiseHudModeActive();
+  const reuseInCenterTabs = useSessionAuxReuseInCenterTabs();
+  const showCenterSwitcher =
+    reuseInCenterTabs &&
+    centerSwitcherVisible &&
+    Boolean(onCenterViewChange) &&
+    centerSwitcherOptions.length > 1;
   const [selectedOpenAppId, setSelectedOpenAppId] = useState<string>(() => {
     return getOpenAppPreferenceSync() || DEFAULT_OPEN_APP_ID;
   });
@@ -336,6 +347,15 @@ export const Topbar = memo(function Topbar({
                 icon={<IconCollapseSidebar collapsed={collapsed ?? false} />}
                 label={collapsed ? "展开侧边栏" : "收起侧边栏"}
                 onClick={onToggleSidebar}
+              />
+            ) : null}
+            {showCenterSwitcher ? (
+              <Segmented
+                className="app-topbar-center-switcher"
+                size="small"
+                value={centerView}
+                onChange={(value) => onCenterViewChange?.(value as CenterView)}
+                options={centerSwitcherOptions}
               />
             ) : null}
             {showRepoTitle ? (

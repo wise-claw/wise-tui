@@ -138,6 +138,10 @@ export const WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED = "wise:workspace-inspector
 
 export const WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED = "wise:file-tree-open-in-new-pane-changed";
 
+/** 会话右栏（文件/需求/终端）复用到消息区顶部 Tab 切换。 */
+export const WISE_SESSION_AUX_REUSE_IN_CENTER_TABS_CHANGED =
+  "wise:session-aux-reuse-in-center-tabs-changed";
+
 /** Markdown 文件默认打开模式变更（编辑 / 预览）。 */
 export const WISE_MARKDOWN_DEFAULT_OPEN_MODE_CHANGED = "wise:markdown-default-open-mode-changed";
 
@@ -293,6 +297,11 @@ export interface WiseDefaultConfigV1 {
   showWorkspaceTodosPanel: boolean;
   /** 文件树点击文件时在新窗格打开，而非占用当前会话主区。 */
   fileTreeOpenInNewPane: boolean;
+  /**
+   * 将会话右栏（文件 / 需求 / 快捷操作 / 终端）复用到消息区，顶部 Tab 互斥切换。
+   * 关闭时保持消息与右栏并排。
+   */
+  sessionAuxReuseInCenterTabs: boolean;
   /** Markdown 文件默认打开模式：编辑或预览；默认编辑。 */
   markdownDefaultOpenMode: MarkdownDefaultOpenMode;
   /** Git 变更面板是否在左栏显示；默认显示。 */
@@ -385,6 +394,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceTodosPanel: false,
   fileTreeOpenInNewPane: false,
+  sessionAuxReuseInCenterTabs: false,
   markdownDefaultOpenMode: "edit",
   gitPanelPlacement: "visible",
   filesPanelPlacement: "visible",
@@ -668,6 +678,13 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.fileTreeOpenInNewPane === undefined
           ? DEFAULT_CONFIG.fileTreeOpenInNewPane
           : normalizeBoolean(parsed.fileTreeOpenInNewPane, DEFAULT_CONFIG.fileTreeOpenInNewPane),
+      sessionAuxReuseInCenterTabs:
+        parsed.sessionAuxReuseInCenterTabs === undefined
+          ? DEFAULT_CONFIG.sessionAuxReuseInCenterTabs
+          : normalizeBoolean(
+              parsed.sessionAuxReuseInCenterTabs,
+              DEFAULT_CONFIG.sessionAuxReuseInCenterTabs,
+            ),
       markdownDefaultOpenMode: normalizeMarkdownDefaultOpenMode(parsed.markdownDefaultOpenMode),
       gitPanelPlacement:
         normalizeRepoPanelVisibility(parsed.gitPanelPlacement) ?? DEFAULT_CONFIG.gitPanelPlacement,
@@ -930,6 +947,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
     fileTreeOpenInNewPane: DEFAULT_CONFIG.fileTreeOpenInNewPane,
+    sessionAuxReuseInCenterTabs: DEFAULT_CONFIG.sessionAuxReuseInCenterTabs,
     markdownDefaultOpenMode: DEFAULT_CONFIG.markdownDefaultOpenMode,
     gitPanelPlacement: DEFAULT_CONFIG.gitPanelPlacement,
     filesPanelPlacement: DEFAULT_CONFIG.filesPanelPlacement,
@@ -1106,6 +1124,13 @@ function dispatchFileTreeOpenInNewPaneChanged(openInNewPane: boolean): void {
   );
 }
 
+function dispatchSessionAuxReuseInCenterTabsChanged(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_SESSION_AUX_REUSE_IN_CENTER_TABS_CHANGED, { detail: { enabled } }),
+  );
+}
+
 function dispatchMarkdownDefaultOpenModeChanged(mode: MarkdownDefaultOpenMode): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
@@ -1274,6 +1299,7 @@ export async function saveWiseDefaultConfig(
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceTodosPanel"
       | "fileTreeOpenInNewPane"
+      | "sessionAuxReuseInCenterTabs"
       | "markdownDefaultOpenMode"
       | "gitPanelPlacement"
       | "filesPanelPlacement"
@@ -1379,6 +1405,8 @@ export async function saveWiseDefaultConfig(
       patch.showWorkspaceQuickActionsPanel ?? current.showWorkspaceQuickActionsPanel,
     showWorkspaceTodosPanel: patch.showWorkspaceTodosPanel ?? current.showWorkspaceTodosPanel,
     fileTreeOpenInNewPane: patch.fileTreeOpenInNewPane ?? current.fileTreeOpenInNewPane,
+    sessionAuxReuseInCenterTabs:
+      patch.sessionAuxReuseInCenterTabs ?? current.sessionAuxReuseInCenterTabs,
     markdownDefaultOpenMode:
       patch.markdownDefaultOpenMode !== undefined
         ? normalizeMarkdownDefaultOpenMode(patch.markdownDefaultOpenMode)
@@ -1607,6 +1635,9 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.fileTreeOpenInNewPane !== undefined) {
     next.fileTreeOpenInNewPane = normalizeBoolean(patch.fileTreeOpenInNewPane);
+  }
+  if (patch.sessionAuxReuseInCenterTabs !== undefined) {
+    next.sessionAuxReuseInCenterTabs = normalizeBoolean(patch.sessionAuxReuseInCenterTabs);
   }
   if (patch.markdownDefaultOpenMode !== undefined) {
     next.markdownDefaultOpenMode = normalizeMarkdownDefaultOpenMode(patch.markdownDefaultOpenMode);
@@ -1899,6 +1930,12 @@ export async function saveWiseDefaultConfig(
     next.fileTreeOpenInNewPane !== current.fileTreeOpenInNewPane
   ) {
     dispatchFileTreeOpenInNewPaneChanged(next.fileTreeOpenInNewPane);
+  }
+  if (
+    patch.sessionAuxReuseInCenterTabs !== undefined &&
+    next.sessionAuxReuseInCenterTabs !== current.sessionAuxReuseInCenterTabs
+  ) {
+    dispatchSessionAuxReuseInCenterTabsChanged(next.sessionAuxReuseInCenterTabs);
   }
   if (
     patch.markdownDefaultOpenMode !== undefined &&
@@ -2515,6 +2552,14 @@ export async function loadFileTreeOpenInNewPaneFromStore(): Promise<boolean> {
 
 export async function saveFileTreeOpenInNewPaneToStore(openInNewPane: boolean): Promise<void> {
   await saveWiseDefaultConfig({ fileTreeOpenInNewPane: openInNewPane });
+}
+
+export async function loadSessionAuxReuseInCenterTabsFromStore(): Promise<boolean> {
+  return (await loadWiseDefaultConfig()).sessionAuxReuseInCenterTabs;
+}
+
+export async function saveSessionAuxReuseInCenterTabsToStore(enabled: boolean): Promise<void> {
+  await saveWiseDefaultConfig({ sessionAuxReuseInCenterTabs: enabled });
 }
 
 export async function loadMarkdownDefaultOpenModeFromStore(): Promise<MarkdownDefaultOpenMode> {

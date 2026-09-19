@@ -76,7 +76,7 @@ import {
   areLeftSidebarPropsEqual,
 } from "./LeftSidebar/leftSidebarPropsEqual";
 import { claudeSessionsShellPropsEqual } from "./ClaudeSessions/claudeSessionsPropsEqual";
-import { CenterViewControlContext, useCenterView } from "./ClaudeSessions/claudeChatHelpers";
+import { buildCenterSwitcherOptions, CenterViewControlContext, useCenterView } from "./ClaudeSessions/claudeChatHelpers";
 import { registerPaneCenterViewSetter, syncPaneCenterView } from "../stores/paneCenterViewControlStore";
 import { useWorkspaceMemoPanelOpen } from "../stores/workspaceMemoPanelStore";
 import { useWorkspaceQuickActionsPanelOpen } from "../stores/workspaceQuickActionsPanelStore";
@@ -1222,25 +1222,14 @@ export function AppWorkspaceLayout({
     [setCenterView],
   );
   // Segmented 选项：消息恒有；各 aux slot 打开时各自占一个 tab（可同时存在）。
-  const layoutLevelCenterSwitcherOptions = useMemo<Array<{ label: string; value: CenterView }>>(
-    () => {
-      const opts: Array<{ label: string; value: CenterView }> = [
-        { label: "消息", value: "messages" },
-      ];
-      if (primaryHasFiles) {
-        opts.push({ label: "文件", value: "files" });
-      }
-      if (memoOpen) {
-        opts.push({ label: "需求", value: "requirements" });
-      }
-      if (quickActionsOpen) {
-        opts.push({ label: "快捷操作", value: "quickActions" });
-      }
-      if (primaryHasTerminal) {
-        opts.push({ label: "终端", value: "terminal" });
-      }
-      return opts;
-    },
+  const layoutLevelCenterSwitcherOptions = useMemo(
+    () =>
+      buildCenterSwitcherOptions({
+        hasFiles: primaryHasFiles,
+        hasRequirements: memoOpen,
+        hasQuickActions: quickActionsOpen,
+        hasTerminal: primaryHasTerminal,
+      }),
     [primaryHasFiles, primaryHasTerminal, memoOpen, quickActionsOpen],
   );
 
