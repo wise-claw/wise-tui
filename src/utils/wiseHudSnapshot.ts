@@ -14,6 +14,12 @@ import {
 } from "../constants/sessionExecutionEngine";
 import { formatClaudeModelLabel } from "./claudeModel";
 import { isAssistantDisplayNoiseText } from "./claudeChatMessageDisplay";
+import { isCodeReviewPromptHistorySession } from "./codeReviewPromptSession";
+import { isConventionalCommitPromptHistorySession } from "./conventionalCommitMessage";
+import { getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGrouping";
+import { formatWorkspaceSidebarRelativeTime } from "./repositoryWorkspaceTree";
+import { repositoryPathsMatch } from "./repositoryMainSessionBinding";
+import { isSessionFeedbackLoopHistorySession } from "./sessionFeedbackLoopDispatch";
 import { resolveSessionListPreviewSource } from "./sessionListPreview";
 import { stripRedundantRepoBracketPrefix } from "./sessionRepositoryDisplay";
 
@@ -37,6 +43,9 @@ export const WISE_HUD_ADD_REPOSITORY_EVENT = "wise-hud-add-repository";
 export const WISE_HUD_ADD_REPOSITORY_RESULT_EVENT = "wise-hud-add-repository-result";
 
 export const HUD_ASSISTANT_PREVIEW_MAX_LEN = 280;
+
+/** HUD 详情标签：运行中会话全部保留，其余按当前仓库历史补齐。 */
+export const HUD_SESSION_TAB_LIMIT = 24;
 
 export const HUD_RUN_STATUSES = ["idle", "running", "completed"] as const;
 
@@ -76,6 +85,9 @@ export interface WiseHudSessionTab {
   title: string;
   repositoryName: string;
   status: ClaudeSession["status"];
+  updatedAt: number;
+  /** 主窗口按侧栏规则格式化，避免 HUD 端拿不到有效时间戳时显示 "—"。 */
+  timeLabel: string;
 }
 
 export interface WiseHudSessionSnapshot {
@@ -244,19 +256,102 @@ export function formatHudModelLabel(
   return SESSION_EXECUTION_ENGINE_LABELS[engine]?.short ?? "Wise";
 }
 
+function hudSessionRecency(session: ClaudeSession): number {
+  return getSessionUpdatedAt(session);
+}
+
 export function buildHudSessionTabs(sessions: readonly ClaudeSession[]): WiseHudSessionTab[] {
   return sessions.map((session) => {
     const source = resolveSessionListPreviewSource(session);
     const title = stripRedundantRepoBracketPrefix(source, session.repositoryName ?? "")
       .replace(/\s+/g, " ")
       .trim();
+    const updatedAt = hudSessionRecency(session);
     return {
       id: session.id,
-      title: title || session.threadName?.trim() || session.repositoryName?.trim() || "新会话",
+      title: title || "新会话",
       repositoryName: session.repositoryName?.trim() || "",
       status: session.status,
+      updatedAt,
+      timeLabel: formatWorkspaceSidebarRelativeTime(updatedAt),
     };
   });
+}
+
+function resolveHudTabRepositoryPath(
+  session: ClaudeSession | null | undefined,
+  extras: BuildWiseHudSessionSnapshotExtras,
+): string {
+  const fromSession = session?.repositoryPath?.trim() ?? "";
+  if (fromSession) return fromSession;
+  const activeId = extras.activeRepositoryId;
+  if (activeId == null) return "";
+  return extras.repositories?.find((item) => item.id === activeId)?.path?.trim() ?? "";
+}
+
+function isHudUtilityHistorySession(session: ClaudeSession): boolean {
+  return (
+    isConventionalCommitPromptHistorySession(session) ||
+    isCodeReviewPromptHistorySession(session) ||
+    isSessionFeedbackLoopHistorySession(session)
+  );
+}
+
+function listHudRepositoryHistorySessions(
+  sessions: readonly ClaudeSession[],
+  repositoryPath: string,
+): ClaudeSession[] {
+  return sessions
+    .filter(
+      (item) =>
+        repositoryPathsMatch(item.repositoryPath, repositoryPath) &&
+        !isHudUtilityHistorySession(item),
+    )
+    .sort((a, b) => {
+      const byTime = hudSessionRecency(b) - hudSessionRecency(a);
+      if (byTime !== 0) return byTime;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+}
+
+/**
+ * HUD 详情可切换会话：当前会话、任意运行中会话，以及当前仓库的历史会话。
+ * 运行中会话不受条数上限裁掉，避免进行中的任务从标签栏消失。
+ */
+export function collectHudSessionTabSessions(
+  sessions: readonly ClaudeSession[],
+  current: ClaudeSession | null | undefined,
+  extras: BuildWiseHudSessionSnapshotExtras = {},
+  limit = HUD_SESSION_TAB_LIMIT,
+): ClaudeSession[] {
+  const seen = new Set<string>();
+  const out: ClaudeSession[] = [];
+  const push = (item: ClaudeSession | null | undefined): boolean => {
+    const id = item?.id?.trim();
+    if (!item || !id || seen.has(id)) return false;
+    seen.add(id);
+    out.push(item);
+    return true;
+  };
+
+  push(current ?? null);
+
+  for (const item of sessions) {
+    if (isHudSessionBusyStatus(item.status)) push(item);
+  }
+
+  const repoPath = resolveHudTabRepositoryPath(current, extras);
+  if (!repoPath) return out;
+
+  const room = Math.max(0, limit - out.length);
+  if (room === 0) return out;
+
+  let added = 0;
+  for (const item of listHudRepositoryHistorySessions(sessions, repoPath)) {
+    if (added >= room) break;
+    if (push(item)) added += 1;
+  }
+  return out;
 }
 
 const HUD_THINKING_PREVIEW_PREFIX = "[思考过程]";
@@ -342,9 +437,7 @@ export function buildWiseHudSessionSnapshot(
   const repositoryRunStatus = extras.repositoryRunStatus ?? "idle";
   const messages = extras.includeMessages && session ? [...session.messages] : [];
   const sessionTabs = buildHudSessionTabs(
-    (extras.sessions ?? (session ? [session] : [])).filter(
-      (item) => item.id === session?.id || isHudSessionBusyStatus(item.status),
-    ),
+    collectHudSessionTabSessions(extras.sessions ?? (session ? [session] : []), session, extras),
   );
   if (!session) {
     return {
@@ -474,19 +567,45 @@ function parseHudRepositories(raw: unknown): WiseHudRepositoryOption[] {
   return out;
 }
 
+function parseHudUpdatedAt(raw: unknown): number {
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+    return Math.floor(raw);
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed);
+  }
+  return 0;
+}
+
+function parseHudTimeLabel(raw: unknown, updatedAt: number): string {
+  if (typeof raw === "string" && raw.trim() && raw.trim() !== "—") return raw.trim();
+  return formatWorkspaceSidebarRelativeTime(updatedAt);
+}
+
 function parseHudSessionTabs(raw: unknown): WiseHudSessionTab[] {
   if (!Array.isArray(raw)) return [];
   const out: WiseHudSessionTab[] = [];
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
-    const value = item as { id?: unknown; title?: unknown; repositoryName?: unknown; status?: unknown };
+    const value = item as {
+      id?: unknown;
+      title?: unknown;
+      repositoryName?: unknown;
+      status?: unknown;
+      updatedAt?: unknown;
+      timeLabel?: unknown;
+    };
     const status = parseHudSessionStatus(value.status);
     if (typeof value.id !== "string" || !value.id.trim() || typeof value.title !== "string" || !status) continue;
+    const updatedAt = parseHudUpdatedAt(value.updatedAt);
     out.push({
       id: value.id.trim(),
       title: value.title.trim() || "新会话",
       repositoryName: typeof value.repositoryName === "string" ? value.repositoryName : "",
       status,
+      updatedAt,
+      timeLabel: parseHudTimeLabel(value.timeLabel, updatedAt),
     });
   }
   return out;

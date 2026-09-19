@@ -19,7 +19,8 @@ body,
 .semi-portal,
 .app-hud-image-float,
 .app-hud-context-popover,
-.app-hud-quick-actions-popover {
+.app-hud-quick-actions-popover,
+.app-hud-session-picker-dropdown {
   pointer-events: auto;
   -webkit-app-region: no-drag;
 }

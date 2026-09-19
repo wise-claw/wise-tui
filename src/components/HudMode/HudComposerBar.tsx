@@ -7,12 +7,12 @@ import {
   wiseHudCancel,
   wiseHudExit,
   wiseHudNewSession,
-  wiseHudSelectSession,
   wiseHudSetDetailsOpen,
   wiseHudSubmit,
 } from "../../services/wiseHud";
 import { HudContextPicker } from "./HudContextPicker";
 import { HudQuickActionsPicker } from "./HudQuickActionsPicker";
+import { HudSessionPicker } from "./HudSessionPicker";
 import { HudCompletionToasts } from "./HudCompletionToasts";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import { safeUnlisten } from "../../utils/safeTauriUnlisten";
@@ -587,7 +587,12 @@ export function HudComposerBar({
           >
             <span aria-hidden />
           </div>
-          <div className="app-hud-session-details__actions">
+          <div className="app-hud-session-details__toolbar">
+            <HudSessionPicker
+              tabs={snapshot.sessionTabs}
+              activeSessionId={snapshot.sessionId}
+              onPointerDown={suppressEditorAutofocus}
+            />
             <button
               type="button"
               className="app-hud-session-details__close"
@@ -601,33 +606,6 @@ export function HudComposerBar({
               ×
             </button>
           </div>
-          {snapshot.sessionTabs.length > 1 ? (
-            <div className="app-hud-session-tabs" role="tablist" aria-label="会话列表">
-              {snapshot.sessionTabs.map((tab) => {
-                const active = tab.id === snapshot.sessionId;
-                const busy = tab.status === "running" || tab.status === "connecting";
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    className={`app-hud-session-tab${active ? " app-hud-session-tab--active" : ""}`}
-                    title={tab.repositoryName ? `${tab.title} · ${tab.repositoryName}` : tab.title}
-                    onClick={() => {
-                      if (!active) void wiseHudSelectSession(tab.id);
-                    }}
-                  >
-                    <span
-                      className={`app-hud-session-tab__status app-hud-session-tab__status--${busy ? "running" : tab.status}`}
-                      aria-hidden
-                    />
-                    <span className="app-hud-session-tab__title">{tab.title}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
           {session ? (
             <ClaudeSessionMessagesColumn
               session={session}

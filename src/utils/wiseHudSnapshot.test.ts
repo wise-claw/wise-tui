@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClaudeSession } from "../types";
+import { formatWorkspaceSidebarRelativeTime } from "./repositoryWorkspaceTree";
+import { getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGrouping";
 import {
   appendHudAttachmentMentions,
   buildWiseHudSessionSnapshot,
@@ -22,6 +24,7 @@ import {
   resolveHudAssistantPreview,
   resolveHudRunStatus,
   resolveHudSubmitSessionId,
+  collectHudSessionTabSessions,
 } from "./wiseHudSnapshot";
 
 function session(overrides: Partial<ClaudeSession> = {}): ClaudeSession {
@@ -37,6 +40,11 @@ function session(overrides: Partial<ClaudeSession> = {}): ClaudeSession {
     pendingPrompt: "",
     ...overrides,
   };
+}
+
+function hudTabTime(item: ClaudeSession) {
+  const updatedAt = getSessionUpdatedAt(item);
+  return { updatedAt, timeLabel: formatWorkspaceSidebarRelativeTime(updatedAt) };
 }
 
 describe("buildWiseHudSessionSnapshot", () => {
@@ -122,7 +130,7 @@ describe("buildWiseHudSessionSnapshot", () => {
     })).messages).toEqual([]);
   });
 
-  it("includes lightweight switchable session tabs", () => {
+  it("includes current, running, and same-repo history session tabs", () => {
     const current = session({
       messages: [{ id: 1, role: "user", content: "修复 HUD", parts: [], timestamp: 1 }],
     });
@@ -130,16 +138,82 @@ describe("buildWiseHudSessionSnapshot", () => {
       id: "sess-2",
       threadName: "运行中的会话",
       repositoryName: "other",
+      repositoryPath: "/tmp/other",
       status: "running",
     });
-    const idle = session({ id: "sess-3", threadName: "空闲会话", repositoryName: "idle" });
+    const idleSameRepo = session({
+      id: "sess-3",
+      threadName: "同仓库空闲会话",
+      createdAt: 2,
+    });
+    const idleOtherRepo = session({
+      id: "sess-4",
+      threadName: "其他仓库空闲",
+      repositoryName: "idle",
+      repositoryPath: "/tmp/idle",
+    });
     const snap = buildWiseHudSessionSnapshot(current, "claude", {
-      sessions: [current, running, idle],
+      sessions: [current, running, idleSameRepo, idleOtherRepo],
     });
     expect(snap.sessionTabs).toEqual([
-      { id: "sess-1", title: "修复 HUD", repositoryName: "demo", status: "idle" },
-      { id: "sess-2", title: "运行中的会话", repositoryName: "other", status: "running" },
+      { id: "sess-1", title: "修复 HUD", repositoryName: "demo", status: "idle", ...hudTabTime(current) },
+      { id: "sess-2", title: "运行中的会话", repositoryName: "other", status: "running", ...hudTabTime(running) },
+      { id: "sess-3", title: "同仓库空闲会话", repositoryName: "demo", status: "idle", ...hudTabTime(idleSameRepo) },
     ]);
+  });
+
+  it("keeps running tabs and fills remaining slots with current-repo history", () => {
+    const current = session({ id: "curr", createdAt: 100 });
+    const running = Array.from({ length: 24 }, (_, index) =>
+      session({
+        id: `run-${index}`,
+        repositoryPath: `/tmp/run-${index}`,
+        repositoryName: `run-${index}`,
+        status: "running",
+        threadName: `运行 ${index}`,
+      }),
+    );
+    const history = session({
+      id: "hist",
+      threadName: "历史会话",
+      createdAt: 90,
+    });
+    const snap = buildWiseHudSessionSnapshot(current, "claude", {
+      sessions: [current, ...running, history],
+    });
+    expect(snap.sessionTabs.map((tab) => tab.id)).toEqual([
+      "curr",
+      ...running.map((item) => item.id),
+    ]);
+    expect(snap.sessionTabs.some((tab) => tab.id === "hist")).toBe(false);
+  });
+
+  it("collects current-repo history when the active session is empty", () => {
+    const empty = session({ id: "empty", createdAt: 3 });
+    const older = session({
+      id: "older",
+      threadName: "有消息的会话",
+      createdAt: 1,
+      messages: [{ id: 1, role: "user", content: "你好", parts: [], timestamp: 1 }],
+    });
+    expect(
+      collectHudSessionTabSessions([empty, older], empty).map((item) => item.id),
+    ).toEqual(["empty", "older"]);
+  });
+
+  it("uses 新会话 and updatedAt when there is no preview", () => {
+    const empty = session({ messages: [] });
+    const snap = buildWiseHudSessionSnapshot(empty);
+    expect(snap.sessionTabs).toEqual([
+      { id: "sess-1", title: "新会话", repositoryName: "demo", status: "idle", ...hudTabTime(empty) },
+    ]);
+  });
+
+  it("formats current-repo empty sessions with sidebar relative time", () => {
+    const nineMinAgo = Date.now() - 9 * 60_000;
+    const snap = buildWiseHudSessionSnapshot(session({ createdAt: nineMinAgo, messages: [] }));
+    expect(snap.sessionTabs[0]?.timeLabel).toBe("9m");
+    expect(snap.sessionTabs[0]?.updatedAt).toBe(nineMinAgo);
   });
 });
 
@@ -377,6 +451,16 @@ describe("parseWiseHud payloads", () => {
       runningCount: 2,
       runStatus: "running",
       repositoryRunStatus: "stopping",
+      sessionTabs: [
+        {
+          id: "sess-1",
+          title: "新会话",
+          repositoryName: "wise-tui",
+          status: "idle",
+          updatedAt: 1_700_000_000_000,
+          timeLabel: "9m",
+        },
+      ],
       messages: [{ id: 9, role: "assistant", content: "好的", parts: [], timestamp: 2 }],
     });
     expect(snap).toMatchObject({
@@ -392,6 +476,16 @@ describe("parseWiseHud payloads", () => {
     ]);
     expect(snap?.repositories).toEqual([
       { id: 3, name: "wise-tui", path: "/tmp/wise-tui", openAppId: null },
+    ]);
+    expect(snap?.sessionTabs).toEqual([
+      {
+        id: "sess-1",
+        title: "新会话",
+        repositoryName: "wise-tui",
+        status: "idle",
+        updatedAt: 1_700_000_000_000,
+        timeLabel: "9m",
+      },
     ]);
     expect(parseWiseHudSelectRepositoryPayload({ repositoryId: 3 })).toEqual({ repositoryId: 3 });
     expect(parseWiseHudSelectRepositoryPayload({ repositoryId: "3" })).toBeNull();
