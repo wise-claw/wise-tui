@@ -17,16 +17,34 @@ export interface ToolGroupActivitySummary {
   toolCount: number;
 }
 
-function pickPathBasename(input: Record<string, unknown>): string {
-  for (const key of ["file_path", "path", "target_file", "target_directory", "root"]) {
+function pickPathBasename(part: ToolUsePart): string {
+  const previewName = extractToolFileEditPreview(part)?.fileName;
+  if (previewName) return previewName;
+  const input =
+    part.input && typeof part.input === "object" && !Array.isArray(part.input)
+      ? (part.input as Record<string, unknown>)
+      : {};
+  for (const key of [
+    "file_path",
+    "filePath",
+    "path",
+    "target_file",
+    "targetFile",
+    "target_directory",
+    "root",
+    "uri",
+  ]) {
     const value = input[key];
     if (typeof value === "string" && value.trim()) {
-      const normalized = value.replace(/\\/g, "/");
+      const normalized = value.replace(/\\/g, "/").replace(/^file:\/\//i, "");
       const base = normalized.split("/").filter(Boolean).pop();
       return base || normalized;
     }
   }
-  return "";
+  const location = part.locations?.find((item) => item.path?.trim());
+  if (!location?.path) return "";
+  const normalized = location.path.replace(/\\/g, "/");
+  return normalized.split("/").filter(Boolean).pop() || normalized;
 }
 
 export function classifyToolActivity(part: ToolUsePart): ToolActivityKind | null {
@@ -83,7 +101,7 @@ export function buildToolGroupActivitySummary(
     const kind = classifyToolActivity(part);
     if (!kind) continue;
 
-    const basename = pickPathBasename((part.input ?? {}) as Record<string, unknown>);
+    const basename = pickPathBasename(part);
     if (kind === "explore") {
       explore += 1;
       if (!firstExploreName && basename) firstExploreName = basename;

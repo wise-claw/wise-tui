@@ -179,6 +179,7 @@ fn map_tool_call(update: &Value, status: &str) -> Vec<String> {
         }
     }
     enrich_input_from_locations(&mut input, locations.as_ref());
+    enrich_input_from_acp_diffs(&mut input, update);
 
     let name = map_tool_name(kind, title);
     let mut tool_use = json!({
@@ -287,6 +288,107 @@ fn extract_raw_output_text(update: &Value) -> Option<String> {
     Some(raw.to_string())
 }
 
+fn title_looks_like_file_edit(title: &str) -> bool {
+    let t = title.trim();
+    let lower = t.to_ascii_lowercase();
+    if matches!(
+        lower.as_str(),
+        "edit" | "write" | "delete" | "strreplace" | "str_replace" | "apply_patch" | "apply patch"
+    ) {
+        return true;
+    }
+    let looks_like_path = t.contains('`') || t.contains('/') || t.contains('\\');
+    if !looks_like_path {
+        return false;
+    }
+    lower.starts_with("edit ")
+        || lower.starts_with("edited ")
+        || lower.starts_with("write ")
+        || lower.starts_with("wrote ")
+        || lower.starts_with("delete ")
+        || lower.starts_with("deleted ")
+        || lower.starts_with("str_replace")
+        || lower.starts_with("strreplace")
+        || lower.starts_with("apply_patch")
+        || lower.starts_with("apply patch")
+        || lower.starts_with("applied patch")
+}
+
+/// ACP `content[{type:"diff"}]` 才带 oldText/newText；写进 input 后会话才能画出变更。
+fn enrich_input_from_acp_diffs(input: &mut Value, update: &Value) {
+    let Some(items) = update.get("content").and_then(Value::as_array) else {
+        return;
+    };
+    let mut diffs: Vec<(String, String, String)> = Vec::new();
+    for item in items {
+        if item.get("type").and_then(Value::as_str) != Some("diff") {
+            continue;
+        }
+        let path = item
+            .get("path")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or("")
+            .to_string();
+        let old = acp_diff_text(item, &["oldText", "old_text", "old_string"]);
+        let new = acp_diff_text(item, &["newText", "new_text", "new_string"]);
+        if path.is_empty() && old.is_empty() && new.is_empty() {
+            continue;
+        }
+        diffs.push((path, old, new));
+    }
+    if diffs.is_empty() {
+        return;
+    }
+    let Some(obj) = input.as_object_mut() else {
+        return;
+    };
+    if diffs.len() == 1 {
+        let (path, old, new) = &diffs[0];
+        if !path.is_empty() {
+            obj.entry("file_path".to_string())
+                .or_insert_with(|| Value::String(path.clone()));
+            obj.entry("path".to_string())
+                .or_insert_with(|| Value::String(path.clone()));
+        }
+        obj.insert("old_string".to_string(), Value::String(old.clone()));
+        obj.insert("new_string".to_string(), Value::String(new.clone()));
+        return;
+    }
+    let edits = diffs
+        .into_iter()
+        .map(|(path, old, new)| {
+            json!({
+                "file_path": path,
+                "old_string": old,
+                "new_string": new,
+            })
+        })
+        .collect::<Vec<_>>();
+    if let Some(first) = edits
+        .first()
+        .and_then(|v| v.get("file_path"))
+        .and_then(Value::as_str)
+    {
+        if !first.is_empty() {
+            obj.entry("file_path".to_string())
+                .or_insert_with(|| Value::String(first.to_string()));
+        }
+    }
+    obj.insert("edits".to_string(), Value::Array(edits));
+}
+
+fn acp_diff_text(item: &Value, keys: &[&str]) -> String {
+    for key in keys {
+        match item.get(*key) {
+            Some(Value::String(text)) => return text.clone(),
+            Some(Value::Null) => return String::new(),
+            _ => {}
+        }
+    }
+    String::new()
+}
+
 fn enrich_input_from_locations(input: &mut Value, locations: Option<&Value>) {
     let Some(obj) = input.as_object_mut() else {
         return;
@@ -328,6 +430,9 @@ fn map_tool_name(kind: &str, title: &str) -> String {
         "fetch" | "web_fetch" => "WebFetch".to_string(),
         "think" => "Think".to_string(),
         _ => {
+            if title_looks_like_file_edit(title) {
+                return "Edit".to_string();
+            }
             // Empty name lets frontend merge keep a previously good tool name when
             // tool_call_update omits title/kind (ACP patch semantics).
             if is_placeholder_tool_label(title) {
@@ -573,6 +678,35 @@ mod tests {
         assert_eq!(lines.len(), 2);
         assert!(lines[0].contains(r#""name":"Bash""#));
         assert!(lines[1].contains(r#""type":"tool_result""#));
+    }
+
+    #[test]
+    fn tool_call_diff_content_becomes_edit_input() {
+        let params = json!({
+            "update": {
+                "sessionUpdate": "tool_call_update",
+                "toolCallId": "call_edit",
+                "status": "completed",
+                "title": "Edit `/repo/src/a.ts`",
+                "content": [{
+                    "type": "diff",
+                    "path": "/repo/src/a.ts",
+                    "oldText": null,
+                    "newText": "export const n = 1;\n"
+                }]
+            }
+        });
+        let lines = adapt_acp_notification_to_stream_lines(
+            AcpEngine::OpenCode,
+            "session/update",
+            Some(&params),
+            "tab",
+        );
+        assert!(!lines.is_empty());
+        assert!(lines[0].contains(r#""name":"Edit""#));
+        assert!(lines[0].contains("old_string"));
+        assert!(lines[0].contains("export const n = 1;"));
+        assert!(lines[0].contains("/repo/src/a.ts"));
     }
 
     #[test]

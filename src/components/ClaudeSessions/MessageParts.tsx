@@ -17,6 +17,9 @@ import { Markdown, StreamingReplyHint, ThinkingHintIcon } from "./Markdown";
 import { ToolFileEditCard } from "./ToolFileEditCard";
 import { WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL } from "../../constants/workflowUiEvents";
 import {
+  canonicalFileEditToolName,
+  dedupePathOnlyFileEditParts,
+  expandFileEditToolParts,
   extractToolFileEditPreview,
   isFileEditToolName,
   isToolEditNoiseOutput,
@@ -348,6 +351,30 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
   const lower = n.toLowerCase();
   const locSub = locationSubtitle(part);
 
+  if (isFileEditToolName(lower)) {
+    const preview = extractToolFileEditPreview(part);
+    const fileName =
+      preview?.fileName ||
+      pickInputString(input, ["file_path", "filePath", "path", "target_file", "targetFile"])
+        .split(/[/\\]/)
+        .filter(Boolean)
+        .pop() ||
+      locationPathBasename(part);
+    const canonical = canonicalFileEditToolName(lower);
+    const label =
+      canonical === "write" || canonical === "write_file" || canonical === "create_file"
+        ? "写入文件"
+        : canonical === "apply_patch" || canonical === "applypatch"
+          ? "应用补丁"
+          : canonical === "delete" || canonical === "delete_file"
+            ? "删除文件"
+            : "编辑文件";
+    return {
+      label,
+      subtitle: fileName || locSub,
+    };
+  }
+
   switch (lower) {
     case "bash":
     case "exec":
@@ -664,16 +691,26 @@ export function getToolInputParamRows(part: ToolUsePart): { key: string; value: 
   return rows;
 }
 
+function fileEditFingerprint(part: ToolUsePart): string {
+  if (!isFileEditToolName(part.name)) return "";
+  const preview = extractToolFileEditPreview(part);
+  if (!preview) return "|no-edit";
+  const lineBucket =
+    part.status === "running" ? Math.floor(preview.lines.length / 4) : preview.lines.length;
+  return `|${preview.filePath}|+${preview.addedLineCount}|-${preview.removedLineCount}|${lineBucket}|${preview.truncated ? 1 : 0}`;
+}
+
 function toolPartRenderFingerprint(part: ToolUsePart): string {
+  const editMark = fileEditFingerprint(part);
   if (part.status !== "running") {
-    return `${part.status}|${part.name}|${part.output?.length ?? 0}|${part.error ?? ""}|${part.locations?.length ?? 0}`;
+    return `${part.status}|${part.name}|${part.output?.length ?? 0}|${part.error ?? ""}|${part.locations?.length ?? 0}${editMark}`;
   }
   const subtitle = getToolDisplayInfo(part).subtitle;
   const outputBucketSize = isFileEditToolName(part.name) ? 1024 : 512;
   const outBucket = Math.floor((part.output?.length ?? 0) / outputBucketSize);
   const subBucket = Math.floor(subtitle.length / 64);
   const locBucket = part.locations?.length ?? 0;
-  return `${part.status}|${part.name}|${outBucket}|${subBucket}|${locBucket}|${part.error ?? ""}`;
+  return `${part.status}|${part.name}|${outBucket}|${subBucket}|${locBucket}|${part.error ?? ""}${editMark}`;
 }
 
 function ToolUseOutputBody({ part, streaming }: { part: ToolUsePart; streaming: boolean }) {
@@ -917,6 +954,21 @@ const ToolGroupDisplay = memo(function ToolGroupDisplay({
 }) {
   const toolParts = useMemo(() => parts.map(({ part }) => part), [parts]);
   const summary = useMemo(() => buildToolGroupActivitySummary(toolParts), [toolParts]);
+  const { editItems, otherItems } = useMemo(() => {
+    const edits: { part: ToolUsePart; originalIndex: number }[] = [];
+    const others: { part: ToolUsePart; originalIndex: number }[] = [];
+    for (const item of parts) {
+      const expanded = expandFileEditToolParts(item.part);
+      const editSlices = expanded.filter((part) => extractToolFileEditPreview(part));
+      if (editSlices.length > 0) {
+        for (const part of editSlices) edits.push({ part, originalIndex: item.originalIndex });
+        continue;
+      }
+      others.push(item);
+    }
+    return { editItems: dedupePathOnlyFileEditParts(edits), otherItems: others };
+  }, [parts]);
+  const hasOtherDetails = otherItems.length > 0;
   const keys = useMemo(
     () => parts.map(({ part, originalIndex }) => toolPartStableKey(part, originalIndex)),
     [parts],
@@ -946,11 +998,13 @@ const ToolGroupDisplay = memo(function ToolGroupDisplay({
         type="button"
         className={`app-message-parts__tool-group-summary${
           showShimmer ? " app-message-parts__tool-group-summary--running" : ""
-        }`}
-        aria-expanded={detailsOpen}
+        }${hasOtherDetails ? "" : " app-message-parts__tool-group-summary--edits-only"}`}
+        aria-expanded={hasOtherDetails ? detailsOpen : undefined}
         aria-busy={showShimmer || undefined}
-        onPointerDown={onPointerDown}
+        disabled={!hasOtherDetails}
+        onPointerDown={hasOtherDetails ? onPointerDown : undefined}
         onClick={() => {
+          if (!hasOtherDetails) return;
           if (consumeHadTextSelection()) return;
           setDetailsOpen((prev) => !prev);
         }}
@@ -978,13 +1032,32 @@ const ToolGroupDisplay = memo(function ToolGroupDisplay({
             </span>
           ) : null}
         </span>
-        <span className="app-message-parts__tool-group-summary__chevron" aria-hidden>
-          <ChevronIcon expanded={detailsOpen} />
-        </span>
+        {hasOtherDetails ? (
+          <span className="app-message-parts__tool-group-summary__chevron" aria-hidden>
+            <ChevronIcon expanded={detailsOpen} />
+          </span>
+        ) : null}
       </button>
-      {detailsOpen ? (
+      {editItems.length > 0 ? (
+        <div className="app-message-parts__tool-group-edits">
+          {editItems.map(({ part, originalIndex }) => {
+            const key = toolPartStableKey(part, originalIndex);
+            return (
+              <ToolUsePartDisplay
+                key={key}
+                part={part}
+                expanded={expandedMap[key] ?? false}
+                onExpandedChange={(next) =>
+                  setExpandedMap((prev) => ({ ...prev, [key]: next }))
+                }
+              />
+            );
+          })}
+        </div>
+      ) : null}
+      {detailsOpen && hasOtherDetails ? (
         <div className="app-message-parts__tool-group-details">
-          {parts.map(({ part, originalIndex }) => {
+          {otherItems.map(({ part, originalIndex }) => {
             const key = toolPartStableKey(part, originalIndex);
             return (
               <ToolUsePartDisplay

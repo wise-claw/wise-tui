@@ -1,9 +1,9 @@
-import type { ClaudeMessage, ClaudeSession } from "../types";
+import type { ClaudeMessage, ClaudeSession, ToolUsePart } from "../types";
 import {
   hasRenderableChatMessageBody,
   isToolOnlyUserMessage,
 } from "./claudeChatMessageDisplay";
-import { extractToolFileEditPreview } from "./toolFileEditPreview";
+import { expandFileEditToolParts, extractToolFileEditPreview } from "./toolFileEditPreview";
 
 export type TurnFileChangeEntry = {
   filePath: string;
@@ -19,6 +19,12 @@ export type TurnFileChangeSummaryPlacement = {
   files: TurnFileChangeEntry[];
   key: string;
 };
+
+function previewsForFileEditPart(part: ToolUsePart) {
+  return expandFileEditToolParts(part)
+    .map((item) => extractToolFileEditPreview(item))
+    .filter((preview): preview is NonNullable<typeof preview> => preview != null);
+}
 
 function normalizeFilePathKey(filePath: string): string {
   return filePath.trim().replace(/\\/g, "/");
@@ -44,21 +50,21 @@ export function collectTurnFileChanges(
       if (part.type !== "tool_use") continue;
       // 仅统计已完成编辑；running/error 或 input 未到齐时不计入总结。
       if (part.status !== "completed") continue;
-      const preview = extractToolFileEditPreview(part);
-      if (!preview) continue;
-      const key = normalizeFilePathKey(preview.filePath);
-      if (!key) continue;
-      const existing = byPath.get(key);
-      if (existing) {
-        existing.addedLineCount += preview.addedLineCount;
-        existing.removedLineCount += preview.removedLineCount;
-      } else {
-        byPath.set(key, {
-          filePath: preview.filePath,
-          fileName: preview.fileName || fileNameFromPath(preview.filePath),
-          addedLineCount: preview.addedLineCount,
-          removedLineCount: preview.removedLineCount,
-        });
+      for (const preview of previewsForFileEditPart(part)) {
+        const key = normalizeFilePathKey(preview.filePath);
+        if (!key) continue;
+        const existing = byPath.get(key);
+        if (existing) {
+          existing.addedLineCount += preview.addedLineCount;
+          existing.removedLineCount += preview.removedLineCount;
+        } else {
+          byPath.set(key, {
+            filePath: preview.filePath,
+            fileName: preview.fileName || fileNameFromPath(preview.filePath),
+            addedLineCount: preview.addedLineCount,
+            removedLineCount: preview.removedLineCount,
+          });
+        }
       }
     }
   }

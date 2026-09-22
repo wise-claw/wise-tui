@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolUsePart } from "../types";
 import {
+  buildFileTextDiffLines,
+  dedupePathOnlyFileEditParts,
   extractToolFileEditPreview,
+  groupFileEditDiffRows,
   isFileEditToolName,
   isToolEditNoiseOutput,
   relativePathInRepository,
@@ -24,6 +27,17 @@ describe("isFileEditToolName", () => {
     expect(isFileEditToolName("MultiEdit")).toBe(true);
     expect(isFileEditToolName("search_replace")).toBe(true);
     expect(isFileEditToolName("Read")).toBe(false);
+  });
+
+  test("recognizes tool names from each execution environment", () => {
+    expect(isFileEditToolName("StrReplace")).toBe(true);
+    expect(isFileEditToolName("write_file")).toBe(true);
+    expect(isFileEditToolName("replace")).toBe(true);
+    expect(isFileEditToolName("mcp__fs__edit_file")).toBe(true);
+    expect(isFileEditToolName("apply_patch")).toBe(true);
+    expect(isFileEditToolName("FileChange")).toBe(false);
+    expect(isFileEditToolName("Read")).toBe(false);
+    expect(isFileEditToolName("Bash")).toBe(false);
   });
 });
 
@@ -167,6 +181,62 @@ describe("extractToolFileEditPreview apply_patch", () => {
     expect(added?.text).toBe("const a = 2;");
   });
 
+  test("reads OpenCode filePath plus camelCase old/new strings", () => {
+    const preview = extractToolFileEditPreview(
+      buildPart({
+        name: "edit",
+        input: {
+          filePath: "/repo/src/open.ts",
+          oldString: "const a = 1;",
+          newString: "const a = 2;",
+        },
+      }),
+    );
+    expect(preview?.fileName).toBe("open.ts");
+    expect(preview?.addedLineCount).toBeGreaterThan(0);
+    expect(preview?.removedLineCount).toBeGreaterThan(0);
+  });
+
+  test("reads Cursor write fileText", () => {
+    const preview = extractToolFileEditPreview(
+      buildPart({
+        name: "Write",
+        input: {
+          path: "/repo/src/cursor.ts",
+          fileText: "export const n = 1;\n",
+        },
+      }),
+    );
+    expect(preview?.fileName).toBe("cursor.ts");
+    expect(preview?.addedLineCount).toBe(2);
+  });
+
+  test("uses ACP locations when input has no path", () => {
+    const preview = extractToolFileEditPreview(
+      buildPart({
+        name: "Edit",
+        input: {},
+        locations: [{ path: "/repo/src/from-location.py" }],
+      }),
+    );
+    expect(preview?.fileName).toBe("from-location.py");
+    expect(preview?.lines).toEqual([]);
+  });
+
+  test("reads apply_patch path from the patch header", () => {
+    const preview = extractToolFileEditPreview(
+      buildPart({
+        name: "apply_patch",
+        input: {
+          command: "*** Begin Patch\n*** Update File: src/bar.ts\n@@\n-old\n+new\n*** End Patch",
+        },
+      }),
+    );
+    expect(preview?.filePath).toBe("src/bar.ts");
+    expect(preview?.addedLineCount).toBe(1);
+    expect(preview?.removedLineCount).toBe(1);
+  });
+
   test("returns null for apply_patch without file_path", () => {
     const part = buildPart({
       name: "apply_patch",
@@ -179,5 +249,118 @@ describe("extractToolFileEditPreview apply_patch", () => {
 
   test("isFileEditToolName accepts apply_patch", () => {
     expect(isFileEditToolName("apply_patch")).toBe(true);
+  });
+
+  test("recognizes Cursor titles that embed the file path", () => {
+    const name = "Edit `/Users/me/repo/src/toolFileEditPreview.ts`";
+    expect(isFileEditToolName(name)).toBe(true);
+    const preview = extractToolFileEditPreview(
+      buildPart({
+        name,
+        input: {
+          path: "/Users/me/repo/src/toolFileEditPreview.ts",
+          old_string: "const a = 1;",
+          new_string: "const a = 2;",
+        },
+      }),
+    );
+    expect(preview?.fileName).toBe("toolFileEditPreview.ts");
+    expect(preview?.addedLineCount).toBeGreaterThan(0);
+    expect(preview?.removedLineCount).toBeGreaterThan(0);
+  });
+
+  test("reads a path out of the tool title when input has none", () => {
+    const preview = extractToolFileEditPreview(
+      buildPart({
+        name: "Edited `/repo/src/only-title.ts`",
+        input: { title: "Edited `/repo/src/only-title.ts`" },
+      }),
+    );
+    expect(preview?.fileName).toBe("only-title.ts");
+  });
+
+  test("treats Codex add and delete patches without +/- markers as full-file changes", () => {
+    const added = extractToolFileEditPreview(
+      buildPart({
+        name: "apply_patch",
+        input: {
+          file_path: ".gitignore",
+          kind: { type: "add" },
+          patch: "node_modules\ndist\n",
+        },
+      }),
+    );
+    expect(added?.addedLineCount).toBe(3);
+    expect(added?.removedLineCount).toBe(0);
+    expect(added?.lines.every((line) => line.kind === "add")).toBe(true);
+
+    const removed = extractToolFileEditPreview(
+      buildPart({
+        name: "apply_patch",
+        input: {
+          file_path: "old.txt",
+          kind: { type: "delete" },
+          patch: "gone\n",
+        },
+      }),
+    );
+    expect(removed?.removedLineCount).toBe(2);
+    expect(removed?.addedLineCount).toBe(0);
+  });
+
+  test("numbers a full-file edit and folds unmodified lines outside the hunk", () => {
+    const before = Array.from({ length: 40 }, (_, index) => `line ${index + 1}`).join("\n");
+    const afterLines = before.split("\n");
+    afterLines[20] = "line 21 changed";
+    const preview = extractToolFileEditPreview(
+      buildPart({
+        name: "Edit",
+        input: {
+          path: "/repo/src/MessageParts.tsx",
+          old_string: before,
+          new_string: afterLines.join("\n"),
+        },
+      }),
+    );
+    const changed = preview?.lines.find((line) => line.kind === "add");
+    expect(changed?.newLine).toBe(21);
+    expect(changed?.text).toBe("line 21 changed");
+    const rows = groupFileEditDiffRows(preview?.lines ?? []);
+    const folds = rows.filter((row) => row.type === "fold");
+    expect(folds.map((row) => (row.type === "fold" ? row.count : 0))).toEqual([17, 16]);
+    const firstLine = rows.find((row) => row.type === "line");
+    expect(firstLine?.type === "line" ? firstLine.line.newLine : null).toBe(18);
+  });
+
+  test("reads unified diff hunk line numbers", () => {
+    const preview = extractToolFileEditPreview(
+      buildPart({
+        name: "apply_patch",
+        input: {
+          file_path: "src/foo.ts",
+          patch: ["@@ -957,3 +957,4 @@", " const edits = [];", "-if (old) return;", "+const expanded = [];", " return edits;"].join("\n"),
+        },
+      }),
+    );
+    const removed = preview?.lines.find((line) => line.kind === "remove");
+    const added = preview?.lines.find((line) => line.kind === "add");
+    expect(removed?.oldLine).toBe(958);
+    expect(added?.newLine).toBe(958);
+  });
+
+  test("collapses repeated path-only edits of the same file", () => {
+    const part = buildPart({
+      name: "Edit `/repo/src/styles/global.css`",
+      input: { path: "/repo/src/styles/global.css" },
+    });
+    const items = [part, { ...part, id: "tool-2" }, { ...part, id: "tool-3" }].map((item, index) => ({
+      part: item,
+      originalIndex: index,
+    }));
+    const deduped = dedupePathOnlyFileEditParts(items);
+    expect(deduped).toHaveLength(1);
+    const lines = buildFileTextDiffLines("a\nb\n", "a\nc\n");
+    expect(lines.some((line) => line.kind === "remove" && line.text === "b")).toBe(true);
+    expect(lines.some((line) => line.kind === "add" && line.text === "c")).toBe(true);
   });
 });

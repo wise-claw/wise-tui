@@ -5580,6 +5580,24 @@
   opacity: 0.55;
 }
 
+.app-message-parts__tool-group-summary:disabled,
+.app-message-parts__tool-group-summary--edits-only {
+  opacity: 1;
+  cursor: default;
+}
+
+.app-message-parts__tool-group-summary--edits-only:hover {
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-message-parts__tool-group-edits {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin: 4px 0 2px;
+}
+
 .app-message-parts__tool-group-details {
   display: flex;
   flex-direction: column;
@@ -6762,20 +6780,62 @@ button.app-message-part-header:disabled:hover {
 
 .app-tool-edit-card__code {
   margin: 0;
-  padding: 0;
-  font-size: 11px;
-  line-height: 1.45;
-  overflow: hidden;
+  padding: 2px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow: auto;
+  max-height: 420px;
   background: transparent;
   border: none;
+  font-family: "SF Mono", "Fira Code", Consolas, monospace;
+}
+
+.app-tool-edit-card__fold-block {
+  margin: 2px 0;
+}
+
+.app-tool-edit-card__fold {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: calc(100% - 16px);
+  margin: 2px 8px;
+  padding: 3px 10px;
+  border: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ant-color-fill-secondary) 88%, transparent);
+  color: var(--ant-color-text-tertiary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.app-tool-edit-card__fold:hover {
+  background: color-mix(in srgb, var(--ant-color-fill) 90%, transparent);
+  color: var(--ant-color-text-secondary);
+}
+
+.app-tool-edit-card__fold:focus-visible {
+  outline: 1px solid var(--ant-color-primary);
+  outline-offset: 1px;
 }
 
 .app-tool-edit-card__line {
   display: flex;
   align-items: stretch;
-  min-height: 1.45em;
+  min-height: 1.5em;
   white-space: pre;
-  overflow-x: auto;
+}
+
+.app-tool-edit-card__gutter {
+  flex: 0 0 46px;
+  padding: 0 10px 0 4px;
+  text-align: right;
+  color: var(--ant-color-text-quaternary);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
 }
 
 .app-tool-edit-card__line code {
@@ -6801,7 +6861,7 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-tool-edit-card__line--same {
-  color: var(--ant-color-text-quaternary);
+  color: var(--ant-color-text);
 }
 
 .app-tool-edit-card__line--same code {

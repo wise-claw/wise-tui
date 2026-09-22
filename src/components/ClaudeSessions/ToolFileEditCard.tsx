@@ -1,6 +1,10 @@
-import { memo, useCallback, useMemo, type MouseEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { dispatchOpenRepositoryFile } from "../../constants/workflowUiEvents";
-import { relativePathInRepository } from "../../utils/toolFileEditPreview";
+import {
+  groupFileEditDiffRows,
+  relativePathInRepository,
+  type ToolFileEditPreviewLine,
+} from "../../utils/toolFileEditPreview";
 import { ExplorerTreeFileIcon } from "../GitPanel/explorerTreeChrome";
 import { highlightMarkdownCode } from "../../utils/markdownCodeHighlight";
 import type { ToolFileEditPreview } from "../../utils/toolFileEditPreview";
@@ -8,6 +12,7 @@ import {
   getClaudeChatMessageScrollBridge,
   rememberChatScrollBeforeFileOpen,
 } from "../../stores/claudeChatMessageScrollBridge";
+import { loadWorkingTreeFileDiffLines } from "../../utils/workingTreeFileDiff";
 import { useChatRepositoryPath } from "./chatRepositoryContext";
 import "./markdownCodeHighlight.css";
 
@@ -29,6 +34,56 @@ function HighlightedCodeLine({
     return <code className={codeClass} dangerouslySetInnerHTML={{ __html: highlighted.html }} />;
   }
   return <code className={codeClass}>{text || " "}</code>;
+}
+
+function useWorkingTreeDiffLines(
+  repositoryPath: string | null,
+  filePath: string,
+  enabled: boolean,
+): ToolFileEditPreviewLine[] {
+  const relativePath = repositoryPath ? relativePathInRepository(repositoryPath, filePath) : null;
+  const [lines, setLines] = useState<ToolFileEditPreviewLine[]>([]);
+  useEffect(() => {
+    if (!enabled || !repositoryPath || !relativePath) {
+      setLines([]);
+      return;
+    }
+    let cancelled = false;
+    void loadWorkingTreeFileDiffLines(repositoryPath, relativePath)
+      .then((next) => {
+        if (!cancelled) setLines(next);
+      })
+      .catch(() => {
+        if (!cancelled) setLines([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, repositoryPath, relativePath]);
+  return lines;
+}
+
+function gutterLineNumber(line: ToolFileEditPreviewLine): string {
+  if (line.kind === "remove") return line.oldLine == null ? "" : String(line.oldLine);
+  return line.newLine == null ? "" : String(line.newLine);
+}
+
+function FoldChevron({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {expanded ? <path d="M4 6l4 4 4-4" /> : <path d="M6 4l4 4-4 4" />}
+    </svg>
+  );
 }
 
 function toolFileEditPreviewFingerprint(
@@ -82,21 +137,50 @@ export const ToolFileEditCard = memo(
       [preview.filePath, repositoryPath],
     );
 
+    const recoveredLines = useWorkingTreeDiffLines(
+      repositoryPath,
+      preview.filePath,
+      preview.lines.length === 0,
+    );
+    const displayLines = preview.lines.length > 0 ? preview.lines : recoveredLines;
+    const addedLineCount =
+      preview.lines.length > 0
+        ? preview.addedLineCount
+        : displayLines.filter((line) => line.kind === "add").length;
+    const removedLineCount =
+      preview.lines.length > 0
+        ? preview.removedLineCount
+        : displayLines.filter((line) => line.kind === "remove").length;
+
     const statsLabel = useMemo(() => {
-      if (preview.addedLineCount > 0 && preview.removedLineCount > 0) {
-        return `+${preview.addedLineCount} -${preview.removedLineCount}`;
+      if (addedLineCount > 0 && removedLineCount > 0) {
+        return `+${addedLineCount} -${removedLineCount}`;
       }
-      if (preview.addedLineCount > 0) return `+${preview.addedLineCount}`;
-      if (preview.removedLineCount > 0) return `-${preview.removedLineCount}`;
+      if (addedLineCount > 0) return `+${addedLineCount}`;
+      if (removedLineCount > 0) return `-${removedLineCount}`;
       return "";
-    }, [preview.addedLineCount, preview.removedLineCount]);
+    }, [addedLineCount, removedLineCount]);
 
     const statsClass =
-      preview.addedLineCount > 0 && preview.removedLineCount === 0
+      addedLineCount > 0 && removedLineCount === 0
         ? "app-tool-edit-card__stats app-tool-edit-card__stats--add"
-        : preview.removedLineCount > 0 && preview.addedLineCount === 0
+        : removedLineCount > 0 && addedLineCount === 0
           ? "app-tool-edit-card__stats app-tool-edit-card__stats--remove"
           : "app-tool-edit-card__stats";
+
+    const diffRows = useMemo(() => groupFileEditDiffRows(displayLines), [displayLines]);
+    const foldSignature = `${preview.filePath}|${addedLineCount}|${removedLineCount}|${displayLines.length}`;
+    const [foldState, setFoldState] = useState<{ signature: string; open: Record<string, boolean> }>({
+      signature: foldSignature,
+      open: {},
+    });
+    const openFolds = foldState.signature === foldSignature ? foldState.open : {};
+    const toggleFold = useCallback((key: string) => {
+      setFoldState((prev) => {
+        const open = prev.signature === foldSignature ? prev.open : {};
+        return { signature: foldSignature, open: { ...open, [key]: !open[key] } };
+      });
+    }, [foldSignature]);
 
     return (
       <div
@@ -122,18 +206,51 @@ export const ToolFileEditCard = memo(
           )}
           {statsLabel ? <span className={statsClass}>{statsLabel}</span> : null}
         </div>
-        <div className="app-tool-edit-card__body">
-          <pre className="app-tool-edit-card__code">
-            {preview.lines.map((line, idx) => (
-              <div
-                key={streaming ? idx : `${idx}-${line.kind}-${line.text.slice(0, 24)}`}
-                className={`app-tool-edit-card__line app-tool-edit-card__line--${line.kind}`}
-              >
-                <HighlightedCodeLine text={line.text} lang={preview.language} streaming={streaming} />
-              </div>
-            ))}
-          </pre>
-        </div>
+        {diffRows.length > 0 ? (
+          <div className="app-tool-edit-card__body">
+            <div className="app-tool-edit-card__code">
+              {diffRows.map((row) => {
+                if (row.type === "fold") {
+                  const expanded = openFolds[row.key] === true;
+                  return (
+                    <div key={row.key} className="app-tool-edit-card__fold-block">
+                      <button
+                        type="button"
+                        className="app-tool-edit-card__fold"
+                        aria-expanded={expanded}
+                        onClick={() => toggleFold(row.key)}
+                      >
+                        <FoldChevron expanded={expanded} />
+                        <span>{expanded ? "收起未修改行" : `${row.count} 行未修改`}</span>
+                      </button>
+                      {expanded
+                        ? row.lines.map((line, index) => (
+                            <div
+                              key={`${row.key}-${index}`}
+                              className={`app-tool-edit-card__line app-tool-edit-card__line--${line.kind}`}
+                            >
+                              <span className="app-tool-edit-card__gutter">{gutterLineNumber(line)}</span>
+                              <HighlightedCodeLine text={line.text} lang={preview.language} streaming={streaming} />
+                            </div>
+                          ))
+                        : null}
+                    </div>
+                  );
+                }
+                const line = row.line;
+                return (
+                  <div
+                    key={row.key}
+                    className={`app-tool-edit-card__line app-tool-edit-card__line--${line.kind}`}
+                  >
+                    <span className="app-tool-edit-card__gutter">{gutterLineNumber(line)}</span>
+                    <HighlightedCodeLine text={line.text} lang={preview.language} streaming={streaming} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   },

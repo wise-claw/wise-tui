@@ -256,6 +256,18 @@ describe("getToolDisplayInfo fallback", () => {
     expect(info.label === "Tool" && info.subtitle === "Tool").toBe(false);
   });
 
+  test("labels file edits from non-Claude tool names", () => {
+    const info = getToolDisplayInfo({
+      id: "t-edit",
+      type: "tool_use",
+      name: "StrReplace",
+      input: { filePath: "src/session.ts", oldString: "a", newString: "b" },
+      status: "completed",
+    });
+    expect(info.label).toBe("编辑文件");
+    expect(info.subtitle).toBe("session.ts");
+  });
+
   test("read tool uses location basename when input path missing", () => {
     const part: ToolUsePart = {
       id: "t3",

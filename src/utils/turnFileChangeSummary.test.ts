@@ -113,6 +113,42 @@ describe("collectTurnFileChanges", () => {
     expect(files[0]!.addedLineCount).toBeGreaterThan(0);
   });
 
+  test("collects OpenCode and Cursor shaped edits", () => {
+    const files = collectTurnFileChanges([
+      msg({
+        id: 1,
+        role: "assistant",
+        parts: [
+          {
+            id: "oc",
+            type: "tool_use",
+            name: "edit",
+            status: "completed",
+            input: { filePath: "src/open.ts", oldString: "a", newString: "b" },
+            output: "",
+          },
+          {
+            id: "cu",
+            type: "tool_use",
+            name: "Write",
+            status: "completed",
+            input: { path: "src/cursor.ts", fileText: "one" },
+            output: "",
+          },
+          {
+            id: "gm",
+            type: "tool_use",
+            name: "write_file",
+            status: "completed",
+            input: { file_path: "src/gemini.ts", content: "g" },
+            output: "",
+          },
+        ],
+      }),
+    ]);
+    expect(files.map((f) => f.fileName).sort()).toEqual(["cursor.ts", "gemini.ts", "open.ts"]);
+  });
+
   test("keeps distinct paths", () => {
     const files = collectTurnFileChanges([
       msg({

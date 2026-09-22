@@ -136,6 +136,8 @@ fn map_tool_call(update: &Value, status: &str) -> Vec<String> {
     }
     // When rawInput is empty, surface first location path so UI can show a file subtitle.
     enrich_input_from_locations(&mut input, locations.as_ref());
+    // Cursor Agent 把文件差异放在 content[{type:"diff"}]，不在 rawInput。
+    enrich_input_from_acp_diffs(&mut input, update);
 
     let name = map_tool_name(kind, title, &input);
     let progress_output = if status == "running" || status == "pending" {
@@ -264,6 +266,105 @@ fn extract_locations(update: &Value) -> Option<Value> {
     } else {
         Some(Value::Array(out))
     }
+}
+
+fn title_looks_like_file_edit(title: &str) -> bool {
+    let t = title.trim();
+    let lower = t.to_ascii_lowercase();
+    if matches!(
+        lower.as_str(),
+        "edit" | "write" | "delete" | "strreplace" | "str_replace" | "apply_patch" | "apply patch"
+    ) {
+        return true;
+    }
+    // 「Write a summary」这类句子不是文件编辑；Cursor 的编辑标题带路径或反引号。
+    let looks_like_path = t.contains('`') || t.contains('/') || t.contains('\\');
+    if !looks_like_path {
+        return false;
+    }
+    lower.starts_with("edit ")
+        || lower.starts_with("edited ")
+        || lower.starts_with("write ")
+        || lower.starts_with("wrote ")
+        || lower.starts_with("delete ")
+        || lower.starts_with("deleted ")
+        || lower.starts_with("str_replace")
+        || lower.starts_with("strreplace")
+        || lower.starts_with("apply_patch")
+        || lower.starts_with("apply patch")
+        || lower.starts_with("applied patch")
+}
+
+/// 把 ACP `content` 里的 `{type:"diff", path, oldText, newText}` 写入工具 input，
+/// 前端才能画出变更文件卡片。`oldText: null` 表示新建文件。
+fn enrich_input_from_acp_diffs(input: &mut Value, update: &Value) {
+    let Some(items) = update.get("content").and_then(Value::as_array) else {
+        return;
+    };
+    let mut diffs: Vec<(String, String, String)> = Vec::new();
+    for item in items {
+        if item.get("type").and_then(Value::as_str) != Some("diff") {
+            continue;
+        }
+        let path = item
+            .get("path")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or("")
+            .to_string();
+        let old = acp_diff_text(item, &["oldText", "old_text", "old_string"]);
+        let new = acp_diff_text(item, &["newText", "new_text", "new_string"]);
+        if path.is_empty() && old.is_empty() && new.is_empty() {
+            continue;
+        }
+        diffs.push((path, old, new));
+    }
+    if diffs.is_empty() {
+        return;
+    }
+    let Some(obj) = input.as_object_mut() else {
+        return;
+    };
+    if diffs.len() == 1 {
+        let (path, old, new) = &diffs[0];
+        if !path.is_empty() {
+            obj.entry("file_path".to_string())
+                .or_insert_with(|| Value::String(path.clone()));
+            obj.entry("path".to_string())
+                .or_insert_with(|| Value::String(path.clone()));
+        }
+        obj.insert("old_string".to_string(), Value::String(old.clone()));
+        obj.insert("new_string".to_string(), Value::String(new.clone()));
+        return;
+    }
+    let edits = diffs
+        .into_iter()
+        .map(|(path, old, new)| {
+            json!({
+                "file_path": path,
+                "old_string": old,
+                "new_string": new,
+            })
+        })
+        .collect::<Vec<_>>();
+    if let Some(first) = edits.first().and_then(|v| v.get("file_path")).and_then(Value::as_str) {
+        if !first.is_empty() {
+            obj.entry("file_path".to_string())
+                .or_insert_with(|| Value::String(first.to_string()));
+        }
+    }
+    obj.insert("edits".to_string(), Value::Array(edits));
+}
+
+fn acp_diff_text(item: &Value, keys: &[&str]) -> String {
+    for key in keys {
+        match item.get(*key) {
+            Some(Value::String(text)) => return text.clone(),
+            Some(Value::Null) => return String::new(),
+            _ => {}
+        }
+    }
+    String::new()
 }
 
 fn is_placeholder_tool_label(label: &str) -> bool {
@@ -471,6 +572,9 @@ fn map_tool_name(kind: &str, title: &str, input: &Value) -> String {
         _ => {
             if input_looks_like_task(input) || title_looks_like_task(title) {
                 return "Task".to_string();
+            }
+            if title_looks_like_file_edit(title) {
+                return "Edit".to_string();
             }
             // Empty name lets frontend merge keep a previously good tool name when
             // tool_call_update omits title/kind (ACP patch semantics).
@@ -774,6 +878,35 @@ mod tests {
         let lines = map_cursor_task(Some(&params));
         assert_eq!(lines.len(), 1);
         assert!(lines[0].contains("trellis-research"));
+    }
+
+    #[test]
+    fn tool_call_diff_content_becomes_edit_input() {
+        let params = json!({
+            "sessionId": "s1",
+            "update": {
+                "sessionUpdate": "tool_call_update",
+                "toolCallId": "tc-edit",
+                "title": "Edit `/Users/me/repo/src/toolFileEditPreview.ts`",
+                "status": "completed",
+                "rawInput": { "path": "/Users/me/repo/src/toolFileEditPreview.ts" },
+                "locations": [{ "path": "/Users/me/repo/src/toolFileEditPreview.ts" }],
+                "content": [{
+                    "type": "diff",
+                    "path": "/Users/me/repo/src/toolFileEditPreview.ts",
+                    "oldText": "const a = 1;\n",
+                    "newText": "const a = 2;\n"
+                }]
+            }
+        });
+        let lines = adapt_acp_notification_to_stream_lines("session/update", Some(&params), "tab1");
+        assert!(!lines.is_empty());
+        assert!(lines[0].contains("\"name\":\"Edit\""));
+        assert!(lines[0].contains("old_string"));
+        assert!(lines[0].contains("new_string"));
+        assert!(lines[0].contains("const a = 1;"));
+        assert!(lines[0].contains("const a = 2;"));
+        assert!(lines[0].contains("\"name\":\"Edit\""));
     }
 
     #[test]
