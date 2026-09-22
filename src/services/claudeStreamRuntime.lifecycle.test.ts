@@ -42,6 +42,67 @@ function harness() {
 }
 
 describe("stream completion lifecycle", () => {
+  test("text and reasoning deltas skip history scans while tool updates still publish", () => {
+    Object.defineProperty(dom.document, "visibilityState", { configurable: true, value: "visible" });
+    const originalRaf = window.requestAnimationFrame;
+    const originalCancelRaf = window.cancelAnimationFrame;
+    let frame: FrameRequestCallback | undefined;
+    window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      frame = callback;
+      return 1;
+    }) as typeof window.requestAnimationFrame;
+    window.cancelAnimationFrame = () => { frame = undefined; };
+    const { deps, runtime } = harness();
+    runtime.dispose();
+    const ingest = mock(() => {});
+    const bound = createClaudeStreamRuntime({ ...deps, ingestTodosFromSessionMessages: ingest });
+    const flush = () => {
+      const callback = frame;
+      frame = undefined;
+      callback?.(0);
+    };
+    try {
+      for (let i = 0; i < 50; i += 1) {
+        bound.handleOutputForSendTab("tab", {
+          type: "stream_event",
+          event: { type: "content_block_delta", delta: { type: "text_delta", text: `词${i} ` } },
+        });
+      }
+      bound.handleOutputForSendTab("tab", {
+        type: "stream_event",
+        event: { type: "content_block_delta", delta: { type: "thinking_delta", thinking: "思考中" } },
+      });
+      flush();
+      expect(ingest).not.toHaveBeenCalled();
+      expect(deps.sessionsRef.current[0]!.messages.at(-1)!.content).toContain("词49");
+      expect(deps.sessionsRef.current[0]!.messages.at(-1)!.parts).toContainEqual({
+        type: "reasoning", text: "思考中",
+      });
+
+      for (const name of ["TodoWrite", "ExitPlanMode"]) {
+        bound.handleOutputForSendTab("tab", {
+          type: "assistant",
+          message: { content: [{ type: "tool_use", id: name, name, input: {} }] },
+        });
+        flush();
+      }
+      expect(ingest).toHaveBeenCalledTimes(2);
+      bound.handleOutputForSendTab("tab", {
+        type: "user",
+        message: { content: [{ type: "tool_result", tool_use_id: "TodoWrite", content: "updated" }] },
+      });
+      flush();
+      expect(ingest).toHaveBeenCalledTimes(3);
+      expect(deps.sessionsRef.current[0]!.messages.at(-1)!.parts).toContainEqual(
+        expect.objectContaining({ type: "tool_use", id: "TodoWrite", status: "completed", output: "updated" }),
+      );
+    } finally {
+      bound.dispose();
+      window.requestAnimationFrame = originalRaf;
+      window.cancelAnimationFrame = originalCancelRaf;
+    }
+  });
+
   test("hidden windows commit final status before notifying and consume completion only once", () => {
     Object.defineProperty(dom.document, "visibilityState", { configurable: true, value: "hidden" });
     const { deps, runtime } = harness();

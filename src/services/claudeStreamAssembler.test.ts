@@ -773,4 +773,70 @@ describe("foldToolResultUserMessagesIntoAssistant", () => {
     expect(applied.matchedIds.has("toolu_1")).toBe(true);
     expect(applied.messages[0]?.parts[0]).toMatchObject({ output: "task list body" });
   });
+
+  test("updates every preceding duplicate tool id and keeps the first update in a batch", () => {
+    const first = assistantTool("shared", "Read");
+    const second = assistantTool("shared", "Read");
+    second.parts.push({ ...second.parts[0] } as ToolUsePart);
+    const update = toolResultUser("shared", "first result");
+    update.parts.push(...toolResultUser("shared", "duplicate result").parts);
+    const messages = [first, second];
+    const before = JSON.stringify(messages);
+    const folded = foldToolResultUserMessagesIntoAssistant([...messages, update]);
+    expect(folded).toHaveLength(2);
+    for (const message of folded) {
+      for (const part of message.parts) {
+        expect(part).toMatchObject({ id: "shared", output: "first result", name: "Read" });
+      }
+    }
+    expect(JSON.stringify(messages)).toBe(before);
+    expect(applyToolResultPartsToMessages(messages, update.parts as ToolUsePart[]).messages)
+      .toEqual(folded);
+  });
+
+  test("preserves orphan results, mixed batches, and original message order", () => {
+    const early = toolResultUser("late", "arrived before call");
+    const known = assistantTool("known", "Read");
+    const late = assistantTool("late", "Bash");
+    const mixed = toolResultUser("known", "known result");
+    mixed.parts.push(...toolResultUser("missing", "orphan result").parts);
+    const plainUser: ClaudeMessage = {
+      id: "plain", role: "user", content: "Continue", timestamp: 3,
+      parts: [{ type: "text", text: "Continue" }],
+    };
+    const folded = foldToolResultUserMessagesIntoAssistant([early, known, plainUser, late, mixed]);
+    expect(folded).toHaveLength(5);
+    expect(folded[0]).toMatchObject({ role: "user", content: "", parts: early.parts });
+    expect(folded[1]!.parts[0]).toMatchObject({ output: "known result" });
+    expect(folded[2]).toBe(plainUser);
+    expect(folded[3]).toBe(late);
+    expect(folded[4]).toMatchObject({ content: "", parts: [mixed.parts[1]] });
+  });
+
+  test("successive results preserve tool input, locations, and error transitions", () => {
+    const call = assistantTool("tool", "Read");
+    const tool = call.parts[0] as ToolUsePart;
+    tool.locations = [{ path: "/repo/example.ts", line: 4 }];
+    const success = toolResultUser("tool", "loaded");
+    const error = toolResultUser("tool", "");
+    error.parts[0] = { ...error.parts[0], status: "error", error: "failed" } as ToolUsePart;
+    const result = foldToolResultUserMessagesIntoAssistant([call, success, error]);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts[0]).toMatchObject({
+      name: "Read", input: { taskId: "3" }, locations: tool.locations,
+      status: "error", error: "failed",
+    });
+    expect(tool).not.toHaveProperty("error");
+  });
+
+  test("preserves legacy content-only assistant messages alongside tool results", () => {
+    const legacy = { id: "legacy", role: "assistant", content: "Legacy text", timestamp: 0 } as ClaudeMessage;
+    const call = assistantTool("tool", "Read");
+    const update = toolResultUser("tool", "loaded");
+    const folded = foldToolResultUserMessagesIntoAssistant([legacy, call, update]);
+    expect(folded[0]).toBe(legacy);
+    expect(folded[1]!.parts[0]).toMatchObject({ output: "loaded" });
+    expect(applyToolResultPartsToMessages([legacy, call], update.parts as ToolUsePart[]).messages)
+      .toEqual(folded);
+  });
 });

@@ -118,9 +118,11 @@ export function joinAssistantTextPartBodies(bodies: readonly string[]): string {
     if (isLikelyStreamTextFragment(prevSeg, next)) {
       out = joinFragmentBodies(out, next);
     } else {
-      out = `${out.replace(/\n+$/g, "")}\n\n${next.replace(/^\n+/g, "")}`;
+      // segments 已裁掉尾部空白，后续段也已裁掉头部空白，无需重扫 out 去换行。
+      out = `${out}\n\n${next}`;
     }
-    outKey = textDedupeKey(out);
+    // 拼接仅增加空白分隔符；复用已归一化的键，避免每个片段重扫累积正文。
+    outKey += nextKey;
   }
   return out;
 }

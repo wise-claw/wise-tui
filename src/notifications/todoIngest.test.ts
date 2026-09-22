@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { ClaudeMessage } from "../types";
+import type { ClaudeMessage, MessagePart } from "../types";
 import {
   computeTodoProgress,
   extractLatestTodoWriteFromMessages,
@@ -68,6 +68,30 @@ describe("pickActiveTodoTitle", () => {
 });
 
 describe("extractLatestTodoWriteFromMessages", () => {
+  it("skips invalid newer writes and user messages without parsing older valid batches", () => {
+    const valid: MessagePart = {
+      type: "tool_use", id: "valid", name: "TodoWrite", status: "running",
+      input: { merge: true, todos: [{ content: "Latest valid", status: "in_progress" }] },
+    };
+    const invalid: MessagePart = { ...valid, id: "invalid", input: { todos: [] } };
+    const older: ClaudeMessage = {
+      id: 1, role: "assistant", content: "", timestamp: 1,
+      get parts(): MessagePart[] { throw new Error("Older history should not be scanned"); },
+    };
+    const messages: ClaudeMessage[] = [
+      older,
+      { id: 2, role: "assistant", content: "", timestamp: 2, parts: [valid, invalid] },
+      { id: 3, role: "assistant", content: "", timestamp: 3, parts: [invalid] },
+      { id: 4, role: "user", content: "", timestamp: 4, parts: [valid] },
+    ];
+    expect(extractLatestTodoWriteFromMessages(messages)).toEqual({
+      merge: true,
+      items: [{ id: "todo_Latest_valid", content: "Latest valid", status: "in_progress" }],
+    });
+    expect(extractLatestTodoWriteFromMessages([])).toBeNull();
+    expect(extractTodoWriteFromMessageParts([invalid])).toBeNull();
+  });
+
   it("returns the last assistant TodoWrite batch", () => {
     const messages: ClaudeMessage[] = [
       {

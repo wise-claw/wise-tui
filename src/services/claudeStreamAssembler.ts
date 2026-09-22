@@ -565,22 +565,32 @@ function mergeToolUseInput(
   return base;
 }
 
+/** 同一批重复 id 沿用原先 find 的首次命中语义。 */
+function indexFirstToolUpdates(updates: readonly ToolUsePart[]): Map<string, ToolUsePart> {
+  const byId = new Map<string, ToolUsePart>();
+  for (const update of updates) {
+    if (!byId.has(update.id)) byId.set(update.id, update);
+  }
+  return byId;
+}
+
 function assistantMessageWithMergedToolParts(
   message: ClaudeMessage,
-  updates: readonly ToolUsePart[],
+  updates: ReadonlyMap<string, ToolUsePart>,
   matchedIds: Set<string>,
 ): ClaudeMessage | null {
-  if (message.role !== "assistant") return null;
-  let touched = false;
-  const nextParts = message.parts.map((part) => {
-    if (part.type !== "tool_use") return part;
-    const update = updates.find((u) => u.id === part.id);
-    if (!update) return part;
-    touched = true;
+  if (message.role !== "assistant" || !message.parts?.length) return null;
+  let nextParts: MessagePart[] | undefined;
+  for (let i = 0; i < message.parts.length; i += 1) {
+    const part = message.parts[i];
+    if (part.type !== "tool_use") continue;
+    const update = updates.get(part.id);
+    if (!update) continue;
+    nextParts ??= [...message.parts];
     matchedIds.add(part.id);
-    return mergeToolUseWithUpdate(part, update);
-  });
-  if (!touched) return null;
+    nextParts[i] = mergeToolUseWithUpdate(part, update);
+  }
+  if (!nextParts) return null;
   return { ...message, parts: nextParts, content: assistantTextJoinedFromParts(nextParts) };
 }
 
@@ -593,14 +603,11 @@ export function applyToolResultPartsToMessages(
     return { messages: [...messages], matchedIds: new Set<string>() };
   }
   const matchedIds = new Set<string>();
-  let changed = false;
+  const updatesById = indexFirstToolUpdates(updates);
   const nextMessages = messages.map((message) => {
-    const merged = assistantMessageWithMergedToolParts(message, updates, matchedIds);
-    if (!merged) return message;
-    changed = true;
-    return merged;
+    return assistantMessageWithMergedToolParts(message, updatesById, matchedIds) ?? message;
   });
-  return { messages: changed ? nextMessages : [...messages], matchedIds };
+  return { messages: nextMessages, matchedIds };
 }
 
 /**
@@ -608,9 +615,23 @@ export function applyToolResultPartsToMessages(
  * 与流式 `applyToolResultPartsToSession` 行为对齐。
  */
 export function foldToolResultUserMessagesIntoAssistant(messages: readonly ClaudeMessage[]): ClaudeMessage[] {
-  let result: ClaudeMessage[] = [];
+  const result: ClaudeMessage[] = [];
+  // 仅索引已出现的 assistant，保留乱序结果的孤儿语义。
+  // 同 id 可能在多条快照中出现，必须更新全部既有位置，不能只记最后一条。
+  const messageIndexesByToolId = new Map<string, Set<number>>();
   for (const msg of messages) {
     if (!isToolOnlyUserMessage(msg)) {
+      if (msg.role === "assistant") {
+        for (const part of msg.parts ?? []) {
+          if (part.type !== "tool_use") continue;
+          let indexes = messageIndexesByToolId.get(part.id);
+          if (!indexes) {
+            indexes = new Set<number>();
+            messageIndexesByToolId.set(part.id, indexes);
+          }
+          indexes.add(result.length);
+        }
+      }
       result.push(msg);
       continue;
     }
@@ -621,9 +642,19 @@ export function foldToolResultUserMessagesIntoAssistant(messages: readonly Claud
       result.push(msg);
       continue;
     }
-    const applied = applyToolResultPartsToMessages(result, updates);
-    result = applied.messages;
-    const orphans = updates.filter((update) => !applied.matchedIds.has(update.id));
+    const updatesById = indexFirstToolUpdates(updates);
+    const affectedMessageIndexes = new Set<number>();
+    for (const id of updatesById.keys()) {
+      for (const index of messageIndexesByToolId.get(id) ?? []) {
+        affectedMessageIndexes.add(index);
+      }
+    }
+    const matchedIds = new Set<string>();
+    for (const index of affectedMessageIndexes) {
+      const merged = assistantMessageWithMergedToolParts(result[index], updatesById, matchedIds);
+      if (merged) result[index] = merged;
+    }
+    const orphans = updates.filter((update) => !matchedIds.has(update.id));
     if (orphans.length === 0) continue;
     // 孤儿 user 消息：`content` 留空，避免 stdout 表格被下游当成用户正文渲染。
     // 工具结果输出仍存于 `parts[*].output` / `parts[*].error`，由 MessagePartsDisplay

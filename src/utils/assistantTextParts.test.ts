@@ -80,6 +80,20 @@ describe("joinAssistantTextPartBodies", () => {
     const short = "改动已就绪，等你确认。";
     expect(joinAssistantTextPartBodies([short, short])).toBe(`${short}\n\n${short}`);
   });
+
+  test("dedupes a full snapshot after many short fragments and a skipped duplicate", () => {
+    const fragments = Array.from({ length: 120 }, (_, i) => `片段 ${i} 内容。`);
+    const snapshot = fragments.join("\n\n");
+    const tail = "继续处理下一步。";
+    expect(joinAssistantTextPartBodies([
+      ...fragments, snapshot, fragments.slice(0, 20).join(" "), tail, `${snapshot}\n\n${tail}`,
+    ])).toBe(`${snapshot}\n\n${tail}`);
+  });
+
+  test("preserves leading indentation and removes whitespace-only paragraphs", () => {
+    expect(joinAssistantTextPartBodies(["  intro.\n\n", " \n\t ", "\n\t summary \n"]))
+      .toBe("  intro.\n\nsummary");
+  });
 });
 
 describe("isLikelyStreamTextFragment", () => {

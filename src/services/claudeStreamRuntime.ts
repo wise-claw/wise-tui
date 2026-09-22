@@ -355,7 +355,11 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
           if (streamParts.length > 0) {
             updated = appendAssistantStreamParts(updated, streamParts, effectiveMergeOptions);
           }
-          ingestTodosFromSessionMessages(tid, updated.messages);
+          // TodoWrite / ExitPlanMode 状态来自工具 part；正文与思考 delta 不改变它们。
+          // 避免逐 token 扫描整个 transcript，工具调用及结果仍在同一批更新中处理。
+          if (dedupedParts.some((part) => part.type === "tool_use")) {
+            ingestTodosFromSessionMessages(tid, updated.messages);
+          }
         }
         return updated;
       });

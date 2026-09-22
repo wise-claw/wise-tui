@@ -57,14 +57,14 @@ export function isTodoWriteToolName(name: string | undefined | null): boolean {
 export function extractTodoWriteFromMessageParts(
   parts: readonly MessagePart[],
 ): { items: TodoItem[]; merge: boolean } | null {
-  let last: { items: TodoItem[]; merge: boolean } | null = null;
-  for (const part of parts) {
+  for (let i = parts.length - 1; i >= 0; i -= 1) {
+    const part = parts[i];
     if (part.type !== "tool_use") continue;
     if (!isTodoWriteToolName(part.name)) continue;
     const parsed = parseTodoWriteInput(part.input);
-    if (parsed) last = parsed;
+    if (parsed) return parsed;
   }
-  return last;
+  return null;
 }
 
 export function computeTodoProgress(items: readonly TodoItem[]): {
@@ -106,13 +106,13 @@ export function truncateTodoTitle(text: string, maxLen = 42): string {
 export function extractLatestTodoWriteFromMessages(
   messages: readonly ClaudeMessage[],
 ): { items: TodoItem[]; merge: boolean } | null {
-  let last: { items: TodoItem[]; merge: boolean } | null = null;
-  for (const msg of messages) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
     if (msg.role !== "assistant") continue;
     const batch = extractTodoWriteFromMessageParts(msg.parts);
-    if (batch) last = batch;
+    if (batch) return batch;
   }
-  return last;
+  return null;
 }
 
 export function todosSnapshotEqual(a: readonly TodoItem[], b: readonly TodoItem[]): boolean {
