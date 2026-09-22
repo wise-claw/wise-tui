@@ -9,6 +9,7 @@ import type {
 import { bumpSessionCreatedAtForSortActivity } from "../components/ClaudeSessions/sessionGrouping";
 import {
   buildWorkspaceSidebarTreeRows,
+  collectDisplayedWorkspaceSessionIds,
   collectFlatWorkspaceRepositories,
   filterDispatchTasksForRepository,
   filterEmployeeMonitorForRepository,
@@ -97,6 +98,17 @@ describe("listWorkspaceSidebarHistorySessions", () => {
     ];
     expect(pickFirstWorkspaceSidebarHistorySession(sessions, "/work/a")?.id).toBe("new");
     expect(pickFirstWorkspaceSidebarHistorySession(sessions, "/work/missing")).toBeNull();
+  });
+
+  test("collectDisplayedWorkspaceSessionIds keeps the sidebar rows for each repository", () => {
+    const sessions = [
+      makeSession("a1", "/work/a", { createdAt: 300, content: "第一条" }),
+      makeSession("a2", "/work/a", { createdAt: 200, content: "第二条" }),
+      makeSession("a3", "/work/a", { createdAt: 100, content: "第三条" }),
+      makeSession("b1", "/work/b", { createdAt: 250, content: "另一仓" }),
+    ];
+    const shown = collectDisplayedWorkspaceSessionIds(sessions, 2);
+    expect([...shown].sort()).toEqual(["a1", "a2", "b1"]);
   });
 
   test("pickFirstRepositoryOwnedSidebarHistorySession skips nested Project root sessions", () => {

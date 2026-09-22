@@ -12,7 +12,10 @@ import {
   getClaudeChatMessageScrollBridge,
   rememberChatScrollBeforeFileOpen,
 } from "../../stores/claudeChatMessageScrollBridge";
-import { loadWorkingTreeFileDiffLines } from "../../utils/workingTreeFileDiff";
+import {
+  FILE_DIFF_RECOVERY_VERSION,
+  loadWorkingTreeFileDiffLines,
+} from "../../utils/workingTreeFileDiff";
 import { useChatRepositoryPath } from "./chatRepositoryContext";
 import "./markdownCodeHighlight.css";
 
@@ -59,7 +62,7 @@ function useWorkingTreeDiffLines(
     return () => {
       cancelled = true;
     };
-  }, [enabled, repositoryPath, relativePath]);
+  }, [enabled, repositoryPath, relativePath, FILE_DIFF_RECOVERY_VERSION]);
   return lines;
 }
 
@@ -67,6 +70,9 @@ function gutterLineNumber(line: ToolFileEditPreviewLine): string {
   if (line.kind === "remove") return line.oldLine == null ? "" : String(line.oldLine);
   return line.newLine == null ? "" : String(line.newLine);
 }
+
+/** 单卡最多画这么多 diff 行。长会话里每条编辑都挂全量高亮会把多窗格主线程拖死。 */
+const VISIBLE_DIFF_ROW_CAP = 48;
 
 function FoldChevron({ expanded }: { expanded: boolean }) {
   return (
@@ -169,6 +175,9 @@ export const ToolFileEditCard = memo(
           : "app-tool-edit-card__stats";
 
     const diffRows = useMemo(() => groupFileEditDiffRows(displayLines), [displayLines]);
+    const shownDiffRows =
+      diffRows.length > VISIBLE_DIFF_ROW_CAP ? diffRows.slice(0, VISIBLE_DIFF_ROW_CAP) : diffRows;
+    const omittedDiffRowCount = diffRows.length - shownDiffRows.length;
     const foldSignature = `${preview.filePath}|${addedLineCount}|${removedLineCount}|${displayLines.length}`;
     const [foldState, setFoldState] = useState<{ signature: string; open: Record<string, boolean> }>({
       signature: foldSignature,
@@ -209,7 +218,7 @@ export const ToolFileEditCard = memo(
         {diffRows.length > 0 ? (
           <div className="app-tool-edit-card__body">
             <div className="app-tool-edit-card__code">
-              {diffRows.map((row) => {
+              {shownDiffRows.map((row) => {
                 if (row.type === "fold") {
                   const expanded = openFolds[row.key] === true;
                   return (
@@ -248,6 +257,9 @@ export const ToolFileEditCard = memo(
                   </div>
                 );
               })}
+              {omittedDiffRowCount > 0 ? (
+                <div className="app-tool-edit-card__omitted">其余 {omittedDiffRowCount} 段未展示</div>
+              ) : null}
             </div>
           </div>
         ) : null}

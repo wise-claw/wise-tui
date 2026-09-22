@@ -372,12 +372,12 @@ export function useTerminalSession({
         setStatus("connecting");
         setMessage("正在连接终端…");
         await waitForStableLayout(container);
-        if (cancelled) return () => undefined;
+        if (cancelled) return;
 
         if (typeof document !== "undefined" && document.fonts) {
           await document.fonts.ready;
         }
-        if (cancelled) return () => undefined;
+        if (cancelled) return;
 
         const frameUnsub = subscribeTerminalFrame((event) => {
           if (
@@ -788,65 +788,12 @@ export function useTerminalSession({
           });
         };
 
-        try {
-          const attach = await attachTerminalSession(workspaceId, terminalId, 0);
-          if (cancelled) return () => undefined;
-          applyFrame(attach.frame);
-          finalizeReady();
-        } catch (error) {
-          const errMessage =
-            error instanceof Error ? error.message : String(error);
-          const missing = errMessage
-            .toLowerCase()
-            .includes("terminal session not found");
-          if (!missing && !shouldIgnoreTerminalError(error)) {
-            if (cancelled) return () => undefined;
-            setStatus("error");
-            setMessage(errMessage || "终端连接失败");
-          } else {
-            const liveContainer = containerRef.current ?? container;
-            metricsRef.current = measureTerminalMetrics(
-              liveContainer,
-              TERMINAL_FONT_SIZE,
-            );
-            const cols = clampTerminalDim(
-              initialSizeRef.current?.cols ?? metricsRef.current.cols,
-            );
-            const rows = clampTerminalDim(
-              initialSizeRef.current?.rows ?? metricsRef.current.rows,
-            );
-            try {
-              await openTerminalSession(workspaceId, terminalId, cols, rows, cwd, {
-                source: "user",
-              });
-              if (cancelled) return () => undefined;
-              try {
-                const attach = await attachTerminalSession(
-                  workspaceId,
-                  terminalId,
-                  0,
-                );
-                if (!cancelled) applyFrame(attach.frame);
-              } catch {
-                // 首帧可等 terminal-frame 事件
-              }
-              finalizeReady();
-            } catch (openError) {
-              if (cancelled) return () => undefined;
-              if (!shouldIgnoreTerminalError(openError)) {
-                console.warn("open terminal session failed", openError);
-              }
-              setStatus("error");
-              setMessage(
-                openError instanceof Error
-                  ? openError.message
-                  : "终端启动失败",
-              );
-            }
-          }
-        }
-
-        return () => {
+        // Register teardown before the first IPC await: unmount/visibility changes
+        // can happen while attach/open is pending and must release DOM listeners now.
+        let disposed = false;
+        cleanup = () => {
+          if (disposed) return;
+          disposed = true;
           cancelled = true;
           if (resizeDebounceTimer !== null) {
             window.clearTimeout(resizeDebounceTimer);
@@ -886,10 +833,76 @@ export function useTerminalSession({
             cleanupTerminalSession(workspaceId, terminalId);
           }
         };
+
+        try {
+          const attach = await attachTerminalSession(workspaceId, terminalId, 0);
+          if (cancelled) return;
+          applyFrame(attach.frame);
+          finalizeReady();
+        } catch (error) {
+          if (cancelled) return;
+          const errMessage =
+            error instanceof Error ? error.message : String(error);
+          const missing = errMessage
+            .toLowerCase()
+            .includes("terminal session not found");
+          if (!missing && !shouldIgnoreTerminalError(error)) {
+            setStatus("error");
+            setMessage(errMessage || "终端连接失败");
+          } else {
+            const liveContainer = containerRef.current ?? container;
+            metricsRef.current = measureTerminalMetrics(
+              liveContainer,
+              TERMINAL_FONT_SIZE,
+            );
+            const cols = clampTerminalDim(
+              initialSizeRef.current?.cols ?? metricsRef.current.cols,
+            );
+            const rows = clampTerminalDim(
+              initialSizeRef.current?.rows ?? metricsRef.current.rows,
+            );
+            try {
+              await openTerminalSession(workspaceId, terminalId, cols, rows, cwd, {
+                source: "user",
+              });
+              if (cancelled) {
+                if (closeOnUnmount) cleanupTerminalSession(workspaceId, terminalId);
+                return;
+              }
+              try {
+                const attach = await attachTerminalSession(
+                  workspaceId,
+                  terminalId,
+                  0,
+                );
+                if (!cancelled) applyFrame(attach.frame);
+              } catch {
+                // 首帧可等 terminal-frame 事件
+              }
+              finalizeReady();
+            } catch (openError) {
+              if (cancelled) return;
+              if (!shouldIgnoreTerminalError(openError)) {
+                console.warn("open terminal session failed", openError);
+              }
+              setStatus("error");
+              setMessage(
+                openError instanceof Error
+                  ? openError.message
+                  : "终端启动失败",
+              );
+            }
+          }
+        }
       };
 
-      void bootstrap().then((dispose) => {
-        cleanup = dispose;
+      void bootstrap().catch((error) => {
+        const wasCancelled = cancelled;
+        cleanup?.();
+        if (!wasCancelled) {
+          setStatus("error");
+          setMessage(error instanceof Error ? error.message : "终端连接失败");
+        }
       });
     };
 

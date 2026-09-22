@@ -534,37 +534,20 @@ pub(crate) async fn execute_codex_rpc(
         loop {
             // Take the session lock only long enough to poll one notification
             // or one server request, then drop it so interrupt/approval can proceed.
-            enum PollResult {
-                Notification(Option<ServerNotification>),
-                ServerRequest(Option<ServerRequest>),
-            }
-
-            let poll_result = {
-                let mut session_guard = session_arc.lock().await;
-                // Poll both channels non-blockingly; if neither has data,
-                // sleep briefly (releasing the lock) before retrying.
-                if let Some(notif) = session_guard.poll_notification() {
-                    Some(PollResult::Notification(Some(notif)))
-                } else if let Some(req) = session_guard.poll_server_request() {
-                    Some(PollResult::ServerRequest(Some(req)))
-                } else {
-                    // Drop the lock before sleeping.
-                    drop(session_guard);
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    None
-                }
-            }; // lock dropped here
+            use crate::codex_rpc_session::CodexRpcSessionEvent;
+            let poll_result = session_arc.lock().await.poll_event();
 
             let Some(result) = poll_result else {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 continue;
             };
 
             match result {
-                PollResult::Notification(Some(ServerNotification::TurnCompleted {
+                CodexRpcSessionEvent::Notification(ServerNotification::TurnCompleted {
                     status,
                     error_message,
                     ..
-                })) => {
+                }) => {
                     let failed = status.eq_ignore_ascii_case("failed")
                         || status.eq_ignore_ascii_case("errored")
                         || status.eq_ignore_ascii_case("error");
@@ -598,7 +581,7 @@ pub(crate) async fn execute_codex_rpc(
                     }
                     break;
                 }
-                PollResult::Notification(Some(notification)) => {
+                CodexRpcSessionEvent::Notification(notification) => {
                     if matches!(&notification, ServerNotification::Error { .. }) {
                         success = false;
                     }
@@ -633,12 +616,12 @@ pub(crate) async fn execute_codex_rpc(
                         );
                     }
                 }
-                PollResult::Notification(None) => {
+                CodexRpcSessionEvent::Disconnected => {
                     // Channel closed — subprocess likely exited.
                     success = false;
                     break;
                 }
-                PollResult::ServerRequest(Some(request)) => {
+                CodexRpcSessionEvent::ServerRequest(request) => {
                     // Handle different server request types.
                     match &request {
                         ServerRequest::McpServerElicitationRequest { request_id, ref params } => {
@@ -652,20 +635,27 @@ pub(crate) async fn execute_codex_rpc(
                         }
                     }
                 }
-                PollResult::ServerRequest(None) => {
-                    // Server-request channel closed — not fatal, just continue
-                    // waiting for notifications.
-                }
             }
         }
 
-        // Clean up session from store.
-        {
+        // A late exit from an old process must not remove a replacement session.
+        let owned_session = {
             let session_store = app_loop.state::<CodexRpcSessionStore>();
             let mut store = session_store.sessions.lock().await;
-            store.remove(&session_id_loop);
-            session_store.cancelled.lock().await.remove(&session_id_loop);
+            let owned = store.get(&session_id_loop)
+                .is_some_and(|current| Arc::ptr_eq(current, &session_arc));
+            if owned {
+                store.remove(&session_id_loop);
+                session_store.cancelled.lock().await.remove(&session_id_loop);
+            }
+            owned
+        };
+        let _ = session_arc.lock().await.shutdown().await;
+        if let Some(inv) = invocation_key_loop.as_deref() {
+            app_loop.state::<ClaudeProcessState>()
+                .invocation_tab_session_by_key.lock().await.remove(inv);
         }
+        if !owned_session { return; }
 
         let registry = app_loop.state::<ClaudeSessionRegistry>();
         registry.mark_completed(&session_id_loop, success);

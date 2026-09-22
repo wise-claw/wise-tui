@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState, type MouseEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { dispatchOpenRepositoryFile } from "../../constants/workflowUiEvents";
 import {
   getClaudeChatMessageScrollBridge,
@@ -6,17 +6,68 @@ import {
 } from "../../stores/claudeChatMessageScrollBridge";
 import type { TurnFileChangeEntry } from "../../utils/turnFileChangeSummary";
 import { relativePathInRepository } from "../../utils/toolFileEditPreview";
+import {
+  FILE_DIFF_RECOVERY_VERSION,
+  loadWorkingTreeFileDiffLines,
+} from "../../utils/workingTreeFileDiff";
 import { ExplorerTreeFileIcon } from "../GitPanel/explorerTreeChrome";
 import { useChatRepositoryPath } from "./chatRepositoryContext";
 
 /** 文件变更总结卡折叠展示上限：超过后默认只展示前 N 个，点击展开全部。 */
 const FILES_CHANGED_COLLAPSED_LIMIT = 8;
 
-function fileChangeStatsLabel(file: TurnFileChangeEntry): string {
-  const parts: string[] = [];
-  if (file.addedLineCount > 0) parts.push(`+${file.addedLineCount}`);
-  if (file.removedLineCount > 0) parts.push(`-${file.removedLineCount}`);
-  return parts.join(" ");
+type LineCounts = { added: number; removed: number };
+
+function hasRecordedLineCounts(file: TurnFileChangeEntry): boolean {
+  return file.addedLineCount > 0 || file.removedLineCount > 0;
+}
+
+/** 工具入参没有 +/- 时，用工作区或最近一次提交的 diff 补行数。 */
+function useRecoveredLineCounts(
+  files: readonly TurnFileChangeEntry[],
+  repositoryPath: string | null,
+): Record<string, LineCounts> {
+  const missingKey = files
+    .filter((file) => !hasRecordedLineCounts(file))
+    .map((file) => file.filePath)
+    .join("\n");
+  const [counts, setCounts] = useState<Record<string, LineCounts>>({});
+
+  useEffect(() => {
+    if (!repositoryPath || !missingKey) {
+      setCounts({});
+      return;
+    }
+    const missing = missingKey.split("\n");
+    let cancelled = false;
+    void Promise.all(
+      missing.map(async (filePath) => {
+        const relativePath = relativePathInRepository(repositoryPath, filePath);
+        if (!relativePath) return null;
+        const lines = await loadWorkingTreeFileDiffLines(repositoryPath, relativePath);
+        return [
+          filePath,
+          {
+            added: lines.filter((line) => line.kind === "add").length,
+            removed: lines.filter((line) => line.kind === "remove").length,
+          },
+        ] as const;
+      }),
+    ).then((rows) => {
+      if (cancelled) return;
+      const next: Record<string, LineCounts> = {};
+      for (const row of rows) {
+        if (!row) continue;
+        next[row[0]] = row[1];
+      }
+      setCounts(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [missingKey, repositoryPath, FILE_DIFF_RECOVERY_VERSION]);
+
+  return counts;
 }
 
 function filesFingerprint(files: readonly TurnFileChangeEntry[]): string {
@@ -28,6 +79,7 @@ function filesFingerprint(files: readonly TurnFileChangeEntry[]): string {
 export const TurnFilesChangedSummaryCard = memo(
   function TurnFilesChangedSummaryCard({ files }: { files: readonly TurnFileChangeEntry[] }) {
     const repositoryPath = useChatRepositoryPath();
+    const recoveredCounts = useRecoveredLineCounts(files, repositoryPath);
     const [expanded, setExpanded] = useState(false);
 
     const hasMore = files.length > FILES_CHANGED_COLLAPSED_LIMIT;
@@ -74,7 +126,11 @@ export const TurnFilesChangedSummaryCard = memo(
             const canOpen =
               Boolean(repositoryPath) &&
               relativePathInRepository(repositoryPath ?? "", file.filePath) != null;
-            const stats = fileChangeStatsLabel(file);
+            const recorded = hasRecordedLineCounts(file);
+            const added = recorded ? file.addedLineCount : (recoveredCounts[file.filePath]?.added ?? 0);
+            const removed = recorded
+              ? file.removedLineCount
+              : (recoveredCounts[file.filePath]?.removed ?? 0);
             return (
               <li key={file.filePath} className="app-turn-files-changed__row">
                 <ExplorerTreeFileIcon
@@ -95,15 +151,13 @@ export const TurnFilesChangedSummaryCard = memo(
                     {file.fileName}
                   </span>
                 )}
-                {stats ? (
+                {added > 0 || removed > 0 ? (
                   <span className="app-turn-files-changed__stats">
-                    {file.addedLineCount > 0 ? (
-                      <span className="app-turn-files-changed__add">+{file.addedLineCount}</span>
+                    {added > 0 ? (
+                      <span className="app-turn-files-changed__add">+{added}</span>
                     ) : null}
-                    {file.removedLineCount > 0 ? (
-                      <span className="app-turn-files-changed__remove">
-                        -{file.removedLineCount}
-                      </span>
+                    {removed > 0 ? (
+                      <span className="app-turn-files-changed__remove">-{removed}</span>
                     ) : null}
                   </span>
                 ) : null}

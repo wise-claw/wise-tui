@@ -429,9 +429,38 @@ impl ClaudeSessionRegistry {
         sessions.remove(session_id);
     }
 
+    /// Adapted engines register again for each turn; completed metadata is not history storage.
+    pub(crate) fn remove_completed(&self, session_id: &str) {
+        let mut sessions = self.sessions.lock().unwrap();
+        if sessions.get(session_id).is_some_and(|info| info.status != "running") {
+            sessions.remove(session_id);
+        }
+    }
+
     fn list(&self) -> Vec<ClaudeSessionInfo> {
         let sessions = self.sessions.lock().unwrap();
         sessions.values().cloned().collect()
+    }
+}
+
+#[cfg(test)]
+mod session_registry_lifecycle_tests {
+    use super::ClaudeSessionRegistry;
+
+    #[test]
+    fn completed_engine_sessions_do_not_accumulate_or_remove_a_new_running_turn() {
+        let registry = ClaudeSessionRegistry::new();
+        registry.register("running".into(), "/tmp".into(), "model".into());
+        for i in 0..10_000 {
+            let id = format!("session-{i}");
+            registry.register(id.clone(), "/tmp".into(), "model".into());
+            registry.mark_completed(&id, i % 2 == 0);
+            registry.remove_completed(&id);
+        }
+        registry.remove_completed("running");
+        let remaining = registry.list();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].session_id, "running");
     }
 }
 

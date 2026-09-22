@@ -5,7 +5,7 @@ use std::path::Path;
 use anyhow::{anyhow, Context, Result};
 use base64::Engine;
 use serde_json::Value;
-use tokio::sync::oneshot;
+use crate::pending_rpc_request::PendingResponse;
 
 use crate::cursor_acp_transport::CursorAcpTransport;
 use crate::cursor_acp_types::{
@@ -176,7 +176,7 @@ impl CursorAcpSession {
         &mut self,
         prompt: &str,
         attachments: &[(String, String)],
-    ) -> Result<(JsonRpcId, oneshot::Receiver<JsonRpcMessage>)> {
+    ) -> Result<(JsonRpcId, PendingResponse<JsonRpcId, JsonRpcMessage>)> {
         let sid = self
             .acp_session_id
             .clone()

@@ -121,6 +121,28 @@ export function isSandboxDisabledInSettings(text: string): boolean {
   );
 }
 
+const CLAUDE_SETTINGS_MANAGED_KEYS = new Set(["ultracode", "permissionMode", "sandbox"]);
+
+/**
+ * 开关盖不住的内容需要直接编辑 JSON：非法文本、顶层其它键，或 sandbox 下除 enabled 以外的字段。
+ */
+export function claudeSettingsNeedsRawEditor(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const obj = parseClaudeDefaultSettings(trimmed);
+  if (!obj) return true;
+  for (const key of Object.keys(obj)) {
+    if (!CLAUDE_SETTINGS_MANAGED_KEYS.has(key)) return true;
+  }
+  const sandbox = obj["sandbox"];
+  if (typeof sandbox === "object" && sandbox !== null && !Array.isArray(sandbox)) {
+    for (const key of Object.keys(sandbox as Record<string, unknown>)) {
+      if (key !== "enabled") return true;
+    }
+  }
+  return false;
+}
+
 /**
  * 开启/关闭「取消沙箱限制」。
  * - 开启：在 `sandbox` 对象上置 `enabled: false`（保留 sandbox 下其它键，如 allowWrite）；

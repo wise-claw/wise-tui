@@ -2,7 +2,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
-use tokio::sync::oneshot;
+use crate::pending_rpc_request::PendingResponse;
 
 use crate::acp_engine::AcpEngine;
 use crate::opencode_acp_transport::OpencodeAcpTransport;
@@ -167,7 +167,7 @@ impl OpencodeAcpSession {
     pub async fn begin_prompt(
         &mut self,
         prompt: &str,
-    ) -> Result<(JsonRpcId, oneshot::Receiver<JsonRpcMessage>)> {
+    ) -> Result<(JsonRpcId, PendingResponse<JsonRpcId, JsonRpcMessage>)> {
         let sid = self
             .acp_session_id
             .clone()

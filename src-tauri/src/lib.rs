@@ -5,6 +5,7 @@ mod agent_registry;
 mod assistants;
 mod ai_usage_multi_source;
 mod child_slot_wait;
+mod pending_rpc_request;
 mod claude_code_line_edits;
 mod claude_code_usage;
 mod claude_commands;

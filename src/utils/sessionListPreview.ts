@@ -92,14 +92,25 @@ export function resolveSessionListPreviewSource(
   return deriveSessionListPreviewFromMessages(session.messages);
 }
 
+/** 尾部窗口里仍像用户原话的标题可以留下；常量碎片、标点起头的中段不行。 */
+function looksLikeRecoverableListTitle(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || looksLikeMidTruncatedPreview(trimmed)) return false;
+  if (/^[A-Z0-9_]+[,:]/.test(trimmed) && !/[\u4e00-\u9fff]/.test(trimmed)) return false;
+  return true;
+}
+
 /** 丢弃/截断 messages 前：若尚无 diskPreview，用当前消息锁住列表标题。 */
 export function retainSessionListPreviewOnMessageDrop(
   session: Pick<ClaudeSession, "messages" | "diskPreview" | "diskTranscriptPartial">,
 ): string | undefined {
   const existing = session.diskPreview?.trim();
   if (existing) return session.diskPreview;
-  // 当前 messages 已是尾部窗口时首条消息不是会话开头，不能拿来当标题。
-  if (session.diskTranscriptPartial) return session.diskPreview;
   const derived = deriveSessionListPreviewFromMessages(session.messages);
-  return derived || session.diskPreview;
+  if (!derived) return session.diskPreview;
+  // 尾部窗口不一定含会话开头。能读成标题的用户原话仍要留下，否则侧栏会全部变成「新会话」。
+  if (session.diskTranscriptPartial && !looksLikeRecoverableListTitle(derived)) {
+    return session.diskPreview;
+  }
+  return derived;
 }

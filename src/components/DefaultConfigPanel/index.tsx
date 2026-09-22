@@ -39,7 +39,9 @@ import { useHudDetailsSetting } from "./useHudDetailsSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
 import { useDefaultExecutionEngineSetting } from "./useDefaultExecutionEngineSetting";
 import { useTerminalThemeModeSetting } from "./useTerminalThemeModeSetting";
+import { claudeSettingsNeedsRawEditor } from "./claudeDefaultSettings";
 import { useClaudeDefaultSettingsSetting } from "./useClaudeDefaultSettingsSetting";
+import type { CodexPermissionPreset } from "./codexDefaultSettings";
 import { ClaudeSettingsJsonEditor } from "../ClaudeSessions/ClaudeSettingsJsonEditor";
 import { useCodexDefaultSettingsSetting } from "./useCodexDefaultSettingsSetting";
 import { useOpencodeDefaultSettingsSetting } from "./useOpencodeDefaultSettingsSetting";
@@ -76,11 +78,11 @@ function DefaultConfigSection({ title, children }: { title: string; children: Re
 
 /** 工作台配置 / 运行设置 / 默认配置：全局会话与布局默认值。
  *
- * 弹窗按"用户能看到的视觉区域"分组：
- * - 启动 / CLI 默认：新建会话的运行模式与 CLI 注入配置
- * - 左栏 / 运行面板 / Git 文件树：屏幕上的栏位与显隐
- * - 输入框 / 顶栏 / 仓库操作快捷键：交互元素自身的默认
- * - 开发实验：反馈神经网（默认折叠态）
+ * 弹窗按使用场景分组：
+ * - 新建会话 / 引擎 / 终端：开新会话时生效的默认
+ * - 左栏 / Git 文件：屏幕上的栏位与显隐
+ * - 输入框 / 界面 / 仓库操作快捷键：交互元素自身的默认
+ * - 开发实验：反馈神经网
  */
 export function DefaultConfigPanel() {
   const connection = useClaudeConnectionModeSetting();
@@ -110,6 +112,10 @@ export function DefaultConfigPanel() {
   const openInTerminalShortcut = useOpenInTerminalShortcutSetting();
   const openInEditorShortcut = useOpenInEditorShortcutSetting();
   const [terminalEmployees, setTerminalEmployees] = useState<EmployeeItem[]>([]);
+  /** null = 随内容：含开关以外字段时展开 JSON。 */
+  const [claudeJsonPref, setClaudeJsonPref] = useState<boolean | null>(null);
+  /** 从预设进入沙箱/审批细调；与「当前不是四档预设」一起决定是否展开。 */
+  const [codexRawPref, setCodexRawPref] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -409,16 +415,20 @@ export function DefaultConfigPanel() {
     }
   };
 
+  const showClaudeJson = claudeJsonPref ?? claudeSettingsNeedsRawEditor(claudeDefaultSettings.value);
+  const codexUnmatched =
+    codexDefaultSettings.permissionPreset === "custom" &&
+    (codexDefaultSettings.sandboxMode != null || codexDefaultSettings.approvalPolicy != null);
+  const showCodexRaw = codexRawPref || codexUnmatched;
+
   const sections = [
-    // 启动 / CLI 默认：新建会话的运行模式与 CLI 注入配置。
     {
-      key: "boot",
-      title: "启动 / CLI 默认",
+      key: "session",
+      title: "新建会话",
       content: (
         <>
           <DefaultConfigRow
             title="会话处理方式"
-            hint="新建标签默认"
             detail="新建标签默认；已单独设置过的标签不变"
             control={
               <DefaultConfigOptionPick<ClaudeSessionConnectionKind>
@@ -436,8 +446,7 @@ export function DefaultConfigPanel() {
             }
           />
           <DefaultConfigRow
-            title="默认执行环境"
-            hint="新建会话默认"
+            title="执行环境"
             detail="新建会话默认；仓库 / 席位单独设置过的执行引擎不变"
             control={
               <Select
@@ -458,34 +467,27 @@ export function DefaultConfigPanel() {
               />
             }
           />
+        </>
+      ),
+    },
+    {
+      key: "engines",
+      title: "引擎",
+      content: (
+        <>
           <DefaultConfigRow
-            title="Claude 启动 --settings"
-            hint="默认配置"
-            detail='作为 claude --settings 加载，等同编辑 settings.json；留空不注入。例：{"ultracode": true}'
-            layout="stack"
+            title="Claude"
+            detail="新会话的 Ultracode、沙箱与权限，和输入框权限徽标是同一份配置。JSON 只在需要改其它字段时展开。"
+            layout={showClaudeJson ? "stack" : "inline"}
             control={
-              <div className="app-default-config-claude-settings">
-                <ClaudeSettingsJsonEditor
-                  ariaLabel="Claude 启动 --settings JSON"
-                  value={claudeDefaultSettings.draft}
-                  height={120}
-                  readOnly={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
-                  onChange={claudeDefaultSettings.setDraft}
-                  onBlur={() => {
-                    if (claudeDefaultSettings.loading || claudeDefaultSettings.saving) return;
-                    void claudeDefaultSettings.commit();
-                  }}
-                />
-                <div className="app-default-config-claude-settings__actions">
-                  <Button
-                    size="small"
-                    disabled={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
-                    onClick={() => {
-                      void claudeDefaultSettings.format();
-                    }}
-                  >
-                    格式化
-                  </Button>
+              <div
+                className={
+                  showClaudeJson
+                    ? "app-default-config-claude-settings app-default-config-claude-settings--open"
+                    : "app-default-config-claude-settings"
+                }
+              >
+                <div className="app-default-config-engine-controls">
                   <span className="app-default-config-claude-settings__toggle">
                     ultracode
                     <Switch
@@ -498,7 +500,7 @@ export function DefaultConfigPanel() {
                     />
                   </span>
                   <span className="app-default-config-claude-settings__toggle">
-                    取消沙箱限制
+                    取消沙箱
                     <Switch
                       size="small"
                       checked={claudeDefaultSettings.sandboxDisabled}
@@ -508,147 +510,208 @@ export function DefaultConfigPanel() {
                       }}
                     />
                   </span>
-                  <span className="app-default-config-claude-settings__toggle">
-                    权限模式
-                    <Select
-                      size="small"
-                      aria-label="Claude permission-mode"
-                      disabled={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
-                      value={claudeDefaultSettings.permissionMode ?? ""}
-                      onChange={(v: string) => {
-                        void claudeDefaultSettings.savePermissionMode(v || null);
-                      }}
-                      style={{ minWidth: 168 }}
-                      options={[
-                        { label: "默认 (bypassPermissions)", value: "" },
-                        { label: "default", value: "default" },
-                        { label: "acceptEdits", value: "acceptEdits" },
-                        { label: "plan", value: "plan" },
-                        { label: "bypassPermissions", value: "bypassPermissions" },
-                      ]}
-                    />
-                  </span>
-                </div>
-              </div>
-            }
-          />
-          <DefaultConfigRow
-            title="Codex 沙箱/审批"
-            hint="默认配置"
-            detail="新会话 -s sandbox_mode；续接用 -c 覆盖沙箱（避免旧 read-only 会话写不了）。留空=workspace-write"
-            control={
-              <div className="app-default-config-cli-settings__actions app-default-config-cli-settings__actions--compact">
-                <span className="app-default-config-cli-settings__toggle">
-                  沙箱
                   <Select
                     size="small"
-                    aria-label="Codex sandbox_mode"
-                    classNames={{ popup: { root: "app-default-config-dropdown--compact" } }}
-                    disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
-                    value={codexDefaultSettings.sandboxMode ?? ""}
+                    aria-label="Claude permission-mode"
+                    disabled={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
+                    value={claudeDefaultSettings.effectivePermissionMode}
                     onChange={(v: string) => {
-                      void codexDefaultSettings.saveSandboxMode(v || null);
+                      void claudeDefaultSettings.savePermissionMode(v);
                     }}
-                    style={{ minWidth: 124 }}
+                    style={{ minWidth: 108 }}
                     options={[
-                      { label: "默认", value: "" },
-                      { label: "read-only", value: "read-only" },
-                      { label: "write", value: "workspace-write" },
-                      { label: "danger-full", value: "danger-full-access" },
+                      { label: "请求批准", value: "default" },
+                      { label: "接受编辑", value: "acceptEdits" },
+                      { label: "仅计划", value: "plan" },
+                      { label: "完全访问", value: "bypassPermissions" },
                     ]}
                   />
-                </span>
-                <span className="app-default-config-cli-settings__toggle">
-                  审批
-                  <Select
-                    size="small"
-                    aria-label="Codex approval_policy"
-                    classNames={{ popup: { root: "app-default-config-dropdown--compact" } }}
-                    disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
-                    value={codexDefaultSettings.approvalPolicy ?? ""}
-                    onChange={(v: string) => {
-                      void codexDefaultSettings.saveApprovalPolicy(v || null);
-                    }}
-                    style={{ minWidth: 96 }}
-                    options={[
-                      { label: "默认 (config.toml)", value: "" },
-                      { label: "请求批准 (untrusted)", value: "untrusted" },
-                      { label: "替我审批 (on-request)", value: "on-request" },
-                      { label: "从不询问 (never)", value: "never" },
-                    ]}
-                  />
-                </span>
-                <span className="app-default-config-cli-settings__toggle">
-                  忽略沙箱
-                  <Switch
-                    size="small"
-                    checked={codexDefaultSettings.fullAccess}
-                    disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
-                    onChange={(checked) => {
-                      void codexDefaultSettings.saveFullAccess(checked);
-                    }}
-                  />
-                </span>
-              </div>
-            }
-          />
-          <DefaultConfigRow
-            title="OpenCode 权限"
-            hint="默认配置"
-            detail="自动批准=--dangerously-skip-permissions（现状）；自定义规则=移除 skip，改用 OPENCODE_PERMISSION 注入 allow/ask/deny 规则"
-            control={
-              <div className="app-default-config-cli-settings__actions">
-                <span className="app-default-config-cli-settings__toggle">
-                  权限模式
-                  <Select
-                    size="small"
-                    aria-label="OpenCode 权限模式"
-                    classNames={{ popup: { root: "app-default-config-dropdown--compact" } }}
-                    disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
-                    value={opencodeDefaultSettings.mode}
-                    onChange={(v: string) => {
-                      void opencodeDefaultSettings.saveMode(v as "auto" | "custom");
-                    }}
-                    style={{ minWidth: 124 }}
-                    options={[
-                      { label: "自动批准", value: "auto" },
-                      { label: "自定义规则", value: "custom" },
-                    ]}
-                  />
-                </span>
-                {opencodeDefaultSettings.mode === "custom" ? (
                   <Button
+                    type="link"
                     size="small"
-                    disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
+                    className="app-default-config-engine-json-toggle"
+                    aria-expanded={showClaudeJson}
                     onClick={() => {
-                      void opencodeDefaultSettings.format();
+                      setClaudeJsonPref(!showClaudeJson);
                     }}
                   >
-                    格式化
+                    {showClaudeJson ? "收起" : "JSON"}
                   </Button>
+                </div>
+                {showClaudeJson ? (
+                  <>
+                    <ClaudeSettingsJsonEditor
+                      ariaLabel="Claude 启动 --settings JSON"
+                      value={claudeDefaultSettings.draft}
+                      height={96}
+                      readOnly={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
+                      onChange={claudeDefaultSettings.setDraft}
+                      onBlur={() => {
+                        if (claudeDefaultSettings.loading || claudeDefaultSettings.saving) return;
+                        void claudeDefaultSettings.commit();
+                      }}
+                    />
+                    <div className="app-default-config-engine-controls">
+                      <Button
+                        size="small"
+                        disabled={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
+                        onClick={() => {
+                          void claudeDefaultSettings.format();
+                        }}
+                      >
+                        格式化
+                      </Button>
+                    </div>
+                  </>
                 ) : null}
               </div>
             }
           />
-          {opencodeDefaultSettings.mode === "custom" ? (
-            <div className="app-default-config-cli-settings">
-              <Input.TextArea
-                aria-label="OpenCode permission JSON"
-                value={opencodeDefaultSettings.permissionDraft}
-                placeholder={OPENCODE_PERMISSION_PLACEHOLDER}
-                autoSize={{ minRows: 3, maxRows: 10 }}
-                disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
-                onChange={(e) => opencodeDefaultSettings.setPermissionDraft(e.target.value)}
-                onBlur={() => {
-                  void opencodeDefaultSettings.commit();
-                }}
-              />
-            </div>
-          ) : null}
+          <DefaultConfigRow
+            title="Codex"
+            detail="与输入框权限徽标同一份配置。自定义使用 Codex 配置文件；分别设置可指定沙箱与审批。"
+            layout={showCodexRaw ? "stack" : "inline"}
+            control={
+              <div
+                className={
+                  showCodexRaw
+                    ? "app-default-config-claude-settings app-default-config-claude-settings--open"
+                    : "app-default-config-claude-settings"
+                }
+              >
+                <div className="app-default-config-engine-controls">
+                  <Select
+                    size="small"
+                    aria-label="Codex 权限预设"
+                    disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
+                    value={showCodexRaw ? "raw" : codexDefaultSettings.permissionPreset}
+                    onChange={(value: CodexPermissionPreset | "raw") => {
+                      if (value === "raw") {
+                        setCodexRawPref(true);
+                        return;
+                      }
+                      setCodexRawPref(false);
+                      void codexDefaultSettings.savePermissionPreset(value);
+                    }}
+                    style={{ minWidth: 108 }}
+                    options={[
+                      { label: "请求批准", value: "ask" },
+                      { label: "替我审批", value: "auto" },
+                      { label: "完全访问", value: "full" },
+                      { label: "自定义", value: "custom" },
+                      { label: "分别设置", value: "raw" },
+                    ]}
+                  />
+                </div>
+                {showCodexRaw ? (
+                  <div className="app-default-config-engine-controls">
+                    <span className="app-default-config-cli-settings__toggle">
+                      沙箱
+                      <Select
+                        size="small"
+                        aria-label="Codex sandbox_mode"
+                        disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
+                        value={codexDefaultSettings.sandboxMode ?? ""}
+                        onChange={(v: string) => {
+                          void codexDefaultSettings.saveSandboxMode(v || null);
+                        }}
+                        style={{ minWidth: 88 }}
+                        options={[
+                          { label: "默认", value: "" },
+                          { label: "只读", value: "read-only" },
+                          { label: "可写", value: "workspace-write" },
+                          { label: "完全", value: "danger-full-access" },
+                        ]}
+                      />
+                    </span>
+                    <span className="app-default-config-cli-settings__toggle">
+                      审批
+                      <Select
+                        size="small"
+                        aria-label="Codex approval_policy"
+                        disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
+                        value={codexDefaultSettings.approvalPolicy ?? ""}
+                        onChange={(v: string) => {
+                          void codexDefaultSettings.saveApprovalPolicy(v || null);
+                        }}
+                        style={{ minWidth: 108 }}
+                        options={[
+                          { label: "默认", value: "" },
+                          { label: "始终询问", value: "untrusted" },
+                          { label: "风险时询问", value: "on-request" },
+                          { label: "不询问", value: "never" },
+                        ]}
+                      />
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            }
+          />
+          <DefaultConfigRow
+            title="OpenCode"
+            detail="自动批准会跳过权限询问；自定义规则写入 OPENCODE_PERMISSION。"
+            layout={opencodeDefaultSettings.mode === "custom" ? "stack" : "inline"}
+            control={
+              <div
+                className={
+                  opencodeDefaultSettings.mode === "custom"
+                    ? "app-default-config-claude-settings app-default-config-claude-settings--open"
+                    : "app-default-config-claude-settings"
+                }
+              >
+                <div className="app-default-config-engine-controls">
+                  <DefaultConfigOptionPick<"auto" | "custom">
+                    aria-label="OpenCode 权限模式"
+                    disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
+                    value={opencodeDefaultSettings.mode}
+                    options={[
+                      { label: "自动批准", value: "auto" },
+                      { label: "自定义", value: "custom" },
+                    ]}
+                    onChange={(value) => {
+                      void opencodeDefaultSettings.saveMode(value);
+                    }}
+                  />
+                  {opencodeDefaultSettings.mode === "custom" ? (
+                    <Button
+                      size="small"
+                      disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
+                      onClick={() => {
+                        void opencodeDefaultSettings.format();
+                      }}
+                    >
+                      格式化
+                    </Button>
+                  ) : null}
+                </div>
+                {opencodeDefaultSettings.mode === "custom" ? (
+                  <Input.TextArea
+                    aria-label="OpenCode permission JSON"
+                    value={opencodeDefaultSettings.permissionDraft}
+                    placeholder={OPENCODE_PERMISSION_PLACEHOLDER}
+                    autoSize={{ minRows: 3, maxRows: 8 }}
+                    disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
+                    onChange={(e) => opencodeDefaultSettings.setPermissionDraft(e.target.value)}
+                    onBlur={() => {
+                      void opencodeDefaultSettings.commit();
+                    }}
+                  />
+                ) : null}
+              </div>
+            }
+          />
+        </>
+      ),
+    },
+    {
+      key: "terminal",
+      title: "终端",
+      content: (
+        <>
           {defaultTerminal.isMac ? (
             <DefaultConfigRow
-              title="默认终端"
-              hint="外部打开目录"
+              title="外部终端"
               detail="在外部打开仓库目录时使用的 macOS 终端"
               control={
                 defaultTerminal.detected.length > 0 ? (
@@ -701,9 +764,8 @@ export function DefaultConfigPanel() {
             />
           ) : null}
           <DefaultConfigRow
-            title="内置终端主题"
-            hint="浅色 / 深色 / 跟随应用"
-            detail="内置终端（PTY）配色；可与应用外观解耦。跟随应用时与顶栏外观开关同步"
+            title="内置主题"
+            detail="内置终端配色。跟随应用时与顶栏外观开关同步"
             control={
               <DefaultConfigOptionPick<TerminalThemeMode>
                 aria-label="内置终端主题"
@@ -722,7 +784,7 @@ export function DefaultConfigPanel() {
         </>
       ),
     },
-    // 左栏：工作区树、快捷入口、派发历史默认查询天数。
+    // 左栏：工作区、需求、运行面板、预览与快捷入口。
     {
       key: "leftSidebar",
       title: "左栏",
@@ -730,8 +792,7 @@ export function DefaultConfigPanel() {
         <>
           <DefaultConfigRow
             title="工作区树"
-            hint="显隐 · 栏位 · 行数"
-            detail="左栏仓库工作区列表（展开显示会话与运行项）；栏位顶/底会同步分区顺序，也可在左栏直接拖拽各分区标题重排；与文件树并存时可按行数限制高度"
+            detail="展开后显示会话与运行项；栏位会同步左栏分区顺序，也可直接拖拽分区标题重排"
             control={
               <div className="app-default-config-row__control--monitor">
                 <div className="app-default-config-monitor-panel__field">
@@ -795,8 +856,7 @@ export function DefaultConfigPanel() {
 
           <DefaultConfigRow
             title="需求列表"
-            hint="显隐 · 行数"
-            detail="左栏需求模块；可配置显示行数，超出部分滚动查看；新增需求须指定归属仓库"
+            detail="左栏需求模块；超出行数后滚动。新增需求须指定归属仓库"
             control={
               <div className="app-default-config-row__control--monitor">
                 <div className="app-default-config-monitor-panel__field">
@@ -841,8 +901,7 @@ export function DefaultConfigPanel() {
 
           <DefaultConfigRow
             title="会话预览"
-            hint="展开默认条数"
-            detail="工作区展开后默认展示的会话与运行行数（席位 / 派发 / 工作流 + 会话）；超出可点 More 加载更多"
+            detail="工作区展开后默认展示的会话与运行行数；超出可点 More"
             control={
               <Select
                 size="small"
@@ -863,7 +922,6 @@ export function DefaultConfigPanel() {
 
           <DefaultConfigRow
             title="派发历史"
-            hint="默认查询天数"
             detail="左栏派发任务默认查询天数；列表头可临时切换"
             control={
               <Select
@@ -879,6 +937,62 @@ export function DefaultConfigPanel() {
                   void execEnvDispatchHistory.save(value);
                 }}
               />
+            }
+          />
+
+          <DefaultConfigRow
+            title="运行面板"
+            detail="席位、派发与工作流；关闭后不再显示"
+            control={
+              <div className="app-default-config-row__control--monitor">
+                <div className="app-default-config-monitor-panel__field">
+                  <span className="app-default-config-monitor-panel__field-label">显示</span>
+                  <DefaultConfigOptionPick<"visible" | "hidden">
+                    aria-label="运行面板默认显示"
+                    disabled={monitorPanel.loading || monitorPanel.saving}
+                    value={monitorPanel.visible ? "visible" : "hidden"}
+                    options={[
+                      { label: "显示", value: "visible" },
+                      { label: "隐藏", value: "hidden" },
+                    ]}
+                    onChange={(value) => {
+                      void monitorPanel.saveVisible(value === "visible");
+                    }}
+                  />
+                </div>
+                <div className="app-default-config-monitor-panel__field">
+                  <span className="app-default-config-monitor-panel__field-label">栏位</span>
+                  <DefaultConfigOptionPick<"left" | "right">
+                    aria-label="运行面板默认栏位"
+                    disabled={monitorPanel.loading || monitorPanel.saving || !monitorPanel.visible}
+                    value={monitorPanel.placement}
+                    options={[
+                      { label: "左", value: "left" },
+                      { label: "右", value: "right" },
+                    ]}
+                    onChange={(value) => {
+                      void monitorPanel.savePlacement(value);
+                    }}
+                  />
+                </div>
+                <div className="app-default-config-monitor-panel__field app-default-config-monitor-panel__field--rows">
+                  <span className="app-default-config-monitor-panel__field-label">行数</span>
+                  <Select
+                    size="small"
+                    className="app-default-config-monitor-panel__rows-select"
+                    aria-label="运行面板可见行数"
+                    disabled={monitorPanel.loading || monitorPanel.saving || !monitorPanel.visible}
+                    value={monitorPanel.visibleRows}
+                    options={MONITOR_PANEL_VISIBLE_ROWS_OPTIONS.map((rows) => ({
+                      value: rows,
+                      label: `${rows}`,
+                    }))}
+                    onChange={(value) => {
+                      void monitorPanel.saveVisibleRows(value);
+                    }}
+                  />
+                </div>
+              </div>
             }
           />
 
@@ -905,70 +1019,7 @@ export function DefaultConfigPanel() {
         </>
       ),
     },
-    // 运行面板：左栏独立区块（席位 / 派发 / 工作流）。
-    {
-      key: "monitor",
-      title: "运行面板",
-      content: (
-        <DefaultConfigRow
-          title="席位 / 派发 / 工作流"
-          hint="显隐 · 栏位 · 行数"
-          detail="左栏独立运行面板；关闭后不再显示"
-          control={
-            <div className="app-default-config-row__control--monitor">
-              <div className="app-default-config-monitor-panel__field">
-                <span className="app-default-config-monitor-panel__field-label">显示</span>
-                <DefaultConfigOptionPick<"visible" | "hidden">
-                  aria-label="运行面板默认显示"
-                  disabled={monitorPanel.loading || monitorPanel.saving}
-                  value={monitorPanel.visible ? "visible" : "hidden"}
-                  options={[
-                    { label: "显示", value: "visible" },
-                    { label: "隐藏", value: "hidden" },
-                  ]}
-                  onChange={(value) => {
-                    void monitorPanel.saveVisible(value === "visible");
-                  }}
-                />
-              </div>
-              <div className="app-default-config-monitor-panel__field">
-                <span className="app-default-config-monitor-panel__field-label">栏位</span>
-                <DefaultConfigOptionPick<"left" | "right">
-                  aria-label="运行面板默认栏位"
-                  disabled={monitorPanel.loading || monitorPanel.saving || !monitorPanel.visible}
-                  value={monitorPanel.placement}
-                  options={[
-                    { label: "左", value: "left" },
-                    { label: "右", value: "right" },
-                  ]}
-                  onChange={(value) => {
-                    void monitorPanel.savePlacement(value);
-                  }}
-                />
-              </div>
-              <div className="app-default-config-monitor-panel__field app-default-config-monitor-panel__field--rows">
-                <span className="app-default-config-monitor-panel__field-label">行数</span>
-                <Select
-                  size="small"
-                  className="app-default-config-monitor-panel__rows-select"
-                  aria-label="运行面板可见行数"
-                  disabled={monitorPanel.loading || monitorPanel.saving || !monitorPanel.visible}
-                  value={monitorPanel.visibleRows}
-                  options={MONITOR_PANEL_VISIBLE_ROWS_OPTIONS.map((rows) => ({
-                    value: rows,
-                    label: `${rows}`,
-                  }))}
-                  onChange={(value) => {
-                    void monitorPanel.saveVisibleRows(value);
-                  }}
-                />
-              </div>
-            </div>
-          }
-        />
-      ),
-    },
-    // Git / 文件树：四个相关 row 紧凑成一组。
+    // Git / 文件树。
     {
       key: "gitFiles",
       title: "Git / 文件树",
@@ -1174,68 +1225,53 @@ export function DefaultConfigPanel() {
         </>
       ),
     },
-    // 会话功能面板：历史会话 / 历史消息 / 定时任务 按钮显隐。
     {
-      key: "feature-panel",
-      title: "功能面板",
+      key: "chrome",
+      title: "界面",
       content: (
-        <DefaultConfigRow
-          title="功能按钮"
-          hint="主会话顶栏下方"
-          detail="主会话顶栏下方的会话功能面板按钮"
-          layout="stack"
-          control={
-            <DefaultConfigCheckboxGrid
-              ariaLabel="会话功能面板按钮显示"
-              disabled={featurePanelChrome.loading || featurePanelChrome.saving}
-              options={featurePanelOptions}
-              onToggle={handleFeaturePanelToggle}
-            />
-          }
-        />
-      ),
-    },
-    {
-      key: "hud",
-      title: "HUD",
-      content: (
-        <DefaultConfigRow
-          title="常驻详情"
-          hint="HUD 输入条上方"
-          detail="进入 HUD 后在输入条上方默认显示完整会话详情；可拖动顶部调整高度"
-          control={
-            <Switch
-              size="small"
-              checked={hudDetails.enabled}
-              loading={hudDetails.saving}
-              disabled={hudDetails.loading || hudDetails.saving}
-              onChange={(checked) => {
-                void hudDetails.save(checked);
-              }}
-            />
-          }
-        />
-      ),
-    },
-    // 主会话顶栏：仓库名 / 远程入口 / 终端 / 工具图标（合并到一个 grid）。
-    {
-      key: "topbar",
-      title: "顶栏",
-      content: (
-        <DefaultConfigRow
-          title="图标与按钮"
-          hint="点击切换显示"
-          detail="主会话顶栏图标与按钮；隐藏后部分仍可从「更多」打开"
-          layout="stack"
-          control={
-            <DefaultConfigCheckboxGrid
-              ariaLabel="顶栏图标与按钮显示"
-              disabled={topbarChrome.loading || topbarChrome.saving}
-              options={topbarToolOptions}
-              onToggle={handleTopbarToolToggle}
-            />
-          }
-        />
+        <>
+          <DefaultConfigRow
+            title="顶栏"
+            detail="主会话顶栏图标与按钮；隐藏后部分仍可从「更多」打开"
+            layout="stack"
+            control={
+              <DefaultConfigCheckboxGrid
+                ariaLabel="顶栏图标与按钮显示"
+                disabled={topbarChrome.loading || topbarChrome.saving}
+                options={topbarToolOptions}
+                onToggle={handleTopbarToolToggle}
+              />
+            }
+          />
+          <DefaultConfigRow
+            title="功能按钮"
+            detail="主会话顶栏下方的会话功能面板按钮"
+            layout="stack"
+            control={
+              <DefaultConfigCheckboxGrid
+                ariaLabel="会话功能面板按钮显示"
+                disabled={featurePanelChrome.loading || featurePanelChrome.saving}
+                options={featurePanelOptions}
+                onToggle={handleFeaturePanelToggle}
+              />
+            }
+          />
+          <DefaultConfigRow
+            title="HUD 详情"
+            detail="进入 HUD 后在输入条上方默认显示完整会话详情；可拖动顶部调整高度"
+            control={
+              <Switch
+                size="small"
+                checked={hudDetails.enabled}
+                loading={hudDetails.saving}
+                disabled={hudDetails.loading || hudDetails.saving}
+                onChange={(checked) => {
+                  void hudDetails.save(checked);
+                }}
+              />
+            }
+          />
+        </>
       ),
     },
     // 仓库操作快捷键：系统级全局，未聚焦时也可打开当前选中仓库的终端 / 编辑器。

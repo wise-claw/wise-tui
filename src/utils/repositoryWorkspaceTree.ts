@@ -69,6 +69,28 @@ export function listWorkspaceSidebarHistorySessions(
   return scoped.sort((a, b) => sessionUpdatedAtMs(b) - sessionUpdatedAtMs(a));
 }
 
+/**
+ * 侧栏当前会画出来的会话（每个仓库按时间取前 N 条）。
+ * 内存回收不能把这些会话的正文和标题清成「新会话」。
+ */
+export function collectDisplayedWorkspaceSessionIds(
+  sessions: ReadonlyArray<ClaudeSession>,
+  perRepositoryLimit: number = WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT,
+): Set<string> {
+  const limit = Math.max(1, perRepositoryLimit);
+  const paths = new Set<string>();
+  for (const session of sessions) {
+    const path = session.repositoryPath?.trim();
+    if (path) paths.add(path);
+  }
+  const ids = new Set<string>();
+  for (const path of paths) {
+    const shown = listWorkspaceSidebarHistorySessions(sessions, path).slice(0, limit);
+    for (const session of shown) ids.add(session.id);
+  }
+  return ids;
+}
+
 /** 选中工作区时默认激活的会话：与侧栏列表第一项一致。 */
 export function pickFirstWorkspaceSidebarHistorySession(
   sessions: ReadonlyArray<ClaudeSession>,

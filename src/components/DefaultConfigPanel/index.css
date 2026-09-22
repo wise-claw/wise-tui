@@ -307,15 +307,41 @@
 .app-default-config-claude-settings {
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 6px;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.app-default-config-claude-settings--open {
+  align-items: stretch;
   width: 100%;
 }
 
-.app-default-config-claude-settings__actions {
+.app-default-config-engine-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 12px;
+  justify-content: flex-end;
+  gap: 6px 10px;
+}
+
+.app-default-config-claude-settings--open .app-default-config-engine-controls {
+  justify-content: flex-start;
+}
+
+.app-default-config-row:not(.app-default-config-row--stack) .app-default-config-row__control:has(.app-default-config-engine-controls) {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.app-default-config-engine-json-toggle.ant-btn {
+  padding-inline: 0;
+  height: auto;
+  font-size: 11px;
 }
 
 .app-default-config-claude-settings__toggle {
@@ -324,38 +350,6 @@
   gap: 4px;
   font-size: 11px;
   color: var(--ant-color-text-secondary);
-}
-
-/* codex / opencode 启动默认设置复用的通用布局（与 claude-settings 同结构）。 */
-.app-default-config-cli-settings {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  padding: 0 10px 6px;
-}
-
-.app-default-config-cli-settings__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-}
-
-.app-default-config-cli-settings__actions--compact {
-  gap: 4px 8px;
-}
-
-.app-default-config-cli-settings__actions--compact .app-default-config-cli-settings__toggle {
-  font-size: 10px;
-}
-
-/* antd Select 下拉是 portal 渲染（不在 compact 容器 DOM 子树里），挂在 popupClassName 上接管样式。 */
-.app-default-config-dropdown--compact .ant-select-item {
-  font-size: 12px;
-  line-height: 1.4;
-  min-height: 24px;
-  padding-inline: 7px;
 }
 
 .app-default-config-cli-settings__toggle {

@@ -30,6 +30,20 @@ pub fn emit_adapted_stream_payload<P: serde::Serialize>(
     invocation_key: Option<&str>,
 ) {
     use tauri::Emitter;
+    use tauri::Manager;
+    // Invocation routing is needed only while the turn is live. Ordinary
+    // completion must release it too, not just cancel_claude_invocation.
+    if base == CLAUDE_STREAM_EVENT_COMPLETE {
+        if let Some(registry) = app.try_state::<crate::claude_commands::ClaudeSessionRegistry>() {
+            registry.remove_completed(session_id);
+        }
+        if let (Some(inv), Some(state)) = (
+            invocation_key,
+            app.try_state::<crate::claude_commands::ClaudeProcessState>(),
+        ) {
+            forget_completed_invocation(&state.invocation_tab_session_by_key, inv);
+        }
+    }
     if !session_id.is_empty() {
         let _ = app.emit(&session_event(base, session_id), payload);
     }
@@ -41,9 +55,56 @@ pub fn emit_adapted_stream_payload<P: serde::Serialize>(
     }
 }
 
+fn forget_completed_invocation(
+    mappings: &std::sync::Arc<tokio::sync::Mutex<std::collections::HashMap<String, String>>>,
+    invocation_key: &str,
+) {
+    if let Ok(mut map) = mappings.try_lock() {
+        map.remove(invocation_key);
+    } else {
+        let mappings = std::sync::Arc::clone(mappings);
+        let invocation_key = invocation_key.to_string();
+        tauri::async_runtime::spawn(async move {
+            mappings.lock().await.remove(&invocation_key);
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn completed_invocations_release_routing_even_when_the_map_is_busy() {
+        use std::{collections::HashMap, sync::Arc};
+        use tokio::sync::Mutex;
+        let mappings = Arc::new(Mutex::new(HashMap::new()));
+        for i in 0..10_000 {
+            let inv = format!("inv-{i}");
+            mappings.lock().await.insert(inv.clone(), "tab".into());
+            forget_completed_invocation(&mappings, &inv);
+            assert!(mappings.lock().await.is_empty());
+        }
+        let mut held = mappings.lock().await;
+        held.insert("done".into(), "old".into());
+        held.insert("running".into(), "live".into());
+        forget_completed_invocation(&mappings, "done");
+        drop(held);
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                if !mappings.lock().await.contains_key("done") {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            mappings.lock().await.get("running").map(String::as_str),
+            Some("live")
+        );
+    }
 
     #[test]
     fn builds_scoped_event_names() {

@@ -15,6 +15,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex};
 
+use crate::pending_rpc_request::{PendingRequestMap, PendingResponse};
+
 // ---------------------------------------------------------------------------
 // Wire-level JSON-RPC message types
 // ---------------------------------------------------------------------------
@@ -84,7 +86,7 @@ pub struct CodexRpcTransport {
     /// Each item is `(request_id, method, params)`.
     server_request_rx: mpsc::Receiver<(u64, String, Option<Value>)>,
     /// Pending requests awaiting a response, keyed by request id.
-    pending_requests: Arc<Mutex<HashMap<u64, oneshot::Sender<JsonRpcMessage>>>>,
+    pending_requests: PendingRequestMap<u64, JsonRpcMessage>,
     /// Monotonically increasing request id counter.
     next_id: AtomicU64,
 }
@@ -135,7 +137,7 @@ impl CodexRpcTransport {
             .ok_or_else(|| anyhow!("Failed to take codex app-server stdout"))?;
 
         let pending: HashMap<u64, oneshot::Sender<JsonRpcMessage>> = HashMap::new();
-        let pending_requests = Arc::new(Mutex::new(pending));
+        let pending_requests = Arc::new(std::sync::Mutex::new(pending));
 
         // Notification channel: reader task → session layer.
         let (notification_tx, notification_rx) = mpsc::channel::<(String, Option<Value>)>(256);
@@ -181,7 +183,7 @@ impl CodexRpcTransport {
                     }
                 }
                 // On exit, drop all pending senders so waiters unblock with errors.
-                let mut pending = pending_for_reader.lock().await;
+                let mut pending = pending_for_reader.lock().unwrap();
                 pending.clear();
             });
         }
@@ -199,7 +201,7 @@ impl CodexRpcTransport {
     /// Parse a single stdout JSON line and route it.
     async fn handle_stdout_line(
         line: &str,
-        pending_requests: &Arc<Mutex<HashMap<u64, oneshot::Sender<JsonRpcMessage>>>>,
+        pending_requests: &PendingRequestMap<u64, JsonRpcMessage>,
         notification_tx: &mpsc::Sender<(String, Option<Value>)>,
         server_request_tx: &mpsc::Sender<(u64, String, Option<Value>)>,
     ) {
@@ -214,7 +216,7 @@ impl CodexRpcTransport {
         match &msg {
             JsonRpcMessage::Response { id, .. } | JsonRpcMessage::Error { id, .. } => {
                 let sender = {
-                    let mut pending = pending_requests.lock().await;
+                    let mut pending = pending_requests.lock().unwrap();
                     pending.remove(id)
                 };
                 if let Some(tx) = sender {
@@ -266,11 +268,7 @@ impl CodexRpcTransport {
             .with_context(|| format!("Failed to serialize request: {method}"))?;
 
         // Register the pending oneshot before writing to stdin.
-        let (tx, rx) = oneshot::channel::<JsonRpcMessage>();
-        {
-            let mut pending = self.pending_requests.lock().await;
-            pending.insert(id, tx);
-        }
+        let rx = PendingResponse::register(&self.pending_requests, id);
 
         // Write the JSON line to stdin.
         {
@@ -379,5 +377,42 @@ impl CodexRpcTransport {
         }
         let _ = self.child.wait().await;
         Ok(())
+    }
+}
+
+#[cfg(all(test, unix))]
+mod request_lifecycle_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn abandoned_requests_and_failed_writes_leave_no_pending_entries() {
+        // A local sink exercises real stdin writes without invoking an AI engine.
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "exec /bin/cat > /dev/null"])
+            .stdin(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn().unwrap();
+        let stdin = child.stdin.take().unwrap();
+        let mut transport = CodexRpcTransport {
+            child,
+            stdin: Mutex::new(stdin),
+            notification_rx: mpsc::channel(1).1,
+            server_request_rx: mpsc::channel(1).1,
+            pending_requests: Arc::default(),
+            next_id: AtomicU64::new(1),
+        };
+        let timeout = std::time::Duration::from_millis(5);
+        // Cancellation while waiting to acquire stdin must release registration too.
+        let held_stdin = transport.stdin.lock().await;
+        assert!(tokio::time::timeout(timeout, transport.send_request("test", None)).await.is_err());
+        assert!(transport.pending_requests.lock().unwrap().is_empty());
+        drop(held_stdin);
+        // The write succeeds, but the peer never replies.
+        assert!(tokio::time::timeout(timeout, transport.send_request("test", None)).await.is_err());
+        assert!(transport.pending_requests.lock().unwrap().is_empty());
+        transport.shutdown().await.unwrap();
+        // Broken-pipe errors must not strand the sender registered before writing.
+        assert!(transport.send_request("test", None).await.is_err());
+        assert!(transport.pending_requests.lock().unwrap().is_empty());
     }
 }

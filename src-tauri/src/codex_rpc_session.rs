@@ -42,6 +42,29 @@ pub struct CodexRpcSession {
     initialized: bool,
 }
 
+pub(crate) enum CodexRpcSessionEvent {
+    Notification(ServerNotification),
+    ServerRequest(ServerRequest),
+    Disconnected,
+}
+
+fn poll_session_event(
+    notifications: &mut mpsc::Receiver<ServerNotification>,
+    requests: &mut mpsc::Receiver<ServerRequest>,
+) -> Option<CodexRpcSessionEvent> {
+    use mpsc::error::TryRecvError;
+    match notifications.try_recv() {
+        Ok(notification) => Some(CodexRpcSessionEvent::Notification(notification)),
+        // Drain buffered notifications first, including a final turn/completed.
+        // Empty is temporary; Disconnected must end the owner task.
+        Err(TryRecvError::Disconnected) => Some(CodexRpcSessionEvent::Disconnected),
+        Err(TryRecvError::Empty) => requests
+            .try_recv()
+            .ok()
+            .map(CodexRpcSessionEvent::ServerRequest),
+    }
+}
+
 #[allow(dead_code)]
 impl CodexRpcSession {
     /// Bootstrap a new session:
@@ -380,6 +403,13 @@ impl CodexRpcSession {
     /// Non-blocking poll for the next server notification.
     pub fn poll_notification(&mut self) -> Option<ServerNotification> {
         self.notification_rx.try_recv().ok()
+    }
+
+    pub(crate) fn poll_event(&mut self) -> Option<CodexRpcSessionEvent> {
+        if !self.initialized {
+            return Some(CodexRpcSessionEvent::Disconnected);
+        }
+        poll_session_event(&mut self.notification_rx, &mut self.server_request_rx)
     }
 
     /// Blocking wait for the next server notification.
@@ -1213,5 +1243,53 @@ fn truncate_json_for_error(value: &serde_json::Value) -> String {
         raw
     } else {
         format!("{}…", &raw[..MAX])
+    }
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn idle_channel_and_disconnected_session_are_distinct() {
+        for _ in 0..10_000 {
+            let (notifications_tx, mut notifications) = mpsc::channel(2);
+            let (_requests_tx, mut requests) = mpsc::channel(2);
+            assert!(poll_session_event(&mut notifications, &mut requests).is_none());
+            drop(notifications_tx);
+            assert!(matches!(
+                poll_session_event(&mut notifications, &mut requests),
+                Some(CodexRpcSessionEvent::Disconnected)
+            ));
+        }
+    }
+
+    #[test]
+    fn queued_completion_is_delivered_before_disconnect() {
+        let (notifications_tx, mut notifications) = mpsc::channel(2);
+        let (_requests_tx, mut requests) = mpsc::channel(2);
+        notifications_tx.try_send(parse_notification(
+            "turn/completed",
+            Some(serde_json::json!({
+                "threadId": "thread", "turn": { "id": "turn", "status": "completed" }
+            })),
+        )).unwrap();
+        drop(notifications_tx);
+        assert!(matches!(
+            poll_session_event(&mut notifications, &mut requests),
+            Some(CodexRpcSessionEvent::Notification(ServerNotification::TurnCompleted { .. }))
+        ));
+        assert!(matches!(
+            poll_session_event(&mut notifications, &mut requests),
+            Some(CodexRpcSessionEvent::Disconnected)
+        ));
+    }
+
+    #[test]
+    fn closing_only_the_request_channel_does_not_end_a_live_turn() {
+        let (_notifications_tx, mut notifications) = mpsc::channel(2);
+        let (requests_tx, mut requests) = mpsc::channel(2);
+        drop(requests_tx);
+        assert!(poll_session_event(&mut notifications, &mut requests).is_none());
     }
 }

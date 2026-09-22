@@ -6778,13 +6778,19 @@ button.app-message-part-header:disabled:hover {
   );
 }
 
+.app-tool-edit-card__omitted {
+  padding: 4px 10px 6px;
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
+}
+
 .app-tool-edit-card__code {
   margin: 0;
   padding: 2px 0;
   font-size: 12px;
   line-height: 1.5;
   overflow: auto;
-  max-height: 420px;
+  max-height: 168px;
   background: transparent;
   border: none;
   font-family: "SF Mono", "Fira Code", Consolas, monospace;

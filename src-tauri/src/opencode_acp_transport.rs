@@ -10,6 +10,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex};
 
+use crate::pending_rpc_request::{PendingRequestMap, PendingResponse};
+
 use crate::acp_engine::AcpEngine;
 use crate::opencode_acp_types::{JsonRpcId, JsonRpcMessage};
 
@@ -19,7 +21,7 @@ pub struct OpencodeAcpTransport {
     stdin: Mutex<tokio::process::ChildStdin>,
     notification_rx: mpsc::Receiver<(String, Option<Value>)>,
     server_request_rx: mpsc::Receiver<(JsonRpcId, String, Option<Value>)>,
-    pending_requests: Arc<Mutex<HashMap<JsonRpcId, oneshot::Sender<JsonRpcMessage>>>>,
+    pending_requests: PendingRequestMap<JsonRpcId, JsonRpcMessage>,
     next_id: AtomicU64,
 }
 
@@ -55,7 +57,7 @@ impl OpencodeAcpTransport {
             .take()
             .ok_or_else(|| anyhow!("Failed to take {} acp stdout", engine.display_name()))?;
 
-        let pending_requests = Arc::new(Mutex::new(HashMap::new()));
+        let pending_requests = Arc::new(std::sync::Mutex::new(HashMap::new()));
         let (notification_tx, notification_rx) = mpsc::channel::<(String, Option<Value>)>(512);
         let (server_request_tx, server_request_rx) =
             mpsc::channel::<(JsonRpcId, String, Option<Value>)>(128);
@@ -99,7 +101,7 @@ impl OpencodeAcpTransport {
                     Err(_) => break,
                 }
             }
-            pending_for_reader.lock().await.clear();
+            pending_for_reader.lock().unwrap().clear();
         });
 
         Ok(Self {
@@ -115,7 +117,7 @@ impl OpencodeAcpTransport {
     async fn handle_stdout_line(
         engine: AcpEngine,
         line: &str,
-        pending_requests: &Arc<Mutex<HashMap<JsonRpcId, oneshot::Sender<JsonRpcMessage>>>>,
+        pending_requests: &PendingRequestMap<JsonRpcId, JsonRpcMessage>,
         notification_tx: &mpsc::Sender<(String, Option<Value>)>,
         server_request_tx: &mpsc::Sender<(JsonRpcId, String, Option<Value>)>,
     ) {
@@ -134,7 +136,7 @@ impl OpencodeAcpTransport {
         match msg {
             JsonRpcMessage::Response { id, result, error, jsonrpc } => {
                 let sender = {
-                    let mut pending = pending_requests.lock().await;
+                    let mut pending = pending_requests.lock().unwrap();
                     pending.remove(&id)
                 };
                 if let Some(tx) = sender {
@@ -183,7 +185,7 @@ impl OpencodeAcpTransport {
         &self,
         method: &str,
         params: Option<Value>,
-    ) -> Result<(JsonRpcId, oneshot::Receiver<JsonRpcMessage>)> {
+    ) -> Result<(JsonRpcId, PendingResponse<JsonRpcId, JsonRpcMessage>)> {
         let id = self.next_request_id();
         let msg = JsonRpcMessage::Request {
             jsonrpc: "2.0".to_string(),
@@ -194,11 +196,7 @@ impl OpencodeAcpTransport {
         let wire = serde_json::to_string(&msg)
             .with_context(|| format!("Failed to serialize request: {method}"))?;
 
-        let (tx, rx) = oneshot::channel();
-        {
-            let mut pending = self.pending_requests.lock().await;
-            pending.insert(id.clone(), tx);
-        }
+        let rx = PendingResponse::register(&self.pending_requests, id.clone());
 
         {
             let mut stdin = self.stdin.lock().await;
@@ -220,7 +218,7 @@ impl OpencodeAcpTransport {
     /// never exits and the tab `busy` flag stays stuck.
     pub async fn abort_pending_requests(&self, stop_reason: &str) {
         let pending: HashMap<JsonRpcId, oneshot::Sender<JsonRpcMessage>> = {
-            let mut map = self.pending_requests.lock().await;
+            let mut map = self.pending_requests.lock().unwrap();
             std::mem::take(&mut *map)
         };
         complete_pending_with_stop_reason(pending, stop_reason);
@@ -333,5 +331,42 @@ mod tests {
             }
             other => panic!("unexpected message: {other:?}"),
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod request_lifecycle_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn abandoned_requests_and_failed_writes_leave_no_pending_entries() {
+        // A local sink exercises real stdin writes without invoking an AI engine.
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "exec /bin/cat > /dev/null"])
+            .stdin(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn().unwrap();
+        let stdin = child.stdin.take().unwrap();
+        let mut transport = OpencodeAcpTransport {
+            child,
+            stdin: Mutex::new(stdin),
+            notification_rx: mpsc::channel(1).1,
+            server_request_rx: mpsc::channel(1).1,
+            pending_requests: Arc::default(),
+            next_id: AtomicU64::new(1),
+        };
+        let timeout = std::time::Duration::from_millis(5);
+        // Cancellation while waiting to acquire stdin must release registration too.
+        let held_stdin = transport.stdin.lock().await;
+        assert!(tokio::time::timeout(timeout, transport.send_request("test", None)).await.is_err());
+        assert!(transport.pending_requests.lock().unwrap().is_empty());
+        drop(held_stdin);
+        // The write succeeds, but the peer never replies.
+        assert!(tokio::time::timeout(timeout, transport.send_request("test", None)).await.is_err());
+        assert!(transport.pending_requests.lock().unwrap().is_empty());
+        transport.shutdown().await.unwrap();
+        // Broken-pipe errors must not strand the sender registered before writing.
+        assert!(transport.send_request("test", None).await.is_err());
+        assert!(transport.pending_requests.lock().unwrap().is_empty());
     }
 }

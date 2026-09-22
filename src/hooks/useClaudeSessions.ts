@@ -10,7 +10,10 @@ import {
 } from "react";
 import { message } from "antd";
 import { subscribeRepositorySessionPrefetch } from "../services/repositorySessionPrefetch";
-import { pickFirstRepositoryOwnedSidebarHistorySession } from "../utils/repositoryWorkspaceTree";
+import {
+  collectDisplayedWorkspaceSessionIds,
+  pickFirstRepositoryOwnedSidebarHistorySession,
+} from "../utils/repositoryWorkspaceTree";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -383,6 +386,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         keep.add(session.id);
       }
     }
+    // 侧栏正在展示的会话：回收时不能把正文清空，否则标题会掉成「新会话」。
+    for (const id of collectDisplayedWorkspaceSessionIds(list)) keep.add(id);
     return keep;
   }, []);
 
@@ -2566,9 +2571,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     for (const cid of companionSessionIds) keep.add(cid);
     const recentWarm = new Set(recentActiveSessionIdsRef.current);
     setSessions((prev) => {
+      const displayed = collectDisplayedWorkspaceSessionIds(prev);
       let changed = false;
       const next = prev.map((s) => {
-        if (keep.has(s.id)) {
+        if (keep.has(s.id) || displayed.has(s.id)) {
           if (s.transcriptMemoryUnlimited) return s;
           const perSessionMax =
             s.id === activeSessionId
@@ -2578,6 +2584,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           changed = true;
           return {
             ...s,
+            diskPreview: retainSessionListPreviewOnMessageDrop(s),
             messages: capSessionMessagesForMemory(s.messages, perSessionMax),
             diskTranscriptPartial: true,
             transcriptMemoryUnlimited: false,
@@ -2611,6 +2618,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           changed = true;
           return {
             ...s,
+            diskPreview: retainSessionListPreviewOnMessageDrop(s),
             messages: capSessionMessagesForMemory(s.messages),
             diskTranscriptPartial: true,
           };

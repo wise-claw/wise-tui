@@ -205,8 +205,9 @@ export async function applyStreamingProcessReclaim(
     }
     return applyStreamingProcessReclaimUnlocked(params);
   })();
-  reclaimInFlight = run.finally(() => {
-    if (reclaimInFlight === run) reclaimInFlight = null;
+  const tracked = run.finally(() => {
+    if (reclaimInFlight === tracked) reclaimInFlight = null;
   });
-  return run;
+  reclaimInFlight = tracked;
+  return tracked;
 }

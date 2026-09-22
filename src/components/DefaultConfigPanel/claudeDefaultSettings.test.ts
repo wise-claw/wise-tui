@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   extractPermissionMode,
   formatClaudeDefaultSettings,
+  claudeSettingsNeedsRawEditor,
   isSandboxDisabledInSettings,
   isUltracodeEnabledInSettings,
   parseClaudeDefaultSettings,
@@ -270,5 +271,25 @@ describe("setPermissionModeInSettings", () => {
   test("已设同值再设幂等", () => {
     const result = setPermissionModeInSettings('{"permissionMode":"plan"}', "plan");
     expect(JSON.parse(result)).toEqual({ permissionMode: "plan" });
+  });
+});
+
+describe("claudeSettingsNeedsRawEditor", () => {
+  test("空文本与仅开关字段不需要原文", () => {
+    expect(claudeSettingsNeedsRawEditor("")).toBe(false);
+    expect(claudeSettingsNeedsRawEditor('{"ultracode":true}')).toBe(false);
+    expect(
+      claudeSettingsNeedsRawEditor(
+        '{"ultracode":true,"permissionMode":"plan","sandbox":{"enabled":false}}',
+      ),
+    ).toBe(false);
+  });
+
+  test("其它键、sandbox 扩展字段、非法 JSON 需要原文", () => {
+    expect(claudeSettingsNeedsRawEditor('{"model":"claude-sonnet-4-6"}')).toBe(true);
+    expect(claudeSettingsNeedsRawEditor('{"sandbox":{"enabled":false,"allowWrite":["/tmp"]}}')).toBe(
+      true,
+    );
+    expect(claudeSettingsNeedsRawEditor("{not json}")).toBe(true);
   });
 });

@@ -139,4 +139,15 @@ describe("sessionListPreview", () => {
       ),
     ).toBeUndefined();
   });
+
+  test("尾部窗口里仍能读出的用户原话要留下，避免侧栏变成新会话", () => {
+    expect(
+      retainSessionListPreviewOnMessageDrop(
+        session({
+          messages: [userMsg("运行久了多个会话会卡")],
+          diskTranscriptPartial: true,
+        }),
+      ),
+    ).toBe("运行久了多个会话会卡");
+  });
 });
