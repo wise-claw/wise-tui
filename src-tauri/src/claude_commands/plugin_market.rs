@@ -3,11 +3,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::process::Command;
+use std::time::Duration;
 
+use crate::cli_probe::{blocking_output_with_timeout, CaptureError};
 use super::shared::{canonicalize_existing_project_dir, read_json_file};
 use super::{claude_path_search_prefixes, find_claude_binary, merge_path_env};
 
@@ -77,54 +77,30 @@ fn home_dir() -> Result<PathBuf, String> {
 fn run_claude_plugin_cli_in(home: &Path, cwd: &Path, args: &[&str]) -> Result<String, String> {
     let bin = find_claude_binary()?;
     let path_merged = merge_path_env(&claude_path_search_prefixes());
-    let mut child = Command::new(&bin)
-        .args(args)
+    let mut cmd = Command::new(&bin);
+    cmd.args(args)
         .current_dir(cwd)
         .env("PATH", &path_merged)
         .env("HOME", home.to_string_lossy().to_string())
-        .env("CI", "1")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("无法启动 claude: {}", e))?;
-
-    let start = Instant::now();
-    loop {
-        match child
-            .try_wait()
-            .map_err(|e| format!("等待 claude 子进程失败: {e}"))?
-        {
-            Some(status) => {
-                let mut stdout = String::new();
-                let mut stderr = String::new();
-                if let Some(mut pipe) = child.stdout.take() {
-                    let _ = pipe.read_to_string(&mut stdout);
-                }
-                if let Some(mut pipe) = child.stderr.take() {
-                    let _ = pipe.read_to_string(&mut stderr);
-                }
-                let stdout = stdout.trim().to_string();
-                let stderr = stderr.trim().to_string();
-                if status.success() {
-                    return Ok(if stdout.is_empty() { stderr } else { stdout });
-                }
-                return Err(format!(
-                    "claude plugin 失败（退出码 {:?}）\n{stderr}\n{stdout}",
-                    status.code()
-                ));
-            }
-            None => {
-                if start.elapsed() > PLUGIN_CLI_TIMEOUT {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(format!(
-                        "claude plugin 超时（>{PLUGIN_CLI_TIMEOUT:?}）。若网络较慢，可稍后打开「已安装」确认是否已成功，或点击「刷新市场」后重试"
-                    ));
-                }
-                std::thread::sleep(Duration::from_millis(250));
-            }
+        .env("CI", "1");
+    let output = match blocking_output_with_timeout(&mut cmd, PLUGIN_CLI_TIMEOUT) {
+        Ok(output) => output,
+        Err(CaptureError::Io(e)) => return Err(format!("无法启动 claude: {}", e)),
+        Err(CaptureError::TimedOut) => {
+            return Err(format!(
+                "claude plugin 超时（>{PLUGIN_CLI_TIMEOUT:?}）。若网络较慢，可稍后打开「已安装」确认是否已成功，或点击「刷新市场」后重试"
+            ));
         }
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if output.status.success() {
+        return Ok(if stdout.is_empty() { stderr } else { stdout });
     }
+    Err(format!(
+        "claude plugin 失败（退出码 {:?}）\n{stderr}\n{stdout}",
+        output.status.code()
+    ))
 }
 
 fn run_claude_plugin_cli(home: &Path, args: &[&str]) -> Result<String, String> {

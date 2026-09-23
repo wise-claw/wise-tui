@@ -6,7 +6,9 @@ use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
+use std::collections::HashMap;
 use std::process::{Command, Stdio};
+use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 fn shell_stdout(shell: &str, args: &[&str], budget: Duration) -> Option<String> {
@@ -102,8 +104,43 @@ pub(crate) fn executable_path(stdout: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
+type LookupCache = Mutex<HashMap<String, (Instant, Option<String>)>>;
+
+static LOOKUP_CACHE: LazyLock<LookupCache> = LazyLock::new(Default::default);
+
+/// Misses expire quickly so an install made while Wise runs is still found.
+const MISS_TTL: Duration = Duration::from_secs(30);
+
+fn cached_lookup(
+    cache: &LookupCache,
+    lookup: &str,
+    resolve: impl FnOnce() -> Option<String>,
+) -> Option<String> {
+    let cached = cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(lookup)
+        .cloned();
+    match cached {
+        Some((_, Some(path))) if executable_path(&path).is_some() => return Some(path),
+        Some((at, None)) if at.elapsed() < MISS_TTL => return None,
+        _ => {}
+    }
+    // Not held across `resolve`: lookups for different CLIs must not serialize.
+    let found = resolve();
+    cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(lookup.to_owned(), (Instant::now(), found.clone()));
+    found
+}
+
 /// `lookup` is a fixed built-in command (e.g. `command -v codex`), never user input.
 pub(crate) fn find_in_login_shell(lookup: &str) -> Option<String> {
+    cached_lookup(&LOOKUP_CACHE, lookup, || find_in_login_shell_uncached(lookup))
+}
+
+fn find_in_login_shell_uncached(lookup: &str) -> Option<String> {
     for (shell, args) in [
         ("/bin/zsh", vec!["-l", "-c", lookup]),
         ("/bin/bash", vec!["-lc", lookup]),
@@ -152,6 +189,42 @@ mod tests {
         let stdout = shell_stdout("/bin/sh", &["-c", "i=0; while [ $i -lt 20000 ]; do echo banner; i=$((i+1)); done; printf '/bin/sh\\n'"], Duration::from_secs(3)).unwrap();
         assert!(stdout.len() <= 64 * 1024);
         assert_eq!(executable_path(&stdout), Some("/bin/sh".into()));
+    }
+
+    #[test]
+    fn lookup_cache_reuses_hits_and_expires_misses() {
+        use std::cell::Cell;
+        let cache = LookupCache::default();
+        let calls = Cell::new(0);
+        let hit = || {
+            calls.set(calls.get() + 1);
+            Some("/bin/sh".to_string())
+        };
+        assert_eq!(cached_lookup(&cache, "command -v sh", hit), Some("/bin/sh".into()));
+        assert_eq!(cached_lookup(&cache, "command -v sh", hit), Some("/bin/sh".into()));
+        assert_eq!(calls.get(), 1);
+
+        let miss = || {
+            calls.set(calls.get() + 1);
+            None
+        };
+        assert_eq!(cached_lookup(&cache, "command -v missing", miss), None);
+        assert_eq!(cached_lookup(&cache, "command -v missing", miss), None);
+        assert_eq!(calls.get(), 2);
+        cache.lock().unwrap().get_mut("command -v missing").unwrap().0 =
+            Instant::now() - MISS_TTL - Duration::from_secs(1);
+        assert_eq!(
+            cached_lookup(&cache, "command -v missing", || Some("/bin/sh".into())),
+            Some("/bin/sh".into())
+        );
+
+        // A cached path that disappeared (uninstall/upgrade) is looked up again.
+        cache
+            .lock()
+            .unwrap()
+            .insert("command -v gone".into(), (Instant::now(), Some("/nonexistent/cli".into())));
+        assert_eq!(cached_lookup(&cache, "command -v gone", hit), Some("/bin/sh".into()));
+        assert_eq!(calls.get(), 3);
     }
 
     #[test]

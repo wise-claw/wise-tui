@@ -1,10 +1,92 @@
-//! Short-lived CLI discovery: coalesce concurrent probes and reap timed-out children.
+//! Short-lived CLI calls: coalesce concurrent probes and reap timed-out children.
 
 use std::future::Future;
+use std::io::Read;
 use std::process::{Output, Stdio};
+use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 use tokio::process::Command;
 use tokio::sync::Mutex;
+
+#[derive(Debug)]
+pub(crate) enum CaptureError {
+    Io(std::io::Error),
+    TimedOut,
+}
+
+type SharedBuf = Arc<std::sync::Mutex<Vec<u8>>>;
+
+fn drain_pipe<R: Read + Send + 'static>(pipe: Option<R>, done: mpsc::Sender<()>) -> SharedBuf {
+    let buf = SharedBuf::default();
+    let Some(mut pipe) = pipe else {
+        let _ = done.send(());
+        return buf;
+    };
+    let sink = buf.clone();
+    std::thread::spawn(move || {
+        let mut chunk = [0_u8; 8192];
+        loop {
+            match pipe.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => sink
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .extend_from_slice(&chunk[..n]),
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => break,
+            }
+        }
+        let _ = done.send(());
+    });
+    buf
+}
+
+/// Blocking capture for sync call sites (`spawn_blocking` bodies).
+///
+/// Pipes are drained while the child runs: reading only after exit lets a chatty CLI
+/// fill the pipe buffer and stall until the deadline.
+pub(crate) fn blocking_output_with_timeout(
+    cmd: &mut std::process::Command,
+    timeout: Duration,
+) -> Result<Output, CaptureError> {
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(CaptureError::Io)?;
+    let (done_tx, done_rx) = mpsc::channel();
+    let stdout = drain_pipe(child.stdout.take(), done_tx.clone());
+    let stderr = drain_pipe(child.stderr.take(), done_tx);
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        if let Some(status) = child.try_wait().map_err(CaptureError::Io)? {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(CaptureError::TimedOut);
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    // A daemon started by the CLI may inherit the pipes; don't wait for its EOF.
+    let grace = Instant::now() + Duration::from_millis(500);
+    for _ in 0..2 {
+        if done_rx
+            .recv_timeout(grace.saturating_duration_since(Instant::now()))
+            .is_err()
+        {
+            break;
+        }
+    }
+    let take = |buf: SharedBuf| std::mem::take(&mut *buf.lock().unwrap_or_else(|e| e.into_inner()));
+    Ok(Output {
+        status,
+        stdout: take(stdout),
+        stderr: take(stderr),
+    })
+}
 
 pub(crate) async fn output_with_timeout(
     cmd: &mut Command,
@@ -144,6 +226,39 @@ mod tests {
         assert_eq!(output.status.code(), Some(7));
         assert_eq!(output.stdout, b"catalog");
         assert_eq!(output.stderr, b"warning");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn blocking_capture_drains_large_output_and_bounds_hangs() {
+        let start = Instant::now();
+        let mut cmd = std::process::Command::new("/bin/sh");
+        cmd.args(["-c", "head -c 1048576 /dev/zero; printf done >&2; exit 3"]);
+        let output = blocking_output_with_timeout(&mut cmd, Duration::from_secs(20)).unwrap();
+        assert_eq!(output.stdout.len(), 1 << 20);
+        assert_eq!(output.stderr, b"done");
+        assert_eq!(output.status.code(), Some(3));
+        assert!(start.elapsed() < Duration::from_secs(5));
+
+        let mut cmd = std::process::Command::new("/bin/sh");
+        cmd.args(["-c", "sleep 30"]);
+        assert!(matches!(
+            blocking_output_with_timeout(&mut cmd, Duration::from_millis(100)),
+            Err(CaptureError::TimedOut)
+        ));
+
+        let start = Instant::now();
+        let mut cmd = std::process::Command::new("/bin/sh");
+        cmd.args(["-c", "sleep 3 & printf ok"]);
+        let output = blocking_output_with_timeout(&mut cmd, Duration::from_secs(20)).unwrap();
+        assert_eq!(output.stdout, b"ok");
+        assert!(start.elapsed() < Duration::from_secs(2));
+
+        let mut cmd = std::process::Command::new("/nonexistent/wise-cli");
+        assert!(matches!(
+            blocking_output_with_timeout(&mut cmd, Duration::from_secs(1)),
+            Err(CaptureError::Io(_))
+        ));
     }
 
     #[cfg(unix)]
