@@ -3,8 +3,6 @@
 use std::path::Path;
 #[cfg(unix)]
 use std::sync::OnceLock;
-#[cfg(unix)]
-use std::time::{Duration, Instant};
 
 /// Enumerate likely `codex` paths (GUI apps often lack NVM/fnm on PATH).
 pub(crate) fn codex_binary_candidates() -> Vec<String> {
@@ -45,51 +43,7 @@ static LOGIN_SHELL_CODEX: OnceLock<Option<String>> = OnceLock::new();
 
 #[cfg(unix)]
 fn try_codex_from_login_shell() -> Option<String> {
-    for (shell, args) in [
-        ("/bin/zsh", vec!["-l", "-c", "command -v codex"]),
-        ("/bin/bash", vec!["-lc", "command -v codex"]),
-    ] {
-        let Ok(mut child) = std::process::Command::new(shell)
-            .args(&args)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-        else {
-            continue;
-        };
-        // 用户的 shell 初始化可能等待网络/交互；探测必须有界，超时继续常见路径兜底。
-        let deadline = Instant::now() + Duration::from_secs(2);
-        let completed = loop {
-            match child.try_wait() {
-                Ok(Some(_)) => break true,
-                Ok(None) if Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(20));
-                }
-                _ => break false,
-            }
-        };
-        if !completed {
-            let _ = child.kill();
-            let _ = child.wait();
-            continue;
-        }
-        let Ok(output) = child.wait_with_output() else {
-            continue;
-        };
-        if !output.status.success() {
-            continue;
-        }
-        // 忽略 shell 启动横幅，只接受实际存在且可执行的绝对路径。
-        if let Some(path) = String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .rev()
-            .map(str::trim)
-            .find(|path| Path::new(path).is_absolute() && is_codex_executable(path))
-        {
-            return Some(path.to_string());
-        }
-    }
-    None
+    crate::login_shell_probe::find_in_login_shell("command -v codex")
 }
 
 fn is_codex_executable(path: &str) -> bool {

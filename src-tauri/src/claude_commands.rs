@@ -592,28 +592,7 @@ fn claude_binary_candidates() -> Vec<PathBuf> {
 
 #[cfg(unix)]
 fn try_claude_from_login_shell() -> Option<String> {
-    for (shell, args) in [
-        ("/bin/zsh", vec!["-l", "-c", "command -v claude"]),
-        ("/bin/bash", vec!["-lc", "command -v claude"]),
-    ] {
-        let output = Command::new(shell)
-            .args(&args)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .output()
-            .ok()?;
-        if !output.status.success() {
-            continue;
-        }
-        let p = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if p.is_empty() {
-            continue;
-        }
-        if Path::new(&p).is_file() {
-            return Some(p);
-        }
-    }
-    None
+    crate::login_shell_probe::find_in_login_shell("command -v claude")
 }
 
 /// Finds the claude binary in common locations (works when packaged app has a narrow PATH).

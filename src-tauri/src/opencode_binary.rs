@@ -39,25 +39,7 @@ pub(crate) fn opencode_binary_candidates() -> Vec<String> {
 
 #[cfg(unix)]
 fn try_opencode_from_login_shell() -> Option<String> {
-    for (shell, args) in [
-        ("/bin/zsh", vec!["-l", "-c", "command -v opencode"]),
-        ("/bin/bash", vec!["-lc", "command -v opencode"]),
-    ] {
-        let output = std::process::Command::new(shell)
-            .args(&args)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .output()
-            .ok()?;
-        if !output.status.success() {
-            continue;
-        }
-        let p = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !p.is_empty() && Path::new(&p).is_file() {
-            return Some(p);
-        }
-    }
-    None
+    crate::login_shell_probe::find_in_login_shell("command -v opencode")
 }
 
 pub(crate) fn find_opencode_binary() -> Result<String, String> {

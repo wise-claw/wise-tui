@@ -92,6 +92,21 @@ pub struct ProbeResult {
 
 pub trait Probe: Send + Sync {
     fn probe<'a>(&'a self, command: &'a str, env: &'a HashMap<String, String>) -> ProbeFuture<'a>;
+
+    fn fallback_binary<'a>(
+        &'a self,
+        command: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+        Box::pin(async move {
+            let resolve = match command {
+                "codex" => crate::codex_binary::find_codex_binary,
+                "dsh" => crate::dsh_binary::find_dsh_binary,
+                "agent" => crate::cursor_binary::find_cursor_agent_binary,
+                _ => return Err(format!("no fallback for {command}")),
+            };
+            tokio::task::spawn_blocking(resolve).await.map_err(|e| e.to_string())?
+        })
+    }
 }
 
 #[derive(Debug, Default)]
@@ -114,6 +129,7 @@ struct RegistryState {
 
 pub struct AgentRegistry {
     state: RwLock<RegistryState>,
+    refresh_lock: tokio::sync::Mutex<()>,
 }
 
 impl AgentRegistry {
@@ -123,6 +139,7 @@ impl AgentRegistry {
                 agents: Vec::new(),
                 last_probed_at: None,
             }),
+            refresh_lock: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -163,6 +180,10 @@ impl AgentRegistry {
         if let Some(cached) = self.cached_snapshot(force)? {
             return Ok(cached);
         }
+        let _refresh = self.refresh_lock.lock().await;
+        if let Some(cached) = self.cached_snapshot(force)? {
+            return Ok(cached);
+        }
 
         let custom_records = load_custom_agents(db)?;
         let mut agents = detect_builtin_agents(probe, db).await;
@@ -178,6 +199,10 @@ impl AgentRegistry {
         db: &Mutex<Connection>,
         probe: &dyn Probe,
     ) -> Result<Vec<DetectedAgent>, String> {
+        if let Some(cached) = self.cached_snapshot(force)? {
+            return Ok(cached);
+        }
+        let _refresh = self.refresh_lock.lock().await;
         if let Some(cached) = self.cached_snapshot(force)? {
             return Ok(cached);
         }
@@ -198,6 +223,10 @@ impl AgentRegistry {
         db: &Mutex<Connection>,
         probe: &dyn Probe,
     ) -> Result<Vec<DetectedAgent>, String> {
+        if let Some(cached) = self.cached_snapshot(force)? {
+            return Ok(cached);
+        }
+        let _refresh = self.refresh_lock.lock().await;
         if let Some(cached) = self.cached_snapshot(force)? {
             return Ok(cached);
         }
@@ -414,7 +443,7 @@ async fn probe_builtin(
         return first;
     }
     if command == "dsh" {
-        return match crate::dsh_binary::find_dsh_binary() {
+        return match probe.fallback_binary("dsh").await {
             Ok(path) => ProbeResult {
                 ok: true,
                 error: None,
@@ -481,7 +510,7 @@ async fn probe_codex_builtin(probe: &dyn Probe, env: &HashMap<String, String>) -
         return first;
     }
 
-    match crate::codex_binary::find_codex_binary() {
+    match probe.fallback_binary("codex").await {
         Ok(path) => ProbeResult {
             ok: true,
             error: None,
@@ -1572,6 +1601,20 @@ mod tests {
     }
 
     impl Probe for MockProbe {
+        fn fallback_binary<'a>(
+            &'a self,
+            command: &'a str,
+        ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+            // Unit tests must not discover the developer's installed binaries.
+            Box::pin(async move {
+                if self.default_ok && !self.failures.lock().unwrap().contains(command) {
+                    Ok(format!("/mock/{command}"))
+                } else {
+                    Err(format!("{command} fallback unavailable"))
+                }
+            })
+        }
+
         fn probe<'a>(
             &'a self,
             command: &'a str,
@@ -1579,6 +1622,7 @@ mod tests {
         ) -> ProbeFuture<'a> {
             Box::pin(async move {
                 self.calls.fetch_add(1, Ordering::SeqCst);
+                tokio::task::yield_now().await;
                 let forced_failure = self
                     .failures
                     .lock()
@@ -1764,6 +1808,62 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn agent_registry_concurrent_cache_misses_share_one_refresh() {
+        let db = test_db();
+        let registry = AgentRegistry::new();
+        let probe = MockProbe::ok();
+        let requests = (0..32).map(|_| registry.refresh_all(false, &db, &probe));
+        let results = futures_util::future::join_all(requests).await;
+        assert!(results.iter().all(|result| result.as_ref().unwrap().len() == 7));
+        assert_eq!(probe.call_count(), 6);
+    }
+
+    #[tokio::test]
+    async fn fresh_snapshot_stays_responsive_during_refresh_and_cancellation() {
+        struct PendingProbe;
+        impl Probe for PendingProbe {
+            fn probe<'a>(&'a self, _: &'a str, _: &'a HashMap<String, String>) -> ProbeFuture<'a> {
+                Box::pin(std::future::pending())
+            }
+        }
+        let db = test_db();
+        let registry = AgentRegistry::new();
+        let probe = MockProbe::ok();
+        registry.refresh_all(false, &db, &probe).await.unwrap();
+        let (cancelled, cached) = tokio::join!(
+            tokio::time::timeout(Duration::from_millis(100), registry.refresh_all(true, &db, &PendingProbe)),
+            tokio::time::timeout(Duration::from_millis(20), registry.refresh_all(false, &db, &probe)),
+        );
+        assert!(cancelled.is_err());
+        assert_eq!(cached.unwrap().unwrap().len(), 7);
+        registry.refresh_all(true, &db, &probe).await.unwrap();
+        assert_eq!(probe.call_count(), 12);
+    }
+
+    #[tokio::test]
+    async fn builtin_path_fallback_is_preserved_when_path_probe_fails() {
+        struct FallbackProbe;
+        impl Probe for FallbackProbe {
+            fn probe<'a>(&'a self, _: &'a str, _: &'a HashMap<String, String>) -> ProbeFuture<'a> {
+                Box::pin(async { ProbeResult {
+                    ok: false, error: Some("missing from PATH".into()), resolved_path: None, version: None,
+                } })
+            }
+            fn fallback_binary<'a>(&'a self, command: &'a str) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+                Box::pin(async move { Ok(format!("/fallback/{command}")) })
+            }
+        }
+        for command in ["codex", "dsh"] {
+            let result = probe_builtin(command, &FallbackProbe, &HashMap::new()).await;
+            assert!(result.ok);
+            assert_eq!(result.resolved_path, Some(format!("/fallback/{command}")));
+        }
+        let cursor = crate::cursor_agent::probe_cursor_registry(&test_db(), &FallbackProbe).await;
+        assert!(cursor.ok);
+        assert_eq!(cursor.resolved_path.as_deref(), Some("/fallback/agent"));
+    }
+
+    #[tokio::test]
     async fn agent_registry_force_refresh_bypasses_cache() {
         let db = test_db();
         let registry = AgentRegistry::new();
@@ -1800,7 +1900,8 @@ mod tests {
         match codex {
             DetectedAgent::Codex(agent) => {
                 assert!(!agent.available);
-                assert_eq!(agent.failure_reason.as_deref(), Some("codex unavailable"));
+                assert_eq!(agent.binary_path, None);
+                assert_eq!(agent.failure_reason.as_deref(), Some("codex unavailable; codex fallback unavailable"));
             }
             _ => panic!("codex variant expected"),
         }

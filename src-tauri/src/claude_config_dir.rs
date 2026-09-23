@@ -543,11 +543,11 @@ mod tests {
     #[test]
     fn build_spawn_settings_payload_user_only_omits_empty_env() {
         // 仅用户 settings、无 FCC env 时，不应产生空 env 键。
-        let user = serde_json::json!({ "ultracode": true });
+        let user = serde_json::json!({ "permissions": { "allow": ["Read"] } });
         let env = HashMap::<String, String>::new();
         let payload = build_claude_spawn_settings_payload(&env, Some(&user));
         let obj = payload.as_object().expect("payload should be object");
-        assert_eq!(obj.get("ultracode"), Some(&serde_json::Value::Bool(true)));
+        assert_eq!(obj.get("permissions"), user.get("permissions"));
         assert!(
             obj.get("env").is_none(),
             "empty env should not produce an env key"

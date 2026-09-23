@@ -1906,6 +1906,7 @@ mod tests {
                 "050_terminal_quick_commands",
                 "051_terminal_quick_commands_seed",
                 "052_workspace_quick_actions_category",
+                "053_assistant_custom_script_file",
             ]
         );
     }

@@ -31,7 +31,7 @@ use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Mutex as TokioMutex;
-use tokio::time::{timeout, Duration};
+use tokio::time::Duration;
 use uuid::Uuid;
 
 pub const CURSOR_API_KEY_SETTING: &str = "cursor_sdk.api_key";
@@ -259,7 +259,7 @@ async fn run_cursor_cli_capture(
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
-    let output = timeout(CLI_ONESHOT_TIMEOUT, cmd.output())
+    let output = crate::cli_probe::output_with_timeout(&mut cmd, CLI_ONESHOT_TIMEOUT)
         .await
         .map_err(|_| format!("Cursor CLI 超时（>{CLI_ONESHOT_TIMEOUT:?}）"))?
         .map_err(|e| format!("无法启动 Cursor CLI: {e}"))?;
@@ -304,8 +304,8 @@ fn parse_cli_version(about_stdout: &str) -> Option<String> {
     None
 }
 
-pub async fn probe_cursor_registry(_db: &Mutex<Connection>, _probe: &dyn Probe) -> ProbeResult {
-    match find_cursor_agent_binary() {
+pub async fn probe_cursor_registry(_db: &Mutex<Connection>, probe: &dyn Probe) -> ProbeResult {
+    match probe.fallback_binary("agent").await {
         Ok(path) => ProbeResult {
             ok: true,
             error: None,
@@ -581,7 +581,7 @@ pub async fn cursor_agent_probe_agent_write(
         api_key.as_deref(),
     );
 
-    let output = timeout(Duration::from_secs(180), cmd.output())
+    let output = crate::cli_probe::output_with_timeout(&mut cmd, Duration::from_secs(180))
         .await
         .map_err(|_| "Cursor CLI write probe 超时".to_string())?
         .map_err(|e| format!("无法启动 Cursor CLI write probe: {e}"))?;

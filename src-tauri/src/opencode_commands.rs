@@ -25,7 +25,8 @@ use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex as TokioMutex;
-use tokio::time::{timeout, Duration};
+use tokio::time::Duration;
+use crate::cli_probe::{output_with_timeout, ModelProbeCache};
 use uuid::Uuid;
 
 #[derive(Clone, Serialize)]
@@ -577,11 +578,18 @@ fn parse_opencode_models_cli_output(stdout: &str) -> Vec<OpencodeModelListItem> 
     out
 }
 
+static OPENCODE_MODEL_CACHE: ModelProbeCache<OpencodeModelListItem> = ModelProbeCache::new();
+
 async fn try_list_opencode_models_via_cli() -> Vec<OpencodeModelListItem> {
-    let Ok(bin) = find_opencode_binary() else {
+    OPENCODE_MODEL_CACHE.get_or_load(load_opencode_models_via_cli).await
+}
+
+async fn load_opencode_models_via_cli() -> Vec<OpencodeModelListItem> {
+    let Ok(Ok((bin, path_env))) = tokio::task::spawn_blocking(|| {
+        find_opencode_binary().map(|bin| (bin, opencode_merged_path_env()))
+    }).await else {
         return Vec::new();
     };
-    let path_env = opencode_merged_path_env();
     let mut cmd = Command::new(&bin);
     apply_opencode_child_env(&mut cmd, &path_env);
     cmd.arg("models");
@@ -589,7 +597,7 @@ async fn try_list_opencode_models_via_cli() -> Vec<OpencodeModelListItem> {
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     // 列表失败时应快速回退到 opencode.json，避免拖慢 Composer 打开。
-    let Ok(output) = timeout(Duration::from_secs(4), cmd.output()).await else {
+    let Ok(output) = output_with_timeout(&mut cmd, Duration::from_secs(4)).await else {
         return Vec::new();
     };
     let Ok(output) = output else {

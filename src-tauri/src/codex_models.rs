@@ -2,6 +2,8 @@
 //! （`~/.codex/config.toml` 与各 Codex 模型档案的 config 信封）。
 
 use serde::Serialize;
+use crate::cli_probe::{output_with_timeout, ModelProbeCache};
+use std::time::Duration;
 
 use crate::claude_model_profiles::{load_store, ClaudeModelProfile};
 use crate::codex_binary::{apply_codex_child_env, codex_merged_path_env, find_codex_binary};
@@ -240,22 +242,9 @@ pub async fn codex_list_models(
     let mut out: Vec<CodexModelListItem> = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
 
-    let codex_path = find_codex_binary().ok();
-    if let Some(path) = codex_path {
-        let mut cmd = tokio::process::Command::new(&path);
-        cmd.arg("debug").arg("models");
-        let path_env = codex_merged_path_env();
-        apply_codex_child_env(&mut cmd, &path_env);
-        if let Ok(output) = cmd.output().await {
-            if output.status.success() {
-                if let Ok(stdout) = String::from_utf8(output.stdout) {
-                    for item in parse_codex_models_catalog(&stdout) {
-                        if seen.insert(item.id.clone()) {
-                            out.push(item);
-                        }
-                    }
-                }
-            }
+    for item in codex_model_catalog().await {
+        if seen.insert(item.id.clone()) {
+            out.push(item);
         }
     }
 
@@ -277,30 +266,27 @@ pub async fn codex_list_models(
 // 模型，避免 provider（如火山方舟 deepseek）以 invalid_request_error 拒绝。
 // ---------------------------------------------------------------------------
 
-/// `codex debug models` 目录的短 TTL 缓存（该查询会拉起 codex 二进制，较重）。
-static CODEX_MODEL_CATALOG_CACHE: std::sync::OnceLock<
-    std::sync::Mutex<Option<(std::time::Instant, std::collections::BTreeSet<String>)>>,
-> = std::sync::OnceLock::new();
+// Picker and execution guard share the same catalog, including failure cooldown.
+static CODEX_MODEL_CATALOG_CACHE: ModelProbeCache<CodexModelListItem> = ModelProbeCache::new();
 
-const CODEX_MODEL_CATALOG_CACHE_TTL_SECS: u64 = 60;
-
-fn cached_codex_model_catalog() -> Option<std::collections::BTreeSet<String>> {
-    let lock = CODEX_MODEL_CATALOG_CACHE.get_or_init(|| std::sync::Mutex::new(None));
-    let guard = lock.lock().ok()?;
-    let (at, models) = guard.as_ref()?;
-    if at.elapsed().as_secs() > CODEX_MODEL_CATALOG_CACHE_TTL_SECS {
-        None
-    } else {
-        Some(models.clone())
-    }
-}
-
-fn store_codex_model_catalog(models: std::collections::BTreeSet<String>) {
-    if let Some(lock) = CODEX_MODEL_CATALOG_CACHE.get() {
-        if let Ok(mut guard) = lock.lock() {
-            *guard = Some((std::time::Instant::now(), models));
+async fn codex_model_catalog() -> Vec<CodexModelListItem> {
+    CODEX_MODEL_CATALOG_CACHE.get_or_load(|| async {
+        // Binary discovery can run a login shell; keep it off Tokio's worker.
+        let Ok(Ok((path, path_env))) = tokio::task::spawn_blocking(|| {
+            find_codex_binary().map(|path| (path, codex_merged_path_env()))
+        }).await else {
+            return Vec::new();
+        };
+        let mut cmd = tokio::process::Command::new(path);
+        cmd.args(["debug", "models"]);
+        apply_codex_child_env(&mut cmd, &path_env);
+        match output_with_timeout(&mut cmd, Duration::from_secs(4)).await {
+            Ok(Ok(output)) if output.status.success() => {
+                parse_codex_models_catalog(&String::from_utf8_lossy(&output.stdout))
+            }
+            _ => Vec::new(),
         }
-    }
+    }).await
 }
 
 /// config.toml 是否已声明该模型（顶层 `model` / `[model_providers.*]` 的 `model`、`models`）。
@@ -321,31 +307,9 @@ pub(crate) async fn codex_model_is_known(model: &str) -> bool {
     if codex_model_configured_in(&envelope.config, model) {
         return true;
     }
-    if let Some(catalog) = cached_codex_model_catalog() {
-        return catalog.contains(model);
-    }
-
-    let mut catalog = std::collections::BTreeSet::new();
-    if let Some(path) = find_codex_binary().ok() {
-        let mut cmd = tokio::process::Command::new(&path);
-        cmd.arg("debug").arg("models");
-        let path_env = codex_merged_path_env();
-        apply_codex_child_env(&mut cmd, &path_env);
-        if let Ok(output) = cmd.output().await {
-            if output.status.success() {
-                if let Ok(stdout) = String::from_utf8(output.stdout) {
-                    for item in parse_codex_models_catalog(&stdout) {
-                        catalog.insert(item.id);
-                    }
-                }
-            }
-        }
-    }
-    if catalog.is_empty() {
-        return true;
-    }
-    store_codex_model_catalog(catalog.clone());
-    catalog.contains(model)
+    let catalog = codex_model_catalog().await;
+    // Preserve fail-open behavior for custom providers when discovery is unavailable.
+    catalog.is_empty() || catalog.iter().any(|item| item.id == model)
 }
 
 #[cfg(test)]

@@ -19,7 +19,8 @@ use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex as TokioMutex;
-use tokio::time::{timeout, Duration};
+use tokio::time::Duration;
+use crate::cli_probe::{output_with_timeout, ModelProbeCache};
 use uuid::Uuid;
 
 #[derive(Clone, Serialize)]
@@ -580,18 +581,25 @@ fn parse_qoder_models_cli_output(stdout: &str) -> Vec<QoderModelListItem> {
     out
 }
 
+static QODER_MODEL_CACHE: ModelProbeCache<QoderModelListItem> = ModelProbeCache::new();
+
 async fn try_list_qoder_models_via_cli() -> Vec<QoderModelListItem> {
-    let Ok(bin) = find_qoder_binary() else {
+    QODER_MODEL_CACHE.get_or_load(load_qoder_models_via_cli).await
+}
+
+async fn load_qoder_models_via_cli() -> Vec<QoderModelListItem> {
+    let Ok(Ok((bin, path_env))) = tokio::task::spawn_blocking(|| {
+        find_qoder_binary().map(|bin| (bin, qoder_merged_path_env()))
+    }).await else {
         return Vec::new();
     };
-    let path_env = qoder_merged_path_env();
     let mut cmd = Command::new(&bin);
     apply_qoder_child_env(&mut cmd, &path_env);
     cmd.arg("--list-models");
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
-    let Ok(output) = timeout(Duration::from_secs(4), cmd.output()).await else {
+    let Ok(output) = output_with_timeout(&mut cmd, Duration::from_secs(4)).await else {
         return Vec::new();
     };
     let Ok(output) = output else {
