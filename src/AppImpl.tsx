@@ -2695,6 +2695,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     let unlistenFilename: (() => void) | undefined;
     let unlistenContent: (() => void) | undefined;
     void listen("global-open-filename-search", (event) => {
@@ -2709,7 +2710,8 @@ export default function App() {
       openFilenameSearchPalette(scopeDir);
     })
       .then((fn) => {
-        unlistenFilename = fn;
+        if (cancelled) void safeUnlisten(fn);
+        else unlistenFilename = fn;
       })
       .catch(() => undefined);
     void listen("global-open-content-search", (event) => {
@@ -2719,10 +2721,12 @@ export default function App() {
       openContentSearchPalette(scopeDir);
     })
       .then((fn) => {
-        unlistenContent = fn;
+        if (cancelled) void safeUnlisten(fn);
+        else unlistenContent = fn;
       })
       .catch(() => undefined);
     return () => {
+      cancelled = true;
       void safeUnlisten(unlistenFilename);
       void safeUnlisten(unlistenContent);
     };
@@ -2730,6 +2734,7 @@ export default function App() {
 
   /** ⌘N / Ctrl+N：新建会话 */
   useEffect(() => {
+    let cancelled = false;
     let unlisten: (() => void) | undefined;
     void listen("global-create-new-session", () => {
       // 多窗口下：仅当前聚焦窗口触发新建会话，避免另一窗口被动弹窗/创建。
@@ -2747,10 +2752,12 @@ export default function App() {
       void handleManualNewRepositorySession(repo);
     })
       .then((fn) => {
-        unlisten = fn;
+        if (cancelled) void safeUnlisten(fn);
+        else unlisten = fn;
       })
       .catch(() => undefined);
     return () => {
+      cancelled = true;
       void safeUnlisten(unlisten);
     };
   }, []);

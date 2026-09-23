@@ -1,6 +1,7 @@
 import { marked } from "marked";
 import DOMPurify, { type Config } from "dompurify";
 import { isValidHttpUrl, normalizeAutolinkUrl } from "./autolinkUrl";
+import { createBoundedStringCache } from "./boundedStringCache";
 import { normalizeMarkdownForDisplay, normalizeMarkdownLineBreaks } from "./markdownDisplayNormalize";
 import {
   shouldRenderFencedBlockAsMermaid,
@@ -20,8 +21,13 @@ const DOMPURIFY_OPTIONS: Config = {
   FORBID_TAGS: ["style", "script"],
 };
 
-const DISPLAY_HTML_CACHE_MAX = 128;
-const displayHtmlCache = new Map<string, string>();
+/** 键是整段 Markdown 源，值是展示 HTML；两者都计入字符预算，单条过大的长文不缓存。 */
+const displayHtmlCache = createBoundedStringCache({
+  maxEntries: 128,
+  maxChars: 6 * 1024 * 1024,
+  maxEntryChars: 512 * 1024,
+  countKeyChars: true,
+});
 
 export function coerceMarkdownSourceText(input: unknown): string {
   if (input == null) return "";
@@ -418,23 +424,11 @@ const DEFAULT_ENHANCER: MarkdownHtmlEnhancer = {
 };
 
 function readDisplayHtmlCache(key: string): string | undefined {
-  const hit = displayHtmlCache.get(key);
-  if (hit === undefined) return undefined;
-  displayHtmlCache.delete(key);
-  displayHtmlCache.set(key, hit);
-  return hit;
+  return displayHtmlCache.get(key);
 }
 
 function writeDisplayHtmlCache(key: string, html: string): void {
-  if (displayHtmlCache.has(key)) {
-    displayHtmlCache.delete(key);
-  }
   displayHtmlCache.set(key, html);
-  while (displayHtmlCache.size > DISPLAY_HTML_CACHE_MAX) {
-    const oldest = displayHtmlCache.keys().next().value;
-    if (oldest === undefined) break;
-    displayHtmlCache.delete(oldest);
-  }
 }
 
 /** 在已有 HTML 字符串上注入复制按钮、外链规范化等聊天展示增强。 */

@@ -272,6 +272,7 @@ pub fn run() {
             app.manage(extension_registry);
             app.manage(agent_registry::AgentRegistry::new());
             composer_image_gc::spawn_composer_image_gc_scanner(app.handle().clone());
+            crate::acp_idle_reaper::spawn_acp_idle_reaper(app.handle().clone());
             {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -975,6 +976,9 @@ pub fn run() {
             if matches!(event, tauri::RunEvent::Reopen { .. }) {
                 let _ = app_handle.show();
                 let _ = wise_mascot::wise_main_window_focus(app_handle.clone());
+            }
+            if matches!(event, tauri::RunEvent::Exit) {
+                crate::app_shutdown::shutdown_managed_processes(app_handle);
             }
         });
 }

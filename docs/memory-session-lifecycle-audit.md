@@ -26,6 +26,29 @@
 3. `build_spawn_settings_payload_user_only_omits_empty_env`：实际用户设置载荷包含 env，与测试预期不符。
 4. `migration_registry_preserves_ordered_names`：运行注册表包含第 053 项迁移，测试预期名单止于 052。
 
+## 第二轮：多会话回收与缓存上限（2026-09-23）
+
+| 问题 | 触发与影响 | 修复位置 |
+| --- | --- | --- |
+| 退出应用不结束子进程 | Tauri 退出时不运行析构，`kill_on_drop` 也不生效；单次 Claude 任务、Codex / Cursor / OpenCode / DeepSeek 常驻进程、Stagehand sidecar、终端 PTY 会在应用退出后继续运行 | `src-tauri/src/app_shutdown.rs`：`RunEvent::Exit` 时逐个结束各 store 登记的进程，每个 store 最多等 1.5 s，终端锁最多等 0.5 s，卡住的 store 不阻塞退出；Claude 子进程另加 `kill_on_drop` 兜底 |
+| ACP 常驻进程只增不减 | 每个 Cursor / OpenCode / DeepSeek 标签首轮后常驻一个 agent 进程，只有关标签才结束 | `src-tauri/src/acp_idle_reaper.rs`：每分钟扫描，空闲 20 分钟或同一引擎超过 8 个会话（最久空闲的先回收，且至少空闲 2 分钟）时关闭进程；两次扫描之间有新回合则重新计时；摘除在 busy 锁内完成，不会和新回合抢同一个会话；下次发送经 `session/load` 接回原对话 |
+| CLI stderr 全量驻留 | Codex / OpenCode / Qoder 单次任务把 stderr 每行存进 `Vec`，长任务或刷屏日志无上限 | `src-tauri/src/cli_stderr_log.rs`：保留前 64 行和后 256 行，单行最多 4 KB，中间以省略标记连接 |
+| ACP 权限请求残留 | 中断、关闭或非常驻回合结束后，未应答的权限选项仍留在映射里 | `opencode_acp_commands.rs`：记录请求所属标签，上述三种收尾时清理 |
+| 工具输入不受截断 | 消息内存上限只截 text，`tool_use.input`（大文件写入、补丁）整份驻留 | `src/utils/sessionMessagesMemory.ts`：输入中的长字符串截到 100k 字符，未变化时保持引用 |
+| 完整记录模式不降级 | 打开「完整记录」后切走，会话仍绕过条数上限 | 同上及 `useClaudeSessions.ts`：只有当前会话和伴随窗格保留完整记录；其余会话切回尾窗并标记为部分记录，侧栏标题预先锁定 |
+| 关标签后的附属状态 | composer 图片草稿、后台压缩状态、hook 活动、Stagehand / 页面监控运行态、流式合并选项按标签累积 | `pruneLiveSessionSidecars` 周期清理；只清理空闲、无订阅者的条目，运行中的页面监控保留 |
+| Monaco 依赖模型只增不减 | 切换仓库、浏览大量文件后 `node_modules` 类型模型持续创建 | `src/services/monacoTypeScriptEnvironment.ts`：自有依赖模型 LRU 最多 240 个，跳过编辑器正在使用和本次同步需要的模型 |
+| Markdown 缓存只按条数限制 | 大代码块的高亮结果和展示 HTML 单条可达数 MB | `markdownCodeHighlight.ts`、`markdownRenderPipeline.ts`：同时限制总字符数和单条体积，键长计入 |
+| Tauri 监听卸载竞态 | 组件在 `listen()` resolve 前卸载，监听永不注销；composer 每次切会话都会重挂载 | `AppImpl.tsx`、`composer-region.tsx`、`useFreeClaudeCodeSetting.ts`：迟到的监听立即注销 |
+
+所有命令和引擎接口保留；回收对象都是可以重建的运行时状态。
+
+第二轮验证：
+
+- `bun run test`（项目脚本，按文件隔离）：4,086 通过，0 失败。裸 `bun test` 不隔离文件，跨文件 `mock.module` 互相污染，HEAD 上即有 82 项失败，本次前后失败集合一致。
+- `cargo test --lib -- --test-threads=4`：666 通过，0 失败，1 项手动基准默认忽略。新增 10 项测试覆盖回收选择、busy 锁下摘除、stderr 头尾保留、退出超时、终端锁中毒恢复，以及用真实 `/bin/sleep` 进程验证退出时逐个结束且不重复。
+- `bunx tsc -p tsconfig.app.json --noEmit`、`git diff --check`：通过。
+
 ## 验证边界
 
 本次是代码路径检查和可重复生命周期测试，未执行数小时真实 Wise UI、多引擎和大历史会话的持续压力运行。因此不能据此断言所有内存增长或卡顿均已消除。后续真实运行采样应同时记录主进程/WebView/子进程内存、存活子进程数和关闭会话后的回落情况，区分缓存保留、系统分配器保留与持续泄漏。

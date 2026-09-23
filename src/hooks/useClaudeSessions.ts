@@ -10,6 +10,9 @@ import {
 } from "react";
 import { message } from "antd";
 import { subscribeRepositorySessionPrefetch } from "../services/repositorySessionPrefetch";
+import { pruneComposerImageDrafts } from "../stores/composerImageDraftStore";
+import { pruneStagehandBrowseRuntimeSessions } from "../stores/stagehandBrowseRuntimeStore";
+import { prunePageMonitorRuntimeSessions } from "../stores/chromeDevtoolsMonitorRuntimeStore";
 import {
   collectDisplayedWorkspaceSessionIds,
   pickFirstRepositoryOwnedSidebarHistorySession,
@@ -100,6 +103,7 @@ import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import {
   CLAUDE_DISK_JSONL_TAIL_LINES_LAZY,
   CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
+  IN_MEMORY_DISPLAYED_SESSION_MESSAGES_MAX,
   IN_MEMORY_RECENT_SESSION_KEEP,
   IN_MEMORY_RECENT_SESSION_MESSAGES_MAX,
   IN_MEMORY_SESSION_MESSAGES_MAX,
@@ -137,6 +141,8 @@ import {
 import {
   applySessionsMemoryCap,
   capSessionMessagesForMemory,
+  downgradeUnlimitedTranscriptSession,
+  downgradeUnlimitedTranscriptsOutside,
   sessionMessagesFromJsonlLines,
 } from "../utils/sessionMessagesMemory";
 import {
@@ -919,6 +925,19 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     if (pruneCodexRpcReasoningEffortSessions(liveTabIds)) {
       sidecarChanged = true;
     }
+    for (const key of [...backgroundCompactStateRef.current.keys()]) {
+      if (liveKeys.has(key) || backgroundCompactStateRef.current.get(key)?.inFlight) continue;
+      backgroundCompactStateRef.current.delete(key);
+      sidecarChanged = true;
+    }
+    for (const key of [...recentHookActivityByTabRef.current.keys()]) {
+      if (liveKeys.has(key)) continue;
+      recentHookActivityByTabRef.current.delete(key);
+      sidecarChanged = true;
+    }
+    pruneComposerImageDrafts(liveTabIds);
+    pruneStagehandBrowseRuntimeSessions(liveTabIds);
+    prunePageMonitorRuntimeSessions(liveTabIds);
     notificationHub.pruneOrphanSessions(liveTabIds);
     pruneInvocationSnapshotMemory(collectInvocationSnapshotMemoryKeys(liveSessions));
     for (const key of [...streamingProcessActivityByTabRef.current.keys()]) {
@@ -2560,11 +2579,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       let changed = false;
       const next = prev.map((s) => {
         if (keep.has(s.id) || displayed.has(s.id)) {
-          if (s.transcriptMemoryUnlimited) return s;
+          if (s.transcriptMemoryUnlimited && keep.has(s.id)) return s;
           const perSessionMax =
             s.id === activeSessionId
               ? IN_MEMORY_SESSION_MESSAGES_MAX
-              : companionMemoryLimits.companionMax;
+              : keep.has(s.id)
+                ? companionMemoryLimits.companionMax
+                : IN_MEMORY_DISPLAYED_SESSION_MESSAGES_MAX;
+          if (s.transcriptMemoryUnlimited) {
+            changed = true;
+            return downgradeUnlimitedTranscriptSession(s, perSessionMax);
+          }
           if (s.messages.length <= perSessionMax) return s;
           changed = true;
           return {
@@ -2577,6 +2602,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
         // 最近切过的会话：保留热缓存正文，切回立即可见（Cursor 式切 tab）。
         if (recentWarm.has(s.id)) {
+          if (s.transcriptMemoryUnlimited) {
+            changed = true;
+            return downgradeUnlimitedTranscriptSession(s, IN_MEMORY_RECENT_SESSION_MESSAGES_MAX);
+          }
           if (s.messages.length <= IN_MEMORY_RECENT_SESSION_MESSAGES_MAX) return s;
           changed = true;
           return {
@@ -2643,7 +2672,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       cancelIdle = runWhenIdle(() => {
         pruneLiveSessionSidecars(sessionsRef.current);
         setSessions((prev) => {
-          const capped = applySessionsMemoryCap(prev, {
+          const viewed = new Set(companionSessionIdsRef.current);
+          if (activeSessionIdRef.current) viewed.add(activeSessionIdRef.current);
+          const downgraded = downgradeUnlimitedTranscriptsOutside(prev, viewed);
+          const capped = applySessionsMemoryCap(downgraded, {
             keepSessionIds: buildMemoryKeepSessionIds(prev),
             globalMessagesBudget: companionMemoryLimits.globalBudget,
             ...(hidden
@@ -2656,7 +2688,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
                 }
               : {}),
           });
-          return capped === prev ? prev : capped;
+          return capped;
         });
       }, { timeoutMs: hidden ? 1200 : 4000 });
     };

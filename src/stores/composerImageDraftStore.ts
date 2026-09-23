@@ -65,6 +65,31 @@ export function clearComposerImageDraft(bucketKey: string): void {
   setComposerImageDraft(bucketKey, EMPTY_IMAGES);
 }
 
+const SESSION_SCOPED_BUCKET_PREFIXES = ["hud:"] as const;
+
+function sessionIdOfBucket(bucketKey: string): string | null {
+  for (const prefix of SESSION_SCOPED_BUCKET_PREFIXES) {
+    if (bucketKey.startsWith(prefix)) return bucketKey.slice(prefix.length);
+  }
+  return bucketKey.includes(":") ? null : bucketKey;
+}
+
+/**
+ * 释放已关闭会话的图片草稿（base64 可达数 MB）。仍有订阅者的桶与非会话桶（如 `monitor-drawer:`）保留。
+ * @returns 释放的桶数
+ */
+export function pruneComposerImageDrafts(liveSessionIds: ReadonlySet<string>): number {
+  let removed = 0;
+  for (const key of [...buckets.keys()]) {
+    const sessionId = sessionIdOfBucket(key);
+    if (sessionId === null || liveSessionIds.has(sessionId)) continue;
+    if ((listeners.get(key)?.size ?? 0) > 0) continue;
+    buckets.delete(key);
+    removed += 1;
+  }
+  return removed;
+}
+
 /** 仅供测试重置模块级状态。 */
 export function resetComposerImageDraftStoreForTests(): void {
   buckets.clear();

@@ -85,36 +85,55 @@ const AUTO_DETECT_LANGUAGES = [
 let registered = false;
 
 /** 已完成代码块高亮缓存；流式阶段应跳过 hljs，避免每 token 重复解析。 */
+/** 键含完整代码文本、值是高亮 HTML（通常为源码数倍），两者都计入字符预算。 */
 const HIGHLIGHT_CACHE_MAX = 384;
-const highlightCache = new Map<string, { html: string; resolvedLang: string }>();
+const HIGHLIGHT_CACHE_MAX_CHARS = 8 * 1024 * 1024;
+const HIGHLIGHT_CACHE_MAX_ENTRY_CHARS = 768 * 1024;
+type HighlightResult = { html: string; resolvedLang: string };
+const highlightCache = new Map<string, HighlightResult>();
+let highlightCacheChars = 0;
 
 function highlightCacheKey(lang: string, text: string): string {
   return `${lang}\u0000${text}`;
 }
 
-function readHighlightCache(lang: string, text: string): { html: string; resolvedLang: string } | null {
-  return highlightCache.get(highlightCacheKey(lang, text)) ?? null;
+function highlightEntryChars(key: string, value: HighlightResult): number {
+  return key.length + value.html.length;
 }
 
-function writeHighlightCache(
-  lang: string,
-  text: string,
-  value: { html: string; resolvedLang: string },
-): void {
+function deleteHighlightEntry(key: string): void {
+  const previous = highlightCache.get(key);
+  if (!previous) return;
+  highlightCacheChars -= highlightEntryChars(key, previous);
+  highlightCache.delete(key);
+}
+
+function readHighlightCache(lang: string, text: string): HighlightResult | null {
   const key = highlightCacheKey(lang, text);
-  if (highlightCache.has(key)) {
-    highlightCache.set(key, value);
-    return;
-  }
-  if (highlightCache.size >= HIGHLIGHT_CACHE_MAX) {
-    const oldest = highlightCache.keys().next().value;
-    if (oldest) highlightCache.delete(oldest);
-  }
+  const hit = highlightCache.get(key);
+  if (!hit) return null;
+  highlightCache.delete(key);
+  highlightCache.set(key, hit);
+  return hit;
+}
+
+function writeHighlightCache(lang: string, text: string, value: HighlightResult): void {
+  const key = highlightCacheKey(lang, text);
+  deleteHighlightEntry(key);
+  const size = highlightEntryChars(key, value);
+  if (size > HIGHLIGHT_CACHE_MAX_ENTRY_CHARS) return;
   highlightCache.set(key, value);
+  highlightCacheChars += size;
+  while (highlightCache.size > HIGHLIGHT_CACHE_MAX || highlightCacheChars > HIGHLIGHT_CACHE_MAX_CHARS) {
+    const oldest = highlightCache.keys().next().value;
+    if (oldest === undefined) break;
+    deleteHighlightEntry(oldest);
+  }
 }
 
 export function clearMarkdownCodeHighlightCache(): void {
   highlightCache.clear();
+  highlightCacheChars = 0;
 }
 
 function ensureLanguagesRegistered(): void {

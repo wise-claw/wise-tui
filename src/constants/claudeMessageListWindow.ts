@@ -34,8 +34,17 @@ export const IN_MEMORY_RECENT_SESSION_KEEP = 16;
 /** 热缓存中非当前会话的每会话消息上限（低于活动会话上限，控制总内存） */
 export const IN_MEMORY_RECENT_SESSION_MESSAGES_MAX = 40;
 
+/** 侧栏展示但未打开的会话：标题已锁进 diskPreview，只留少量尾部供预览与快速切换。 */
+export const IN_MEMORY_DISPLAYED_SESSION_MESSAGES_MAX = 24;
+
 /** 单条 message part 文本/tool 输出在内存中的字符上限 */
 export const IN_MEMORY_MESSAGE_PART_TEXT_MAX = 10_000;
+
+/**
+ * tool_use 入参中单个字符串（Write 全文、Edit new_string、补丁）的内存上限。
+ * 文件变更卡片只渲染前 2500 行，保留开头约 1250 行足够展示，超出部分只影响巨型整文件写入。
+ */
+export const IN_MEMORY_TOOL_INPUT_STRING_MAX = 100_000;
 
 /** 单仓库磁盘索引合并后最多保留的无消息历史标签数（其余仅保留 preview 在磁盘） */
 export const MAX_REPO_DISK_INDEX_SESSIONS = 24;

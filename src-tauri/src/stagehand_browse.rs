@@ -164,6 +164,19 @@ pub struct StagehandBrowseState {
     sessions: Arc<Mutex<HashMap<String, SidecarSession>>>,
 }
 
+impl StagehandBrowseState {
+    /// 应用退出时结束全部 sidecar 进程；返回结束的会话数。
+    pub(crate) async fn shutdown_all(&self) -> usize {
+        let sessions: Vec<SidecarSession> =
+            self.sessions.lock().await.drain().map(|(_, s)| s).collect();
+        let count = sessions.len();
+        for mut session in sessions {
+            let _ = session.child.kill().await;
+        }
+        count
+    }
+}
+
 impl Default for StagehandBrowseState {
     fn default() -> Self {
         Self {

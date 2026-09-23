@@ -281,7 +281,7 @@ fn attach_qoder_child_io(
         }
     });
 
-    let stderr_lines = Arc::new(TokioMutex::new(Vec::<String>::new()));
+    let stderr_lines = Arc::new(TokioMutex::new(crate::cli_stderr_log::BoundedStderrLog::default()));
     let stderr_lines_reader = stderr_lines.clone();
     let app_stderr = ctx.app.clone();
     let session_id_stderr = ctx.session_id.clone();
@@ -294,7 +294,7 @@ fn attach_qoder_child_io(
             if trimmed.is_empty() {
                 continue;
             }
-            stderr_lines_reader.lock().await.push(trimmed.to_string());
+            stderr_lines_reader.lock().await.push(trimmed);
             if stderr_line_is_actionable(trimmed) {
                 emit_qoder_stdout_line(
                     &app_stderr,
@@ -328,7 +328,7 @@ fn attach_qoder_child_io(
 
         let success = exit_status.map(|status| status.success()).unwrap_or(false);
         let stdout_err = stdout_error_reader.lock().await.clone();
-        let lines = stderr_lines.lock().await.clone();
+        let lines = stderr_lines.lock().await.lines();
         if !success {
             if used_resume
                 && allow_resume_retry

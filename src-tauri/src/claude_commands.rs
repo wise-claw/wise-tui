@@ -95,6 +95,35 @@ impl Default for ClaudeProcessState {
     }
 }
 
+impl ClaudeProcessState {
+    /// 应用退出时向所有登记的 Claude 子进程发结束信号并关闭 stdin；返回发出信号的进程数。
+    /// 进程句柄留在槽位中，reader 任务按原路径观察退出。
+    pub(crate) async fn kill_all_children(&self) -> usize {
+        self.claude_stdin_by_session.lock().await.clear();
+        self.pending_stdin_by_spawn_id.lock().await.clear();
+        *self.current_session_id.lock().await = None;
+
+        let mut slots: Vec<Arc<TokioMutex<Option<Child>>>> = vec![self.current_process.clone()];
+        slots.extend(self.active_child_by_claude_session.lock().await.values().cloned());
+        slots.extend(self.active_child_by_invocation_key.lock().await.values().cloned());
+
+        let mut seen: HashSet<*const TokioMutex<Option<Child>>> = HashSet::new();
+        let mut signalled = 0;
+        for slot in slots {
+            if !seen.insert(Arc::as_ptr(&slot)) {
+                continue;
+            }
+            let mut guard = slot.lock().await;
+            if let Some(child) = guard.as_mut() {
+                if child.id().is_some() && child.start_kill().is_ok() {
+                    signalled += 1;
+                }
+            }
+        }
+        signalled
+    }
+}
+
 fn normalize_claude_spawn_limit(raw: Option<u32>) -> u32 {
     let v = raw.unwrap_or(16);
     v.clamp(1, 32)
@@ -1756,6 +1785,8 @@ async fn spawn_claude_process(
         llm_traffic_capture,
         user_settings.as_ref(),
     );
+    // 所有主动结束路径都会先 kill 再清槽位；这里兜住句柄被意外丢弃的情况，不留孤儿进程。
+    cmd.kill_on_drop(true);
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
@@ -2809,6 +2840,55 @@ pub(crate) async fn close_streaming_session(
     registry.remove(&sid);
 
     Ok(())
+}
+
+#[cfg(all(test, unix))]
+mod process_state_shutdown_tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn sleeper() -> Child {
+        tokio::process::Command::new("/bin/sleep")
+            .arg("30")
+            .kill_on_drop(true)
+            .spawn()
+            .expect("spawn sleep")
+    }
+
+    #[tokio::test]
+    async fn kill_all_children_signals_each_registered_process_once() {
+        let state = ClaudeProcessState::default();
+        *state.current_process.lock().await = Some(sleeper());
+        let shared = Arc::new(TokioMutex::new(Some(sleeper())));
+        state
+            .active_child_by_claude_session
+            .lock()
+            .await
+            .insert("sid".into(), shared.clone());
+        state
+            .active_child_by_invocation_key
+            .lock()
+            .await
+            .insert("inv".into(), shared.clone());
+        state
+            .active_child_by_invocation_key
+            .lock()
+            .await
+            .insert("empty".into(), Arc::new(TokioMutex::new(None)));
+
+        assert_eq!(state.kill_all_children().await, 2);
+
+        for slot in [state.current_process.clone(), shared] {
+            let mut guard = slot.lock().await;
+            let child = guard.as_mut().expect("child kept in slot");
+            let status = tokio::time::timeout(Duration::from_secs(5), child.wait())
+                .await
+                .expect("process exits after kill")
+                .expect("wait");
+            assert!(!status.success());
+        }
+        assert_eq!(state.kill_all_children().await, 0);
+    }
 }
 
 #[cfg(test)]

@@ -76,6 +76,19 @@ pub(crate) struct CodexRpcSessionStore {
     pub(crate) cancelled: Arc<TokioMutex<HashSet<String>>>,
 }
 
+impl CodexRpcSessionStore {
+    /// 应用退出时关闭全部 app-server 子进程；返回关闭的会话数。
+    pub(crate) async fn shutdown_all(&self) -> usize {
+        let sessions: Vec<_> = self.sessions.lock().await.drain().map(|(_, s)| s).collect();
+        self.cancelled.lock().await.clear();
+        let count = sessions.len();
+        for session in sessions {
+            let _ = session.lock().await.shutdown().await;
+        }
+        count
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Command parameters
 // ---------------------------------------------------------------------------

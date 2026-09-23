@@ -4,6 +4,8 @@ export interface BoundedStringCacheOptions {
   maxChars: number;
   /** 单项超过此上限时不缓存，避免一个异常大文件挤掉整个热集。 */
   maxEntryChars?: number;
+  /** 键本身就是大段内容（如整段 Markdown 源）时，把键长也计入预算。 */
+  countKeyChars?: boolean;
 }
 
 export interface BoundedStringCache {
@@ -22,13 +24,17 @@ export function createBoundedStringCache(options: BoundedStringCacheOptions): Bo
     1,
     Math.min(maxChars, Math.floor(options.maxEntryChars ?? maxChars)),
   );
+  const countKeyChars = options.countKeyChars === true;
   const entries = new Map<string, string>();
   let chars = 0;
+
+  const entryChars = (key: string, value: string): number =>
+    value.length + (countKeyChars ? key.length : 0);
 
   const remove = (key: string): void => {
     const previous = entries.get(key);
     if (previous === undefined) return;
-    chars -= previous.length;
+    chars -= entryChars(key, previous);
     entries.delete(key);
   };
 
@@ -51,9 +57,10 @@ export function createBoundedStringCache(options: BoundedStringCacheOptions): Bo
     },
     set(key, value) {
       remove(key);
-      if (value.length > maxEntryChars) return false;
+      const size = entryChars(key, value);
+      if (size > maxEntryChars) return false;
       entries.set(key, value);
-      chars += value.length;
+      chars += size;
       evictToBudget();
       return entries.has(key);
     },

@@ -70,5 +70,5 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib cli_probe::tests::benchmar
 
 ## 后续可选项
 
-- 应用退出时没有统一结束仍在运行的 Claude / Codex 子进程。常驻会话会因 stdin 关闭自行退出，但单次任务会继续跑完当前工具调用；如需「退出即停止」，可在 `RunEvent::Exit` 中结束 `ClaudeProcessState` 登记的子进程。
+- ~~应用退出时没有统一结束仍在运行的 Claude / Codex 子进程。~~ 已在 `src-tauri/src/app_shutdown.rs` 处理，见 `docs/memory-session-lifecycle-audit.md` 第二轮。
 - 守卫测试只检查命令体本身，不追踪其调用的辅助函数；新增命令仍需按「会等待进程或 libgit2 就用 async + spawn_blocking」的约定编写。

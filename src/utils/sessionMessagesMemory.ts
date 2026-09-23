@@ -2,6 +2,7 @@ import {
   IN_MEMORY_GLOBAL_MESSAGES_BUDGET,
   IN_MEMORY_MESSAGE_PART_TEXT_MAX,
   IN_MEMORY_SESSION_MESSAGES_MAX,
+  IN_MEMORY_TOOL_INPUT_STRING_MAX,
 } from "../constants/claudeMessageListWindow";
 import type { ClaudeMessage, ClaudeSession, MessagePart } from "../types";
 import { parseClaudeSessionJsonlLines } from "./claudeSessionJsonl";
@@ -25,10 +26,53 @@ function capPartText(
   return keep === "head" ? text.slice(0, max) : text.slice(-max);
 }
 
-/** 截断单条消息内过大的 text / reasoning / tool 输出，避免少数巨型 part 占满堆。 */
+function capToolInputString(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const head = text.slice(0, max);
+  const lastNewline = head.lastIndexOf("\n");
+  return lastNewline > max / 2 ? head.slice(0, lastNewline + 1) : head;
+}
+
+const TOOL_INPUT_CAP_MAX_DEPTH = 4;
+
+function capToolInputValue(value: unknown, max: number, depth: number): unknown {
+  if (typeof value === "string") return capToolInputString(value, max);
+  if (depth >= TOOL_INPUT_CAP_MAX_DEPTH || !value || typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next = value.map((item) => {
+      const capped = capToolInputValue(item, max, depth + 1);
+      if (capped !== item) changed = true;
+      return capped;
+    });
+    return changed ? next : value;
+  }
+  let changed = false;
+  const record = value as Record<string, unknown>;
+  const next: Record<string, unknown> = {};
+  for (const key of Object.keys(record)) {
+    const item = record[key];
+    const capped = capToolInputValue(item, max, depth + 1);
+    if (capped !== item) changed = true;
+    next[key] = capped;
+  }
+  return changed ? next : value;
+}
+
+/** 截断 tool_use 入参里的超长字符串（保留开头、按行边界），未超限时返回原引用。 */
+export function capToolInputForMemory(
+  input: Record<string, unknown>,
+  max: number = IN_MEMORY_TOOL_INPUT_STRING_MAX,
+): Record<string, unknown> {
+  if (!input || typeof input !== "object") return input;
+  return capToolInputValue(input, max, 0) as Record<string, unknown>;
+}
+
+/** 截断单条消息内过大的 text / reasoning / tool 输出与入参，避免少数巨型 part 占满堆。 */
 export function trimMessagePartsForMemory(
   messages: ClaudeMessage[],
   partTextMax: number = IN_MEMORY_MESSAGE_PART_TEXT_MAX,
+  toolInputStringMax: number = IN_MEMORY_TOOL_INPUT_STRING_MAX,
 ): ClaudeMessage[] {
   let changed = false;
   const next = messages.map((message) => {
@@ -55,6 +99,14 @@ export function trimMessagePartsForMemory(
           nextPart = {
             ...(nextPart as Extract<MessagePart, { type: "tool_use" }>),
             error: capPartText(part.error, partTextMax),
+          };
+        }
+        const cappedInput = capToolInputForMemory(part.input, toolInputStringMax);
+        if (cappedInput !== part.input) {
+          partsChanged = true;
+          nextPart = {
+            ...(nextPart as Extract<MessagePart, { type: "tool_use" }>),
+            input: cappedInput,
           };
         }
         return nextPart;
@@ -214,6 +266,42 @@ function enforceGlobalMessagesBudget(
     ),
     changed: true,
   };
+}
+
+/**
+ * 全量 transcript 只允许留在正在查看的会话上：其余会话清掉 `transcriptMemoryUnlimited`
+ * 并回到尾部窗口，切回时按 partial 再从磁盘补齐。
+ */
+export function downgradeUnlimitedTranscriptSession(
+  session: ClaudeSession,
+  max: number = IN_MEMORY_SESSION_MESSAGES_MAX,
+): ClaudeSession {
+  if (!session.transcriptMemoryUnlimited) return session;
+  if (session.messages.length <= max) {
+    return { ...session, transcriptMemoryUnlimited: false };
+  }
+  return {
+    ...session,
+    diskPreview: retainSessionListPreviewOnMessageDrop(session),
+    messages: capSessionMessagesForMemory(session.messages, max),
+    diskTranscriptPartial: true,
+    transcriptMemoryUnlimited: false,
+  };
+}
+
+export function downgradeUnlimitedTranscriptsOutside(
+  sessions: ClaudeSession[],
+  viewedSessionIds: ReadonlySet<string>,
+  max: number = IN_MEMORY_SESSION_MESSAGES_MAX,
+): ClaudeSession[] {
+  let changed = false;
+  const next = sessions.map((session) => {
+    if (!session.transcriptMemoryUnlimited || viewedSessionIds.has(session.id)) return session;
+    if (session.status === "running" || session.status === "connecting") return session;
+    changed = true;
+    return downgradeUnlimitedTranscriptSession(session, max);
+  });
+  return changed ? next : sessions;
 }
 
 export function applySessionsMemoryCap(

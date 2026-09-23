@@ -209,6 +209,21 @@ export function setStagehandBrowseScreenshot(sessionId: string, path: string | n
   );
 }
 
+/**
+ * 释放已关闭会话的浏览状态与日志。非 idle 或仍有订阅者的条目保留。
+ * @returns 释放的会话数
+ */
+export function pruneStagehandBrowseRuntimeSessions(liveSessionIds: ReadonlySet<string>): number {
+  let removed = 0;
+  for (const [id, state] of [...stateBySessionId.entries()]) {
+    if (liveSessionIds.has(id) || state.status !== "idle") continue;
+    if ((listenersBySessionId.get(id)?.size ?? 0) > 0) continue;
+    stateBySessionId.delete(id);
+    removed += 1;
+  }
+  return removed;
+}
+
 /** @internal test helper */
 export function resetStagehandBrowseRuntimeForTests(): void {
   stateBySessionId.clear();

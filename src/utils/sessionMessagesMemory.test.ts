@@ -6,6 +6,8 @@ import {
   applySessionMemoryCap,
   applySessionsMemoryCap,
   capSessionMessagesForMemory,
+  downgradeUnlimitedTranscriptSession,
+  downgradeUnlimitedTranscriptsOutside,
   sessionMessagesFromJsonlLines,
   trimMessagePartsForMemory,
 } from "./sessionMessagesMemory";
@@ -171,6 +173,83 @@ describe("sessionMessagesMemory", () => {
     if (trimmed[0]?.parts[0]?.type === "tool_use") {
       expect((trimmed[0].parts[0].output ?? "").length).toBeLessThan(20_000);
     }
+  });
+
+  test("trimMessagePartsForMemory caps oversized tool input strings and keeps small inputs by reference", () => {
+    const bigLine = "x".repeat(99);
+    const bigContent = Array.from({ length: 3_000 }, () => bigLine).join("\n");
+    const smallInput = { file_path: "/r/a.ts", old_string: "a", new_string: "b" };
+    const bigInput = {
+      file_path: "/r/big.ts",
+      content: bigContent,
+      edits: [{ old_string: "a", new_string: bigContent }],
+    };
+    const messages = [
+      {
+        id: 1,
+        role: "assistant" as const,
+        content: "",
+        parts: [
+          { type: "tool_use" as const, id: "s", name: "Edit", input: smallInput, status: "completed" as const },
+          { type: "tool_use" as const, id: "b", name: "Write", input: bigInput, status: "completed" as const },
+        ],
+        timestamp: 1,
+      },
+    ];
+    const trimmed = trimMessagePartsForMemory(messages, 10_000, 5_000);
+    const [small, big] = trimmed[0]!.parts;
+    expect(small?.type === "tool_use" && small.input).toBe(smallInput);
+    if (big?.type !== "tool_use") throw new Error("expected tool_use");
+    const content = big.input.content as string;
+    expect(content.length).toBeLessThanOrEqual(5_000);
+    expect(content.endsWith("\n")).toBe(true);
+    expect(bigContent.startsWith(content)).toBe(true);
+    expect(big.input.file_path).toBe("/r/big.ts");
+    const edit = (big.input.edits as Array<Record<string, string>>)[0]!;
+    expect(edit.new_string!.length).toBeLessThanOrEqual(5_000);
+    expect(edit.old_string).toBe("a");
+    expect(bigInput.content).toBe(bigContent);
+    expect(trimMessagePartsForMemory(trimmed, 10_000, 5_000)).toBe(trimmed);
+  });
+
+  test("downgradeUnlimitedTranscriptsOutside keeps viewed/running sessions and tail-caps the rest", () => {
+    const mk = (id: string, n: number, extra: Record<string, unknown> = {}) =>
+      ({
+        id,
+        claudeSessionId: id,
+        repositoryPath: "/r",
+        status: "idle",
+        transcriptMemoryUnlimited: true,
+        messages: Array.from({ length: n }, (_, i) => ({
+          id: i,
+          role: "user" as const,
+          content: i === 0 ? `${id}-title` : `m${i}`,
+          parts: [{ type: "text" as const, text: i === 0 ? `${id}-title` : `m${i}` }],
+          timestamp: i,
+        })),
+        ...extra,
+      }) as unknown as import("../types").ClaudeSession;
+    const viewed = mk("viewed", 500);
+    const running = mk("running", 500, { status: "running" });
+    const background = mk("bg", 500);
+    const small = mk("small", 3);
+    const plain = { ...mk("plain", 5), transcriptMemoryUnlimited: false };
+    const input = [viewed, running, background, small, plain];
+
+    const out = downgradeUnlimitedTranscriptsOutside(input, new Set(["viewed"]), 64);
+    expect(out[0]).toBe(viewed);
+    expect(out[1]).toBe(running);
+    expect(out[2]!.messages.length).toBe(64);
+    expect(out[2]!.transcriptMemoryUnlimited).toBe(false);
+    expect(out[2]!.diskTranscriptPartial).toBe(true);
+    expect(out[2]!.diskPreview).toContain("bg-title");
+    expect(out[3]!.messages).toBe(small.messages);
+    expect(out[3]!.transcriptMemoryUnlimited).toBe(false);
+    expect(out[4]).toBe(plain);
+
+    const again = downgradeUnlimitedTranscriptsOutside(out, new Set(["viewed"]), 64);
+    expect(again).toBe(out);
+    expect(downgradeUnlimitedTranscriptSession(plain)).toBe(plain);
   });
 
   test("applySessionsMemoryCap clears idle sessions when global budget exceeded", () => {

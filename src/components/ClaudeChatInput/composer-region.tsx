@@ -1338,6 +1338,7 @@ function ComposerInner({
   useEffect(() => {
     if (!isComposerSherpaSpeechPlatform()) return;
     void getComposerSherpaSpeechCapabilities().then(setSherpaSpeechCaps);
+    let cancelled = false;
     let unlisten: (() => void) | undefined;
     void listenComposerSherpaModelsStatus((payload) => {
       if (payload.phase === "downloading") {
@@ -1367,9 +1368,11 @@ function ComposerInner({
         setSherpaDownloadError(payload.message || "SenseVoice 模型下载失败");
       }
     }).then((fn) => {
-      unlisten = fn;
+      if (cancelled) fn();
+      else unlisten = fn;
     });
     return () => {
+      cancelled = true;
       unlisten?.();
     };
   }, []);

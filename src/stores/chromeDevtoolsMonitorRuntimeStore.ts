@@ -524,6 +524,26 @@ export async function togglePageMonitor(input: {
   await startPageMonitor(input);
 }
 
+/**
+ * 释放已关闭会话的监控状态。仍在监控/启动/停止中或仍有订阅者的条目保留。
+ * @returns 释放的会话数
+ */
+export function prunePageMonitorRuntimeSessions(liveSessionIds: ReadonlySet<string>): number {
+  let removed = 0;
+  const keys = new Set([...stateBySessionId.keys(), ...internalsBySessionId.keys()]);
+  for (const id of keys) {
+    if (liveSessionIds.has(id)) continue;
+    if ((stateBySessionId.get(id)?.status ?? "idle") !== "idle") continue;
+    if ((listenersBySessionId.get(id)?.size ?? 0) > 0) continue;
+    const internals = internalsBySessionId.get(id);
+    if (internals) clearIdleTimer(internals);
+    internalsBySessionId.delete(id);
+    stateBySessionId.delete(id);
+    removed += 1;
+  }
+  return removed;
+}
+
 /** @internal */
 export function resetPageMonitorRuntimeForTests(): void {
   for (const internals of internalsBySessionId.values()) {

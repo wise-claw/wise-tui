@@ -36,6 +36,20 @@ pub(crate) struct CursorAcpSessionStore {
     pub(crate) turn_epoch: Arc<TokioMutex<HashMap<String, u64>>>,
 }
 
+impl CursorAcpSessionStore {
+    /// 应用退出时关闭全部 ACP 子进程；返回关闭的会话数。
+    pub(crate) async fn shutdown_all(&self) -> usize {
+        let sessions: Vec<_> = self.sessions.lock().await.drain().map(|(_, s)| s).collect();
+        self.busy.lock().await.clear();
+        self.turn_epoch.lock().await.clear();
+        let count = sessions.len();
+        for session in sessions {
+            let _ = session.lock().await.shutdown().await;
+        }
+        count
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ExecuteCursorAcpParams {

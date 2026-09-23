@@ -36,4 +36,22 @@ describe("createBoundedStringCache", () => {
     expect(cache.get("a")).toBeUndefined();
     expect(cache.chars).toBe(0);
   });
+
+  test("countKeyChars budgets large keys and rejects oversized key+value entries", () => {
+    const cache = createBoundedStringCache({
+      maxEntries: 10,
+      maxChars: 20,
+      maxEntryChars: 12,
+      countKeyChars: true,
+    });
+    cache.set("aaaa", "1111");
+    cache.set("bbbb", "2222");
+    expect(cache.chars).toBe(16);
+    cache.set("cccc", "3333");
+    expect(cache.get("aaaa")).toBeUndefined();
+    expect(cache.chars).toBe(16);
+    expect(cache.set("dddddddd", "12345")).toBe(false);
+    expect(cache.set("bbbb", "")).toBe(true);
+    expect(cache.chars).toBe(12);
+  });
 });

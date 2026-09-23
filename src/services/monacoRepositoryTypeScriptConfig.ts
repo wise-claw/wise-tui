@@ -211,6 +211,9 @@ export async function registerRepositoryTypeScriptLibs(
         disposable.dispose();
       }
       ACTIVE_REPOSITORY_TYPE_LIBS.delete(owner);
+      if (REGISTERED_REPOSITORY_TYPE_LIBS.get(active.repositoryPath)?.disposables === active.disposables) {
+        REGISTERED_REPOSITORY_TYPE_LIBS.delete(active.repositoryPath);
+      }
     }
   }
 

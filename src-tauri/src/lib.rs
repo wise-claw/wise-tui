@@ -1,11 +1,14 @@
 mod acp_engine;
+mod acp_idle_reaper;
 mod agents_explorer;
+mod app_shutdown;
 mod app_state_commands;
 mod agent_registry;
 mod assistants;
 mod ai_usage_multi_source;
 mod child_slot_wait;
 mod cli_probe;
+mod cli_stderr_log;
 #[cfg(test)]
 mod ipc_thread_guard_tests;
 #[cfg(unix)]

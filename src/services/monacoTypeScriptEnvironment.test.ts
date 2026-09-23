@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   applyWiseTypeScriptDefaults,
   buildMonacoLargeModuleStub,
+  ensureMonacoModel,
+  evictStaleDependencyModels,
   extractMonacoTypeScriptModuleSpecifiers,
+  monacoUriForRepositoryPath,
   isScopePackageSpecifier,
   resolveImportSpecifierToRelativePath,
   resolveMonacoRepositoryRelativeImportCandidates,
@@ -348,5 +351,77 @@ describe("resolveScopePackageCandidates — npm scope 包", () => {
     expect(resolveScopePackageCandidates("./foo")).toEqual([]);
     expect(resolveScopePackageCandidates("lodash")).toEqual([]);
     expect(resolveScopePackageCandidates("@scope")).toEqual([]);
+  });
+});
+
+describe("Monaco dependency model retention", () => {
+  type FakeModel = {
+    value: string;
+    attached: boolean;
+    disposed: boolean;
+    getValue(): string;
+    setValue(v: string): void;
+    isAttachedToEditor(): boolean;
+    isDisposed(): boolean;
+    dispose(): void;
+  };
+
+  function createFakeMonaco() {
+    const models = new Map<string, FakeModel>();
+    const monaco = {
+      Uri: { parse: (value: string) => ({ value, toString: () => value }) },
+      editor: {
+        getModel: (uri: { value: string }) => models.get(uri.value) ?? null,
+        createModel: (content: string, _lang: string, uri: { value: string }) => {
+          const model: FakeModel = {
+            value: content,
+            attached: false,
+            disposed: false,
+            getValue() {
+              return this.value;
+            },
+            setValue(v: string) {
+              this.value = v;
+            },
+            isAttachedToEditor() {
+              return this.attached;
+            },
+            isDisposed() {
+              return this.disposed;
+            },
+            dispose() {
+              this.disposed = true;
+              models.delete(uri.value);
+            },
+          };
+          models.set(uri.value, model);
+          return model;
+        },
+      },
+    };
+    return { monaco: monaco as unknown as Parameters<typeof ensureMonacoModel>[0], models };
+  }
+
+  test("evicts least recently used owned models but keeps protected and attached ones", () => {
+    const { monaco, models } = createFakeMonaco();
+    const uri = (i: number) => monacoUriForRepositoryPath(`src/f${i}.ts`, "/repo");
+    for (let i = 0; i < 10; i += 1) ensureMonacoModel(monaco, "/repo", `src/f${i}.ts`, `export const v${i} = ${i};`);
+    // f0 再次被使用，变成最近使用；f1 挂在编辑器上。
+    ensureMonacoModel(monaco, "/repo", "src/f0.ts", "export const v0 = 0;");
+    models.get(uri(1))!.attached = true;
+
+    const disposed = evictStaleDependencyModels(monaco, new Set([uri(2)]), 4);
+    expect(disposed).toBe(6);
+    const remaining = [...models.keys()].sort();
+    expect(remaining).toEqual([uri(0), uri(1), uri(2), uri(9)].sort());
+    expect(evictStaleDependencyModels(monaco, new Set(), 4)).toBe(0);
+  });
+
+  test("models disposed elsewhere are forgotten without double dispose", () => {
+    const { monaco, models } = createFakeMonaco();
+    for (let i = 0; i < 3; i += 1) ensureMonacoModel(monaco, "/repo", `src/g${i}.ts`, "x");
+    models.get(monacoUriForRepositoryPath("src/g0.ts", "/repo"))!.dispose();
+    expect(evictStaleDependencyModels(monaco, new Set(), 1)).toBe(1);
+    expect(models.size).toBe(1);
   });
 });

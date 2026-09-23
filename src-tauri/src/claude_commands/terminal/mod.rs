@@ -1181,6 +1181,14 @@ impl TerminalManager {
         Ok(())
     }
 
+    /// 应用退出时结束全部 PTY 会话；返回结束的会话数。
+    pub(crate) fn terminate_all(&mut self) -> usize {
+        let sessions: Vec<TerminalSession> = self.sessions.drain().map(|(_, s)| s).collect();
+        let count = sessions.len();
+        sessions.into_iter().for_each(terminate_terminal_session);
+        count
+    }
+
     fn close_repository_runner(&mut self, workspace_id: &str, cwd: &str) -> Result<(), String> {
         const RUNNER_TERMINAL_ID: &str = "topbar-runner";
         let exact_key = session_key(workspace_id, RUNNER_TERMINAL_ID);

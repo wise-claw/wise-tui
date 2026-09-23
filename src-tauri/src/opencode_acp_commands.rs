@@ -37,8 +37,24 @@ pub(crate) struct AcpSessionStore {
     /// superseded prompt loop must not clear `busy` or emit complete for the new turn.
     pub(crate) turn_epoch: Arc<TokioMutex<HashMap<String, u64>>>,
     /// Last advertised permission options per request id, so a UI decision can be
-    /// resolved against the exact option ids the agent expects.
-    pub(crate) permission_options: Arc<TokioMutex<HashMap<String, Value>>>,
+    /// resolved against the exact option ids the agent expects. Value carries the
+    /// owning Wise tab id so interrupt / shutdown can drop unanswered requests.
+    pub(crate) permission_options: Arc<TokioMutex<HashMap<String, (String, Value)>>>,
+}
+
+impl AcpSessionStore {
+    /// 应用退出时关闭全部 ACP 子进程；返回关闭的会话数。
+    pub(crate) async fn shutdown_all(&self) -> usize {
+        let sessions: Vec<_> = self.sessions.lock().await.drain().map(|(_, s)| s).collect();
+        self.busy.lock().await.clear();
+        self.turn_epoch.lock().await.clear();
+        self.permission_options.lock().await.clear();
+        let count = sessions.len();
+        for session in sessions {
+            let _ = session.lock().await.shutdown().await;
+        }
+        count
+    }
 }
 
 /// Tauri state for the OpenCode engine (distinct type so it coexists with DeepSeek).
@@ -622,6 +638,7 @@ async fn execute_acp_turn(
         );
 
         if !persistent_tab {
+            forget_permission_requests(&store_loop, &session_id_loop).await;
             store_loop.sessions.lock().await.remove(&session_id_loop);
             let mut guard = session_arc_loop.lock().await;
             let _ = guard.shutdown().await;
@@ -653,7 +670,7 @@ async fn handle_server_request(
             }
             {
                 let mut options = store.permission_options.lock().await;
-                options.insert(key.clone(), params.clone());
+                options.insert(key.clone(), (wise_session_id.to_string(), params.clone()));
             }
             let payload = permission_event_payload(wise_session_id, &key, &params);
             let _ = app.emit(engine.permission_request_event(), payload);
@@ -690,6 +707,7 @@ async fn interrupt_acp(
         *entry = entry.saturating_add(1);
     }
     store.busy.lock().await.remove(session_id);
+    forget_permission_requests(store, session_id).await;
 
     let session_arc = {
         let sessions = store.sessions.lock().await;
@@ -717,11 +735,21 @@ async fn shutdown_acp(store: &AcpSessionStore, session_id: &str) -> Result<(), S
     };
     store.turn_epoch.lock().await.remove(session_id);
     store.busy.lock().await.remove(session_id);
+    forget_permission_requests(store, session_id).await;
     if let Some(arc) = session_arc {
         let mut guard = arc.lock().await;
         let _ = guard.shutdown().await;
     }
     Ok(())
+}
+
+/// 中断 / 关闭后，该标签未答复的权限请求不会再被响应。
+async fn forget_permission_requests(store: &AcpSessionStore, session_id: &str) {
+    store
+        .permission_options
+        .lock()
+        .await
+        .retain(|_, (owner, _)| owner != session_id);
 }
 
 async fn respond_acp_permission(
@@ -738,7 +766,7 @@ async fn respond_acp_permission(
     };
     let options = {
         let mut options = store.permission_options.lock().await;
-        options.remove(&params.request_id)
+        options.remove(&params.request_id).map(|(_, value)| value)
     };
     let result = resolve_permission_decision_result(options.as_ref(), &params.decision);
     let id = parse_request_id(&params.request_id);

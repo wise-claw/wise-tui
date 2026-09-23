@@ -155,6 +155,13 @@ const DEPENDENCY_FILE_CONTENT_CACHE = createBoundedStringCache({
 });
 const PENDING_DEPENDENCY_BATCHES = new Map<string, Promise<ProjectRelativeFileMatch | null>>();
 const LAST_SYNC_SIGNATURE_BY_REPOSITORY = new WeakMap<MonacoApi, Map<string, string>>();
+/**
+ * 本模块为依赖图创建的 model（插入顺序即最近使用顺序）。
+ * 每次打开文件最多新增 {@link MAX_DEPENDENCY_MODEL_COUNT} 个，长时间浏览大仓库时需要淘汰，
+ * 否则 model 与 TS worker 中的镜像文件只增不减。
+ */
+const OWNED_DEPENDENCY_MODEL_URIS = new WeakMap<MonacoApi, Map<string, true>>();
+export const MAX_RETAINED_DEPENDENCY_MODELS = MAX_DEPENDENCY_MODEL_COUNT * 3;
 const APPLIED_REPOSITORY_TS_ENVIRONMENT = new WeakMap<MonacoApi, string>();
 const PENDING_REPOSITORY_TS_ENVIRONMENT = new WeakMap<
   MonacoApi,
@@ -265,8 +272,9 @@ export async function syncMonacoRepositoryTypeScriptModels({
 
   setRepositorySyncSignature(repositorySignatures, repositoryPath, syncSignature);
 
+  const touched = new Set<string>();
   for (const source of normalizedSources) {
-    registerRepositorySource(monaco, repositoryPath, source);
+    registerRepositorySource(monaco, repositoryPath, source, touched);
   }
 
   const queue = normalizedSources.map((source) => ({ ...source, depth: 0 }));
@@ -303,7 +311,7 @@ export async function syncMonacoRepositoryTypeScriptModels({
             modelRelativePath: dependency.modelRelativePath,
           }
         : dependency;
-      registerRepositorySource(monaco, repositoryPath, dependencySource);
+      registerRepositorySource(monaco, repositoryPath, dependencySource, touched);
       if (
         !shouldSkipMonacoTypeScriptModelSync(dependency.content.length) &&
         isTypeScriptLikeRepositoryPath(dependency.relativePath)
@@ -312,6 +320,12 @@ export async function syncMonacoRepositoryTypeScriptModels({
       }
       if (loadedCount >= MAX_DEPENDENCY_MODEL_COUNT) break;
     }
+  }
+
+  const evicted = evictStaleDependencyModels(monaco, touched);
+  if (evicted > 0) {
+    // 淘汰会清空签名表；本轮刚同步的这组文件仍然完整，恢复它的签名避免下次重复同步。
+    setRepositorySyncSignature(repositorySignatures, repositoryPath, syncSignature);
   }
 }
 
@@ -447,22 +461,69 @@ function getMonacoTypeScriptRuntime(monaco: MonacoApi): MonacoTypeScriptRuntime 
   throw new Error("Monaco TypeScript runtime is not available");
 }
 
-function ensureMonacoModel(monaco: MonacoApi, repositoryPath: string, relativePath: string, content: string): void {
-  const uri = monaco.Uri.parse(monacoUriForRepositoryPath(relativePath, repositoryPath));
+/** @internal 导出供测试；业务调用走 {@link syncMonacoRepositoryTypeScriptModels}。 */
+export function ensureMonacoModel(
+  monaco: MonacoApi,
+  repositoryPath: string,
+  relativePath: string,
+  content: string,
+  touched?: Set<string>,
+): void {
+  const uriString = monacoUriForRepositoryPath(relativePath, repositoryPath);
+  touched?.add(uriString);
+  const uri = monaco.Uri.parse(uriString);
+  let owned = OWNED_DEPENDENCY_MODEL_URIS.get(monaco);
   const existing = monaco.editor.getModel(uri);
   if (existing) {
     if (existing.getValue() !== content) {
       existing.setValue(content);
     }
+    if (owned?.delete(uriString)) owned.set(uriString, true);
     return;
   }
   monaco.editor.createModel(content, monacoLanguageForTypeScriptModel(relativePath), uri);
+  if (!owned) {
+    owned = new Map();
+    OWNED_DEPENDENCY_MODEL_URIS.set(monaco, owned);
+  }
+  owned.set(uriString, true);
+}
+
+/**
+ * 超出保留上限时按最久未用淘汰本模块创建的依赖 model；本轮用到的与已挂到编辑器上的保留。
+ * @returns 释放的 model 数
+ */
+export function evictStaleDependencyModels(
+  monaco: MonacoApi,
+  protectedUris: ReadonlySet<string>,
+  maxRetained: number = MAX_RETAINED_DEPENDENCY_MODELS,
+): number {
+  const owned = OWNED_DEPENDENCY_MODEL_URIS.get(monaco);
+  if (!owned || owned.size <= maxRetained) return 0;
+  let disposed = 0;
+  for (const uriString of [...owned.keys()]) {
+    if (owned.size <= maxRetained) break;
+    if (protectedUris.has(uriString)) continue;
+    const model = monaco.editor.getModel(monaco.Uri.parse(uriString));
+    if (model?.isAttachedToEditor()) continue;
+    owned.delete(uriString);
+    if (model && !model.isDisposed()) {
+      model.dispose();
+      disposed += 1;
+    }
+  }
+  if (disposed > 0) {
+    // 已同步签名对应的 model 可能刚被释放，下次打开同一组文件需要重新建立。
+    LAST_SYNC_SIGNATURE_BY_REPOSITORY.get(monaco)?.clear();
+  }
+  return disposed;
 }
 
 function registerRepositorySource(
   monaco: MonacoApi,
   repositoryPath: string,
   source: MonacoRepositorySourceFile,
+  touched?: Set<string>,
 ): void {
   disposeRepositoryExtraLib(monaco, repositoryPath, source.relativePath);
   if (source.modelRelativePath && source.modelRelativePath !== source.relativePath) {
@@ -474,7 +535,7 @@ function registerRepositorySource(
     modelPaths.add(source.modelRelativePath);
   }
   for (const modelPath of modelPaths) {
-    ensureMonacoModel(monaco, repositoryPath, modelPath, source.content);
+    ensureMonacoModel(monaco, repositoryPath, modelPath, source.content, touched);
   }
 }
 

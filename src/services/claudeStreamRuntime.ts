@@ -931,6 +931,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       return false;
     }
     clearPendingOneshotComplete(tid);
+    pendingMergeOptionsByTabRef.delete(tid);
     clearAssistBufferKeysForTab(session, tid);
     // 仅 text 正文可抵消迟到 cancel；思考块 / 工具块不算「已完成」。
     // CLI 已明确 success=false（如工具调用解析失败）时，局部思考/工具进度不算成功回合。
@@ -1147,6 +1148,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     deferredStreamTabIds.clear();
     deferredSystemErrors.length = 0;
     deferredStderrErrors.length = 0;
+    pendingMergeOptionsByTabRef.clear();
     for (const tid of [...pendingOneshotCompletes.keys()]) {
       clearPendingOneshotComplete(tid);
     }

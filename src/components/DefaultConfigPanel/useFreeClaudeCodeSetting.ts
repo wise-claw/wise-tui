@@ -48,6 +48,7 @@ export function useFreeClaudeCodeSetting() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     let unlisten: (() => void) | undefined;
     void listenFreeClaudeCodeInstallStatus((payload) => {
       if (payload.phase === "installing") {
@@ -62,9 +63,11 @@ export function useFreeClaudeCodeSetting() {
       setInstallProgress(null);
       setInstallMessage(null);
     }).then((fn) => {
-      unlisten = fn;
+      if (cancelled) fn();
+      else unlisten = fn;
     });
     return () => {
+      cancelled = true;
       unlisten?.();
     };
   }, []);

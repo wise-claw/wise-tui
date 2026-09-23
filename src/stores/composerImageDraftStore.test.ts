@@ -3,6 +3,7 @@ import type { ImageAttachmentPart } from "../types";
 import {
   clearComposerImageDraft,
   getComposerImageDraft,
+  pruneComposerImageDrafts,
   resetComposerImageDraftStoreForTests,
   setComposerImageDraft,
   subscribeComposerImageDraft,
@@ -73,5 +74,26 @@ describe("composerImageDraftStore", () => {
     unsubscribe();
     setComposerImageDraft("session-a", [image("c")]);
     expect(sessionA).toBe(2);
+  });
+
+  test("prune releases closed-session buckets but keeps live, mounted and non-session buckets", () => {
+    setComposerImageDraft("live", [image("a")]);
+    setComposerImageDraft("closed", [image("b")]);
+    setComposerImageDraft("hud:closed", [image("c")]);
+    setComposerImageDraft("hud:live", [image("d")]);
+    setComposerImageDraft("mounted-closed", [image("e")]);
+    setComposerImageDraft("monitor-drawer:task-1", [image("f")]);
+    const unsubscribe = subscribeComposerImageDraft("mounted-closed", () => {});
+
+    expect(pruneComposerImageDrafts(new Set(["live"]))).toBe(2);
+    expect(getComposerImageDraft("closed")).toEqual([]);
+    expect(getComposerImageDraft("hud:closed")).toEqual([]);
+    expect(getComposerImageDraft("live").map((i) => i.id)).toEqual(["a"]);
+    expect(getComposerImageDraft("hud:live").map((i) => i.id)).toEqual(["d"]);
+    expect(getComposerImageDraft("mounted-closed").map((i) => i.id)).toEqual(["e"]);
+    expect(getComposerImageDraft("monitor-drawer:task-1").map((i) => i.id)).toEqual(["f"]);
+
+    unsubscribe();
+    expect(pruneComposerImageDrafts(new Set(["live"]))).toBe(1);
   });
 });
