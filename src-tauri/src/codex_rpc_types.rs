@@ -1941,7 +1941,8 @@ pub struct ThreadReadParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnSteerParams {
-    pub turn_id: String,
+    pub thread_id: String,
+    pub expected_turn_id: String,
     /// Same input-item array shape as `turn/start` (text / localImage / image).
     pub input: Vec<TurnInputItem>,
 }
@@ -2071,6 +2072,20 @@ fn parse_thread_item(v: Option<&Value>) -> ThreadItem {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn steering_serializes_thread_and_active_turn_precondition() {
+        let value = serde_json::to_value(TurnSteerParams {
+            thread_id: "thread-1".into(),
+            expected_turn_id: "turn-2".into(),
+            input: vec![TurnInputItem::Text { text: "补充要求".into() }],
+        }).unwrap();
+        assert_eq!(value, json!({
+            "threadId": "thread-1",
+            "expectedTurnId": "turn-2",
+            "input": [{ "type": "text", "text": "补充要求" }]
+        }));
+    }
 
     #[test]
     fn serializes_thread_metadata_requests_without_full_history_hydration() {

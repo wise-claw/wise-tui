@@ -1132,7 +1132,11 @@ impl CodexRpcSession {
             return Err(anyhow!("turn/steer requires at least one input item"));
         }
         let params = TurnSteerParams {
-            turn_id: turn_id.to_string(),
+            thread_id: self
+                .current_thread_id
+                .clone()
+                .ok_or_else(|| anyhow!("No active thread"))?,
+            expected_turn_id: turn_id.to_string(),
             input,
         };
         let params_value =

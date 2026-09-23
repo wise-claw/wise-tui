@@ -1345,7 +1345,7 @@ pub(crate) struct ReadCodexRpcThreadParams {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SteerCodexRpcTurnParams {
     pub session_id: String,
-    pub turn_id: String,
+    pub turn_id: Option<String>,
     pub input: String,
 }
 
@@ -1548,8 +1548,17 @@ pub(crate) async fn steer_codex_rpc_turn(
     };
 
     let mut session = session_arc.lock().await;
+    if params.input.trim().is_empty() {
+        return Err("瞬时消息不能为空".to_string());
+    }
+    let turn_id = params
+        .turn_id
+        .as_deref()
+        .or_else(|| session.current_turn_id())
+        .ok_or_else(|| "当前没有可接收瞬时消息的 Codex 轮次".to_string())?
+        .to_string();
     session
-        .steer_turn(&params.turn_id, &params.input)
+        .steer_turn(&turn_id, &params.input)
         .await
         .map_err(|e| format!("turn/steer failed: {e}"))
 }

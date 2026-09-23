@@ -955,27 +955,9 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     const resolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
     const engine: SessionExecutionEngine =
       session && resolver ? resolver(session) : getCachedDefaultExecutionEngine();
-    if (engine === "codex") {
-      const contextExecutionEngine =
-        params.codexContextExecutionEngine ??
-        (session && resolver ? resolver(session) : getCachedDefaultExecutionEngine());
-      const codexResumeSessionId =
-        params.forceNewClaudeConversation || !session
-          ? null
-          : resolveCodexResumeSessionId(session, params.tabSessionId, sessionIdMapRef.current);
-      await runCodexOneshotWithInvocation({
-        tabSessionId: params.tabSessionId,
-        turnNonce: params.turnNonce,
-        repositoryPath: params.repositoryPath,
-        prompt: params.prompt,
-        modelArg: params.modelArg,
-        contextExecutionEngine,
-        codexResumeSessionId,
-        forceNewClaudeConversation: params.forceNewClaudeConversation,
-      });
-      return;
-    }
-    if (engine === "codex-rpc") {
+    // Interactive Codex sessions use app-server so Tab can steer the active turn.
+    // Keep the exec runner available for explicit oneshot/background invocations.
+    if (engine === "codex" || engine === "codex-rpc") {
       const contextExecutionEngine =
         params.codexContextExecutionEngine ?? (session && resolver ? resolver(session) : "claude");
       const codexResumeSessionId =

@@ -13,6 +13,16 @@ describe("codexRpc service", () => {
     invoke.mockClear();
   });
 
+  test("steering resolves the active turn on the backend and propagates rejection", async () => {
+    const { steerCodexTurn } = await import("./codexRpc");
+    await steerCodexTurn("tab-1", undefined, "补充要求");
+    expect(invoke).toHaveBeenCalledWith("steer_codex_rpc_turn", {
+      params: { sessionId: "tab-1", turnId: undefined, input: "补充要求" },
+    });
+    invoke.mockImplementationOnce(async () => { throw new Error("turn completed"); });
+    await expect(steerCodexTurn("tab-1", "old-turn", "补充要求")).rejects.toThrow("turn completed");
+  });
+
   test("interruptCodexRpc calls interrupt_codex_rpc with params wrapper", async () => {
     const { interruptCodexRpc } = await import("./codexRpc");
 

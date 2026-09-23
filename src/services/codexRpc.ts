@@ -437,7 +437,7 @@ export function onCodexDynamicToolRequest(
 /** Steer the active turn via the codex app-server */
 export async function steerCodexTurn(
   sessionId: string,
-  turnId: string,
+  turnId: string | undefined,
   input: string,
 ): Promise<void> {
   await invoke('steer_codex_rpc_turn', {

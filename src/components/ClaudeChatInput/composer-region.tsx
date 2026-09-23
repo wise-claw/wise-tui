@@ -1,3 +1,5 @@
+import { shouldSteerComposer } from "./composerSteering";
+import { resolveSessionSteeringTarget, sendSessionSteering } from "../../services/sessionSteering";
 import { useComposerModelSelection } from "../../hooks/useComposerModelSelection";
 import { createComposerSendScope, requireComposerDispatchAccepted } from "./composerSendScope";
 import {
@@ -1017,22 +1019,6 @@ function ComposerInner({
     return () => { composerSessionGenerationRef.current += 1; };
   }, [session.id, draftBucketKey]);
 
-  /** 会话输入区：Tab 仅用于 @ / 补全，不触发浏览器默认焦点切换（底栏按钮等） */
-  useEffect(() => {
-    const shell = shellRef.current;
-    if (!shell) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Tab") return;
-      const active = document.activeElement;
-      if (!active || !shell.contains(active)) return;
-      const editor = shell.querySelector(".ProseMirror");
-      if (!editor || (active !== editor && !editor.contains(active))) return;
-      e.preventDefault();
-    };
-    shell.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => shell.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [session.id]);
-
   /**
    * 空格在「可滚动容器 / 底栏按钮」上会触发滚动或点击发送，表现为输入框失焦。
    * 捕获阶段把空格收回 ProseMirror（仅本会话 composer 可见时）。
@@ -1252,11 +1238,36 @@ function ComposerInner({
     pendingExecutionTaskCount,
   });
   const isSessionBusy = composerBusy.isBusy;
+  const steeringTarget = useMemo(
+    () => resolveSessionSteeringTarget(sessionExecutionEngine, session, defaultConnectionKind),
+    [sessionExecutionEngine, session.id, session.claudeSessionId, session.connectionKind, defaultConnectionKind],
+  );
+  const canSteerSession = steeringTarget !== null;
   const isSessionBusyRef = useRef(isSessionBusy);
   isSessionBusyRef.current = isSessionBusy;
   const onCancelRef = useRef(_onCancel);
   onCancelRef.current = _onCancel;
-  const handleSendRef = useRef<(plain?: string) => void | Promise<void>>(() => undefined);
+  const handleSendRef = useRef<(plain?: string, mode?: "steer") => void | Promise<void>>(() => undefined);
+
+  /** Tab 优先补全；支持的执行通道发送瞬时消息。 */
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const active = document.activeElement;
+      if (!active || !shell.contains(active)) return;
+      const editor = shell.querySelector(".ProseMirror");
+      if (!editor || (active !== editor && !editor.contains(active))) return;
+      e.preventDefault();
+      if (canSteerSession && shouldSteerComposer(e, sessionExecutionEngine, isSessionBusy, Boolean(triggerRef.current.mode), canSteerSession)) {
+        e.stopPropagation();
+        void handleSendRef.current(undefined, "steer");
+      }
+    };
+    shell.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => shell.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, [session.id, sessionExecutionEngine, isSessionBusy, canSteerSession]);
 
   const { prefs: speechPrefs, update: updateSpeechPrefs } = useComposerSpeechPreferences();
   const speechPolishProjectPath =
@@ -1835,7 +1846,7 @@ function ComposerInner({
   }, [session.id]);
 
   const handleSend = useCallback(
-    async (plainFromEditor?: string) => {
+    async (plainFromEditor?: string, mode?: "steer") => {
       if (composerSendInFlightRef.current) return;
       composerSendInFlightRef.current = true;
       const sendScope = createComposerSendScope(composerSessionGenerationRef);
@@ -1963,6 +1974,32 @@ function ComposerInner({
         requestAnimationFrame(() => aiChatRef.current?.focusEditor?.("end"));
         void clearPromptContextSessionKey(draftBucketKey);
       };
+
+      if (mode === "steer") {
+        if (!isSessionBusy || !steeringTarget) {
+          throw new Error("当前会话没有可接收瞬时消息的运行中连接，内容已保留。");
+        }
+        clearComposerSurfaceSync(logicalSnap.trim());
+        const payload = await awaitForComposer(buildClaudeComposerSendPayload({
+          prompt: promptSnap,
+          contextItems: contextSnap,
+          images: imagesSnap,
+          repositoryPath: session.repositoryPath,
+          userBubbleMain: logicalSnap,
+        }));
+        rollbackDraft.images = attachDiskPathsToComposerImages(imagesSnap, payload.imageDiskPaths)
+          .map((img) => ({ ...img }));
+        // 原生 steering 在工具调用后的模型边界消费输入；不启动新轮次、不进入普通队列。
+        await sendSessionSteering(steeringTarget, payload.outbound);
+        onAppendUserMessage?.(session.id, payload.userBubblePrompt || logicalSnap);
+        addToHistory(historyPrompt, "normal", undefined, rollbackDraft.images);
+        if (isCurrentComposer()) {
+          setHistoryIndex(-1);
+          finalizeTranscriptBaselineAfterSend();
+        }
+        message.success("瞬时消息已提交，将在下一个可处理节点生效");
+        return;
+      }
 
       const localSlashCommand = parseComposerLocalSlashCommand(
         logicalSnap,
@@ -2689,6 +2726,8 @@ function ComposerInner({
     },
     [
       isSessionBusy,
+      sessionExecutionEngine,
+      steeringTarget,
       allowSendWhileBusy,
       hudChrome,
       prompt,
@@ -3736,6 +3775,11 @@ function ComposerInner({
       onPointerDownCapture={() => noteComposerScreenshotFocus(session.id)}
       onKeyDown={handleKeyDown}
     >
+      {isSessionBusy && canSteerSession ? (
+        <div className="app-claude-composer-steering-hint" role="note" style={{ fontSize: 12, opacity: 0.65 }}>
+          Tab 发送瞬时消息 · 在下个处理节点生效 · Enter 加入队列
+        </div>
+      ) : null}
       {/* Docks above editor：同仓库多路 AskUserQuestion 时 Tabs 嵌在题卡顶栏（原「待你确认」行） */}
       {hudChrome ? null : useAggregatedQuestionDock && activeQuestionDockTab ? (
         <div style={{ padding: "0 6px" }}>

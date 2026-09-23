@@ -839,7 +839,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   );
 
   const {
-    runCodexOneshotWithInvocation,
     runCodexRpcOneshotWithInvocation,
     runOpencodeOneshotWithInvocation,
     runQoderOneshotWithInvocation,
@@ -1578,22 +1577,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         const codexResumeSessionId = params.forceNewClaudeConversation
           ? null
           : resolveCodexResumeSessionId(session, tabSessionId, sessionIdMapRef.current, {
-              requireUuid: resolvedEngine === "codex-rpc",
+              requireUuid: true,
             });
-        if (resolvedEngine === "codex-rpc") {
-          // 主发送路径此前误走 Codex CLI，导致不写 ~/.wise/codex-runs，刷新后无法 hydrate。
-          await runCodexRpcOneshotWithInvocation({
-            tabSessionId,
-            turnNonce: params.turnNonce,
-            repositoryPath,
-            prompt,
-            modelArg: params.modelArg,
-            contextExecutionEngine,
-            codexResumeSessionId,
-          });
-          return;
-        }
-        await runCodexOneshotWithInvocation({
+        // 主会话统一走可接收 turn/steer 的 App-Server；exec 后端仍供独立调用使用。
+        await runCodexRpcOneshotWithInvocation({
           tabSessionId,
           turnNonce: params.turnNonce,
           repositoryPath,
@@ -1601,7 +1588,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           modelArg: params.modelArg,
           contextExecutionEngine,
           codexResumeSessionId,
-          forceNewClaudeConversation: params.forceNewClaudeConversation,
         });
         return;
       }
@@ -1795,7 +1781,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       appendContextOverflowFailureHint,
       invokeClaudeTurn,
       reloadTranscriptFromDisk,
-      runCodexOneshotWithInvocation,
       runCodexRpcOneshotWithInvocation,
       runCursorOneshotWithInvocation,
       runOpencodeOneshotWithInvocation,

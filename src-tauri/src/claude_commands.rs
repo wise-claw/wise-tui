@@ -2618,11 +2618,42 @@ fn build_streaming_user_message(prompt: &str) -> String {
     .to_string()
 }
 
+fn build_streaming_steering_message(prompt: &str) -> String {
+    let mut payload: serde_json::Value = serde_json::from_str(&build_streaming_user_message(prompt))
+        .expect("streaming user message is valid JSON");
+    // `next` is consumed at the next agent-loop boundary; `now` would abort tools.
+    payload["priority"] = serde_json::json!("next");
+    payload.to_string()
+}
+
+#[cfg(test)]
+mod streaming_steering_tests {
+    use super::{build_streaming_steering_message, build_streaming_user_message};
+
+    #[test]
+    fn steering_uses_next_boundary_without_changing_normal_message_priority() {
+        let text = "补充要求\n保留当前工具";
+        let normal: serde_json::Value = serde_json::from_str(&build_streaming_user_message(text)).unwrap();
+        let steer: serde_json::Value = serde_json::from_str(&build_streaming_steering_message(text)).unwrap();
+        assert!(normal.get("priority").is_none());
+        assert_eq!(steer["priority"], "next");
+        assert_eq!(steer["message"], normal["message"]);
+        assert_eq!(steer["type"], "user");
+        assert_eq!(steer["message"]["content"][0]["text"], text);
+    }
+}
+
 async fn write_streaming_user_message_to_stdin(
     sin: &mut tokio::process::ChildStdin,
     prompt: &str,
 ) -> Result<(), String> {
-    let payload = build_streaming_user_message(prompt);
+    write_streaming_input_payload(sin, &build_streaming_user_message(prompt)).await
+}
+
+async fn write_streaming_input_payload(
+    sin: &mut tokio::process::ChildStdin,
+    payload: &str,
+) -> Result<(), String> {
     use tokio::io::AsyncWriteExt;
     sin.write_all(payload.as_bytes())
         .await
@@ -2699,6 +2730,7 @@ pub(crate) async fn send_user_message_to_session(
     process_state: tauri::State<'_, ClaudeProcessState>,
     session_id: String,
     prompt: String,
+    steer: Option<bool>,
 ) -> Result<(), String> {
     let sid = session_id.trim().to_string();
     if sid.is_empty() {
@@ -2708,7 +2740,6 @@ pub(crate) async fn send_user_message_to_session(
         return Err("prompt 不能为空".to_string());
     }
     let registry = app.state::<ClaudeSessionRegistry>();
-    registry.mark_running(&sid);
 
     let Some(handle) = lookup_stdin_handle(&process_state.claude_stdin_by_session, &sid).await
     else {
@@ -2718,7 +2749,16 @@ pub(crate) async fn send_user_message_to_session(
         ));
     };
     let mut sin = handle.lock().await;
-    write_streaming_user_message_to_stdin(&mut sin, &prompt).await
+    if steer == Some(true) {
+        // Do not resurrect an idle/dead turn on a stale composer busy flag.
+        if !registry.list().iter().any(|row| row.session_id == sid && row.status == "running") {
+            return Err("当前 Claude 轮次已结束，瞬时消息未发送，请用 Enter 提交。".to_string());
+        }
+        write_streaming_input_payload(&mut sin, &build_streaming_steering_message(&prompt)).await
+    } else {
+        registry.mark_running(&sid);
+        write_streaming_user_message_to_stdin(&mut sin, &prompt).await
+    }
 }
 
 /// 关闭 streaming 会话：终止子进程、释放 stdin 映射，并广播终态。

@@ -570,8 +570,11 @@ export async function spawnStreamingSession(params: {
 export async function sendStreamingUserMessage(
   sessionId: string,
   prompt: string,
+  options?: { steer?: boolean },
 ): Promise<void> {
-  return invoke("send_user_message_to_session", { sessionId, prompt });
+  return invoke("send_user_message_to_session", {
+    sessionId, prompt, ...(options?.steer ? { steer: true } : {}),
+  });
 }
 
 /** 终止长驻 Claude 子进程并释放 stdin。 */

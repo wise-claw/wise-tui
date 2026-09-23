@@ -48,6 +48,18 @@ function harness() {
 }
 const params = { tabSessionId: "tab", turnNonce: 1, invokeConc: null, repositoryPath: "/tmp/repo", prompt: "hello", modelArg: undefined, resumeClaudeSid: null };
 
+for (const engine of ["codex", "codex-rpc"] as const) {
+  test(`${engine} interactive turns use the steerable app-server transport`, async () => {
+    const { deps } = harness();
+    deps.claudeSessionsOptionsRef.current = {
+      resolveExecutionEngineRef: { current: () => engine },
+    };
+    await createClaudeEngineHandlers(deps).invokeClaudeTurn(params);
+    expect(invoke.mock.calls.some(([command]) => command === "execute_codex_rpc")).toBe(true);
+    expect(invoke.mock.calls.some(([command]) => command === "execute_codex_code")).toBe(false);
+  });
+}
+
 test("cancelling during Claude spawn configuration prevents launch and releases listeners", async () => {
   const { abort, deps } = harness();
   let release!: () => void;
