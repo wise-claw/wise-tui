@@ -6,6 +6,8 @@ mod assistants;
 mod ai_usage_multi_source;
 mod child_slot_wait;
 mod cli_probe;
+#[cfg(test)]
+mod ipc_thread_guard_tests;
 #[cfg(unix)]
 mod login_shell_probe;
 mod pending_rpc_request;

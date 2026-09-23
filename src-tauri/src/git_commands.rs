@@ -1186,8 +1186,7 @@ pub(crate) async fn git_discard_all(path: String) -> Result<(), String> {
 /// 与 `project_relative_files::MAX_EDITOR_FILE_BYTES` 对齐：编辑器/Diff 不接收超大 blob。
 const MAX_GIT_SHOW_REVISION_BYTES: usize = 4 * 1024 * 1024;
 
-#[tauri::command]
-pub(crate) fn git_show_revision(
+fn git_show_revision_blocking(
     repository_path: String,
     revision_path: String,
 ) -> Result<String, String> {
@@ -1220,7 +1219,17 @@ pub(crate) fn git_show_revision(
 }
 
 #[tauri::command]
-pub(crate) fn git_log(path: String, limit: usize, skip: usize) -> Result<GitLogResponse, String> {
+pub(crate) async fn git_show_revision(
+    repository_path: String,
+    revision_path: String,
+) -> Result<String, String> {
+    run_git_blocking("git_show_revision", move || {
+        git_show_revision_blocking(repository_path, revision_path)
+    })
+    .await
+}
+
+fn git_log_blocking(path: String, limit: usize, skip: usize) -> Result<GitLogResponse, String> {
     let repo = open_repo(&path)?;
     let (ahead, behind, upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
 
@@ -1262,6 +1271,15 @@ pub(crate) fn git_log(path: String, limit: usize, skip: usize) -> Result<GitLogR
         upstream,
         has_more,
     })
+}
+
+#[tauri::command]
+pub(crate) async fn git_log(
+    path: String,
+    limit: usize,
+    skip: usize,
+) -> Result<GitLogResponse, String> {
+    run_git_blocking("git_log", move || git_log_blocking(path, limit, skip)).await
 }
 
 fn collect_commit_ref_labels(repo: &Repository) -> HashMap<Oid, Vec<GitGraphRefLabel>> {
@@ -1394,8 +1412,7 @@ fn push_git_graph_roots(
     Ok(())
 }
 
-#[tauri::command]
-pub(crate) fn git_graph(
+fn git_graph_blocking(
     path: String,
     limit: usize,
     skip: usize,
@@ -1467,6 +1484,21 @@ pub(crate) fn git_graph(
         upstream,
         has_more,
     })
+}
+
+#[tauri::command]
+pub(crate) async fn git_graph(
+    path: String,
+    limit: usize,
+    skip: usize,
+    branch_filter: Option<String>,
+    search_query: Option<String>,
+    author_filter: Option<String>,
+) -> Result<GitGraphResponse, String> {
+    run_git_blocking("git_graph", move || {
+        git_graph_blocking(path, limit, skip, branch_filter, search_query, author_filter)
+    })
+    .await
 }
 
 fn commit_matches_graph_filters(
@@ -1599,8 +1631,7 @@ fn collect_commit_file_changes(
     collect_diff_file_changes(&diff, &line_stats)
 }
 
-#[tauri::command]
-pub(crate) fn git_commit_detail(path: String, sha: String) -> Result<GitCommitDetailResponse, String> {
+fn git_commit_detail_blocking(path: String, sha: String) -> Result<GitCommitDetailResponse, String> {
     let repo = open_repo(&path)?;
     let commit = find_peeled_commit(&repo, &sha)?;
     let oid = commit.id();
@@ -1636,7 +1667,14 @@ pub(crate) fn git_commit_detail(path: String, sha: String) -> Result<GitCommitDe
 }
 
 #[tauri::command]
-pub(crate) fn git_compare_commits(
+pub(crate) async fn git_commit_detail(
+    path: String,
+    sha: String,
+) -> Result<GitCommitDetailResponse, String> {
+    run_git_blocking("git_commit_detail", move || git_commit_detail_blocking(path, sha)).await
+}
+
+fn git_compare_commits_blocking(
     path: String,
     base_sha: String,
     head_sha: String,
@@ -1670,7 +1708,18 @@ pub(crate) fn git_compare_commits(
 }
 
 #[tauri::command]
-pub(crate) fn git_create_tag(
+pub(crate) async fn git_compare_commits(
+    path: String,
+    base_sha: String,
+    head_sha: String,
+) -> Result<GitCompareCommitsResponse, String> {
+    run_git_blocking("git_compare_commits", move || {
+        git_compare_commits_blocking(path, base_sha, head_sha)
+    })
+    .await
+}
+
+fn git_create_tag_blocking(
     path: String,
     sha: String,
     tag_name: String,
@@ -1703,12 +1752,29 @@ pub(crate) fn git_create_tag(
 }
 
 #[tauri::command]
-pub(crate) fn git_delete_tag(path: String, tag_name: String) -> Result<(), String> {
+pub(crate) async fn git_create_tag(
+    path: String,
+    sha: String,
+    tag_name: String,
+    message: Option<String>,
+) -> Result<(), String> {
+    run_git_blocking("git_create_tag", move || {
+        git_create_tag_blocking(path, sha, tag_name, message)
+    })
+    .await
+}
+
+fn git_delete_tag_blocking(path: String, tag_name: String) -> Result<(), String> {
     let name = tag_name.trim();
     if name.is_empty() {
         return Err("标签名不能为空".to_string());
     }
     run_git_command(&path, &["tag", "-d", name], "Delete tag")
+}
+
+#[tauri::command]
+pub(crate) async fn git_delete_tag(path: String, tag_name: String) -> Result<(), String> {
+    run_git_blocking("git_delete_tag", move || git_delete_tag_blocking(path, tag_name)).await
 }
 
 const GIT_BLAME_MAX_LINES: u32 = 800;
@@ -1730,8 +1796,7 @@ fn read_commit_file_lines(
     Ok(content.lines().map(str::to_string).collect())
 }
 
-#[tauri::command]
-pub(crate) fn git_blame_file(
+fn git_blame_file_blocking(
     path: String,
     revision: String,
     file_path: String,
@@ -1793,12 +1858,31 @@ pub(crate) fn git_blame_file(
 }
 
 #[tauri::command]
-pub(crate) fn git_checkout_revision(path: String, revision: String) -> Result<(), String> {
+pub(crate) async fn git_blame_file(
+    path: String,
+    revision: String,
+    file_path: String,
+) -> Result<GitBlameFileResponse, String> {
+    run_git_blocking("git_blame_file", move || {
+        git_blame_file_blocking(path, revision, file_path)
+    })
+    .await
+}
+
+fn git_checkout_revision_blocking(path: String, revision: String) -> Result<(), String> {
     let revision = revision.trim();
     if revision.is_empty() {
         return Err("revision 不能为空".to_string());
     }
     run_git_command(&path, &["checkout", revision], "Checkout")
+}
+
+#[tauri::command]
+pub(crate) async fn git_checkout_revision(path: String, revision: String) -> Result<(), String> {
+    run_git_blocking("git_checkout_revision", move || {
+        git_checkout_revision_blocking(path, revision)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1847,8 +1931,7 @@ pub(crate) async fn git_reset(
     .await
 }
 
-#[tauri::command]
-pub(crate) fn git_init(path: String) -> Result<String, String> {
+fn git_init_blocking(path: String) -> Result<String, String> {
     let repo = Repository::init(&path).map_err(|e| e.to_string())?;
     let sig = repo
         .signature()
@@ -1867,7 +1950,11 @@ pub(crate) fn git_init(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub(crate) fn git_remote_url(path: String) -> Result<Option<String>, String> {
+pub(crate) async fn git_init(path: String) -> Result<String, String> {
+    run_git_blocking("git_init", move || git_init_blocking(path)).await
+}
+
+fn git_remote_url_blocking(path: String) -> Result<Option<String>, String> {
     let repo = open_repo(&path)?;
     let result = match repo.find_remote("origin") {
         Ok(remote) => remote.url().map(|s| s.to_string()),
@@ -1877,7 +1964,11 @@ pub(crate) fn git_remote_url(path: String) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-pub(crate) fn git_list_branches(path: String) -> Result<Vec<GitBranchEntry>, String> {
+pub(crate) async fn git_remote_url(path: String) -> Result<Option<String>, String> {
+    run_git_blocking("git_remote_url", move || git_remote_url_blocking(path)).await
+}
+
+fn git_list_branches_blocking(path: String) -> Result<Vec<GitBranchEntry>, String> {
     let repo = open_repo(&path)?;
     let mut out: Vec<GitBranchEntry> = Vec::new();
 
@@ -1930,7 +2021,11 @@ pub(crate) fn git_list_branches(path: String) -> Result<Vec<GitBranchEntry>, Str
 }
 
 #[tauri::command]
-pub(crate) fn git_checkout_branch(path: String, branch_name: String) -> Result<(), String> {
+pub(crate) async fn git_list_branches(path: String) -> Result<Vec<GitBranchEntry>, String> {
+    run_git_blocking("git_list_branches", move || git_list_branches_blocking(path)).await
+}
+
+fn git_checkout_branch_blocking(path: String, branch_name: String) -> Result<(), String> {
     let repo = open_repo(&path)?;
     let name = branch_name.trim();
     if name.is_empty() {
@@ -1943,6 +2038,14 @@ pub(crate) fn git_checkout_branch(path: String, branch_name: String) -> Result<(
         return run_git_command(&path, &["checkout", "--track", name], "Checkout");
     }
     Err(format!("Branch not found: {}", name))
+}
+
+#[tauri::command]
+pub(crate) async fn git_checkout_branch(path: String, branch_name: String) -> Result<(), String> {
+    run_git_blocking("git_checkout_branch", move || {
+        git_checkout_branch_blocking(path, branch_name)
+    })
+    .await
 }
 
 /// 组装 `git checkout/branch` 创建参数；`--no-track` 必须在 `-b` 之前。
@@ -1976,8 +2079,7 @@ fn build_create_branch_git_args<'a>(
     }
 }
 
-#[tauri::command]
-pub(crate) fn git_create_branch(
+fn git_create_branch_blocking(
     path: String,
     branch_name: String,
     from_ref: Option<String>,
@@ -2003,7 +2105,20 @@ pub(crate) fn git_create_branch(
 }
 
 #[tauri::command]
-pub(crate) fn git_delete_branch(
+pub(crate) async fn git_create_branch(
+    path: String,
+    branch_name: String,
+    from_ref: Option<String>,
+    checkout: Option<bool>,
+    no_track: Option<bool>,
+) -> Result<(), String> {
+    run_git_blocking("git_create_branch", move || {
+        git_create_branch_blocking(path, branch_name, from_ref, checkout, no_track)
+    })
+    .await
+}
+
+fn git_delete_branch_blocking(
     path: String,
     branch_name: String,
     force: Option<bool>,
@@ -2022,6 +2137,18 @@ pub(crate) fn git_delete_branch(
     }
     let flag = if force.unwrap_or(false) { "-D" } else { "-d" };
     run_git_command(&path, &["branch", flag, name], "Delete branch")
+}
+
+#[tauri::command]
+pub(crate) async fn git_delete_branch(
+    path: String,
+    branch_name: String,
+    force: Option<bool>,
+) -> Result<(), String> {
+    run_git_blocking("git_delete_branch", move || {
+        git_delete_branch_blocking(path, branch_name, force)
+    })
+    .await
 }
 
 fn parse_git_worktree_porcelain(
@@ -2111,8 +2238,7 @@ fn remove_worktree_directory_if_leftover(
     fs::remove_dir_all(&wt_canon).map_err(|e| format!("删除 worktree 目录失败: {}", e))
 }
 
-#[tauri::command]
-pub(crate) fn git_worktree_list(path: String) -> Result<Vec<GitWorktreeEntry>, String> {
+fn git_worktree_list_blocking(path: String) -> Result<Vec<GitWorktreeEntry>, String> {
     open_repo(&path)?;
     let root = resolve_repository_root(&path).to_string_lossy().into_owned();
     let output = Command::new("git")
@@ -2136,9 +2262,13 @@ pub(crate) fn git_worktree_list(path: String) -> Result<Vec<GitWorktreeEntry>, S
 }
 
 #[tauri::command]
-pub(crate) fn git_worktree_remove(path: String, worktree_path: String) -> Result<(), String> {
+pub(crate) async fn git_worktree_list(path: String) -> Result<Vec<GitWorktreeEntry>, String> {
+    run_git_blocking("git_worktree_list", move || git_worktree_list_blocking(path)).await
+}
+
+fn git_worktree_remove_blocking(path: String, worktree_path: String) -> Result<(), String> {
     open_repo(&path)?;
-    let list = git_worktree_list(path.clone())?;
+    let list = git_worktree_list_blocking(path.clone())?;
     let target = worktree_path.trim();
     if target.is_empty() {
         return Err("Worktree path is empty".to_string());
@@ -2164,7 +2294,7 @@ pub(crate) fn git_worktree_remove(path: String, worktree_path: String) -> Result
     let remove_err = remove_res.unwrap_err();
 
     let _ = run_git_command(&path, &["worktree", "prune"], "Worktree prune");
-    let after = git_worktree_list(path.clone())?;
+    let after = git_worktree_list_blocking(path.clone())?;
     let still_there = after
         .iter()
         .any(|e| !e.is_primary && worktree_request_matches_entry(target, &e.path));
@@ -2177,7 +2307,14 @@ pub(crate) fn git_worktree_remove(path: String, worktree_path: String) -> Result
 }
 
 #[tauri::command]
-pub(crate) fn git_worktree_add_omc_batch(
+pub(crate) async fn git_worktree_remove(path: String, worktree_path: String) -> Result<(), String> {
+    run_git_blocking("git_worktree_remove", move || {
+        git_worktree_remove_blocking(path, worktree_path)
+    })
+    .await
+}
+
+fn git_worktree_add_omc_batch_blocking(
     repo_path: String,
     task_id: String,
     attempt: i64,
@@ -2202,7 +2339,7 @@ pub(crate) fn git_worktree_add_omc_batch(
 
     if wt_path.exists() {
         let wt_arg = wt_path.to_string_lossy().to_string();
-        let _ = git_worktree_remove(top.clone(), wt_arg.clone());
+        let _ = git_worktree_remove_blocking(top.clone(), wt_arg.clone());
         if wt_path.exists() {
             remove_worktree_directory_if_leftover(&wt_arg, &top)?;
         }
@@ -2232,6 +2369,18 @@ pub(crate) fn git_worktree_add_omc_batch(
     })
 }
 
+#[tauri::command]
+pub(crate) async fn git_worktree_add_omc_batch(
+    repo_path: String,
+    task_id: String,
+    attempt: i64,
+) -> Result<GitWorktreeAddOmcBatchResult, String> {
+    run_git_blocking("git_worktree_add_omc_batch", move || {
+        git_worktree_add_omc_batch_blocking(repo_path, task_id, attempt)
+    })
+    .await
+}
+
 // ── Git Flow Operations ──
 
 /// Git Flow 配置信息
@@ -2248,8 +2397,7 @@ pub(crate) struct GitFlowInfo {
 }
 
 /// 检测仓库的 Git Flow 状态（主分支、develop 分支、前缀配置）
-#[tauri::command]
-pub(crate) fn git_flow_info(path: String) -> Result<GitFlowInfo, String> {
+fn git_flow_info_blocking(path: String) -> Result<GitFlowInfo, String> {
     let repo = open_repo(&path)?;
     let head = repo.head().ok();
     let current_branch = head
@@ -2294,6 +2442,11 @@ pub(crate) fn git_flow_info(path: String) -> Result<GitFlowInfo, String> {
         release_prefix,
         hotfix_prefix,
     })
+}
+
+#[tauri::command]
+pub(crate) async fn git_flow_info(path: String) -> Result<GitFlowInfo, String> {
+    run_git_blocking("git_flow_info", move || git_flow_info_blocking(path)).await
 }
 
 /// 初始化 Git Flow：确保 develop 分支存在，写入 git flow 前缀配置

@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 /// 收集 `~/.claude/plugins/cache/**` 下被启用插件包内的 `agents/` 目录中的子代理候选。
 fn collect_enabled_plugin_subagent_candidates(
@@ -241,18 +242,25 @@ pub(crate) fn list_claude_subagents(
     Ok(out)
 }
 
-#[tauri::command]
-pub(crate) fn list_claude_available_agents(
+fn list_claude_available_agents_blocking(
     project_path: Option<String>,
 ) -> Result<Vec<String>, String> {
-    let mut cmd = Command::new("claude");
-    cmd.arg("agents");
+    // GUI launches inherit a minimal PATH; resolve like session spawns do.
+    let mut cmd = Command::new(super::find_claude_binary()?);
+    cmd.arg("agents")
+        .env("PATH", super::merge_path_env(&super::claude_path_search_prefixes()));
     if let Some(project_root) = canonicalize_existing_project_dir(project_path.as_deref()) {
         cmd.current_dir(project_root);
     }
-    let out = cmd
-        .output()
-        .map_err(|e| format!("执行 claude agents 失败: {}", e))?;
+    let out = match crate::cli_probe::blocking_output_with_timeout(&mut cmd, Duration::from_secs(30)) {
+        Ok(out) => out,
+        Err(crate::cli_probe::CaptureError::Io(e)) => {
+            return Err(format!("执行 claude agents 失败: {}", e))
+        }
+        Err(crate::cli_probe::CaptureError::TimedOut) => {
+            return Err("执行 claude agents 超时（>30s）".to_string())
+        }
+    };
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr).to_string();
         return Err(if stderr.trim().is_empty() {
@@ -291,6 +299,15 @@ pub(crate) fn list_claude_available_agents(
     names.sort();
     names.dedup();
     Ok(names)
+}
+
+#[tauri::command]
+pub(crate) async fn list_claude_available_agents(
+    project_path: Option<String>,
+) -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(move || list_claude_available_agents_blocking(project_path))
+        .await
+        .map_err(|e| format!("list_claude_available_agents 任务异常: {e}"))?
 }
 
 #[tauri::command]

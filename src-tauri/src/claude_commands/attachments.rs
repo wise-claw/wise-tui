@@ -14,8 +14,7 @@ use uuid::Uuid;
 /// Note: We intentionally do **not** fall back to `screencapture -w`. On recent macOS,
 /// `-w` often fails with stderr like "could not create image from window" (permissions /
 /// compositor), and `-i` failing (e.g. user pressed Esc) would incorrectly trigger that path.
-#[tauri::command]
-pub(crate) fn capture_screenshot() -> Result<ScreenshotResult, String> {
+fn capture_screenshot_blocking() -> Result<ScreenshotResult, String> {
     #[cfg(not(target_os = "macos"))]
     {
         return Err("截屏仅支持 macOS".into());
@@ -77,6 +76,13 @@ pub(crate) fn capture_screenshot() -> Result<ScreenshotResult, String> {
             base64_data: B64.encode(&bytes),
         })
     }
+}
+
+#[tauri::command]
+pub(crate) async fn capture_screenshot() -> Result<ScreenshotResult, String> {
+    tokio::task::spawn_blocking(capture_screenshot_blocking)
+        .await
+        .map_err(|e| format!("capture_screenshot 任务异常: {e}"))?
 }
 
 #[derive(Serialize)]

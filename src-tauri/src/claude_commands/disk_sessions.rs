@@ -191,8 +191,7 @@ pub(crate) struct ClaudeDiskSessionItem {
     model_hint: Option<String>,
 }
 
-#[tauri::command]
-pub(crate) fn list_claude_disk_sessions(
+fn list_claude_disk_sessions_blocking(
     project_path: String,
 ) -> Result<Vec<ClaudeDiskSessionItem>, String> {
     let root = claude_projects_root()?;
@@ -239,6 +238,15 @@ pub(crate) fn list_claude_disk_sessions(
     Ok(out)
 }
 
+#[tauri::command]
+pub(crate) async fn list_claude_disk_sessions(
+    project_path: String,
+) -> Result<Vec<ClaudeDiskSessionItem>, String> {
+    tokio::task::spawn_blocking(move || list_claude_disk_sessions_blocking(project_path))
+        .await
+        .map_err(|e| format!("list_claude_disk_sessions 任务异常: {e}"))?
+}
+
 /// 解析 `~/.claude/projects/<encoded>/<session_id>.jsonl` 的绝对路径，并强制限定在项目目录沙箱内。
 ///
 /// 用于 `load_claude_session_jsonl` / `delete_claude_disk_session` 共享路径校验：
@@ -273,8 +281,7 @@ pub(crate) fn claude_session_jsonl_exists(project_path: &str, session_id: &str) 
     resolve_session_jsonl_path(project_path, session_id).is_ok()
 }
 
-#[tauri::command]
-pub(crate) fn load_claude_session_jsonl(
+fn load_claude_session_jsonl_blocking(
     project_path: String,
     session_id: String,
     tail_lines: Option<usize>,
@@ -302,6 +309,19 @@ pub(crate) fn load_claude_session_jsonl(
             Ok(dq.into_iter().collect())
         }
     }
+}
+
+#[tauri::command]
+pub(crate) async fn load_claude_session_jsonl(
+    project_path: String,
+    session_id: String,
+    tail_lines: Option<usize>,
+) -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        load_claude_session_jsonl_blocking(project_path, session_id, tail_lines)
+    })
+    .await
+    .map_err(|e| format!("load_claude_session_jsonl 任务异常: {e}"))?
 }
 
 /// 物理删除 `~/.claude/projects/<encoded>/<session_id>.jsonl`。

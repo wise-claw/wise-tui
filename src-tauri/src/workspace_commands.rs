@@ -47,7 +47,7 @@ pub(crate) fn get_claude_user_agents_dir() -> Result<String, String> {
 fn macos_open_with_named_app(path: &Path, app_name: &str, args: &[String]) -> Result<(), String> {
     // macOS `open -a App` 可能因授权弹窗而卡住，使用 spawn 避免阻塞 Tauri IPC。
     let run_open = |cmd: &mut std::process::Command| -> bool {
-        cmd.spawn().map(|_| true).unwrap_or(false)
+        cmd.spawn().map(reap_detached_child).is_ok()
     };
 
     // WPS：常见安装为 `wpsoffice.app`，Bundle ID 多为 `com.kingsoft.wpsoffice.mac`（国区/国际略有差异）
@@ -320,7 +320,7 @@ fn run_vscode_family_cli_repo_goto(
         .arg("-g")
         .arg(goto_arg)
         .args(args);
-    child.spawn().map_err(|e| {
+    child.spawn().map(reap_detached_child).map_err(|e| {
         format!(
             "无法启动「{}」：{}。请在编辑器中执行 Shell Command: Install '{}' command in PATH。",
             cmd.display(),
@@ -373,8 +373,7 @@ fn resolve_repo_relative_file(
 /// `graph_ide_folder_relative`：打开仓库内相对目录时，`path` 为仓库根、本字段为相对目录，VS Code 系 CLI 使用 `cursor 根 -g 目录下源文件:1:1`。
 /// `ide_goto_relative`：文件搜索等场景，`path` 为仓库根、本字段为要选中的相对文件，VS Code 系使用 `cursor 根 -g 文件:行:列`。
 #[allow(unused_variables)] // goto_* 仅在 command 且 code 系 CLI 分支使用
-#[tauri::command]
-pub(crate) fn open_workspace_in(
+fn open_workspace_in_blocking(
     app: tauri::AppHandle,
     path: String,
     app_name: Option<String>,
@@ -498,6 +497,7 @@ pub(crate) fn open_workspace_in(
                         .arg(&goto_arg)
                         .args(&args)
                         .spawn()
+                        .map(reap_detached_child)
                         .map_err(|e| format!("Failed to run command {}: {}", cmd, e))?;
                     return Ok(());
                 }
@@ -505,6 +505,7 @@ pub(crate) fn open_workspace_in(
                     .arg(&root_canon)
                     .args(&args)
                     .spawn()
+                    .map(reap_detached_child)
                     .map_err(|e| format!("Failed to run command {}: {}", cmd, e))?;
                 return Ok(());
             }
@@ -512,6 +513,7 @@ pub(crate) fn open_workspace_in(
                 .arg(&root_canon)
                 .args(&args)
                 .spawn()
+                .map(reap_detached_child)
                 .map_err(|e| format!("Failed to run command {}: {}", cmd, e))?;
             return Ok(());
         }
@@ -526,6 +528,7 @@ pub(crate) fn open_workspace_in(
                             .arg(&root_canon)
                             .args(&args)
                             .spawn()
+                            .map(reap_detached_child)
                             .map_err(|e| format!("无法启动「{}」：{}", cli, e))?;
                         return Ok(());
                     }
@@ -575,6 +578,7 @@ pub(crate) fn open_workspace_in(
                         .arg(&path_buf)
                         .args(&args)
                         .spawn()
+                        .map(reap_detached_child)
                         .map_err(|e| format!("无法启动「{}」：{}", cli, e))?;
                     return Ok(());
                 }
@@ -619,6 +623,7 @@ pub(crate) fn open_workspace_in(
                 .arg(&goto_arg)
                 .args(args)
                 .spawn()
+                .map(reap_detached_child)
                 .map_err(|e| format!("Failed to run command {}: {}", cmd, e))?;
             return Ok(());
         }
@@ -627,6 +632,7 @@ pub(crate) fn open_workspace_in(
             .arg(&path_buf)
             .args(&args)
             .spawn()
+            .map(reap_detached_child)
             .map_err(|e| format!("Failed to run command {}: {}", cmd, e))?;
         return Ok(());
     }
@@ -634,6 +640,35 @@ pub(crate) fn open_workspace_in(
     app.opener()
         .open_path(&path, None::<String>)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn open_workspace_in(
+    app: tauri::AppHandle,
+    path: String,
+    app_name: Option<String>,
+    command: Option<String>,
+    args: Vec<String>,
+    goto_line: Option<u32>,
+    goto_column: Option<u32>,
+    graph_ide_folder_relative: Option<String>,
+    ide_goto_relative: Option<String>,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        open_workspace_in_blocking(
+            app,
+            path,
+            app_name,
+            command,
+            args,
+            goto_line,
+            goto_column,
+            graph_ide_folder_relative,
+            ide_goto_relative,
+        )
+    })
+    .await
+        .map_err(|e| format!("open_workspace_in 任务异常: {e}"))?
 }
 
 // ── File Watcher ──
@@ -782,8 +817,7 @@ pub(crate) struct ShellCommandResponse {
 }
 
 /// Execute a shell command in the given directory.
-#[tauri::command]
-pub(crate) fn run_shell_command(
+fn run_shell_command_blocking(
     path: String,
     command: String,
 ) -> Result<ShellCommandResponse, String> {
@@ -791,6 +825,7 @@ pub(crate) fn run_shell_command(
         .arg("-c")
         .arg(&command)
         .current_dir(&path)
+        .stdin(std::process::Stdio::null())
         .output()
         .map_err(|e| format!("Failed to execute command: {}", e))?;
 
@@ -799,6 +834,16 @@ pub(crate) fn run_shell_command(
         stderr: String::from_utf8_lossy(&output.stderr).to_string(),
         exit_code: output.status.code().unwrap_or(-1),
     })
+}
+
+#[tauri::command]
+pub(crate) async fn run_shell_command(
+    path: String,
+    command: String,
+) -> Result<ShellCommandResponse, String> {
+    tokio::task::spawn_blocking(move || run_shell_command_blocking(path, command))
+        .await
+        .map_err(|e| format!("run_shell_command 任务异常: {e}"))?
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -832,7 +877,19 @@ pub(crate) fn spawn_shell_command(path: String, command: String) -> Result<Spawn
         .spawn()
         .map_err(|e| format!("Failed to spawn shell command: {}", e))?;
 
-    Ok(SpawnShellCommandResponse { pid: child.id() })
+    let pid = child.id();
+    reap_detached_child(child);
+    Ok(SpawnShellCommandResponse { pid })
+}
+
+/// Fire-and-forget children must still be waited on, or every exit leaves a zombie
+/// in the process table for the lifetime of Wise.
+fn reap_detached_child(mut child: std::process::Child) {
+    let _ = std::thread::Builder::new()
+        .name("wise-reap-child".into())
+        .spawn(move || {
+            let _ = child.wait();
+        });
 }
 
 /// 将文本写入用户通过系统对话框选择的绝对路径（供会话链路包导出等）。
@@ -960,6 +1017,7 @@ fn open_app_at_directory(app_name: &str, path: &str) -> Result<(), String> {
         .arg(app_name)
         .arg(path)
         .spawn()
+        .map(reap_detached_child)
         .map_err(|e| format!("无法启动「{app_name}」：{e}"))?;
     Ok(())
 }
@@ -978,6 +1036,7 @@ fn spawn_app_with_args(app_name: &str, args: &[&str]) -> Result<(), String> {
         cmd.arg(a);
     }
     cmd.spawn()
+        .map(reap_detached_child)
         .map_err(|e| format!("无法启动「{app_name}」：{e}"))?;
     Ok(())
 }
@@ -986,8 +1045,21 @@ fn spawn_app_with_args(app_name: &str, args: &[&str]) -> Result<(), String> {
 /// 退化为只打开终端到指定目录，保持原有"打开外部终端"行为不变。
 #[cfg(target_os = "macos")]
 #[tauri::command]
-pub(crate) fn macos_open_terminal_with_command(
+pub(crate) async fn macos_open_terminal_with_command(
     #[allow(non_snake_case)] appName: String,
+    path: String,
+    command: String,
+) -> Result<(), String> {
+    // AppleScript waits for the terminal and may wait on an Automation prompt.
+    tokio::task::spawn_blocking(move || macos_open_terminal_with_command_blocking(appName, path, command))
+        .await
+        .map_err(|e| format!("macos_open_terminal_with_command 任务异常: {e}"))?
+}
+
+#[cfg(target_os = "macos")]
+#[allow(non_snake_case)]
+fn macos_open_terminal_with_command_blocking(
+    appName: String,
     path: String,
     command: String,
 ) -> Result<(), String> {
@@ -1073,6 +1145,7 @@ pub(crate) fn macos_open_terminal_with_command(
             std::process::Command::new("open")
                 .arg(&uri)
                 .spawn()
+                .map(reap_detached_child)
                 .map_err(|e| format!("无法打开 Warp：{e}"))?;
             if run_command.is_empty() {
                 return Ok(());

@@ -135,8 +135,7 @@ fn openspec_initialized_at_exact(root: &Path) -> bool {
 }
 
 /// If `repository_path` has no `.openspec/`, run `openspec init` with Claude tooling preset.
-#[tauri::command]
-pub fn bootstrap_openspec_if_missing(repository_path: String) -> Result<(), String> {
+fn bootstrap_openspec_if_missing_blocking(repository_path: String) -> Result<(), String> {
     let canon = validate_repository_root_for_bootstrap(&repository_path)?;
     if openspec_initialized_at_exact(&canon) {
         return Ok(());
@@ -194,4 +193,11 @@ pub fn bootstrap_openspec_if_missing(repository_path: String) -> Result<(), Stri
         "{label} init 失败（退出码 {:?}）\n{stderr}\n{stdout}",
         out.status.code()
     ))
+}
+
+#[tauri::command]
+pub async fn bootstrap_openspec_if_missing(repository_path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || bootstrap_openspec_if_missing_blocking(repository_path))
+        .await
+        .map_err(|e| format!("bootstrap_openspec_if_missing 任务异常: {e}"))?
 }
