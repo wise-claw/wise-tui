@@ -1993,14 +1993,20 @@ async fn spawn_claude_process(
             }
         }
 
+        // 本 reader 在 pid 匹配时亲自观察到的退出码。try_wait 一旦看到退出，Child::id() 即变为 None，
+        // 之后再按 pid 匹配会把自己误判为「被顶替」而跳过 complete 与清理；主动 kill 的路径都会在同一把锁内清空槽位，
+        // 所以这里看到的退出只可能是子进程自行结束。
+        let mut observed_exit: Option<std::process::ExitStatus> = None;
         let child_still_running_after_stdout = {
             let mut slot = wait_child_mutex_clone.lock().await;
             match slot.as_mut() {
-                Some(c) if c.id() == Some(spawned_pid_stdout) => c
-                    .try_wait()
-                    .ok()
-                    .flatten()
-                    .is_none(),
+                Some(c) if c.id() == Some(spawned_pid_stdout) => match c.try_wait() {
+                    Ok(Some(status)) => {
+                        observed_exit = Some(status);
+                        false
+                    }
+                    Ok(None) | Err(_) => true,
+                },
                 _ => false,
             }
         };
@@ -2051,11 +2057,15 @@ async fn spawn_claude_process(
                         let still = {
                             let mut slot = wait_child_mutex_clone.lock().await;
                             match slot.as_mut() {
-                                Some(c) if c.id() == Some(spawned_pid_stdout) => c
-                                    .try_wait()
-                                    .ok()
-                                    .flatten()
-                                    .is_none(),
+                                Some(c) if c.id() == Some(spawned_pid_stdout) => {
+                                    match c.try_wait() {
+                                        Ok(Some(status)) => {
+                                            observed_exit = Some(status);
+                                            false
+                                        }
+                                        Ok(None) | Err(_) => true,
+                                    }
+                                }
                                 _ => false,
                             }
                         };
@@ -2070,13 +2080,20 @@ async fn spawn_claude_process(
 
         // Process finished — 只 wait 本 stdout 对应的子进程。Persistent 下新 spawn 会替换全局槽位并 kill 旧进程，
         // 若旧 reader 对「当前 mutex 里的新 Child」wait，会把别的会话的退出码绑到本会话，前端表现为误报「执行失败」。
-        let (exit_status, skip_completion_for_superseded_reader) = {
-            let mut slot = wait_child_mutex_clone.lock().await;
-            match slot.as_mut() {
-                Some(c) if c.id() == Some(spawned_pid_stdout) => (c.wait().await.ok(), false),
+        // 轮询等待并在间隙释放锁：持锁 wait 会让取消 / 新 spawn 拿不到槽位而永久阻塞。
+        let (exit_status, skip_completion_for_superseded_reader) = match observed_exit {
+            Some(status) => (Some(status), false),
+            None => match crate::child_slot_wait::wait_owned_child(
+                &wait_child_mutex_clone,
+                spawned_pid_stdout,
+            )
+            .await
+            {
+                crate::child_slot_wait::OwnedChildWait::Exited(status) => (Some(status), false),
+                crate::child_slot_wait::OwnedChildWait::WaitFailed => (None, false),
                 // 槽位已是别的子进程或已清空：本 reader 属于被顶替/已取消的旧 spawn，不得发 complete。
-                _ => (None, true),
-            }
+                crate::child_slot_wait::OwnedChildWait::Superseded => (None, true),
+            },
         };
         if skip_completion_for_superseded_reader {
             pending_stdin_by_spawn_clone.lock().await.remove(&spawn_id);

@@ -65,6 +65,38 @@ pub(crate) async fn wait_child_slot(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OwnedChildWait {
+    Exited(ExitStatus),
+    WaitFailed,
+    /// Slot is empty or holds another process: this waiter was cancelled or replaced.
+    Superseded,
+}
+
+/// Wait for the child spawned as `pid` in a shared slot (e.g. the persistent Claude
+/// slot that later spawns reuse), releasing the lock between polls so cancel can kill.
+pub(crate) async fn wait_owned_child(
+    wait_child: &Arc<TokioMutex<Option<Child>>>,
+    pid: u32,
+) -> OwnedChildWait {
+    loop {
+        {
+            let mut slot = wait_child.lock().await;
+            match slot.as_mut() {
+                // `id()` is None once any `try_wait` has observed the exit, so callers
+                // that poll must keep the status they saw instead of calling this again.
+                Some(child) if child.id() == Some(pid) => match child.try_wait() {
+                    Ok(Some(status)) => return OwnedChildWait::Exited(status),
+                    Ok(None) => {}
+                    Err(_) => return OwnedChildWait::WaitFailed,
+                },
+                _ => return OwnedChildWait::Superseded,
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(40)).await;
+    }
+}
+
 /// Convenience: map outcome to exit status (Cleared/TimedOut → None).
 pub(crate) async fn wait_child_slot_exit_status(
     wait_child: &Arc<TokioMutex<Option<Child>>>,
@@ -117,5 +149,52 @@ mod tests {
             .expect("join ok");
         // Cleared path may yield None; either way cancel must not block the waiter.
         let _ = status;
+    }
+
+    fn spawn_sh(script: &str) -> (Arc<TokioMutex<Option<Child>>>, u32) {
+        let child = Command::new("/bin/sh")
+            .args(["-c", script])
+            .kill_on_drop(true)
+            .spawn()
+            .expect("spawn sh");
+        let pid = child.id().unwrap();
+        (Arc::new(TokioMutex::new(Some(child))), pid)
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn owned_wait_reports_exit_and_try_wait_clears_pid() {
+        use std::os::unix::process::ExitStatusExt;
+        let (slot, pid) = spawn_sh("exit 3");
+        let outcome = tokio::time::timeout(Duration::from_secs(3), wait_owned_child(&slot, pid))
+            .await
+            .unwrap();
+        assert_eq!(outcome, OwnedChildWait::Exited(ExitStatus::from_raw(3 << 8)));
+        // The reaped child no longer reports its pid, so a second wait cannot match it.
+        assert_eq!(slot.lock().await.as_ref().unwrap().id(), None);
+        assert_eq!(wait_owned_child(&slot, pid).await, OwnedChildWait::Superseded);
+    }
+
+    #[tokio::test]
+    async fn owned_wait_lets_cancel_kill_and_detects_replacement() {
+        let (slot, pid) = spawn_sh("sleep 30");
+        let waiter_slot = slot.clone();
+        let waiter = tokio::spawn(async move { wait_owned_child(&waiter_slot, pid).await });
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        {
+            let mut guard = tokio::time::timeout(Duration::from_secs(1), slot.lock())
+                .await
+                .expect("cancel must acquire the slot while the reader waits");
+            let _ = guard.as_mut().unwrap().kill().await;
+            *guard = None;
+        }
+        let outcome = tokio::time::timeout(Duration::from_secs(3), waiter).await.unwrap().unwrap();
+        assert_eq!(outcome, OwnedChildWait::Superseded);
+
+        let (slot, pid) = spawn_sh("sleep 30");
+        let (replacement, _) = spawn_sh("sleep 30");
+        let next = replacement.lock().await.take();
+        *slot.lock().await = next;
+        assert_eq!(wait_owned_child(&slot, pid).await, OwnedChildWait::Superseded);
     }
 }
