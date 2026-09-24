@@ -87,7 +87,7 @@ where
     F: FnOnce(&mut InAppSearchShortcutState) -> Result<R, String>,
 {
     let state = app.state::<Mutex<InAppSearchShortcutState>>();
-    let mut guard = state.lock().map_err(|_| "in_app_shortcuts lock poisoned".to_string())?;
+    let mut guard = state.lock().unwrap_or_else(|e| e.into_inner());
     f(&mut guard)
 }
 

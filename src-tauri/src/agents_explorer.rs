@@ -104,7 +104,16 @@ pub struct AgentsFilePathArg {
 }
 
 #[tauri::command]
-pub fn agents_explorer_scan(repository_path: String) -> Result<AgentsDirectoryScan, String> {
+pub async fn agents_explorer_scan(repository_path: String) -> Result<AgentsDirectoryScan, String> {
+    crate::blocking_ipc::run_blocking("agents_explorer_scan", move || {
+        agents_explorer_scan_blocking(repository_path)
+    })
+    .await
+}
+
+pub fn agents_explorer_scan_blocking(
+    repository_path: String,
+) -> Result<AgentsDirectoryScan, String> {
     let root = resolve_repository_root(&repository_path)?;
     let agents_root = root.join(AGENTS_DIR_NAME);
     if !agents_root.is_dir() {
@@ -134,7 +143,18 @@ pub fn agents_explorer_scan(repository_path: String) -> Result<AgentsDirectorySc
 }
 
 #[tauri::command]
-pub fn agents_explorer_read_file(arg: AgentsFilePathArg) -> Result<AgentsFileContent, String> {
+pub async fn agents_explorer_read_file(
+    arg: AgentsFilePathArg,
+) -> Result<AgentsFileContent, String> {
+    crate::blocking_ipc::run_blocking("agents_explorer_read_file", move || {
+        agents_explorer_read_file_blocking(arg)
+    })
+    .await
+}
+
+pub fn agents_explorer_read_file_blocking(
+    arg: AgentsFilePathArg,
+) -> Result<AgentsFileContent, String> {
     let p = PathBuf::from(arg.path);
     if !p.is_file() {
         return Err("文件不存在或不可读".to_string());
@@ -511,7 +531,7 @@ mod tests {
         );
         write(&agents.join("commands/quick.md"), "# 快速命令\n\n没有 frontmatter 的命令说明");
 
-        let scan = agents_explorer_scan(dir.path().to_string_lossy().to_string()).expect("scan");
+        let scan = agents_explorer_scan_blocking(dir.path().to_string_lossy().to_string()).expect("scan");
         assert!(scan.exists);
         assert_eq!(scan.commands.len(), 2);
 
@@ -549,7 +569,7 @@ mod tests {
         );
         write(&agents.join("hooks/post-tool.md"), "hook 内容");
 
-        let scan = agents_explorer_scan(dir.path().to_string_lossy().to_string()).expect("scan");
+        let scan = agents_explorer_scan_blocking(dir.path().to_string_lossy().to_string()).expect("scan");
         assert_eq!(scan.skills.len(), 1);
         assert_eq!(scan.skills[0].name, "weather");
         assert_eq!(scan.skills[0].description.as_deref(), Some("查询天气"));
@@ -564,7 +584,7 @@ mod tests {
     #[test]
     fn missing_agents_dir_returns_empty_scan() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let scan = agents_explorer_scan(dir.path().to_string_lossy().to_string()).expect("scan");
+        let scan = agents_explorer_scan_blocking(dir.path().to_string_lossy().to_string()).expect("scan");
         assert!(!scan.exists);
         assert!(scan.root_path.is_none());
         assert!(scan.commands.is_empty());
@@ -575,7 +595,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         write(&dir.path().join("outside.md"), "x");
         let outside = dir.path().join("outside.md");
-        let err = agents_explorer_read_file(AgentsFilePathArg {
+        let err = agents_explorer_read_file_blocking(AgentsFilePathArg {
             path: outside.to_string_lossy().to_string(),
         })
         .expect_err("should reject outside files");

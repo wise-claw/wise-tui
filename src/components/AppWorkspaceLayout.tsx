@@ -86,9 +86,8 @@ import {
 } from "../stores/repositoryRunCommandRuntimeStore";
 import { setPageMonitorAutoFixHandler } from "../stores/chromeDevtoolsMonitorRuntimeStore";
 import type { CenterView } from "./ClaudeSessions/ClaudeChat";
-import { WORKSPACE_MEMO_PANEL_NODE } from "./WorkspaceMemoPanel";
-import { WorkspaceRequirementModal } from "./WorkspaceMemoPanel/WorkspaceRequirementModal";
-import { WORKSPACE_QUICK_ACTIONS_PANEL_NODE } from "./WorkspaceQuickActionsCenterPanel";
+import { WORKSPACE_MEMO_PANEL_NODE, WORKSPACE_QUICK_ACTIONS_PANEL_NODE } from "./workspaceAuxPanelNodes";
+import { DeferredWorkspaceRequirementModal } from "./WorkspaceMemoPanel/DeferredWorkspaceRequirementModal";
 import { TERMINAL_CENTER_SLOT_SENTINEL } from "./TerminalPanel/terminalCenterSlot";
 import { WorkspaceFileTreeRail } from "./WorkspaceFileTreeRail";
 import type { WorkspaceFileTreeRailContext } from "./WorkspaceFileTreeRail/types";
@@ -455,14 +454,16 @@ const ConnectedLeftSidebar = memo(function ConnectedLeftSidebar({
 }: ConnectedLeftSidebarProps) {
   const openRepositoryFile = useRepositoryFileEditorOpenFile();
   return (
-    <MemoLeftSidebar
-      {...leftSidebarProps}
-      dark={dark}
-      collapsed={collapsed}
-      parked={parked}
-      siderWidth={siderWidth}
-      onOpenActiveRepositoryFile={openRepositoryFile}
-    />
+    <ErrorBoundary type="local" fallbackTitle="侧栏出错">
+      <MemoLeftSidebar
+        {...leftSidebarProps}
+        dark={dark}
+        collapsed={collapsed}
+        parked={parked}
+        siderWidth={siderWidth}
+        onOpenActiveRepositoryFile={openRepositoryFile}
+      />
+    </ErrorBoundary>
   );
 }, (prev, next) =>
   prev.collapsed === next.collapsed &&
@@ -626,27 +627,29 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
     return null;
   }
   return (
-    <Suspense fallback={<PanelLoadingFallback />}>
-      <LazyRepositoryFileEditorPanel
-        activePath={activePath}
-        activeSessionId={activeSessionId}
-        dark={dark}
-        dirty={dirty}
-        mdPreviewByPath={mdPreviewByPath}
-        onMdPreviewTabChange={setEditorTabMdPreview}
-        repositoryPath={repositoryPath}
-        saving={saving}
-        tabs={tabs}
-        onActivePathChange={onActivePathChange}
-        onClosePanel={onClosePanel}
-        onCloseTab={onCloseTab}
-        onReloadTab={onReloadTab}
-        onSave={onSave}
-        onTabContentChange={onTabContentChange}
-        onNavigateToFile={openFile}
-        onRevealInExplorer={revealInExplorer ?? undefined}
-      />
-    </Suspense>
+    <ErrorBoundary type="local" fallbackTitle="文件编辑器出错">
+      <Suspense fallback={<PanelLoadingFallback />}>
+        <LazyRepositoryFileEditorPanel
+          activePath={activePath}
+          activeSessionId={activeSessionId}
+          dark={dark}
+          dirty={dirty}
+          mdPreviewByPath={mdPreviewByPath}
+          onMdPreviewTabChange={setEditorTabMdPreview}
+          repositoryPath={repositoryPath}
+          saving={saving}
+          tabs={tabs}
+          onActivePathChange={onActivePathChange}
+          onClosePanel={onClosePanel}
+          onCloseTab={onCloseTab}
+          onReloadTab={onReloadTab}
+          onSave={onSave}
+          onTabContentChange={onTabContentChange}
+          onNavigateToFile={openFile}
+          onRevealInExplorer={revealInExplorer ?? undefined}
+        />
+      </Suspense>
+    </ErrorBoundary>
   );
 });
 
@@ -1992,7 +1995,7 @@ export function AppWorkspaceLayout({
                 <ConnectedRepositoryFilePreviewModal />
               </Suspense>
 
-              <WorkspaceRequirementModal
+              <DeferredWorkspaceRequirementModal
                 repositories={claudeSessionsProps.repositories ?? []}
                 activeRepositoryId={claudeSessionsProps.activeRepository?.id ?? null}
                 employees={claudeSessionsProps.employees}
@@ -2006,13 +2009,17 @@ export function AppWorkspaceLayout({
                 deepseekAvailable={deepseekAvailable}
               />
 
-              <Suspense fallback={null}>
-                <LazyProgressMonitorDrawer {...progressMonitorDrawerProps} />
-              </Suspense>
+              <ErrorBoundary type="local" fallbackTitle="进度监控面板出错">
+                <Suspense fallback={null}>
+                  <LazyProgressMonitorDrawer {...progressMonitorDrawerProps} />
+                </Suspense>
+              </ErrorBoundary>
 
-              <Suspense fallback={null}>
-                <LazyMonitorHistorySessionTranscriptDrawer {...historyTranscriptDrawerProps} />
-              </Suspense>
+              <ErrorBoundary type="local" fallbackTitle="历史会话记录面板出错">
+                <Suspense fallback={null}>
+                  <LazyMonitorHistorySessionTranscriptDrawer {...historyTranscriptDrawerProps} />
+                </Suspense>
+              </ErrorBoundary>
 
             </AntdApp>
           </ConfigProvider>

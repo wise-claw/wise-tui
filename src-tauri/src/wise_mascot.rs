@@ -54,15 +54,15 @@ impl WiseToastMerge {
             return;
         }
         {
-            let mut p = self.pending_preview.lock().unwrap();
+            let mut p = self.pending_preview.lock().unwrap_or_else(|e| e.into_inner());
             *p = preview;
         }
         {
-            let mut s = self.pending_source.lock().unwrap();
+            let mut s = self.pending_source.lock().unwrap_or_else(|e| e.into_inner());
             *s = source;
         }
         {
-            let mut t_guard = self.pending_title.lock().unwrap();
+            let mut t_guard = self.pending_title.lock().unwrap_or_else(|e| e.into_inner());
             *t_guard = title;
         }
         let ms = merge_ms.max(40);
@@ -76,9 +76,9 @@ impl WiseToastMerge {
             if merge.toast_ticket.load(Ordering::SeqCst) != my {
                 return;
             }
-            let body = merge.pending_preview.lock().unwrap().clone();
-            let src = merge.pending_source.lock().unwrap().clone();
-            let title = merge.pending_title.lock().unwrap().clone();
+            let body = merge.pending_preview.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let src = merge.pending_source.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let title = merge.pending_title.lock().unwrap_or_else(|e| e.into_inner()).clone();
             let payload = serde_json::json!({
                 "title": title.unwrap_or_else(|| default_title_for_source(&src)),
                 "body": body,

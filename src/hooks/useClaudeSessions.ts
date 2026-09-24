@@ -2013,6 +2013,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     let cancelled = false;
     void (async () => {
       try {
+        // 与 tabs 读取互不依赖，提前并发发起，避免冷启动串行 IPC 瀑布。
+        const globalDefaultPromise = loadDefaultClaudeConnectionKind();
+        const stripSettingPromise = getAppSetting("wise.defaultConfig.stripTabConnectionOverrides.v1");
+        globalDefaultPromise.catch(() => {});
+        stripSettingPromise.catch(() => {});
         let data = await loadSessionTabsState();
         if (cancelled) return;
         // 合并 beforeunload 写入的 localStorage 备份（弥补异步 IPC 在页面卸载时可能未送达的空窗）
@@ -2042,12 +2047,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           }
         } catch { /* ignore parse errors */ }
         if (data?.sessions && data.sessions.length > 0) {
-          const globalDefault = await loadDefaultClaudeConnectionKind();
+          const globalDefault = await globalDefaultPromise;
           if (!cancelled) defaultConnectionKindRef.current = globalDefault;
 
-          const stripLegacyOverrides = !(await getAppSetting(
-            "wise.defaultConfig.stripTabConnectionOverrides.v1",
-          ))?.trim();
+          const stripLegacyOverrides = !(await stripSettingPromise)?.trim();
 
           const normalized = data.sessions.map((s) => {
             const base = {
@@ -2394,9 +2397,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     });
 
     void (async () => {
-      await attach(claudeStreamEvent("output"), runtime.handleOutput);
-      await attach(claudeStreamEvent("complete"), runtime.handleComplete);
-      await attach(claudeStreamEvent("error"), runtime.handleError);
+      // allSettled：部分失败时要等其余 listen 落定再统一释放，否则迟到的监听会漏掉清理。
+      const results = await Promise.allSettled([
+        attach(claudeStreamEvent("output"), runtime.handleOutput),
+        attach(claudeStreamEvent("complete"), runtime.handleComplete),
+        attach(claudeStreamEvent("error"), runtime.handleError),
+      ]);
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (failed) throw failed.reason;
       if (cancelled) return;
       // 须在全局 listen 就绪后再暴露 runtime，否则首包 invoke 可能无人消费 `claude-output` / complete。
       streamRuntimeRef.current = runtime;

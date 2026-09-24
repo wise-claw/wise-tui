@@ -1018,9 +1018,20 @@ pub(crate) struct ReconcileProjectWorkspaceResult {
 }
 
 #[tauri::command]
-pub(crate) fn reconcile_project_workspace(
+pub(crate) async fn reconcile_project_workspace(
     app: tauri::AppHandle,
-    db: tauri::State<'_, wise_db::WiseDb>,
+    project_id: String,
+) -> Result<ReconcileProjectWorkspaceResult, String> {
+    crate::blocking_ipc::run_blocking("reconcile_project_workspace", move || {
+        let db = app.state::<wise_db::WiseDb>();
+        reconcile_project_workspace_blocking(&app, &db, project_id)
+    })
+    .await
+}
+
+fn reconcile_project_workspace_blocking(
+    app: &tauri::AppHandle,
+    db: &wise_db::WiseDb,
     project_id: String,
 ) -> Result<ReconcileProjectWorkspaceResult, String> {
     let rows = db.list_projects()?;
@@ -1544,7 +1555,7 @@ pub(crate) fn create_workflow_task(
     {
         id
     } else {
-        let g = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = db.conn();
         let default_id: Option<String> = g
             .query_row(
                 "SELECT id FROM workflows WHERE is_default = 1 ORDER BY updated_at DESC LIMIT 1",
@@ -1556,7 +1567,7 @@ pub(crate) fn create_workflow_task(
         default_id.ok_or_else(|| "未找到默认工作流，请先配置工作流".to_string())?
     };
     let task_id = format!("task_{}", Uuid::new_v4().simple());
-    let mut g = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let mut g = db.conn();
     let tx = g.transaction().map_err(|e| e.to_string())?;
     tx.execute(
         "INSERT INTO tasks (id, title, content, creator, workflow_id, current_stage_index, status, created_at, updated_at)
@@ -1628,7 +1639,7 @@ pub(crate) fn list_workflow_tasks(
     db: tauri::State<'_, wise_db::WiseDb>,
     creator: Option<String>,
 ) -> Result<Vec<WorkflowTaskItem>, String> {
-    let g = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let g = db.conn();
     let mut out = Vec::new();
     if let Some(creator_id) = creator
         .map(|v| v.trim().to_string())
@@ -1695,7 +1706,7 @@ pub(crate) fn list_task_events(
     db: tauri::State<'_, wise_db::WiseDb>,
     task_id: String,
 ) -> Result<Vec<WorkflowTaskEventItem>, String> {
-    let g = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let g = db.conn();
     let mut stmt = g
         .prepare(
             "SELECT id, task_id, event_type, payload_json, created_at
@@ -1727,7 +1738,7 @@ pub(crate) fn get_acceptance_verdict_source_stats(
     db: tauri::State<'_, wise_db::WiseDb>,
     task_id: Option<String>,
 ) -> Result<Vec<AcceptanceVerdictSourceStatsItem>, String> {
-    let g = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let g = db.conn();
 
     let sql_with_task =
         "SELECT COALESCE(json_extract(payload_json, '$.verdictSource'), 'unknown') AS verdict_source,
@@ -1815,7 +1826,7 @@ pub(crate) fn append_task_event(
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
 
-    let g = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let g = db.conn();
     let insert_result = g.execute(
         "INSERT INTO task_events (id, task_id, event_type, payload_json, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -1881,7 +1892,7 @@ pub(crate) fn list_task_pending_employees(
     db: tauri::State<'_, wise_db::WiseDb>,
     task_id: String,
 ) -> Result<Vec<TaskPendingEmployeeItem>, String> {
-    let g = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let g = db.conn();
     let (workflow_id, current_stage_index): (String, i64) = g
         .query_row(
             "SELECT workflow_id, current_stage_index FROM tasks WHERE id = ?1",
@@ -1935,7 +1946,7 @@ pub(crate) fn decide_workflow_task_stage(
     if normalized_decision != "approved" && normalized_decision != "rejected" {
         return Err("decision 仅支持 approved/rejected".to_string());
     }
-    let mut g = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let mut g = db.conn();
     let tx = g.transaction().map_err(|e| e.to_string())?;
     let (workflow_id, current_stage_index, _status): (String, i64, String) = tx
         .query_row(
@@ -2181,7 +2192,7 @@ pub(crate) fn end_workflow_task(
     if task_id_value.is_empty() {
         return Err("taskId 不能为空".to_string());
     }
-    let mut g = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let mut g = db.conn();
     let tx = g.transaction().map_err(|e| e.to_string())?;
     tx.execute(
         "UPDATE tasks

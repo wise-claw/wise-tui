@@ -191,7 +191,7 @@ pub fn seed_migrate_terminal_quick_commands_from_app_settings(
 
 impl WiseDb {
     pub fn list_terminal_quick_commands(&self) -> Result<Vec<TerminalQuickCommandDto>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         list_conn(&g)
     }
 
@@ -200,7 +200,7 @@ impl WiseDb {
         items: Vec<TerminalQuickCommandDto>,
     ) -> Result<Vec<TerminalQuickCommandDto>, String> {
         let normalized = normalize_items(items);
-        let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let mut g = self.conn();
         let tx = g.transaction().map_err(|e| e.to_string())?;
         replace_conn(&tx, &normalized)?;
         tx.commit().map_err(|e| e.to_string())?;

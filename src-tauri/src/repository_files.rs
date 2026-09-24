@@ -550,6 +550,16 @@ pub(crate) async fn list_repository_explorer_children(
     root: String,
     relative_dir: String,
 ) -> Result<Vec<RepositoryExplorerEntry>, String> {
+    crate::blocking_ipc::run_blocking("list_repository_explorer_children", move || {
+        list_repository_explorer_children_blocking(root, relative_dir)
+    })
+    .await
+}
+
+fn list_repository_explorer_children_blocking(
+    root: String,
+    relative_dir: String,
+) -> Result<Vec<RepositoryExplorerEntry>, String> {
     const MAX_CHILDREN: usize = 4_000;
 
     let root_path = expand_tilde_in_path(&root);
@@ -719,7 +729,20 @@ pub(crate) fn create_repository_directory(
 
 /// Delete a file or directory under the repository (directories are removed recursively).
 #[tauri::command]
-pub(crate) fn delete_repository_entry(root: String, relative_path: String) -> Result<(), String> {
+pub(crate) async fn delete_repository_entry(
+    root: String,
+    relative_path: String,
+) -> Result<(), String> {
+    crate::blocking_ipc::run_blocking("delete_repository_entry", move || {
+        delete_repository_entry_blocking(root, relative_path)
+    })
+    .await
+}
+
+pub(crate) fn delete_repository_entry_blocking(
+    root: String,
+    relative_path: String,
+) -> Result<(), String> {
     let root_pb = PathBuf::from(&root);
     if !root_pb.is_dir() {
         return Err("仓库根目录无效".into());

@@ -1823,8 +1823,15 @@ pub fn chrome_page_monitor_extension_dir(app: AppHandle) -> Result<String, Strin
 /// Export the app-bundled Chrome extension into `~/Downloads/wise-page-monitor`
 /// and reveal that folder. Never opens the repo source tree.
 #[tauri::command]
-pub fn chrome_page_monitor_download_extension(app: AppHandle) -> Result<String, String> {
-    let dest = crate::chrome_page_monitor_bridge::download_extension(&app)?;
+pub async fn chrome_page_monitor_download_extension(app: AppHandle) -> Result<String, String> {
+    crate::blocking_ipc::run_blocking("chrome_page_monitor_download_extension", move || {
+        chrome_page_monitor_download_extension_blocking(&app)
+    })
+    .await
+}
+
+fn chrome_page_monitor_download_extension_blocking(app: &AppHandle) -> Result<String, String> {
+    let dest = crate::chrome_page_monitor_bridge::download_extension(app)?;
     let path = dest.to_string_lossy().to_string();
     app.opener()
         .open_path(&path, None::<String>)
@@ -1834,8 +1841,8 @@ pub fn chrome_page_monitor_download_extension(app: AppHandle) -> Result<String, 
 
 /// Compatibility wrapper: same as [`chrome_page_monitor_download_extension`].
 #[tauri::command]
-pub fn chrome_page_monitor_open_extension_dir(app: AppHandle) -> Result<(), String> {
-    chrome_page_monitor_download_extension(app).map(|_| ())
+pub async fn chrome_page_monitor_open_extension_dir(app: AppHandle) -> Result<(), String> {
+    chrome_page_monitor_download_extension(app).await.map(|_| ())
 }
 
 #[cfg(test)]

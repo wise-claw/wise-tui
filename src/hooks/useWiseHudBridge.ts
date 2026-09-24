@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
-import { emit, listen } from "@tauri-apps/api/event";
+import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { ClaudeSession, EmployeeItem, Repository } from "../types";
 import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
@@ -9,7 +9,7 @@ import { getWiseHudModeActive, setWiseHudModeActive } from "../stores/wiseHudMod
 import { getAssistantsSnapshot } from "../stores/assistantsStore";
 import type { AssistantEntry } from "../types/assistant";
 import { resolveSessionExecutionEngine } from "../utils/sessionExecutionEngine";
-import { safeUnlisten } from "../utils/safeTauriUnlisten";
+import { collectTauriListeners, safeUnlisten } from "../utils/safeTauriUnlisten";
 import {
   getRepositoryRunCommandState,
   subscribeRepositoryRunCommandRuntimeForRepository,
@@ -228,11 +228,12 @@ export function useWiseHudBridge({
     let cancelled = false;
     const unsubs: Array<() => void> = [];
     void (async () => {
-      const u1 = await listen<unknown>(WISE_HUD_REQUEST_STATE_EVENT, () => {
+      const pending: Array<Promise<UnlistenFn>> = [];
+      pending.push(listen<unknown>(WISE_HUD_REQUEST_STATE_EVENT, () => {
         lastKeyRef.current = "";
         publishNow();
-      });
-      const u2 = await listen<unknown>(WISE_HUD_SUBMIT_EVENT, (event) => {
+      }));
+      pending.push(listen<unknown>(WISE_HUD_SUBMIT_EVENT, (event) => {
         const payload = parseWiseHudSubmitPayload(event.payload);
         if (!payload) return;
         const sessionId = resolveHudSubmitSessionId(
@@ -242,13 +243,13 @@ export function useWiseHudBridge({
         );
         if (!sessionId) return;
         void executeSessionRef.current(sessionId, payload.text);
-      });
-      const u3 = await listen(WISE_HUD_CANCEL_EVENT, () => {
+      }));
+      pending.push(listen(WISE_HUD_CANCEL_EVENT, () => {
         const sessionId = activeSessionIdRef.current;
         if (!sessionId) return;
         cancelSessionRef.current(sessionId);
-      });
-      const u4 = await listen<unknown>(WISE_HUD_ACTIVE_EVENT, (event) => {
+      }));
+      pending.push(listen<unknown>(WISE_HUD_ACTIVE_EVENT, (event) => {
         const active = parseWiseHudActiveChanged(event.payload);
         if (active == null) return;
         setWiseHudModeActive(active);
@@ -261,45 +262,45 @@ export function useWiseHudBridge({
           detailsOpenRef.current = false;
           restoreComposerFocusAfterHudExit(activeSessionIdRef.current);
         }
-      });
-      const u5 = await listen<unknown>(WISE_HUD_SELECT_REPOSITORY_EVENT, (event) => {
+      }));
+      pending.push(listen<unknown>(WISE_HUD_SELECT_REPOSITORY_EVENT, (event) => {
         const payload = parseWiseHudSelectRepositoryPayload(event.payload);
         if (!payload) return;
         selectRepositoryRef.current(payload.repositoryId);
-      });
-      const u6 = await listen(WISE_HUD_NEW_SESSION_EVENT, () => {
+      }));
+      pending.push(listen(WISE_HUD_NEW_SESSION_EVENT, () => {
         const repo = activeRepositoryRef.current;
         if (!repo) return;
         void createNewSessionRef.current(repo);
-      });
+      }));
       const resolveTargetSessionId = (hinted?: string) =>
         resolveHudSubmitSessionId(
           hinted,
           activeSessionIdRef.current,
           sessionsRef.current.map((item) => item.id),
         );
-      const u7 = await listen<unknown>(WISE_HUD_SET_ENGINE_EVENT, (event) => {
+      pending.push(listen<unknown>(WISE_HUD_SET_ENGINE_EVENT, (event) => {
         const payload = parseWiseHudSetEnginePayload(event.payload);
         if (!payload) return;
         const sessionId = resolveTargetSessionId(payload.sessionId);
         if (!sessionId) return;
         setExecutionEngineRef.current(sessionId, payload.engine);
-      });
-      const u8 = await listen<unknown>(WISE_HUD_SET_MODEL_EVENT, (event) => {
+      }));
+      pending.push(listen<unknown>(WISE_HUD_SET_MODEL_EVENT, (event) => {
         const payload = parseWiseHudSetModelPayload(event.payload);
         if (!payload) return;
         const sessionId = resolveTargetSessionId(payload.sessionId);
         if (!sessionId) return;
         setModelRef.current(sessionId, payload.model);
-      });
-      const u9 = await listen<unknown>(WISE_HUD_SET_DETAILS_OPEN_EVENT, (event) => {
+      }));
+      pending.push(listen<unknown>(WISE_HUD_SET_DETAILS_OPEN_EVENT, (event) => {
         const payload = parseWiseHudSetDetailsOpenPayload(event.payload);
         if (!payload) return;
         detailsOpenRef.current = payload.open;
         lastKeyRef.current = "";
         publishNow();
-      });
-      const u10 = await listen<unknown>(WISE_HUD_ACTIVATE_ASSISTANT_EVENT, (event) => {
+      }));
+      pending.push(listen<unknown>(WISE_HUD_ACTIVATE_ASSISTANT_EVENT, (event) => {
         const payload = parseWiseHudActivateAssistantPayload(event.payload);
         if (!payload) return;
         const assistant = getAssistantsSnapshot().find((item) => item.id === payload.assistantId);
@@ -308,8 +309,8 @@ export function useWiseHudBridge({
           return;
         }
         openBuiltinAssistantRef.current(payload.assistantId);
-      });
-      const u11 = await listen<unknown>(WISE_HUD_TOGGLE_REPOSITORY_RUN_EVENT, (event) => {
+      }));
+      pending.push(listen<unknown>(WISE_HUD_TOGGLE_REPOSITORY_RUN_EVENT, (event) => {
         const payload = parseWiseHudToggleRepositoryRunPayload(event.payload);
         if (!payload) return;
         const repository = repositoriesRef.current.find((item) => item.id === payload.repositoryId);
@@ -329,8 +330,8 @@ export function useWiseHudBridge({
           lastKeyRef.current = "";
           publishNow();
         })();
-      });
-      const u12 = await listen<unknown>(WISE_HUD_ADD_REPOSITORY_EVENT, (event) => {
+      }));
+      pending.push(listen<unknown>(WISE_HUD_ADD_REPOSITORY_EVENT, (event) => {
         const payload = parseWiseHudAddRepositoryPayload(event.payload);
         if (!payload) return;
         void Promise.resolve(addFloatingRepositoryFromPathRef.current(payload.folderPath)).then(
@@ -345,45 +346,23 @@ export function useWiseHudBridge({
             });
           },
         );
-      });
-      const u13 = await listen<unknown>(WISE_HUD_SELECT_SESSION_EVENT, (event) => {
+      }));
+      pending.push(listen<unknown>(WISE_HUD_SELECT_SESSION_EVENT, (event) => {
         const payload = parseWiseHudSelectSessionPayload(event.payload);
         if (!payload) return;
         if (!sessionsRef.current.some((item) => item.id === payload.sessionId)) return;
         selectSessionRef.current(payload.sessionId);
-      });
+      }));
+      // 并发注册：串行 await 13 次 listen 即 13 次串行 IPC；任一失败时已注册的统一释放。
+      const registered = await collectTauriListeners(pending);
       if (cancelled) {
-        safeUnlisten(u1);
-        safeUnlisten(u2);
-        safeUnlisten(u3);
-        safeUnlisten(u4);
-        safeUnlisten(u5);
-        safeUnlisten(u6);
-        safeUnlisten(u7);
-        safeUnlisten(u8);
-        safeUnlisten(u9);
-        safeUnlisten(u10);
-        safeUnlisten(u11);
-        safeUnlisten(u12);
-        safeUnlisten(u13);
+        registered.forEach(safeUnlisten);
         return;
       }
-      unsubs.push(
-        () => safeUnlisten(u1),
-        () => safeUnlisten(u2),
-        () => safeUnlisten(u3),
-        () => safeUnlisten(u4),
-        () => safeUnlisten(u5),
-        () => safeUnlisten(u6),
-        () => safeUnlisten(u7),
-        () => safeUnlisten(u8),
-        () => safeUnlisten(u9),
-        () => safeUnlisten(u10),
-        () => safeUnlisten(u11),
-        () => safeUnlisten(u12),
-        () => safeUnlisten(u13),
-      );
-    })();
+      unsubs.push(...registered.map((u) => () => safeUnlisten(u)));
+    })().catch((error) => {
+      if (!cancelled) console.error("Failed to register Wise HUD listeners:", error);
+    });
     return () => {
       cancelled = true;
       for (const unsub of unsubs) unsub();

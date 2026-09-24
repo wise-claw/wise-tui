@@ -201,7 +201,17 @@ fn metadata_mtime_ms(meta: &Metadata) -> u64 {
 }
 
 #[tauri::command]
-pub(crate) fn read_project_relative_file(
+pub(crate) async fn read_project_relative_file(
+    project_path: String,
+    relative_path: String,
+) -> Result<String, String> {
+    crate::blocking_ipc::run_blocking("read_project_relative_file", move || {
+        read_project_relative_file_blocking(project_path, relative_path)
+    })
+    .await
+}
+
+pub(crate) fn read_project_relative_file_blocking(
     project_path: String,
     relative_path: String,
 ) -> Result<String, String> {
@@ -212,7 +222,17 @@ pub(crate) fn read_project_relative_file(
 /// 按优先级返回第一个存在的仓库相对文件。用于模块解析时把十余次 IPC/根路径校验
 /// 合并成一次；任一候选都必须通过与单文件读取相同的越界和普通文件检查。
 #[tauri::command]
-pub(crate) fn read_first_project_relative_file(
+pub(crate) async fn read_first_project_relative_file(
+    project_path: String,
+    relative_paths: Vec<String>,
+) -> Result<Option<ProjectRelativeFileMatch>, String> {
+    crate::blocking_ipc::run_blocking("read_first_project_relative_file", move || {
+        read_first_project_relative_file_blocking(project_path, relative_paths)
+    })
+    .await
+}
+
+pub(crate) fn read_first_project_relative_file_blocking(
     project_path: String,
     relative_paths: Vec<String>,
 ) -> Result<Option<ProjectRelativeFileMatch>, String> {
@@ -252,7 +272,17 @@ pub(crate) fn read_first_project_relative_file(
 
 /// 仓库文件编辑器专用读取：超过 4MiB 拒绝打开，避免多 MB 正文整包 IPC。
 #[tauri::command]
-pub(crate) fn read_project_relative_file_for_editor(
+pub(crate) async fn read_project_relative_file_for_editor(
+    project_path: String,
+    relative_path: String,
+) -> Result<ProjectRelativeFileText, String> {
+    crate::blocking_ipc::run_blocking("read_project_relative_file_for_editor", move || {
+        read_project_relative_file_for_editor_blocking(project_path, relative_path)
+    })
+    .await
+}
+
+pub(crate) fn read_project_relative_file_for_editor_blocking(
     project_path: String,
     relative_path: String,
 ) -> Result<ProjectRelativeFileText, String> {
@@ -283,7 +313,17 @@ pub(crate) fn stat_project_relative_file(
 }
 
 #[tauri::command]
-pub(crate) fn read_project_relative_file_base64(
+pub(crate) async fn read_project_relative_file_base64(
+    project_path: String,
+    relative_path: String,
+) -> Result<String, String> {
+    crate::blocking_ipc::run_blocking("read_project_relative_file_base64", move || {
+        read_project_relative_file_base64_blocking(project_path, relative_path)
+    })
+    .await
+}
+
+pub(crate) fn read_project_relative_file_base64_blocking(
     project_path: String,
     relative_path: String,
 ) -> Result<String, String> {
@@ -325,7 +365,18 @@ pub(crate) fn list_project_relative_directory(
 }
 
 #[tauri::command]
-pub(crate) fn write_project_relative_file(
+pub(crate) async fn write_project_relative_file(
+    project_path: String,
+    relative_path: String,
+    payload: String,
+) -> Result<(), String> {
+    crate::blocking_ipc::run_blocking("write_project_relative_file", move || {
+        write_project_relative_file_blocking(project_path, relative_path, payload)
+    })
+    .await
+}
+
+pub(crate) fn write_project_relative_file_blocking(
     project_path: String,
     relative_path: String,
     payload: String,
@@ -363,7 +414,18 @@ pub(crate) fn write_project_relative_file(
 }
 
 #[tauri::command]
-pub(crate) fn append_project_relative_file(
+pub(crate) async fn append_project_relative_file(
+    project_path: String,
+    relative_path: String,
+    payload: String,
+) -> Result<(), String> {
+    crate::blocking_ipc::run_blocking("append_project_relative_file", move || {
+        append_project_relative_file_blocking(project_path, relative_path, payload)
+    })
+    .await
+}
+
+pub(crate) fn append_project_relative_file_blocking(
     project_path: String,
     relative_path: String,
     payload: String,
@@ -490,7 +552,7 @@ pub(crate) fn append_wise_relative_file(
 mod tests {
     use super::{
         canonicalize_project_dir, editor_file_too_large, project_base_cache_get,
-        project_base_cache_put, read_first_project_relative_file,
+        project_base_cache_put, read_first_project_relative_file_blocking,
         resolve_project_relative_regular_file, MAX_EDITOR_FILE_BYTES, PROJECT_BASE_CACHE,
         PROJECT_BASE_CACHE_CAPACITY,
     };
@@ -567,7 +629,7 @@ mod tests {
         fs::write(dir.path().join("fallback.ts"), "fallback").expect("fallback");
         fs::write(dir.path().join("preferred.ts"), "preferred").expect("preferred");
         let project = dir.path().to_string_lossy().to_string();
-        let matched = read_first_project_relative_file(
+        let matched = read_first_project_relative_file_blocking(
             project,
             vec![
                 "missing.ts".into(),
@@ -586,7 +648,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         fs::write(dir.path().join("safe.ts"), "safe").expect("safe");
         let project = dir.path().to_string_lossy().to_string();
-        let matched = read_first_project_relative_file(
+        let matched = read_first_project_relative_file_blocking(
             project,
             vec!["../outside.ts".into(), "safe.ts".into()],
         )

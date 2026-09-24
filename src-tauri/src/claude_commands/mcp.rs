@@ -1569,7 +1569,26 @@ pub(crate) async fn get_claude_mcp_runtime_health(
 }
 
 #[tauri::command]
-pub(crate) fn remove_claude_mcp_server(
+pub(crate) async fn remove_claude_mcp_server(
+    project_path: Option<String>,
+    name: String,
+    scope: String,
+    source_path: String,
+    _claude_json_project_key: Option<String>,
+) -> Result<(), String> {
+    crate::blocking_ipc::run_blocking("remove_claude_mcp_server", move || {
+        remove_claude_mcp_server_blocking(
+            project_path,
+            name,
+            scope,
+            source_path,
+            _claude_json_project_key,
+        )
+    })
+    .await
+}
+
+pub(crate) fn remove_claude_mcp_server_blocking(
     project_path: Option<String>,
     name: String,
     scope: String,
@@ -1605,7 +1624,34 @@ pub(crate) fn remove_claude_mcp_server(
 }
 
 #[tauri::command]
-pub(crate) fn add_claude_mcp_server(
+pub(crate) async fn add_claude_mcp_server(
+    scope: String,
+    transport: String,
+    name: String,
+    url: Option<String>,
+    command: Option<String>,
+    command_args: Option<Vec<String>>,
+    headers: Option<Vec<String>>,
+    env_pairs: Option<Vec<String>>,
+    project_path: Option<String>,
+) -> Result<(), String> {
+    crate::blocking_ipc::run_blocking("add_claude_mcp_server", move || {
+        add_claude_mcp_server_blocking(
+            scope,
+            transport,
+            name,
+            url,
+            command,
+            command_args,
+            headers,
+            env_pairs,
+            project_path,
+        )
+    })
+    .await
+}
+
+pub(crate) fn add_claude_mcp_server_blocking(
     scope: String,
     transport: String,
     name: String,

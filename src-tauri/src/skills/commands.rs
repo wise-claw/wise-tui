@@ -80,8 +80,18 @@ pub struct ExportArg {
 }
 
 #[tauri::command]
-pub fn skills_detect_external_paths(
-    db: State<'_, WiseDb>,
+pub async fn skills_detect_external_paths(
+    app: AppHandle,
+) -> Result<Vec<DetectedExternalPath>, String> {
+    crate::blocking_ipc::run_blocking("skills_detect_external_paths", move || {
+        let rows = external_paths::list(&app.state::<WiseDb>().conn())?;
+        detect_external_paths_blocking(rows)
+    })
+    .await
+}
+
+fn detect_external_paths_blocking(
+    rows: Vec<ExternalPathRow>,
 ) -> Result<Vec<DetectedExternalPath>, String> {
     let mut out: Vec<DetectedExternalPath> = Vec::new();
     for path in default_external_paths() {
@@ -95,11 +105,7 @@ pub fn skills_detect_external_paths(
             is_default: true,
         });
     }
-    let conn = db
-        .0
-        .lock()
-        .map_err(|e| format!("db lock poisoned: {e}"))?;
-    for row in external_paths::list(&conn)? {
+    for row in rows {
         let p = PathBuf::from(&row.path);
         let exists = p.exists();
         let count = if exists { count_skill_subdirs(&p) } else { 0 };
@@ -115,7 +121,12 @@ pub fn skills_detect_external_paths(
 }
 
 #[tauri::command]
-pub fn skills_scan_path(arg: PathArg) -> Result<Vec<ScannedSkill>, String> {
+pub async fn skills_scan_path(arg: PathArg) -> Result<Vec<ScannedSkill>, String> {
+    crate::blocking_ipc::run_blocking("skills_scan_path", move || skills_scan_path_blocking(arg))
+        .await
+}
+
+fn skills_scan_path_blocking(arg: PathArg) -> Result<Vec<ScannedSkill>, String> {
     let p = PathBuf::from(arg.path);
     if !p.exists() {
         return Ok(Vec::new());
@@ -174,11 +185,7 @@ pub fn skills_add_external_path(
     db: State<'_, WiseDb>,
     arg: PathArg,
 ) -> Result<DetectedExternalPath, String> {
-    let conn = db
-        .0
-        .lock()
-        .map_err(|e| format!("db lock poisoned: {e}"))?;
-    let row = external_paths::insert(&conn, &arg.path)?;
+    let row = external_paths::insert(&db.conn(), &arg.path)?;
     let p = PathBuf::from(&row.path);
     let exists = p.exists();
     let count = if exists { count_skill_subdirs(&p) } else { 0 };
@@ -193,25 +200,22 @@ pub fn skills_add_external_path(
 
 #[tauri::command]
 pub fn skills_remove_external_path(db: State<'_, WiseDb>, arg: IdArg) -> Result<(), String> {
-    let conn = db
-        .0
-        .lock()
-        .map_err(|e| format!("db lock poisoned: {e}"))?;
+    let conn = db.conn();
     external_paths::delete(&conn, &arg.id)
 }
 
 #[tauri::command]
 pub fn skills_list_external_paths(db: State<'_, WiseDb>) -> Result<Vec<ExternalPathRow>, String> {
-    let conn = db
-        .0
-        .lock()
-        .map_err(|e| format!("db lock poisoned: {e}"))?;
+    let conn = db.conn();
     external_paths::list(&conn)
 }
 
 #[tauri::command]
-pub fn skills_import_copy(arg: SourcePathArg) -> Result<ImportedSkill, String> {
-    import::import_copy(Path::new(&arg.source_path))
+pub async fn skills_import_copy(arg: SourcePathArg) -> Result<ImportedSkill, String> {
+    crate::blocking_ipc::run_blocking("skills_import_copy", move || {
+        import::import_copy(Path::new(&arg.source_path))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -220,7 +224,14 @@ pub fn skills_import_symlink(arg: SourcePathArg) -> Result<ImportedSkill, String
 }
 
 #[tauri::command]
-pub fn skills_delete_imported(arg: DeleteArg) -> Result<(), String> {
+pub async fn skills_delete_imported(arg: DeleteArg) -> Result<(), String> {
+    crate::blocking_ipc::run_blocking("skills_delete_imported", move || {
+        skills_delete_imported_blocking(arg)
+    })
+    .await
+}
+
+pub fn skills_delete_imported_blocking(arg: DeleteArg) -> Result<(), String> {
     import::delete_imported(&arg.name)
 }
 

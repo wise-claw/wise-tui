@@ -81,7 +81,7 @@ impl Default for DingTalkStreamGatewayControl {
 
 impl DingTalkStreamGatewayControl {
     pub fn stop_locked(&self) {
-        if let Some(h) = self.join.lock().unwrap().take() {
+        if let Some(h) = self.join.lock().unwrap_or_else(|e| e.into_inner()).take() {
             h.abort();
         }
         self.mark_stopped();
@@ -90,14 +90,14 @@ impl DingTalkStreamGatewayControl {
     pub fn is_running(&self) -> bool {
         self.join
             .lock()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .as_ref()
             .is_some_and(|h| !h.is_finished())
     }
 
     pub fn status(&self) -> DingTalkStreamGatewayStatus {
         let running = self.is_running();
-        let runtime = self.runtime.lock().unwrap().clone();
+        let runtime = self.runtime.lock().unwrap_or_else(|e| e.into_inner()).clone();
         DingTalkStreamGatewayStatus {
             running,
             phase: if running {
@@ -115,7 +115,7 @@ impl DingTalkStreamGatewayControl {
     }
 
     fn mark_started(&self) {
-        let mut runtime = self.runtime.lock().unwrap();
+        let mut runtime = self.runtime.lock().unwrap_or_else(|e| e.into_inner());
         runtime.phase = "connecting".to_string();
         runtime.started_at = Some(now_rfc3339());
         runtime.connected_at = None;
@@ -125,11 +125,11 @@ impl DingTalkStreamGatewayControl {
     }
 
     fn mark_connecting(&self) {
-        self.runtime.lock().unwrap().phase = "connecting".to_string();
+        self.runtime.lock().unwrap_or_else(|e| e.into_inner()).phase = "connecting".to_string();
     }
 
     fn mark_connected(&self) {
-        let mut runtime = self.runtime.lock().unwrap();
+        let mut runtime = self.runtime.lock().unwrap_or_else(|e| e.into_inner());
         runtime.phase = "connected".to_string();
         runtime.connected_at = Some(now_rfc3339());
         runtime.last_error_at = None;
@@ -137,18 +137,18 @@ impl DingTalkStreamGatewayControl {
     }
 
     fn mark_inbound(&self) {
-        self.runtime.lock().unwrap().last_inbound_at = Some(now_rfc3339());
+        self.runtime.lock().unwrap_or_else(|e| e.into_inner()).last_inbound_at = Some(now_rfc3339());
     }
 
     fn mark_error(&self, error: &str) {
-        let mut runtime = self.runtime.lock().unwrap();
+        let mut runtime = self.runtime.lock().unwrap_or_else(|e| e.into_inner());
         runtime.phase = "reconnecting".to_string();
         runtime.last_error_at = Some(now_rfc3339());
         runtime.last_error = Some(error.chars().take(900).collect());
     }
 
     fn mark_stopped(&self) {
-        let mut runtime = self.runtime.lock().unwrap();
+        let mut runtime = self.runtime.lock().unwrap_or_else(|e| e.into_inner());
         runtime.phase = "stopped".to_string();
         runtime.last_stopped_at = Some(now_rfc3339());
     }
@@ -929,7 +929,7 @@ pub async fn dingtalk_stream_gateway_start(
     control: State<'_, DingTalkStreamGatewayControl>,
 ) -> Result<(), String> {
     {
-        let mut jg = control.join.lock().unwrap();
+        let mut jg = control.join.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(ref h) = *jg {
             if !h.is_finished() {
                 return Err("钉钉 Stream 网关已在运行；请先停止".to_string());
@@ -942,7 +942,7 @@ pub async fn dingtalk_stream_gateway_start(
     let h = tokio::spawn(async move {
         gateway_loops(app2).await;
     });
-    *control.join.lock().unwrap() = Some(h);
+    *control.join.lock().unwrap_or_else(|e| e.into_inner()) = Some(h);
     Ok(())
 }
 

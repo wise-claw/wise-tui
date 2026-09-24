@@ -459,11 +459,11 @@ impl Default for GenericWsControl {
 
 impl GenericWsControl {
     fn snapshot(&self) -> GenericWsStatus {
-        self.inner.lock().unwrap().status.clone()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).status.clone()
     }
 
     fn stop_locked(&self) {
-        let mut guard = self.inner.lock().unwrap();
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(tx) = guard.cancel_tx.take() {
             let _ = tx.send(());
         }
@@ -478,12 +478,12 @@ impl GenericWsControl {
 }
 
 fn ws_update_status<F: FnOnce(&mut GenericWsStatus)>(inner: &std::sync::Arc<Mutex<GenericWsInner>>, f: F) {
-    let mut guard = inner.lock().unwrap();
+    let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
     f(&mut guard.status);
 }
 
 fn ws_snapshot(inner: &std::sync::Arc<Mutex<GenericWsInner>>) -> GenericWsStatus {
-    inner.lock().unwrap().status.clone()
+    inner.lock().unwrap_or_else(|e| e.into_inner()).status.clone()
 }
 
 #[derive(Debug, Deserialize)]
@@ -689,7 +689,7 @@ pub async fn generic_ws_start(
     let (outbound_tx, outbound_rx) = mpsc::unbounded_channel();
     let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
     {
-        let mut guard = inner.lock().unwrap();
+        let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
         guard.outbound_tx = Some(outbound_tx);
         guard.cancel_tx = Some(cancel_tx);
         guard.status.running = true;
@@ -710,7 +710,7 @@ pub async fn generic_ws_start(
     let join = tauri::async_runtime::spawn(async move {
         generic_ws_session(app_clone, inner_for_task, args_clone, outbound_rx, cancel_rx).await;
     });
-    inner.lock().unwrap().join = Some(join);
+    inner.lock().unwrap_or_else(|e| e.into_inner()).join = Some(join);
 
     Ok(control.snapshot())
 }
@@ -731,7 +731,7 @@ pub fn generic_ws_send_text(
     control: State<GenericWsControl>,
     text: String,
 ) -> Result<(), String> {
-    let guard = control.inner.lock().unwrap();
+    let guard = control.inner.lock().unwrap_or_else(|e| e.into_inner());
     if !guard.status.running {
         return Err(fail("WebSocket 未运行，无法发送"));
     }

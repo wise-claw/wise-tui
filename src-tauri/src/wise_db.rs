@@ -5,7 +5,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -381,7 +381,30 @@ pub struct WiseWorkflowGraphRow {
 
 pub struct WiseDb(pub Mutex<Connection>);
 
+/// A panic while holding the connection must not turn every later query into
+/// a permanent "lock poisoned" error. The connection itself stays valid; only a
+/// transaction left open by the panicking thread needs to be rolled back.
+pub fn lock_conn(db: &Mutex<Connection>) -> MutexGuard<'_, Connection> {
+    match db.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            let guard = poisoned.into_inner();
+            db.clear_poison();
+            if !guard.is_autocommit() {
+                if let Err(e) = guard.execute_batch("ROLLBACK") {
+                    eprintln!("[wise_db] rollback after poisoned lock failed: {e}");
+                }
+            }
+            guard
+        }
+    }
+}
+
 impl WiseDb {
+    pub fn conn(&self) -> MutexGuard<'_, Connection> {
+        lock_conn(&self.0)
+    }
+
     pub fn open() -> Result<Self, String> {
         let dir = crate::wise_dir()?;
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -402,7 +425,7 @@ impl WiseDb {
     }
 
     pub fn unread_total(&self) -> Result<i64, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let n: i64 = g
             .query_row(
                 "SELECT COUNT(*) FROM messages WHERE read_at IS NULL",
@@ -414,7 +437,7 @@ impl WiseDb {
     }
 
     pub fn mascot_position_opt(&self) -> Result<Option<(i32, i32)>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let mut stmt = g
             .prepare("SELECT window_x, window_y FROM mascot_prefs WHERE id = 1")
             .map_err(|e| e.to_string())?;
@@ -431,7 +454,7 @@ impl WiseDb {
     }
 
     pub fn save_mascot_position(&self, x: i32, y: i32) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute(
             "UPDATE mascot_prefs SET window_x = ?1, window_y = ?2 WHERE id = 1",
             params![x, y],
@@ -441,7 +464,7 @@ impl WiseDb {
     }
 
     pub fn set_mascot_visible_pref(&self, visible: bool) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute(
             "UPDATE mascot_prefs SET visible = ?1 WHERE id = 1",
             params![if visible { 1 } else { 0 }],
@@ -451,7 +474,7 @@ impl WiseDb {
     }
 
     pub fn mascot_visible_pref(&self) -> Result<bool, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let v: i64 = g
             .query_row("SELECT visible FROM mascot_prefs WHERE id = 1", [], |row| {
                 row.get(0)
@@ -467,7 +490,7 @@ impl WiseDb {
         body: &str,
         server_msg_id: Option<&str>,
     ) -> Result<bool, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let id = uuid::Uuid::new_v4().to_string();
         if let Some(sid) = server_msg_id {
             let n = g
@@ -489,7 +512,7 @@ impl WiseDb {
     }
 
     pub fn mascot_toast_merge_ms(&self) -> Result<u64, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let v: i64 = g
             .query_row(
                 "SELECT COALESCE(toast_merge_ms, 80) FROM mascot_prefs WHERE id = 1",
@@ -502,7 +525,7 @@ impl WiseDb {
 
     /// 当前处于勿扰窗口内则返回 true（仅用于抑制气泡，不阻止入库）。
     pub fn mascot_dnd_active(&self) -> Result<bool, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let until: Option<i64> = g
             .query_row(
                 "SELECT dnd_until_ms FROM mascot_prefs WHERE id = 1",
@@ -518,7 +541,7 @@ impl WiseDb {
     }
 
     pub fn mark_all_read(&self) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute(
             "UPDATE messages SET read_at = datetime('now') WHERE read_at IS NULL",
             [],
@@ -533,7 +556,7 @@ impl WiseDb {
         if id.is_empty() {
             return Ok(());
         }
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute(
             "UPDATE messages SET read_at = datetime('now')
              WHERE id = ?1 AND direction = 'inbound' AND read_at IS NULL",
@@ -550,15 +573,10 @@ impl WiseDb {
         batch_epoch: i64,
     ) -> Result<u64, String> {
         let epoch = batch_epoch.to_string();
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        let mut total: u64 = 0;
-        for raw in conversation_ids {
-            let cid = raw.trim();
-            if cid.is_empty() {
-                continue;
-            }
-            let n = g
-                .execute(
+        let g = self.conn();
+        in_write_tx(&g, |c| {
+            let mut stmt = c
+                .prepare(
                     "UPDATE messages SET read_at = datetime('now')
                      WHERE direction = 'inbound' AND read_at IS NULL AND conversation_id = ?1
                      AND server_msg_id IS NOT NULL
@@ -566,18 +584,27 @@ impl WiseDb {
                        server_msg_id LIKE ('omc-direct-batch:' || ?2 || ':%')
                        OR server_msg_id LIKE ('omc-direct-batch:cc-inv:' || ?2 || ':%')
                      )",
-                    params![cid, &epoch],
                 )
                 .map_err(|e| e.to_string())?;
-            total += n as u64;
-        }
-        Ok(total)
+            let mut total: u64 = 0;
+            for raw in conversation_ids {
+                let cid = raw.trim();
+                if cid.is_empty() {
+                    continue;
+                }
+                let n = stmt
+                    .execute(params![cid, &epoch])
+                    .map_err(|e| e.to_string())?;
+                total += n as u64;
+            }
+            Ok(total)
+        })
     }
 
     /// 最近入库的入站消息（桌面通知 / 推送等），用于主窗口通知中心列表。
     pub fn list_inbound_recent(&self, limit: i64) -> Result<Vec<WiseMessageListItem>, String> {
         let lim = limit.clamp(1, 200);
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let mut stmt = g
             .prepare(
                 "SELECT id, conversation_id, body, created_at, read_at
@@ -606,7 +633,7 @@ impl WiseDb {
     }
 
     pub fn list_projects(&self) -> Result<Vec<WiseProjectRow>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let mut stmt = g
             .prepare(
                 "SELECT id, name, created_at, updated_at, icon_display_name, icon_color,
@@ -679,7 +706,7 @@ impl WiseDb {
     }
 
     pub fn list_employees(&self) -> Result<Vec<WiseEmployeeRow>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let mut stmt = g
             .prepare(
                 "SELECT id, name, agent_type, enabled, created_at, updated_at, display_order, execution_engine, default_instruction
@@ -704,27 +731,33 @@ impl WiseDb {
                 })
             })
             .map_err(|e| e.to_string())?;
-        let mut out = Vec::new();
-        for item in rows {
-            let mut row = item.map_err(|e| e.to_string())?;
-            let mut rel_stmt = g
-                .prepare(
-                    "SELECT repository_id
-                     FROM employee_repositories
-                     WHERE employee_id = ?1
-                     ORDER BY created_at ASC",
-                )
-                .map_err(|e| e.to_string())?;
-            let rel_rows = rel_stmt
-                .query_map(params![row.id.clone()], |r| r.get::<_, i64>(0))
-                .map_err(|e| e.to_string())?;
-            let mut repository_ids = Vec::new();
-            for rel in rel_rows {
-                repository_ids.push(rel.map_err(|e| e.to_string())?);
-            }
-            row.repository_ids = repository_ids;
+        let mut out = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
 
-            out.push(row);
+        let mut repository_ids_by_employee: std::collections::HashMap<String, Vec<i64>> =
+            std::collections::HashMap::new();
+        let mut rel_stmt = g
+            .prepare(
+                "SELECT employee_id, repository_id
+                 FROM employee_repositories
+                 ORDER BY created_at ASC, rowid ASC",
+            )
+            .map_err(|e| e.to_string())?;
+        let rel_rows = rel_stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+            .map_err(|e| e.to_string())?;
+        for rel in rel_rows {
+            let (employee_id, repository_id) = rel.map_err(|e| e.to_string())?;
+            repository_ids_by_employee
+                .entry(employee_id)
+                .or_default()
+                .push(repository_id);
+        }
+        for row in &mut out {
+            row.repository_ids = repository_ids_by_employee
+                .remove(&row.id)
+                .unwrap_or_default();
         }
         Ok(out)
     }
@@ -740,7 +773,7 @@ impl WiseDb {
         execution_engine: &str,
         default_instruction: &str,
     ) -> Result<(), String> {
-        let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let mut g = self.conn();
         let tx = g.transaction().map_err(|e| e.to_string())?;
         tx.execute(
             "INSERT INTO employees (id, name, agent_type, enabled, created_at, updated_at, display_order, execution_engine, default_instruction)
@@ -781,7 +814,7 @@ impl WiseDb {
         execution_engine: &str,
         default_instruction: &str,
     ) -> Result<(), String> {
-        let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let mut g = self.conn();
         let tx = g.transaction().map_err(|e| e.to_string())?;
         let n = tx
             .execute(
@@ -820,7 +853,7 @@ impl WiseDb {
     }
 
     pub fn delete_employee(&self, id: &str) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let referenced: i64 = g
             .query_row(
                 "SELECT COUNT(*) FROM stage_assignees WHERE employee_id = ?1",
@@ -841,7 +874,7 @@ impl WiseDb {
     }
 
     pub fn move_employee_display_order(&self, id: &str, direction: &str) -> Result<(), String> {
-        let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let mut g = self.conn();
         let tx = g.transaction().map_err(|e| e.to_string())?;
 
         let current: Option<(String, i64)> = tx
@@ -899,7 +932,7 @@ impl WiseDb {
     }
 
     pub fn list_employee_task_counts(&self) -> Result<Vec<WiseEmployeeTaskCountRow>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let mut stmt = g
             .prepare(
                 "SELECT e.id, COUNT(DISTINCT d.task_id) AS task_count
@@ -929,7 +962,7 @@ impl WiseDb {
     }
 
     pub fn list_workflow_templates(&self) -> Result<Vec<WiseWorkflowTemplateRow>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let mut stmt = g
             .prepare(
                 "SELECT w.id, w.name, w.is_default, COUNT(s.id) AS stage_count, w.created_at, w.updated_at
@@ -962,7 +995,7 @@ impl WiseDb {
         &self,
         workflow_id: &str,
     ) -> Result<Vec<WiseWorkflowStageRow>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let mut stmt = g
             .prepare(
                 "SELECT id, workflow_id, name, stage_order, pass_rule, reject_rule
@@ -997,17 +1030,17 @@ impl WiseDb {
         if stage_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let mut out = Vec::new();
+        let mut stmt = g
+            .prepare(
+                "SELECT id, stage_id, employee_id, required_count, is_required
+                 FROM stage_assignees
+                 WHERE stage_id = ?1
+                 ORDER BY rowid ASC",
+            )
+            .map_err(|e| e.to_string())?;
         for stage_id in stage_ids {
-            let mut stmt = g
-                .prepare(
-                    "SELECT id, stage_id, employee_id, required_count, is_required
-                     FROM stage_assignees
-                     WHERE stage_id = ?1
-                     ORDER BY rowid ASC",
-                )
-                .map_err(|e| e.to_string())?;
             let rows = stmt
                 .query_map(params![stage_id], |row| {
                     Ok(WiseStageAssigneeRow {
@@ -1035,7 +1068,7 @@ impl WiseDb {
         stages: &[WiseWorkflowStageRow],
         assignees: &[WiseStageAssigneeRow],
     ) -> Result<(), String> {
-        let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let mut g = self.conn();
         let tx = g.transaction().map_err(|e| e.to_string())?;
         if is_default {
             tx.execute("UPDATE workflows SET is_default = 0", [])
@@ -1101,7 +1134,7 @@ impl WiseDb {
     }
 
     pub fn delete_workflow_template(&self, workflow_id: &str) -> Result<(), String> {
-        let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let mut g = self.conn();
         let tx = g.transaction().map_err(|e| e.to_string())?;
         let in_progress_task_refs: i64 = tx
             .query_row(
@@ -1197,7 +1230,7 @@ impl WiseDb {
         icon_color: Option<&str>,
         now_ms: i64,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute(
             "INSERT INTO projects (id, name, created_at, updated_at, icon_display_name, icon_color)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -1214,7 +1247,7 @@ impl WiseDb {
         icon_color: Option<&str>,
         now_ms: i64,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let n = g
             .execute(
                 "UPDATE projects SET icon_display_name = ?1, icon_color = ?2, updated_at = ?3 WHERE id = ?4",
@@ -1228,7 +1261,7 @@ impl WiseDb {
     }
 
     pub fn update_project_name(&self, id: &str, name: &str, now_ms: i64) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let n = g
             .execute(
                 "UPDATE projects SET name = ?1, updated_at = ?2 WHERE id = ?3",
@@ -1247,7 +1280,7 @@ impl WiseDb {
         root_path: &str,
         now_ms: i64,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let n = g
             .execute(
                 "UPDATE projects SET root_path = ?1, updated_at = ?2 WHERE id = ?3",
@@ -1266,7 +1299,7 @@ impl WiseDb {
         sdd_mode: &str,
         now_ms: i64,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let n = g
             .execute(
                 "UPDATE projects SET sdd_mode = ?1, updated_at = ?2 WHERE id = ?3",
@@ -1285,7 +1318,7 @@ impl WiseDb {
         main_agent: Option<&str>,
         now_ms: i64,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let n = g
             .execute(
                 "UPDATE projects SET main_agent = ?1, updated_at = ?2 WHERE id = ?3",
@@ -1304,7 +1337,7 @@ impl WiseDb {
         open_app_id: Option<&str>,
         now_ms: i64,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let n = g
             .execute(
                 "UPDATE projects SET open_app_id = ?1, updated_at = ?2 WHERE id = ?3",
@@ -1320,12 +1353,12 @@ impl WiseDb {
     /// 删除仓库在 SQLite 中的关联行（员工映射、助手覆盖、代码图谱索引等）。
     /// 全局 `repositories.json` 条目由 `remove_repository_global_impl` 负责。
     pub fn purge_repository_database_refs(&self, repository_id: i64) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         purge_repository_database_refs_conn(&g, repository_id)
     }
 
     pub fn delete_project(&self, id: &str) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         delete_project_scoped_rows_conn(&g, id)?;
         g.execute(
             "DELETE FROM project_repositories WHERE project_id = ?1",
@@ -1347,7 +1380,7 @@ impl WiseDb {
         repository_id: i64,
         now_ms: i64,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute(
             "INSERT OR IGNORE INTO project_repositories (project_id, repository_id, created_at, display_order)
              SELECT ?1, ?2, ?3,
@@ -1369,7 +1402,7 @@ impl WiseDb {
         ordered_repository_ids: &[i64],
         now_ms: i64,
     ) -> Result<(), String> {
-        let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let mut g = self.conn();
         let tx = g.transaction().map_err(|e| e.to_string())?;
         let mut stmt = tx
             .prepare(
@@ -1425,7 +1458,7 @@ impl WiseDb {
         repository_id: i64,
         now_ms: i64,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute(
             "DELETE FROM project_repositories WHERE project_id = ?1 AND repository_id = ?2",
             params![project_id, repository_id],
@@ -1440,7 +1473,7 @@ impl WiseDb {
     }
 
     pub fn remove_repository_from_all_projects(&self, repository_id: i64) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute(
             "DELETE FROM project_repositories WHERE repository_id = ?1",
             params![repository_id],
@@ -1451,7 +1484,7 @@ impl WiseDb {
 
     /// 仍关联到任意项目的成员记录数（用于删除项目后判断是否应从全局仓库列表移除）。
     pub fn count_repository_project_links(&self, repository_id: i64) -> Result<i64, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let n: i64 = g
             .query_row(
                 "SELECT COUNT(*) FROM project_repositories WHERE repository_id = ?1",
@@ -1463,7 +1496,7 @@ impl WiseDb {
     }
 
     pub fn get_setting(&self, key: &str) -> Result<Option<String>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let mut stmt = g
             .prepare("SELECT value FROM app_settings WHERE key = ?1")
             .map_err(|e| e.to_string())?;
@@ -1477,7 +1510,7 @@ impl WiseDb {
     }
 
     pub fn set_setting(&self, key: &str, value: &str) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute(
             "INSERT INTO app_settings (key, value) VALUES (?1, ?2)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -1488,7 +1521,7 @@ impl WiseDb {
     }
 
     pub fn delete_setting(&self, key: &str) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute("DELETE FROM app_settings WHERE key = ?1", params![key])
             .map_err(|e| e.to_string())?;
         Ok(())
@@ -1502,7 +1535,7 @@ impl WiseDb {
         payload: &str,
         updated_at: i64,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute(
             "INSERT INTO workflow_runs (workflow_run_id, session_id, repository_path, payload, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5)
@@ -1522,7 +1555,7 @@ impl WiseDb {
         &self,
         workflow_run_id: &str,
     ) -> Result<Option<String>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let payload: Option<String> = g
             .query_row(
                 "SELECT payload FROM workflow_runs WHERE workflow_run_id = ?1",
@@ -1542,7 +1575,7 @@ impl WiseDb {
         repository_path: Option<&str>,
         status: Option<&str>,
     ) -> Result<Vec<(String, String, String, i64, Option<String>, Option<String>)>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let cap = limit.clamp(1, 2000);
         // status 过滤在 LIMIT 之前执行，避免匹配 run 落在最新 N 条之外被静默裁掉。
         // 老数据可能缺 status 字段（json_extract 为 NULL），以 COALESCE 回退 'running'，
@@ -1586,8 +1619,15 @@ impl WiseDb {
         if from.is_empty() || to.is_empty() || from == to {
             return Ok(());
         }
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
+        in_write_tx(&g, |g| Self::migrate_claude_tab_session_references_conn(g, from, to))
+    }
 
+    fn migrate_claude_tab_session_references_conn(
+        g: &Connection,
+        from: &str,
+        to: &str,
+    ) -> Result<(), String> {
         g.execute(
             "UPDATE tasks SET creator = ?2 WHERE creator = ?1",
             params![from, to],
@@ -1638,7 +1678,7 @@ impl WiseDb {
         timestamp: i64,
         payload: &str,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute(
             "INSERT OR IGNORE INTO workflow_events (event_id, workflow_run_id, timestamp, payload)
              VALUES (?1, ?2, ?3, ?4)",
@@ -1654,7 +1694,7 @@ impl WiseDb {
         from: Option<i64>,
         until: Option<i64>,
     ) -> Result<Vec<String>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let mut stmt = g
             .prepare(
                 "SELECT payload FROM workflow_events
@@ -1680,7 +1720,7 @@ impl WiseDb {
         &self,
         workflow_id: &str,
     ) -> Result<Option<WiseWorkflowGraphRow>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let row = g
             .query_row(
                 "SELECT workflow_id, version, graph_json, status, created_at, updated_at
@@ -1711,7 +1751,7 @@ impl WiseDb {
         status: &str,
         now_ms: i64,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute(
             "INSERT INTO workflow_graphs (workflow_id, version, graph_json, status, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?5)
@@ -1739,16 +1779,59 @@ fn run_migrations(conn: &Connection) -> Result<(), String> {
 
     for migration in MIGRATIONS {
         if !migration_applied(conn, migration.name)? {
-            apply_migration(conn, migration)?;
-            conn.execute(
-                "INSERT INTO _migrations (name) VALUES (?1)",
-                params![migration.name],
-            )
-            .map_err(|e| e.to_string())?;
+            apply_and_record_migration(conn, migration)
+                .map_err(|e| format!("migration {} failed: {e}", migration.name))?;
         }
     }
 
     Ok(())
+}
+
+/// SQL and its `_migrations` row commit together, so a crash or error mid-way
+/// cannot leave a half-applied migration that is retried on a dirty schema.
+/// `PRAGMA foreign_keys` is a no-op inside a transaction, so migrations that
+/// toggle it keep running in autocommit mode.
+fn apply_and_record_migration(conn: &Connection, migration: &Migration) -> Result<(), String> {
+    let transactional = !matches!(
+        migration.action,
+        MigrationAction::Sql(sql) if sql.to_ascii_uppercase().contains("PRAGMA FOREIGN_KEYS")
+    );
+    let apply = |conn: &Connection| {
+        apply_migration(conn, migration)?;
+        conn.execute(
+            "INSERT INTO _migrations (name) VALUES (?1)",
+            params![migration.name],
+        )
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+    };
+    if transactional {
+        in_write_tx(conn, apply)
+    } else {
+        apply(conn)
+    }
+}
+
+/// Runs `f` atomically. Joins the caller's transaction when one is already
+/// open (e.g. a seed migration), otherwise opens its own.
+pub(crate) fn in_write_tx<T>(
+    conn: &Connection,
+    f: impl FnOnce(&Connection) -> Result<T, String>,
+) -> Result<T, String> {
+    if !conn.is_autocommit() {
+        return f(conn);
+    }
+    conn.execute_batch("BEGIN IMMEDIATE")
+        .map_err(|e| e.to_string())?;
+    let result = f(conn);
+    let end = if result.is_ok() { "COMMIT" } else { "ROLLBACK" };
+    if let Err(e) = conn.execute_batch(end) {
+        if result.is_ok() {
+            let _ = conn.execute_batch("ROLLBACK");
+        }
+        return Err(result.err().unwrap_or_else(|| e.to_string()));
+    }
+    result
 }
 
 fn migration_applied(conn: &Connection, name: &str) -> Result<bool, String> {
@@ -1909,6 +1992,137 @@ mod tests {
                 "053_assistant_custom_script_file",
             ]
         );
+    }
+
+    #[test]
+    fn lock_conn_recovers_poisoned_lock_and_rolls_back_open_transaction() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
+        conn.execute_batch("CREATE TABLE t (v INTEGER);")
+            .expect("create table");
+        let db = std::sync::Arc::new(WiseDb(Mutex::new(conn)));
+
+        let db2 = db.clone();
+        let joined = std::thread::spawn(move || {
+            let g = db2.conn();
+            g.execute_batch("BEGIN; INSERT INTO t (v) VALUES (1);")
+                .expect("begin + insert");
+            panic!("simulated panic while holding db lock");
+        })
+        .join();
+        assert!(joined.is_err());
+        assert!(db.0.is_poisoned());
+
+        let g = db.conn();
+        assert!(g.is_autocommit(), "dangling transaction rolled back");
+        let n: i64 = g
+            .query_row("SELECT COUNT(*) FROM t", [], |row| row.get(0))
+            .expect("query after recovery");
+        assert_eq!(n, 0);
+        g.execute("INSERT INTO t (v) VALUES (2)", [])
+            .expect("writes work after recovery");
+        drop(g);
+        assert!(!db.0.is_poisoned());
+    }
+
+    #[test]
+    fn in_write_tx_rolls_back_on_error_and_joins_outer_transaction() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
+        conn.execute_batch("CREATE TABLE t (v INTEGER);")
+            .expect("create table");
+        let count = |conn: &Connection| -> i64 {
+            conn.query_row("SELECT COUNT(*) FROM t", [], |row| row.get(0))
+                .expect("count")
+        };
+
+        let failed: Result<(), String> = in_write_tx(&conn, |c| {
+            c.execute("INSERT INTO t (v) VALUES (1)", [])
+                .map_err(|e| e.to_string())?;
+            Err("second write failed".into())
+        });
+        assert!(failed.is_err());
+        assert!(conn.is_autocommit());
+        assert_eq!(count(&conn), 0, "partial write rolled back");
+
+        conn.execute_batch("BEGIN").expect("outer begin");
+        in_write_tx(&conn, |c| {
+            c.execute("INSERT INTO t (v) VALUES (2)", [])
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        })
+        .expect("joins outer transaction");
+        assert!(!conn.is_autocommit(), "inner call must not commit the outer tx");
+        conn.execute_batch("ROLLBACK").expect("outer rollback");
+        assert_eq!(count(&conn), 0);
+    }
+
+    #[test]
+    fn list_employees_groups_repository_ids_per_employee_in_link_order() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
+        run_migrations(&conn).expect("migrations succeed");
+        conn.execute_batch(
+            "INSERT INTO employees (id, name, agent_type, enabled, created_at, updated_at, display_order)
+               VALUES ('emp-1', 'A', 'claude', 1, 1, 1, 0), ('emp-2', 'B', 'claude', 1, 1, 1, 1);
+             INSERT INTO employee_repositories (employee_id, repository_id, created_at)
+               VALUES ('emp-1', 42, 20), ('emp-2', 5, 10), ('emp-1', 7, 10);",
+        )
+        .expect("seed employees");
+        let db = WiseDb(Mutex::new(conn));
+
+        let rows = db.list_employees().expect("list employees");
+        let ids: Vec<(&str, &[i64])> = rows
+            .iter()
+            .map(|r| (r.id.as_str(), r.repository_ids.as_slice()))
+            .collect();
+        assert_eq!(ids, vec![("emp-1", &[7, 42][..]), ("emp-2", &[5][..])]);
+    }
+
+    #[test]
+    fn migrate_claude_tab_session_references_is_atomic() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
+        run_migrations(&conn).expect("migrations succeed");
+        conn.execute_batch(
+            "PRAGMA foreign_keys = OFF;
+             INSERT INTO tasks (id, title, content, creator, workflow_id, current_stage_index, status, created_at, updated_at)
+               VALUES ('t1', 't', 'c', 'tab-tmp', 'wf', 0, 'open', 1, 1);
+             INSERT INTO workflow_runs (workflow_run_id, session_id, repository_path, payload, updated_at)
+               VALUES ('r1', 'tab-tmp', '/repo', '{\"sessionId\":\"tab-tmp\"}', 1),
+                      ('r2', 'tab-tmp', '/repo', 'not json', 2);",
+        )
+        .expect("seed rows");
+        let db = WiseDb(Mutex::new(conn));
+
+        assert!(db
+            .migrate_claude_tab_session_references("tab-tmp", "sess-1")
+            .is_err());
+        let g = db.conn();
+        assert!(g.is_autocommit());
+        let creator: String = g
+            .query_row("SELECT creator FROM tasks WHERE id = 't1'", [], |r| r.get(0))
+            .expect("task creator");
+        assert_eq!(creator, "tab-tmp", "task update rolled back with failed run");
+        let moved: i64 = g
+            .query_row(
+                "SELECT COUNT(*) FROM workflow_runs WHERE session_id = 'sess-1'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("count moved runs");
+        assert_eq!(moved, 0);
+        g.execute("DELETE FROM workflow_runs WHERE workflow_run_id = 'r2'", [])
+            .expect("drop bad run");
+        drop(g);
+
+        db.migrate_claude_tab_session_references("tab-tmp", "sess-1")
+            .expect("migrates once payloads are valid");
+        let payload: String = db
+            .conn()
+            .query_row(
+                "SELECT payload FROM workflow_runs WHERE workflow_run_id = 'r1' AND session_id = 'sess-1'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("moved run");
+        assert!(payload.contains("sess-1"));
     }
 
     #[test]

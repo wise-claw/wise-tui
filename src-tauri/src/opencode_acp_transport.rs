@@ -101,7 +101,7 @@ impl OpencodeAcpTransport {
                     Err(_) => break,
                 }
             }
-            pending_for_reader.lock().unwrap().clear();
+            pending_for_reader.lock().unwrap_or_else(|e| e.into_inner()).clear();
         });
 
         Ok(Self {
@@ -136,7 +136,7 @@ impl OpencodeAcpTransport {
         match msg {
             JsonRpcMessage::Response { id, result, error, jsonrpc } => {
                 let sender = {
-                    let mut pending = pending_requests.lock().unwrap();
+                    let mut pending = pending_requests.lock().unwrap_or_else(|e| e.into_inner());
                     pending.remove(&id)
                 };
                 if let Some(tx) = sender {
@@ -218,7 +218,7 @@ impl OpencodeAcpTransport {
     /// never exits and the tab `busy` flag stays stuck.
     pub async fn abort_pending_requests(&self, stop_reason: &str) {
         let pending: HashMap<JsonRpcId, oneshot::Sender<JsonRpcMessage>> = {
-            let mut map = self.pending_requests.lock().unwrap();
+            let mut map = self.pending_requests.lock().unwrap_or_else(|e| e.into_inner());
             std::mem::take(&mut *map)
         };
         complete_pending_with_stop_reason(pending, stop_reason);

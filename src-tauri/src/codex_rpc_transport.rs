@@ -183,7 +183,7 @@ impl CodexRpcTransport {
                     }
                 }
                 // On exit, drop all pending senders so waiters unblock with errors.
-                let mut pending = pending_for_reader.lock().unwrap();
+                let mut pending = pending_for_reader.lock().unwrap_or_else(|e| e.into_inner());
                 pending.clear();
             });
         }
@@ -216,7 +216,7 @@ impl CodexRpcTransport {
         match &msg {
             JsonRpcMessage::Response { id, .. } | JsonRpcMessage::Error { id, .. } => {
                 let sender = {
-                    let mut pending = pending_requests.lock().unwrap();
+                    let mut pending = pending_requests.lock().unwrap_or_else(|e| e.into_inner());
                     pending.remove(id)
                 };
                 if let Some(tx) = sender {
@@ -405,14 +405,14 @@ mod request_lifecycle_tests {
         // Cancellation while waiting to acquire stdin must release registration too.
         let held_stdin = transport.stdin.lock().await;
         assert!(tokio::time::timeout(timeout, transport.send_request("test", None)).await.is_err());
-        assert!(transport.pending_requests.lock().unwrap().is_empty());
+        assert!(transport.pending_requests.lock().unwrap_or_else(|e| e.into_inner()).is_empty());
         drop(held_stdin);
         // The write succeeds, but the peer never replies.
         assert!(tokio::time::timeout(timeout, transport.send_request("test", None)).await.is_err());
-        assert!(transport.pending_requests.lock().unwrap().is_empty());
+        assert!(transport.pending_requests.lock().unwrap_or_else(|e| e.into_inner()).is_empty());
         transport.shutdown().await.unwrap();
         // Broken-pipe errors must not strand the sender registered before writing.
         assert!(transport.send_request("test", None).await.is_err());
-        assert!(transport.pending_requests.lock().unwrap().is_empty());
+        assert!(transport.pending_requests.lock().unwrap_or_else(|e| e.into_inner()).is_empty());
     }
 }

@@ -353,7 +353,16 @@ fn collect_auto_memory_files(files: &mut Vec<ClaudeMemoryFileItem>, memory_dir: 
 }
 
 #[tauri::command]
-pub(crate) fn get_claude_memory_status(
+pub(crate) async fn get_claude_memory_status(
+    project_path: Option<String>,
+) -> Result<ClaudeMemoryStatusResponse, String> {
+    crate::blocking_ipc::run_blocking("get_claude_memory_status", move || {
+        get_claude_memory_status_blocking(project_path)
+    })
+    .await
+}
+
+pub(crate) fn get_claude_memory_status_blocking(
     project_path: Option<String>,
 ) -> Result<ClaudeMemoryStatusResponse, String> {
     let project_root = canonicalize_existing_project_dir(project_path.as_deref());

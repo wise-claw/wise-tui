@@ -468,7 +468,11 @@ fn remove_trace_files(dir: &Path) -> u32 {
 }
 
 #[tauri::command]
-pub(crate) fn clear_fcc_traces() -> Result<u32, String> {
+pub(crate) async fn clear_fcc_traces() -> Result<u32, String> {
+    crate::blocking_ipc::run_blocking("clear_fcc_traces", move || clear_fcc_traces_blocking()).await
+}
+
+pub(crate) fn clear_fcc_traces_blocking() -> Result<u32, String> {
     let mut removed = 0u32;
     let root = fcc_traces_root();
     if root.is_dir() {
@@ -517,7 +521,19 @@ fn merge_trace_lists(file_traces: Vec<FccTraceEntry>, log_traces: Vec<FccTraceEn
 }
 
 #[tauri::command]
-pub(crate) fn list_fcc_traces(
+pub(crate) async fn list_fcc_traces(
+    since_ms: Option<i64>,
+    before_ms: Option<i64>,
+    limit: Option<u32>,
+    session_hint: Option<String>,
+) -> Result<Vec<FccTraceEntry>, String> {
+    crate::blocking_ipc::run_blocking("list_fcc_traces", move || {
+        list_fcc_traces_blocking(since_ms, before_ms, limit, session_hint)
+    })
+    .await
+}
+
+pub(crate) fn list_fcc_traces_blocking(
     since_ms: Option<i64>,
     before_ms: Option<i64>,
     limit: Option<u32>,

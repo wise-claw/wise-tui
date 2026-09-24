@@ -116,9 +116,7 @@ pub struct CursorAgentStatus {
 }
 
 pub fn load_cursor_api_key(db: &Mutex<Connection>) -> Option<String> {
-    let from_db = db
-        .lock()
-        .ok()
+    let from_db = Some(crate::wise_db::lock_conn(db))
         .and_then(|conn| {
             conn.prepare("SELECT value FROM app_settings WHERE key = ?1")
                 .ok()?
@@ -141,7 +139,7 @@ pub fn save_cursor_api_key(db: &Mutex<Connection>, api_key: &str) -> Result<(), 
     if trimmed.is_empty() {
         return Err("Cursor API Key 不能为空".to_string());
     }
-    let conn = db.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let conn = crate::wise_db::lock_conn(db);
     conn.execute(
         "INSERT INTO app_settings (key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -152,7 +150,7 @@ pub fn save_cursor_api_key(db: &Mutex<Connection>, api_key: &str) -> Result<(), 
 }
 
 pub fn clear_cursor_api_key(db: &Mutex<Connection>) -> Result<(), String> {
-    let conn = db.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let conn = crate::wise_db::lock_conn(db);
     conn.execute(
         "DELETE FROM app_settings WHERE key = ?1",
         rusqlite::params![CURSOR_API_KEY_SETTING],

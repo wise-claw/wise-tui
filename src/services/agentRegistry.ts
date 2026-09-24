@@ -8,15 +8,35 @@ import type {
   ProbeResult,
 } from "../types/detectedAgent";
 
-export async function listAgents(): Promise<DetectedAgent[]> {
-  const agents = await invoke<DetectedAgent[]>("agent_registry_list");
+let listInFlight: Promise<DetectedAgent[]> | null = null;
+/** Bumped by every call that publishes a registry snapshot, so a slower list response cannot overwrite a newer one. */
+let publishEpoch = 0;
+
+function publishFresh(agents: DetectedAgent[]): void {
+  publishEpoch += 1;
   publishAgentRegistry(agents);
-  return agents;
+}
+
+/** Concurrent callers (several availability hooks mount together at startup) share one IPC round-trip. */
+export function listAgents(): Promise<DetectedAgent[]> {
+  if (listInFlight) return listInFlight;
+  const startedAt = publishEpoch;
+  const request = invoke<DetectedAgent[]>("agent_registry_list").then((agents) => {
+    if (publishEpoch === startedAt) publishFresh(agents);
+    return agents;
+  });
+  listInFlight = request;
+  request
+    .finally(() => {
+      if (listInFlight === request) listInFlight = null;
+    })
+    .catch(() => {});
+  return request;
 }
 
 export async function refreshAgents(force = false): Promise<DetectedAgent[]> {
   const agents = await invoke<DetectedAgent[]>("agent_registry_refresh", { force });
-  publishAgentRegistry(agents);
+  publishFresh(agents);
   return agents;
 }
 
@@ -41,19 +61,19 @@ export type BuiltinUninstallableKind = Exclude<DetectedAgentKind, "custom">;
 
 export async function installBuiltinAgent(kind: BuiltinInstallableKind): Promise<DetectedAgent[]> {
   const agents = await invoke<DetectedAgent[]>("agent_registry_install_builtin", { kind });
-  publishAgentRegistry(agents);
+  publishFresh(agents);
   return agents;
 }
 
 export async function uninstallBuiltinAgent(kind: BuiltinUninstallableKind): Promise<DetectedAgent[]> {
   const agents = await invoke<DetectedAgent[]>("agent_registry_uninstall_builtin", { kind });
-  publishAgentRegistry(agents);
+  publishFresh(agents);
   return agents;
 }
 
 export async function updateBuiltinAgent(kind: BuiltinInstallableKind): Promise<DetectedAgent[]> {
   const agents = await invoke<DetectedAgent[]>("agent_registry_update_builtin", { kind });
-  publishAgentRegistry(agents);
+  publishFresh(agents);
   return agents;
 }
 

@@ -337,7 +337,16 @@ pub(crate) fn code_review_save_run(args: CodeReviewSaveRunArgs) -> Result<CodeRe
 }
 
 #[tauri::command]
-pub(crate) fn code_review_list_runs(
+pub(crate) async fn code_review_list_runs(
+    args: CodeReviewListRunsArgs,
+) -> Result<Vec<CodeReviewRun>, String> {
+    crate::blocking_ipc::run_blocking("code_review_list_runs", move || {
+        code_review_list_runs_blocking(args)
+    })
+    .await
+}
+
+pub(crate) fn code_review_list_runs_blocking(
     args: CodeReviewListRunsArgs,
 ) -> Result<Vec<CodeReviewRun>, String> {
     let repo = resolve_repo_path(&args.repository_path)?;

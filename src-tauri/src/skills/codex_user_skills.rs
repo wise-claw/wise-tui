@@ -76,7 +76,14 @@ fn list_codex_skills_under_dir(skills_dir: &Path) -> Result<Vec<ClaudeProjectSki
 /// 枚举 Codex 用户级全局技能（`~/.codex/skills`、`~/.agents/skills`、`$CODEX_HOME/skills`）。
 /// 多根同名技能只保留首个来源，跨根排序后返回。
 #[tauri::command]
-pub(crate) fn list_codex_user_skills() -> Result<Vec<ClaudeProjectSkill>, String> {
+pub(crate) async fn list_codex_user_skills() -> Result<Vec<ClaudeProjectSkill>, String> {
+    crate::blocking_ipc::run_blocking("list_codex_user_skills", move || {
+        list_codex_user_skills_blocking()
+    })
+    .await
+}
+
+pub(crate) fn list_codex_user_skills_blocking() -> Result<Vec<ClaudeProjectSkill>, String> {
     let mut out = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     for root in codex_user_skill_roots() {

@@ -64,8 +64,7 @@ import {
   toggleTerminalCenterPanel,
   useTerminalCenterPanelState,
 } from "../../stores/terminalCenterPanelStore";
-import { WORKSPACE_MEMO_PANEL_NODE } from "../WorkspaceMemoPanel";
-import { WORKSPACE_QUICK_ACTIONS_PANEL_NODE } from "../WorkspaceQuickActionsCenterPanel";
+import { WORKSPACE_MEMO_PANEL_NODE, WORKSPACE_QUICK_ACTIONS_PANEL_NODE } from "../workspaceAuxPanelNodes";
 import type { CenterView } from "./ClaudeChat";
 
 const TerminalPanelLazy = lazy(() =>

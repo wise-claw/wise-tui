@@ -46,7 +46,7 @@ impl WiseDb {
         &self,
         record: FeedbackLoopHistoryRecordDto,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         upsert_history(&g, &record)
     }
 
@@ -55,7 +55,7 @@ impl WiseDb {
         repository_path: Option<&str>,
         limit: i32,
     ) -> Result<Vec<FeedbackLoopHistoryRecordDto>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         list_history(&g, repository_path, limit)
     }
 
@@ -65,7 +65,7 @@ impl WiseDb {
     ) -> Result<u32, String> {
         // 包单事务批量写入：原逐条 INSERT 各自隐式事务（N 次 WAL fsync），改一次提交。
         // 失败时整体 rollback（原子批量语义，避免脏数据）。
-        let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let mut g = self.conn();
         let tx = g.transaction().map_err(|e| e.to_string())?;
         let count = insert_patch_batch(&tx, records)?;
         tx.commit().map_err(|e| e.to_string())?;
@@ -77,7 +77,7 @@ impl WiseDb {
         repository_path: Option<&str>,
         limit: i32,
     ) -> Result<Vec<PatchEffectivenessRecordDto>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         list_patch_records(&g, repository_path, limit)
     }
 
@@ -87,7 +87,7 @@ impl WiseDb {
         session_final_score: f64,
         within_ms: i64,
     ) -> Result<u32, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         attach_patch_scores(&g, repository_path, session_final_score, within_ms)
     }
 }

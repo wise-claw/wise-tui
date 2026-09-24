@@ -90,7 +90,7 @@ pub(crate) fn append_requirement_execution_record(
     app: tauri::AppHandle,
     record: RequirementExecutionRecord,
 ) -> Result<(), String> {
-    let mut conn = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let mut conn = db.conn();
     let requirement_id = record.requirement_id.clone();
     append(&mut conn, record)?;
     drop(conn);
@@ -103,7 +103,7 @@ pub(crate) fn list_requirement_execution_records(
     db: tauri::State<'_, WiseDb>,
     requirement_id: String,
 ) -> Result<Vec<RequirementExecutionRecord>, String> {
-    let conn = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let conn = db.conn();
     list(&conn, &requirement_id)
 }
 

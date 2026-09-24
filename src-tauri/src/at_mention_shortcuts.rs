@@ -33,7 +33,7 @@ where
     F: FnOnce(&mut AtMentionShortcutState) -> Result<R, String>,
 {
     let state = app.state::<Mutex<AtMentionShortcutState>>();
-    let mut guard = state.lock().map_err(|_| "at_mention_shortcuts lock poisoned".to_string())?;
+    let mut guard = state.lock().unwrap_or_else(|e| e.into_inner());
     f(&mut guard)
 }
 

@@ -894,7 +894,17 @@ fn reap_detached_child(mut child: std::process::Child) {
 
 /// 将文本写入用户通过系统对话框选择的绝对路径（供会话链路包导出等）。
 #[tauri::command]
-pub(crate) fn write_text_file_absolute(path: String, contents: String) -> Result<(), String> {
+pub(crate) async fn write_text_file_absolute(path: String, contents: String) -> Result<(), String> {
+    crate::blocking_ipc::run_blocking("write_text_file_absolute", move || {
+        write_text_file_absolute_blocking(path, contents)
+    })
+    .await
+}
+
+pub(crate) fn write_text_file_absolute_blocking(
+    path: String,
+    contents: String,
+) -> Result<(), String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return Err("路径不能为空".to_string());

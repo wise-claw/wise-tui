@@ -418,7 +418,7 @@ impl ClaudeSessionRegistry {
     }
 
     pub(crate) fn register(&self, session_id: String, project_path: String, model: String) {
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         sessions.insert(
             session_id.clone(),
             ClaudeSessionInfo {
@@ -435,7 +435,7 @@ impl ClaudeSessionRegistry {
     }
 
     pub(crate) fn mark_completed(&self, session_id: &str, success: bool) {
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(info) = sessions.get_mut(session_id) {
             info.status = if success {
                 "completed".to_string()
@@ -447,27 +447,27 @@ impl ClaudeSessionRegistry {
 
     /// 长驻 streaming 新一轮用户消息写入 stdin 时，注册表恢复为 running（进程未退出）。
     fn mark_running(&self, session_id: &str) {
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(info) = sessions.get_mut(session_id) {
             info.status = "running".to_string();
         }
     }
 
     fn remove(&self, session_id: &str) {
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         sessions.remove(session_id);
     }
 
     /// Adapted engines register again for each turn; completed metadata is not history storage.
     pub(crate) fn remove_completed(&self, session_id: &str) {
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         if sessions.get(session_id).is_some_and(|info| info.status != "running") {
             sessions.remove(session_id);
         }
     }
 
     fn list(&self) -> Vec<ClaudeSessionInfo> {
-        let sessions = self.sessions.lock().unwrap();
+        let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         sessions.values().cloned().collect()
     }
 }
@@ -1028,7 +1028,16 @@ fn normalize_hook_handler_input(
 }
 
 #[tauri::command]
-pub(crate) fn get_claude_hooks_status(
+pub(crate) async fn get_claude_hooks_status(
+    project_path: Option<String>,
+) -> Result<ClaudeHooksStatusResponse, String> {
+    crate::blocking_ipc::run_blocking("get_claude_hooks_status", move || {
+        get_claude_hooks_status_blocking(project_path)
+    })
+    .await
+}
+
+pub(crate) fn get_claude_hooks_status_blocking(
     project_path: Option<String>,
 ) -> Result<ClaudeHooksStatusResponse, String> {
     let user_path = crate::claude_config_dir::user_claude_dir().join("settings.json");

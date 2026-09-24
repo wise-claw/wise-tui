@@ -147,7 +147,7 @@ impl AgentRegistry {
         let guard = self
             .state
             .read()
-            .map_err(|_| "agent registry lock poisoned".to_string())?;
+            .unwrap_or_else(|e| e.into_inner());
         Ok(guard.agents.clone())
     }
 
@@ -155,7 +155,7 @@ impl AgentRegistry {
         let guard = self
             .state
             .read()
-            .map_err(|_| "agent registry lock poisoned".to_string())?;
+            .unwrap_or_else(|e| e.into_inner());
         Ok(guard
             .agents
             .iter()
@@ -167,7 +167,7 @@ impl AgentRegistry {
         let guard = self
             .state
             .read()
-            .map_err(|_| "agent registry lock poisoned".to_string())?;
+            .unwrap_or_else(|e| e.into_inner());
         Ok(guard.agents.is_empty())
     }
 
@@ -252,7 +252,7 @@ impl AgentRegistry {
         let guard = self
             .state
             .read()
-            .map_err(|_| "agent registry lock poisoned".to_string())?;
+            .unwrap_or_else(|e| e.into_inner());
         let fresh = guard
             .last_probed_at
             .map(|last| last.elapsed() < CACHE_TTL)
@@ -267,7 +267,7 @@ impl AgentRegistry {
         let mut guard = self
             .state
             .write()
-            .map_err(|_| "agent registry lock poisoned".to_string())?;
+            .unwrap_or_else(|e| e.into_inner());
         guard.agents = agents;
         guard.last_probed_at = Some(Instant::now());
         Ok(guard.agents.clone())
@@ -916,7 +916,7 @@ fn strip_custom_prefix(id: &str) -> &str {
 }
 
 pub(crate) fn load_custom_agents(db: &Mutex<Connection>) -> Result<Vec<CustomAgentRecord>, String> {
-    let conn = db.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let conn = crate::wise_db::lock_conn(db);
     let mut stmt = conn
         .prepare(
             "SELECT id, name, command, args_json, env_json
@@ -964,7 +964,7 @@ pub(crate) fn insert_custom_agent(
     let args_json = serde_json::to_string(&record.args).map_err(|e| e.to_string())?;
     let env_json = serde_json::to_string(&record.env).map_err(|e| e.to_string())?;
     let now = now_iso();
-    let conn = db.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let conn = crate::wise_db::lock_conn(db);
     conn.execute(
         "INSERT INTO agent_custom (id, name, command, args_json, env_json, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
@@ -1097,7 +1097,7 @@ pub(crate) fn delete_custom_agent(db: &Mutex<Connection>, id: &str) -> Result<()
     if row_id.is_empty() {
         return Err("custom agent id is required".to_string());
     }
-    let conn = db.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let conn = crate::wise_db::lock_conn(db);
     conn.execute("DELETE FROM agent_custom WHERE id = ?1", params![row_id])
         .map_err(|e| e.to_string())?;
     Ok(())

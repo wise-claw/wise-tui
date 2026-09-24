@@ -506,13 +506,23 @@ pub fn spawn_composer_image_gc_scanner(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-pub fn get_composer_image_gc_stats(db: tauri::State<'_, WiseDb>) -> Result<ComposerImageGcStats, String> {
-    composer_image_gc_stats(&db)
+pub async fn get_composer_image_gc_stats(
+    app: tauri::AppHandle,
+) -> Result<ComposerImageGcStats, String> {
+    crate::blocking_ipc::run_blocking("get_composer_image_gc_stats", move || {
+        composer_image_gc_stats(&app.state::<WiseDb>())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn run_composer_image_gc_command(db: tauri::State<'_, WiseDb>) -> Result<ComposerImageGcResult, String> {
-    run_composer_image_gc(&db)
+pub async fn run_composer_image_gc_command(
+    app: tauri::AppHandle,
+) -> Result<ComposerImageGcResult, String> {
+    crate::blocking_ipc::run_blocking("run_composer_image_gc_command", move || {
+        run_composer_image_gc(&app.state::<WiseDb>())
+    })
+    .await
 }
 
 #[tauri::command]

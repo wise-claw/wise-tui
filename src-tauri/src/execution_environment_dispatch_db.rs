@@ -61,7 +61,7 @@ impl WiseDb {
         &self,
         input: UpsertExecutionEnvironmentBatchInput,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         upsert_batch(&g, &input)
     }
 
@@ -69,7 +69,7 @@ impl WiseDb {
         &self,
         input: UpsertExecutionEnvironmentItemInput,
     ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         upsert_item(&g, &input)
     }
 
@@ -78,7 +78,7 @@ impl WiseDb {
         anchor_session_id: &str,
         since_ms: i64,
     ) -> Result<Vec<ExecutionEnvironmentDispatchRecordDto>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         list_for_anchor(&g, anchor_session_id, since_ms)
     }
 
@@ -87,7 +87,7 @@ impl WiseDb {
         repository_path: &str,
         since_ms: i64,
     ) -> Result<Vec<ExecutionEnvironmentDispatchRecordDto>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         list_for_repository(&g, repository_path, since_ms)
     }
 }

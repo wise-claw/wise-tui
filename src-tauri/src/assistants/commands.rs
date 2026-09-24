@@ -222,7 +222,7 @@ pub fn assistants_list(
     db: State<'_, WiseDb>,
     extensions: State<'_, ExtensionRegistry>,
 ) -> Result<Vec<AssistantEntry>, String> {
-    let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+    let conn = db.conn();
     let hidden_ids = hidden::list_hidden_ids(&conn)?;
 
     let mut out = Vec::new();
@@ -294,7 +294,7 @@ pub fn assistants_save_custom(
     db: State<'_, WiseDb>,
     args: SaveCustomArgs,
 ) -> Result<AssistantEntry, String> {
-    let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+    let conn = db.conn();
     let row = storage::upsert(&conn, &args.input)?;
     Ok(custom_to_entry(row))
 }
@@ -330,7 +330,7 @@ fn assistants_delete_impl(db: &WiseDb, raw_id: &str) -> Result<(), String> {
         return Err("assistant id must not be empty".into());
     }
 
-    let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+    let conn = db.conn();
 
     if let Some(custom_id) = id.strip_prefix("custom:") {
         if custom_id.trim().is_empty() {
@@ -379,7 +379,7 @@ pub fn assistants_get_system_prompt(
         return Ok(bundle.system_prompt.to_string());
     }
     if let Some(custom_id) = args.id.strip_prefix("custom:") {
-        let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+        let conn = db.conn();
         return storage::get_by_id(&conn, custom_id)?
             .map(|r| r.system_prompt)
             .ok_or_else(|| format!("no custom assistant with id {custom_id}"));
@@ -404,7 +404,7 @@ pub fn assistants_get_overrides(
     db: State<'_, WiseDb>,
     args: GetOverridesArgs,
 ) -> Result<Option<AssistantOverridesRow>, String> {
-    let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+    let conn = db.conn();
     overrides::get(&conn, &args.assistant_id, &args.scope)
 }
 
@@ -419,7 +419,7 @@ pub fn assistants_list_overrides(
     db: State<'_, WiseDb>,
     args: ListOverridesArgs,
 ) -> Result<Vec<AssistantOverridesRow>, String> {
-    let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+    let conn = db.conn();
     overrides::list_for_assistant(&conn, &args.assistant_id)
 }
 
@@ -437,7 +437,7 @@ pub fn assistants_save_overrides(
     db: State<'_, WiseDb>,
     args: SaveOverridesArgs,
 ) -> Result<AssistantOverridesRow, String> {
-    let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+    let conn = db.conn();
     overrides::save(&conn, &args.assistant_id, &args.scope, &args.patch)
 }
 
@@ -455,7 +455,7 @@ pub fn assistants_reset_overrides(
     db: State<'_, WiseDb>,
     args: ResetOverridesArgs,
 ) -> Result<(), String> {
-    let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+    let conn = db.conn();
     overrides::reset(&conn, &args.assistant_id, &args.scope, &args.sections)
 }
 
@@ -476,7 +476,7 @@ pub fn assistants_resolve_runtime(
     db: State<'_, WiseDb>,
     args: ResolveRuntimeArgs,
 ) -> Result<ResolvedRuntime, String> {
-    let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+    let conn = db.conn();
     runtime_resolver::resolve(
         &conn,
         &args.assistant_id,

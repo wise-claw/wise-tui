@@ -26,7 +26,7 @@ impl Default for WisePushControl {
 
 impl WisePushControl {
     pub fn stop_locked(&self) {
-        let mut g = self.cancel_tx.lock().unwrap();
+        let mut g = self.cancel_tx.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(tx) = g.take() {
             let _ = tx.send(());
         }
@@ -128,7 +128,7 @@ pub async fn wise_push_start(
     }
     control.stop_locked();
     let (tx, rx) = oneshot::channel();
-    *control.cancel_tx.lock().unwrap() = Some(tx);
+    *control.cancel_tx.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
     let app2 = app.clone();
     let u = url.trim().to_string();
     tauri::async_runtime::spawn(async move {

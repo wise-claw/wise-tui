@@ -6,6 +6,7 @@ use crate::wise_paths::wise_dir;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
+use tauri::Manager;
 use tauri_plugin_opener::OpenerExt;
 
 #[derive(Clone, Copy)]
@@ -183,8 +184,17 @@ pub fn open_wise_home_dir(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn list_wise_data_cleanup_categories(
-    db: tauri::State<'_, WiseDb>,
+pub async fn list_wise_data_cleanup_categories(
+    app: tauri::AppHandle,
+) -> Result<Vec<WiseDataCategoryUsage>, String> {
+    crate::blocking_ipc::run_blocking("list_wise_data_cleanup_categories", move || {
+        list_wise_data_cleanup_categories_blocking(&app.state::<WiseDb>())
+    })
+    .await
+}
+
+fn list_wise_data_cleanup_categories_blocking(
+    db: &WiseDb,
 ) -> Result<Vec<WiseDataCategoryUsage>, String> {
     let wise = wise_dir()?;
     let mut out = Vec::with_capacity(CATEGORIES.len());
@@ -210,7 +220,7 @@ pub fn list_wise_data_cleanup_categories(
         };
         let (referenced_file_count, gc_eligible_file_count, gc_eligible_byte_size) =
             if cat.id == "composer_images" {
-                match composer_image_gc::composer_image_gc_stats(&db) {
+                match composer_image_gc::composer_image_gc_stats(db) {
                     Ok(stats) => (
                         Some(stats.referenced_files),
                         Some(stats.gc_eligible_files),
@@ -238,7 +248,16 @@ pub fn list_wise_data_cleanup_categories(
 }
 
 #[tauri::command]
-pub fn cleanup_wise_data_categories(
+pub async fn cleanup_wise_data_categories(
+    category_ids: Vec<String>,
+) -> Result<Vec<WiseDataCleanupResult>, String> {
+    crate::blocking_ipc::run_blocking("cleanup_wise_data_categories", move || {
+        cleanup_wise_data_categories_blocking(category_ids)
+    })
+    .await
+}
+
+fn cleanup_wise_data_categories_blocking(
     category_ids: Vec<String>,
 ) -> Result<Vec<WiseDataCleanupResult>, String> {
     if category_ids.is_empty() {

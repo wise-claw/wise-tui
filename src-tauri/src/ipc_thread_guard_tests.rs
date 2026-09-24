@@ -15,6 +15,11 @@ const BLOCKING_MARKERS: &[&str] = &[
     "Repository::",
     "run_osascript(",
     "blocking_output_with_timeout(",
+    "WalkDir::new(",
+    "remove_dir_all(",
+    "run_claude_mcp_cli(",
+    "run_composer_image_gc(",
+    "composer_image_gc_stats(",
 ];
 
 fn sync_command_offenders(file: &Path, src: &str) -> Vec<String> {

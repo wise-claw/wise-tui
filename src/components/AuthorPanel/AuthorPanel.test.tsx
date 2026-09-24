@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { App as AntApp } from "antd";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToReadableStream } from "react-dom/server";
 import type { AuthorPane } from "../../types/viewMode";
 
 /**
@@ -191,8 +191,9 @@ const { AuthorPanel } = await import("./AuthorPanel");
 const { resolveAuthorNavPane, writeAuthorPaneToStorage } = await import("./authorPaneStorage");
 const { AuthorPanelNav } = await import("./AuthorPanelNav");
 
-function renderAuthorPanel(props: Parameters<typeof AuthorPanel>[0]): string {
-  return renderToStaticMarkup(
+/** Panes are `lazy`; wait for every Suspense boundary so assertions see pane content. */
+async function renderAuthorPanel(props: Parameters<typeof AuthorPanel>[0]): Promise<string> {
+  const stream = await renderToReadableStream(
     <AntApp>
       <AuthorPanelNav
         pane={props.pane}
@@ -202,6 +203,9 @@ function renderAuthorPanel(props: Parameters<typeof AuthorPanel>[0]): string {
       <AuthorPanel {...props} />
     </AntApp>,
   );
+  await stream.allReady;
+  const html = await new Response(stream).text();
+  return html.replace(/<!--[^]*?-->/g, "");
 }
 
 const workspace = {
@@ -305,9 +309,9 @@ function buildProps(
 }
 
 describe("AuthorPanel", () => {
-  test("renders configuration center tab labels", () => {
+  test("renders configuration center tab labels", async () => {
     const { props } = buildProps();
-    const html = renderAuthorPanel(props);
+    const html = await renderAuthorPanel(props);
     for (const label of [
       "席位",
       "工作流",
@@ -341,7 +345,7 @@ describe("AuthorPanel", () => {
     expect(html).not.toContain("委派协议");
   });
 
-  test("pane change and back callbacks remain shell-owned", () => {
+  test("pane change and back callbacks remain shell-owned", async () => {
     const { props, onPaneChange, onBack } = buildProps();
     props.onPaneChange("agents");
     props.onBack();
@@ -363,14 +367,14 @@ describe("AuthorPanel", () => {
     expect(setAppSetting).toHaveBeenCalledWith("wise.author.lastPane", "workflows");
   });
 
-  test("keeps direct-entry workspaces pane routable", () => {
+  test("keeps direct-entry workspaces pane routable", async () => {
     expect(resolveAuthorNavPane("workspaces")).toBe("workspaces");
   });
 
-  test("artifacts pane is a visible configuration center route", () => {
+  test("artifacts pane is a visible configuration center route", async () => {
     expect(resolveAuthorNavPane("artifacts")).toBe("artifacts");
     const { props } = buildProps({ pane: "artifacts" });
-    const html = renderAuthorPanel(props);
+    const html = await renderAuthorPanel(props);
     expect(html).toContain("产物检查台");
   });
 
@@ -380,62 +384,62 @@ describe("AuthorPanel", () => {
     expect(setAppSetting).toHaveBeenCalledWith("wise.author.lastPane", "artifacts");
   });
 
-  test("workspaces pane renders the workspace list", () => {
+  test("workspaces pane renders the workspace list", async () => {
     const { props } = buildProps({ pane: "workspaces" });
-    const html = renderAuthorPanel(props);
+    const html = await renderAuthorPanel(props);
     expect(html).toContain("Wise");
   });
 
-  test("agents pane mounts EmployeeConfigModal and forwards defaultRepositoryIds", () => {
+  test("agents pane mounts EmployeeConfigModal and forwards defaultRepositoryIds", async () => {
     const { props } = buildProps({ pane: "agents" });
-    const html = renderAuthorPanel(props);
+    const html = await renderAuthorPanel(props);
     expect(html).toContain('data-stub="agents"');
     expect(html).toContain("agents:2");
   });
 
-  test("workflows pane mounts WorkflowConfigModal with the initial workflow id", () => {
+  test("workflows pane mounts WorkflowConfigModal with the initial workflow id", async () => {
     const { props } = buildProps({ pane: "workflows" });
-    const html = renderAuthorPanel(props);
+    const html = await renderAuthorPanel(props);
     expect(html).toContain('data-stub="workflows"');
     expect(html).toContain("workflows:wf");
   });
 
-  test("hooks pane mounts ClaudeHooksConfigPanel", () => {
+  test("hooks pane mounts ClaudeHooksConfigPanel", async () => {
     const { props } = buildProps({ pane: "hooks" });
-    const html = renderAuthorPanel(props);
+    const html = await renderAuthorPanel(props);
     expect(html).toContain("新增触发器");
     expect(html).toContain('data-stub="hooks"');
   });
 
-  test("mcp pane mounts McpHub", () => {
+  test("mcp pane mounts McpHub", async () => {
     const { props } = buildProps({ pane: "mcp" });
-    const html = renderAuthorPanel(props);
+    const html = await renderAuthorPanel(props);
     expect(html).toContain("MCP");
   });
 
-  test("skills pane mounts SkillsHub", () => {
+  test("skills pane mounts SkillsHub", async () => {
     const { props } = buildProps({ pane: "skills" });
-    const html = renderAuthorPanel(props);
+    const html = await renderAuthorPanel(props);
     expect(html).toContain("技能");
   });
 
-  test("agents-explorer pane mounts AgentsExplorerPanel with repository path", () => {
+  test("agents-explorer pane mounts AgentsExplorerPanel with repository path", async () => {
     const { props } = buildProps({ pane: "agents-explorer" });
-    const html = renderAuthorPanel(props);
+    const html = await renderAuthorPanel(props);
     expect(html).toContain('data-stub="agents-explorer"');
     expect(html).toContain("AgentsExplorer:/repo");
   });
 
-  test("claude-plugins pane mounts ClaudePluginMarketHub", () => {
+  test("claude-plugins pane mounts ClaudePluginMarketHub", async () => {
     const { props } = buildProps({ pane: "claude-plugins" });
-    const html = renderAuthorPanel(props);
+    const html = await renderAuthorPanel(props);
     expect(html).toContain("插件市场");
     expect(html).toContain("精选市场");
   });
 
-  test("defaults pane renders global session and layout defaults", () => {
+  test("defaults pane renders global session and layout defaults", async () => {
     const { props } = buildProps({ pane: "defaults" });
-    const html = renderAuthorPanel(props);
+    const html = await renderAuthorPanel(props);
     expect(html).toContain("会话处理方式");
     expect(html).toContain("运行项");
     expect(html).toContain("左栏");
@@ -453,15 +457,15 @@ describe("AuthorPanel", () => {
     expect(html).toContain("逐轮");
   });
 
-  test("data-cleanup pane renders wise cache cleanup", () => {
+  test("data-cleanup pane renders wise cache cleanup", async () => {
     const { props } = buildProps({ pane: "data-cleanup" });
-    const html = renderAuthorPanel(props);
+    const html = await renderAuthorPanel(props);
     expect(html).toContain("数据清理");
     expect(html).toContain("清理全部图片");
     expect(html).toContain("Composer 图片");
   });
 
-  test("application setting panes mount inside configuration center", () => {
+  test("application setting panes mount inside configuration center", async () => {
     for (const pane of [
       "defaults",
       "data-cleanup",
@@ -474,14 +478,14 @@ describe("AuthorPanel", () => {
       "channels",
     ] as const) {
       const { props } = buildProps({ pane });
-      renderAuthorPanel(props);
+      await renderAuthorPanel(props);
     }
 
-    const channelsHtml = renderAuthorPanel(buildProps({ pane: "channels" }).props);
+    const channelsHtml = await renderAuthorPanel(buildProps({ pane: "channels" }).props);
     expect(channelsHtml).toContain("远程入口");
     expect(channelsHtml).toContain('data-stub="dingtalk-config"');
 
-    const automationHtml = renderAuthorPanel(buildProps({ pane: "automation" }).props);
+    const automationHtml = await renderAuthorPanel(buildProps({ pane: "automation" }).props);
     expect(automationHtml).toContain('data-stub="scheduled-tasks-modal"');
   });
 });

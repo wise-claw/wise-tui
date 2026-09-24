@@ -790,6 +790,13 @@ async fn kill_sidecar(state: &State<'_, StagehandBrowseState>, session_id: &str)
 
 #[tauri::command]
 pub async fn stagehand_browse_probe(app: AppHandle) -> Result<StagehandBrowseProbe, String> {
+    crate::blocking_ipc::run_blocking("stagehand_browse_probe", move || {
+        stagehand_browse_probe_blocking(app)
+    })
+    .await
+}
+
+fn stagehand_browse_probe_blocking(app: AppHandle) -> Result<StagehandBrowseProbe, String> {
     ensure_cli_lightweight(&app);
     let browse_binary = find_browse_binary();
     let browse_version = if let Some(bin) = &browse_binary {

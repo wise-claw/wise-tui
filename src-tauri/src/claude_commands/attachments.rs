@@ -134,7 +134,14 @@ pub(crate) fn save_composer_image(
 
 /// 读取 `~/.wise/composer-images/` 下已落盘图片，返回 `data:*;base64,...` 供 Composer 缩略图恢复。
 #[tauri::command]
-pub(crate) fn read_composer_image(abs_path: String) -> Result<String, String> {
+pub(crate) async fn read_composer_image(abs_path: String) -> Result<String, String> {
+    crate::blocking_ipc::run_blocking("read_composer_image", move || {
+        read_composer_image_blocking(abs_path)
+    })
+    .await
+}
+
+pub(crate) fn read_composer_image_blocking(abs_path: String) -> Result<String, String> {
     let path = PathBuf::from(abs_path.trim());
     if !path.is_absolute() {
         return Err("abs_path must be absolute".into());
@@ -262,7 +269,14 @@ pub(crate) async fn wise_fetch_remote_image(url: String) -> Result<FetchedImageD
 
 /// 粘贴「Finder 复制图片文件」兜底：剪贴板只有 `file://` 路径时，读盘转 base64。
 #[tauri::command]
-pub(crate) fn wise_read_local_image(abs_path: String) -> Result<FetchedImageData, String> {
+pub(crate) async fn wise_read_local_image(abs_path: String) -> Result<FetchedImageData, String> {
+    crate::blocking_ipc::run_blocking("wise_read_local_image", move || {
+        wise_read_local_image_blocking(abs_path)
+    })
+    .await
+}
+
+pub(crate) fn wise_read_local_image_blocking(abs_path: String) -> Result<FetchedImageData, String> {
     let trimmed = abs_path.trim();
     let path = PathBuf::from(trimmed);
     if !path.is_absolute() {
@@ -378,7 +392,7 @@ pub(crate) fn wise_read_clipboard_image() -> Result<FetchedImageData, String> {
         if let Some(url_str) = unsafe { pb.stringForType(NSPasteboardTypeFileURL) } {
             if let Some(path) = decode_file_url(&url_str.to_string()) {
                 if is_image_path(&path) {
-                    if let Ok(data) = wise_read_local_image(path) {
+                    if let Ok(data) = wise_read_local_image_blocking(path) {
                         return Ok(data);
                     }
                 }

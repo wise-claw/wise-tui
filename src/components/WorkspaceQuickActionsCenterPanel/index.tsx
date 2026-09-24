@@ -445,6 +445,3 @@ export function WorkspaceQuickActionsCenterPanel() {
     </div>
   );
 }
-
-/** 稳定节点：写入 `panelBelowMessages` 时 identity 不随 layout 重渲变化。 */
-export const WORKSPACE_QUICK_ACTIONS_PANEL_NODE = <WorkspaceQuickActionsCenterPanel />;

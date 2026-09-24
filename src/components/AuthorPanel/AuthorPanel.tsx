@@ -5,33 +5,88 @@ import {
   ReloadOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import {
+  Suspense,
+  lazy,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { AppShortcutsPopoverBody } from "../AppShortcutsPopoverBody";
-import { ArtifactsPanel } from "../ArtifactsPanel";
-import { AssistantsPanel } from "../AssistantsPanel";
-import { AutomationPanel } from "../AutomationPanel";
-import { ChannelsPanel } from "../ChannelsPanel";
-import { ClaudeHooksConfigPanel, type ClaudeHooksConfigPanelHandle } from "../ClaudeHooksConfigPanel";
-import { AutoApprovePanel } from "../AutoApprovePanel";
-import { CodeReviewSettingsPanel } from "../CodeReviewSettingsPanel";
-import { DataCleanupPanel } from "../DataCleanupPanel";
-import { DefaultConfigPanel } from "../DefaultConfigPanel";
-import { AgentRegistrySection } from "../ClaudeConfigDirPanel/AgentRegistrySection";
+import type { ArtifactsPanel as ArtifactsPanelComponent } from "../ArtifactsPanel";
+import type { AssistantsPanel as AssistantsPanelComponent } from "../AssistantsPanel";
+import type { AutomationPanel as AutomationPanelComponent } from "../AutomationPanel";
+import type { ClaudeHooksConfigPanelHandle } from "../ClaudeHooksConfigPanel";
 import { ClaudeSandboxHelpPopoverBody } from "../ClaudeSandboxHelpPopoverBody";
-import { EmployeeConfigModal } from "../EmployeeConfigModal";
-import { ExtensionsPanel } from "../ExtensionsPanel";
-import { MyExtensionsPanel } from "../MyExtensionsPanel";
-import { ClaudePluginMarketHub } from "../ClaudePluginMarketHub";
-import { McpHub } from "../McpHub";
+import type { EmployeeConfigModal as EmployeeConfigModalComponent } from "../EmployeeConfigModal";
+import type { McpHub as McpHubComponent } from "../McpHub";
 import { SettingsViewModeProvider } from "../SettingsView";
-import { SkillsHub } from "../SkillsHub";
-import { AgentsExplorerPanel } from "../AgentsExplorerPanel";
-import { WorkflowConfigModal } from "../WorkflowConfigModal";
+import type { SkillsHub as SkillsHubComponent } from "../SkillsHub";
+import type { WorkflowConfigModal as WorkflowConfigModalComponent } from "../WorkflowConfigModal";
 import { AUTHOR_TABS, type AuthorPane } from "./AuthorPanelTabs";
 import { writeAuthorPaneToStorage } from "./authorPaneStorage";
 import { AuthorPanelPageShell } from "./AuthorPanelPageShell";
 import { WorkspacesTab } from "./tabs/WorkspacesTab";
 import "./index.css";
+
+// Only one pane is visible at a time; loading every pane (x6 canvas, plugin
+// market, hooks editor, ...) up front made the first open of the
+// configuration center pay for all of them.
+const ArtifactsPanel = lazy(() =>
+  import("../ArtifactsPanel").then((m) => ({ default: m.ArtifactsPanel })),
+);
+const AssistantsPanel = lazy(() =>
+  import("../AssistantsPanel").then((m) => ({ default: m.AssistantsPanel })),
+);
+const AutomationPanel = lazy(() =>
+  import("../AutomationPanel").then((m) => ({ default: m.AutomationPanel })),
+);
+const ChannelsPanel = lazy(() =>
+  import("../ChannelsPanel").then((m) => ({ default: m.ChannelsPanel })),
+);
+const ClaudeHooksConfigPanel = lazy(() =>
+  import("../ClaudeHooksConfigPanel").then((m) => ({ default: m.ClaudeHooksConfigPanel })),
+);
+const AutoApprovePanel = lazy(() =>
+  import("../AutoApprovePanel").then((m) => ({ default: m.AutoApprovePanel })),
+);
+const CodeReviewSettingsPanel = lazy(() =>
+  import("../CodeReviewSettingsPanel").then((m) => ({ default: m.CodeReviewSettingsPanel })),
+);
+const DataCleanupPanel = lazy(() =>
+  import("../DataCleanupPanel").then((m) => ({ default: m.DataCleanupPanel })),
+);
+const DefaultConfigPanel = lazy(() =>
+  import("../DefaultConfigPanel").then((m) => ({ default: m.DefaultConfigPanel })),
+);
+const AgentRegistrySection = lazy(() =>
+  import("../ClaudeConfigDirPanel/AgentRegistrySection").then((m) => ({
+    default: m.AgentRegistrySection,
+  })),
+);
+const EmployeeConfigModal = lazy(() =>
+  import("../EmployeeConfigModal").then((m) => ({ default: m.EmployeeConfigModal })),
+);
+const ExtensionsPanel = lazy(() =>
+  import("../ExtensionsPanel").then((m) => ({ default: m.ExtensionsPanel })),
+);
+const MyExtensionsPanel = lazy(() =>
+  import("../MyExtensionsPanel").then((m) => ({ default: m.MyExtensionsPanel })),
+);
+const ClaudePluginMarketHub = lazy(() =>
+  import("../ClaudePluginMarketHub").then((m) => ({ default: m.ClaudePluginMarketHub })),
+);
+const McpHub = lazy(() => import("../McpHub").then((m) => ({ default: m.McpHub })));
+const SkillsHub = lazy(() => import("../SkillsHub").then((m) => ({ default: m.SkillsHub })));
+const AgentsExplorerPanel = lazy(() =>
+  import("../AgentsExplorerPanel").then((m) => ({ default: m.AgentsExplorerPanel })),
+);
+const WorkflowConfigModal = lazy(() =>
+  import("../WorkflowConfigModal").then((m) => ({ default: m.WorkflowConfigModal })),
+);
 
 const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
   "workspaces",
@@ -50,12 +105,12 @@ const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
   "engine-registry",
 ]);
 
-type EmployeeConfigProps = ComponentProps<typeof EmployeeConfigModal>;
-type WorkflowConfigProps = ComponentProps<typeof WorkflowConfigModal>;
-type McpHubProps = ComponentProps<typeof McpHub>;
-type SkillsHubProps = ComponentProps<typeof SkillsHub>;
+type EmployeeConfigProps = ComponentProps<typeof EmployeeConfigModalComponent>;
+type WorkflowConfigProps = ComponentProps<typeof WorkflowConfigModalComponent>;
+type McpHubProps = ComponentProps<typeof McpHubComponent>;
+type SkillsHubProps = ComponentProps<typeof SkillsHubComponent>;
 type WorkspacesTabProps = ComponentProps<typeof WorkspacesTab>;
-type AssistantsPanelProps = ComponentProps<typeof AssistantsPanel>;
+type AssistantsPanelProps = ComponentProps<typeof AssistantsPanelComponent>;
 
 export interface AuthorPanelProps {
   pane: AuthorPane;
@@ -68,8 +123,8 @@ export interface AuthorPanelProps {
   skillsHubProps: SkillsHubProps;
   assistantsPanelProps?: AssistantsPanelProps;
   repositoryPath?: string | null;
-  automationPanelProps: ComponentProps<typeof AutomationPanel>;
-  artifactsPanelProps: ComponentProps<typeof ArtifactsPanel>;
+  automationPanelProps: ComponentProps<typeof AutomationPanelComponent>;
+  artifactsPanelProps: ComponentProps<typeof ArtifactsPanelComponent>;
   workflowStudioAction?: ReactNode;
   /** 工作台配置主内容区是否在前台展示 */
   configLayerActive?: boolean;
@@ -294,7 +349,9 @@ export function AuthorPanel({
           aria-label={activeTab.label}
         >
           <div className="author-panel__scroll">
-            {wrappedContent ?? <Spin size="small" />}
+            <Suspense fallback={<Spin size="small" />}>
+              {wrappedContent ?? <Spin size="small" />}
+            </Suspense>
           </div>
         </main>
       </div>

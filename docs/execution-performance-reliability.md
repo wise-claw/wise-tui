@@ -2,6 +2,55 @@
 
 本轮针对 Agent 发现、模型目录查询、短命令生命周期、IPC 主线程阻塞与 Claude 会话收尾，减少重复进程启动，避免外部命令卡住、界面冻结或会话卡在「运行中」。现有执行引擎、配置模型、档案、自定义 Agent、查找回退路径和全部 IPC 命令（名称与参数）均保留，没有删除后端能力。
 
+## 第四部分：第三部分复核后的剩余项（2026-09-24）
+
+| 场景 | 原有问题 | 当前行为与验证 |
+| --- | --- | --- |
+| `extensions_reload`、`chrome_page_monitor_download_extension`（及兼容入口 `chrome_page_monitor_open_extension_dir`）、`kill_claude_host_process` | 第三部分之后仍为同步命令：扩展目录重扫、导出扩展目录拷贝、等待 `kill` 子进程都在主线程执行 | 改为 `async` + `blocking_ipc::run_blocking`，命令名与参数不变 |
+| 批量标记 OMC 通知已读、标签合并为会话后迁移工作流引用 | 循环 `UPDATE` 各自自动提交；迁移中途遇到损坏的 payload 会留下「任务已改、运行记录未改」的半迁移状态 | 放进 `in_write_tx` 单事务并复用预编译语句；失败整体回滚。测试 `migrate_claude_tab_session_references_is_atomic` 覆盖回滚与修复后重试 |
+| `list_employees`、`list_stage_assignees` | 持全局数据库锁逐行 `prepare` + 查询（N+1） | 员工仓库关系一次查询后按员工分组；阶段查询语句只准备一次。测试 `list_employees_groups_repository_ids_per_employee_in_link_order` 确认分组与顺序不变 |
+| 工作台配置中心首次打开 | `AuthorPanel` 静态引入约 20 个子面板（含 `@antv/x6` 工作流画布、插件市场、钩子编辑器），打开任一页都要加载全部 | 各子面板 `lazy`，`Suspense` 兜底；测试改用 `renderToReadableStream` + `allReady` 等待懒加载内容，断言不变 |
+| 需求编辑弹窗 | `WorkspaceRequirementModal` 常驻挂载在工作区布局中，模块与需求面板样式进入工作区首屏 chunk | `DeferredWorkspaceRequirementModal`：首次打开时加载，此后保持挂载以保留关闭动画；侧栏需求列表自带样式，不依赖被延后的样式表 |
+| 后台线程 panic 无记录 | 打包应用中 stderr 不可见，后台线程 panic 只在日志之外消失，排查「偶发卡住 / 功能失效」没有线索 | `panic_log::install()`：保留默认 hook，同时把时间、线程、位置、消息与回溯追加到 `~/.wise/logs/panic.log`，超过 1 MiB 轮转为 `panic.log.1` |
+
+本部分验证（在第三部分改动之上执行）：
+
+- `cargo test --manifest-path src-tauri/Cargo.toml --lib -- --test-threads=4`：672 通过，0 失败，1 个手动基准默认忽略。
+- `cargo check --lib`：0 warning。
+- `bun run test`：4,089 通过，0 失败，覆盖 564 个文件。
+- `bunx tsc -p tsconfig.app.json --noEmit`、`git diff --check`：通过。
+- 同样未执行 `bun run build`，懒加载收益以静态依赖关系为依据，没有 chunk 体积前后数据；未在打包应用中手动点测。
+
+复核时评估后未改动的项：`ClaudeSessions` 内的 `Topbar` 静态引用（工作区布局在启动时已并行预取同一 chunk，多窗格网格也静态使用它，改为懒加载不减少启动加载量）；多窗格布局读取旧 key（只在新 key 为空时发生一次迁移读取）；`useWiseHudBridge` 依赖 `sessions`（已有 80 ms 去抖与按内容去重，HUD 未激活时不带消息体，流式 token 走独立的 live store，不随每次 flush 触发）。
+
+## 第三部分：剩余主线程阻塞、锁中毒、事务与前端启动（2026-09-24）
+
+| 场景 | 原有问题 | 当前行为与验证 |
+| --- | --- | --- |
+| 42 个仍为同步的 IPC 命令：MCP 增删（内部等待 `claude mcp` CLI）、项目工作区同步（深度 12 的 `WalkDir`）、composer 图片 GC 统计/执行与数据清理（递归扫描 `~/.claude/projects/**/*.jsonl`）、FCC trace 列表/清空、仓库条目删除（`remove_dir_all`）、技能 / 子代理 / hooks / memory 枚举、我的扩展快照拷贝与删除、项目相对文件与本地图片（最大 20 MB）读写、外部技能路径探测/扫描/复制导入等 | 同步命令在 macOS 主线程内联执行；上一轮守卫只按词法检查命令体，经辅助函数间接等待进程或遍历目录的命令漏检，大仓库或大量历史会话时界面冻结 | 统一改为 `async` + `blocking_ipc::run_blocking`（`spawn_blocking`，panic 转为命令错误），同步实现保留为 `*_blocking`；命令名和参数不变。需要 `State<WiseDb>` 的命令改由注入的 `AppHandle` 在 blocking 线程取状态，前端调用不变。守卫新增 `WalkDir::new(`、`remove_dir_all(`、`run_claude_mcp_cli(`、composer GC 标记 |
+| `stagehand_browse_probe`、`list_repository_explorer_children` | 已是 async，但在 tokio 工作线程上直接执行 `Command::output()` / `read_dir` | 同样转入 blocking 线程池 |
+| 剪贴板读图、macOS 语音转写 | — | 有意保留同步：`NSPasteboard` 与 Speech 识别必须在主线程执行，移走不会减少卡顿 |
+| `WiseDb` 单连接 `Mutex` | 任一线程持锁 panic 后锁中毒，约 170 处 `map_err("db lock poisoned")` 让所有数据库操作永久失败直到重启 | `wise_db::lock_conn` / `WiseDb::conn()`：恢复中毒锁、清除中毒标记，并回滚 panic 线程遗留的未提交事务 |
+| 会话注册表、Codex / Cursor / OpenCode RPC 等待表、扩展注册表 `RwLock`、钉钉网关、远程通道、桌宠、推送、Agent 注册表与快捷键状态 | 67 处 `.lock().unwrap()` / `.read().expect()` / `map_err("lock poisoned")`：一次 panic 后同一把锁的后续访问全部级联 panic 或永久报错（扩展注册表的 `expect` 会直接打断命令） | 改为 `unwrap_or_else(\|e\| e.into_inner())`；这些锁保护的都是可自洽的映射或状态值。终端模拟器锁保留报错，它已由 `catch_unwind` 隔离，panic 后的 VT 状态不可信 |
+| 数据库迁移 | 迁移 SQL 与 `_migrations` 记名分别自动提交；中途失败或进程被杀会留下半应用的 schema，下次启动在脏状态上重跑 | 每个迁移与其记名在同一 `BEGIN IMMEDIATE` 事务内提交，失败整体回滚且错误带迁移名；切换 `PRAGMA foreign_keys` 的迁移（事务内该 PRAGMA 无效）保持原自动提交方式 |
+| 快捷操作 / 待办整表替换 | `DELETE` + 逐条 `INSERT` 各自自动提交：N 次 WAL 提交，中途失败留下被清空或半写入的列表 | `wise_db::in_write_tx`：单事务 + 预编译语句；已在外层事务中（种子迁移）时直接加入，不嵌套 |
+| 外部技能路径探测 / 新增 | 持有全局数据库锁期间对每个路径做 `exists` 和子目录计数，同时阻塞所有其他数据库命令 | 只在读写行时短暂持锁，文件系统探测在释放锁后进行 |
+| `agent_registry_list` | 6 个 `useAgentRegistry*Available` hook 在主窗口与工作区布局各挂载一次，冷启动最多 12 次 IPC | `listAgents` 并发调用共享同一个进行中的请求；失败后下次调用重新发起；刷新、安装等更新过注册表后，较早发出的列表响应不再覆盖新快照 |
+| 会话标签恢复与流式监听初始化 | 读取 tabs → 默认连接方式 → 迁移标记三次 IPC 串行；三个流式事件 `listen` 串行等待 | 与 tabs 无依赖的两项提前并发发起；三个 `listen` 用 `Promise.allSettled` 并发注册，部分失败时等全部落定再统一释放，不遗漏迟到的监听 |
+| HUD 桥接监听、Claude 批量调用监听 | `useWiseHudBridge` 冷启动串行 `await` 13 次 `listen`（13 次串行 IPC）；`services/claude.ts` 每次批量调用前串行注册 3 个监听。中途任一注册失败时，已注册的监听不会释放，外层 async 还会产生未处理的 rejection | 复用 `collectTauriListeners` 并发注册，任一失败时统一释放已注册项；HUD 注册失败记录错误日志 |
+| 需求面板 / 快捷操作面板哨兵节点 | 稳定节点 `WORKSPACE_*_PANEL_NODE` 定义在面板模块内，工作区布局和会话模块为拿到节点而静态引入整个面板（含 `react-markdown`、`rehype-raw`），即使面板从未打开 | 节点移到 `components/workspaceAuxPanelNodes.tsx`，面板本体 `lazy` 加载；节点 identity 仍为模块级常量 |
+| 局部错误隔离 | 侧栏（含 Git、文件树）、文件编辑器、进度监控、历史会话记录抽屉没有局部 ErrorBoundary，单个面板渲染异常会冒泡到全局兜底页 | 各自包裹 `ErrorBoundary type="local"`，只替换出错面板 |
+
+新增测试：`wise_db::tests::lock_conn_recovers_poisoned_lock_and_rolls_back_open_transaction`（真实线程持锁 panic 后可继续读写，遗留事务被回滚）、`in_write_tx_rolls_back_on_error_and_joins_outer_transaction`、`blocking_ipc::tests`（内部错误原样返回、panic 转为带标签的错误）、`agentRegistry.test.ts` 中 12 个并发调用只发 1 次 IPC、失败不卡死后续调用、慢列表不覆盖新快照。
+
+本部分验证：
+
+- `cargo test --manifest-path src-tauri/Cargo.toml --lib -- --test-threads=4`：669 通过，0 失败，1 个手动基准默认忽略（沙箱外执行，git 测试需要系统临时目录）。
+- `cargo check --lib`：0 warning。
+- `bun run test`：4,089 通过，0 失败，覆盖 564 个文件。
+- `bunx tsc -p tsconfig.app.json --noEmit`、`git diff --check`：通过。
+- 未执行 `bun run build`（项目规则不允许未经许可运行前端构建），因此没有 chunk 体积前后对比数据；懒加载的效果以静态依赖关系为依据。未在打包应用中手动点测。
+
 ## 第二部分：主线程、输出管道与会话收尾
 
 | 场景 | 原有问题 | 当前行为与验证 |

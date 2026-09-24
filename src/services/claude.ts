@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { safeUnlisten } from "../utils/safeTauriUnlisten";
+import { collectTauriListeners, safeUnlisten } from "../utils/safeTauriUnlisten";
 import { DIRECT_BATCH_INVOCATION_STDOUT_RETENTION_LINES } from "../constants/directBatchInvocationLog";
 import { claudeInvocationStreamEvents } from "../constants/claudeStreamEvents";
 import {
@@ -310,7 +310,7 @@ export async function executeClaudeCodeAndWait(params: {
   }
 
   let directBatchSubprocessSidDispatched = false;
-  const unlistenOutput = await listen<string>(outputEvent, (event) => {
+  const unlistenOutputPending = listen<string>(outputEvent, (event) => {
     if (directOutRing) {
       const pl = event.payload;
       const raw = typeof pl === "string" ? pl : String(pl ?? "");
@@ -360,7 +360,7 @@ export async function executeClaudeCodeAndWait(params: {
     );
     emitProgress(outputLines.length % 120 === 0);
   });
-  const unlistenError = await listen<string>(errorEvent, (event) => {
+  const unlistenErrorPending = listen<string>(errorEvent, (event) => {
     if (directErrRing) {
       const pl = event.payload;
       const raw = typeof pl === "string" ? pl : String(pl ?? "");
@@ -379,7 +379,7 @@ export async function executeClaudeCodeAndWait(params: {
     );
     emitProgress(errorLines.length % 24 === 0);
   });
-  const unlistenComplete = await listen<{ success?: boolean }>(completeEvent, (event) => {
+  const unlistenCompletePending = listen<{ success?: boolean }>(completeEvent, (event) => {
     const success = resolveClaudeCompleteSuccess(event.payload);
     const outSnap = snapshotOutputLines();
     const errSnap = snapshotErrorLines();
@@ -424,6 +424,11 @@ export async function executeClaudeCodeAndWait(params: {
     }
     resolveDone?.({ success, outputLines: outSnap, errorLines: errSnap, invocationKey });
   });
+  const [unlistenOutput, unlistenError, unlistenComplete] = await collectTauriListeners([
+    unlistenOutputPending,
+    unlistenErrorPending,
+    unlistenCompletePending,
+  ]);
 
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 

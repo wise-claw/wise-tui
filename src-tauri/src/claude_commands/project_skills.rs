@@ -462,7 +462,16 @@ fn list_claude_skills_under_dir(
 }
 
 #[tauri::command]
-pub(crate) fn list_claude_project_skills(
+pub(crate) async fn list_claude_project_skills(
+    project_path: String,
+) -> Result<Vec<ClaudeProjectSkill>, String> {
+    crate::blocking_ipc::run_blocking("list_claude_project_skills", move || {
+        list_claude_project_skills_blocking(project_path)
+    })
+    .await
+}
+
+pub(crate) fn list_claude_project_skills_blocking(
     project_path: String,
 ) -> Result<Vec<ClaudeProjectSkill>, String> {
     let skills_dir = project_claude_skills_dir(&project_path)?;
@@ -481,7 +490,14 @@ pub(crate) fn list_claude_project_skills(
 
 /// 用户级 `~/.claude/skills/`（与官方 `skills` CLI `-g` 一致；自定义目录时同步切换）。
 #[tauri::command]
-pub(crate) fn list_claude_user_skills() -> Result<Vec<ClaudeProjectSkill>, String> {
+pub(crate) async fn list_claude_user_skills() -> Result<Vec<ClaudeProjectSkill>, String> {
+    crate::blocking_ipc::run_blocking("list_claude_user_skills", move || {
+        list_claude_user_skills_blocking()
+    })
+    .await
+}
+
+pub(crate) fn list_claude_user_skills_blocking() -> Result<Vec<ClaudeProjectSkill>, String> {
     let skills_dir = crate::claude_config_dir::user_claude_dir().join("skills");
     list_claude_skills_under_dir(&skills_dir, Some("user"))
 }
@@ -554,7 +570,16 @@ pub(crate) fn list_claude_plugin_cache_skills_sync(
 
 /// 枚举已启用插件在 `~/.claude/plugins/cache/**` 中注册的 skills / commands 斜杠命令。
 #[tauri::command]
-pub(crate) fn list_claude_plugin_cache_skills(
+pub(crate) async fn list_claude_plugin_cache_skills(
+    repository_path: Option<String>,
+) -> Result<Vec<ClaudeProjectSkill>, String> {
+    crate::blocking_ipc::run_blocking("list_claude_plugin_cache_skills", move || {
+        list_claude_plugin_cache_skills_blocking(repository_path)
+    })
+    .await
+}
+
+pub(crate) fn list_claude_plugin_cache_skills_blocking(
     repository_path: Option<String>,
 ) -> Result<Vec<ClaudeProjectSkill>, String> {
     list_claude_plugin_cache_skills_sync(repository_path.as_deref())
@@ -635,7 +660,17 @@ pub(crate) fn create_claude_project_skill(
 }
 
 #[tauri::command]
-pub(crate) fn delete_claude_project_skill(
+pub(crate) async fn delete_claude_project_skill(
+    project_path: String,
+    skill_name: String,
+) -> Result<(), String> {
+    crate::blocking_ipc::run_blocking("delete_claude_project_skill", move || {
+        delete_claude_project_skill_blocking(project_path, skill_name)
+    })
+    .await
+}
+
+pub(crate) fn delete_claude_project_skill_blocking(
     project_path: String,
     skill_name: String,
 ) -> Result<(), String> {
@@ -708,7 +743,17 @@ fn skill_join_parts(skill_root: &Path, parts: &[String]) -> PathBuf {
 }
 
 #[tauri::command]
-pub(crate) fn list_claude_project_skill_files(
+pub(crate) async fn list_claude_project_skill_files(
+    project_path: String,
+    skill_name: String,
+) -> Result<Vec<ClaudeProjectSkillFileEntry>, String> {
+    crate::blocking_ipc::run_blocking("list_claude_project_skill_files", move || {
+        list_claude_project_skill_files_blocking(project_path, skill_name)
+    })
+    .await
+}
+
+pub(crate) fn list_claude_project_skill_files_blocking(
     project_path: String,
     skill_name: String,
 ) -> Result<Vec<ClaudeProjectSkillFileEntry>, String> {
@@ -793,7 +838,18 @@ pub(crate) fn save_claude_project_skill_file(
 }
 
 #[tauri::command]
-pub(crate) fn delete_claude_project_skill_file(
+pub(crate) async fn delete_claude_project_skill_file(
+    project_path: String,
+    skill_name: String,
+    relative_path: String,
+) -> Result<(), String> {
+    crate::blocking_ipc::run_blocking("delete_claude_project_skill_file", move || {
+        delete_claude_project_skill_file_blocking(project_path, skill_name, relative_path)
+    })
+    .await
+}
+
+pub(crate) fn delete_claude_project_skill_file_blocking(
     project_path: String,
     skill_name: String,
     relative_path: String,

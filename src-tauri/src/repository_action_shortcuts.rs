@@ -56,7 +56,7 @@ where
     let state = app.state::<Mutex<RepositoryActionShortcutState>>();
     let mut guard = state
         .lock()
-        .map_err(|_| "repository_action_shortcuts lock poisoned".to_string())?;
+        .unwrap_or_else(|e| e.into_inner());
     f(&mut guard)
 }
 

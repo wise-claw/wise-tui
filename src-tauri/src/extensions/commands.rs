@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{Manager, State};
 
 use super::example_install::InstallHelloWorldResult;
 use super::manifest::Permissions;
@@ -77,12 +77,14 @@ pub fn extensions_get_permissions(
 }
 
 #[tauri::command]
-pub fn extensions_reload(
-    state: State<'_, ExtensionRegistry>,
-) -> Result<Vec<ExtensionListEntry>, String> {
-    let extra: Vec<PathBuf> = Vec::new();
-    state.hot_reload(&extra)?;
-    Ok(state.list())
+pub async fn extensions_reload(app: tauri::AppHandle) -> Result<Vec<ExtensionListEntry>, String> {
+    crate::blocking_ipc::run_blocking("extensions_reload", move || {
+        let state = app.state::<ExtensionRegistry>();
+        let extra: Vec<PathBuf> = Vec::new();
+        state.hot_reload(&extra)?;
+        Ok(state.list())
+    })
+    .await
 }
 
 #[tauri::command]

@@ -204,32 +204,37 @@ fn replace_quick_actions_conn(
     scope_id: &str,
     items: &[WorkspaceQuickActionItemDto],
 ) -> Result<(), String> {
-    conn.execute(
-        "DELETE FROM workspace_quick_actions WHERE scope_kind = ?1 AND scope_id = ?2",
-        params![scope_kind, scope_id],
-    )
-    .map_err(|e| e.to_string())?;
-    for item in items {
+    crate::wise_db::in_write_tx(conn, |conn| {
         conn.execute(
-            "INSERT INTO workspace_quick_actions (
-                scope_kind, scope_id, id, kind, label, target, category, pinned_to_topbar, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![
-                scope_kind,
-                scope_id,
-                item.id,
-                item.kind,
-                item.label,
-                item.target,
-                item.category,
-                if item.pinned_to_topbar { 1 } else { 0 },
-                item.created_at,
-                item.updated_at,
-            ],
+            "DELETE FROM workspace_quick_actions WHERE scope_kind = ?1 AND scope_id = ?2",
+            params![scope_kind, scope_id],
         )
         .map_err(|e| e.to_string())?;
-    }
-    Ok(())
+        let mut insert = conn
+            .prepare_cached(
+                "INSERT INTO workspace_quick_actions (
+                    scope_kind, scope_id, id, kind, label, target, category, pinned_to_topbar, created_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            )
+            .map_err(|e| e.to_string())?;
+        for item in items {
+            insert
+                .execute(params![
+                    scope_kind,
+                    scope_id,
+                    item.id,
+                    item.kind,
+                    item.label,
+                    item.target,
+                    item.category,
+                    if item.pinned_to_topbar { 1 } else { 0 },
+                    item.created_at,
+                    item.updated_at,
+                ])
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
 }
 
 fn list_quick_actions_conn(
@@ -275,32 +280,37 @@ fn replace_todos_conn(
     scope_id: &str,
     items: &[WorkspaceTodoItemDto],
 ) -> Result<(), String> {
-    conn.execute(
-        "DELETE FROM workspace_todos WHERE scope_kind = ?1 AND scope_id = ?2",
-        params![scope_kind, scope_id],
-    )
-    .map_err(|e| e.to_string())?;
-    for item in items {
+    crate::wise_db::in_write_tx(conn, |conn| {
         conn.execute(
-            "INSERT INTO workspace_todos (
-                scope_kind, scope_id, id, title, completed, due_at, notes, sort_order, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![
-                scope_kind,
-                scope_id,
-                item.id,
-                item.title,
-                if item.completed { 1 } else { 0 },
-                item.due_at,
-                item.notes,
-                item.sort_order,
-                item.created_at,
-                item.updated_at,
-            ],
+            "DELETE FROM workspace_todos WHERE scope_kind = ?1 AND scope_id = ?2",
+            params![scope_kind, scope_id],
         )
         .map_err(|e| e.to_string())?;
-    }
-    Ok(())
+        let mut insert = conn
+            .prepare_cached(
+                "INSERT INTO workspace_todos (
+                    scope_kind, scope_id, id, title, completed, due_at, notes, sort_order, created_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            )
+            .map_err(|e| e.to_string())?;
+        for item in items {
+            insert
+                .execute(params![
+                    scope_kind,
+                    scope_id,
+                    item.id,
+                    item.title,
+                    if item.completed { 1 } else { 0 },
+                    item.due_at,
+                    item.notes,
+                    item.sort_order,
+                    item.created_at,
+                    item.updated_at,
+                ])
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
 }
 
 fn get_workspace_global_memo_conn(conn: &Connection) -> Result<WorkspaceGlobalMemoDto, String> {
@@ -543,7 +553,7 @@ impl WiseDb {
                 items: vec![],
             });
         }
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let items = list_quick_actions_conn(&g, "project", id)?;
         Ok(WorkspaceQuickActionsPayloadDto {
             version: 1,
@@ -564,7 +574,7 @@ impl WiseDb {
             .into_iter()
             .filter_map(normalize_quick_action_item)
             .collect();
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         replace_quick_actions_conn(&g, "project", id, &dedupe_quick_actions(normalized))
     }
 
@@ -579,7 +589,7 @@ impl WiseDb {
             });
         }
         let scope_id = repository_id.to_string();
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         let items = list_quick_actions_conn(&g, "repository", &scope_id)?;
         Ok(WorkspaceQuickActionsPayloadDto {
             version: 1,
@@ -600,7 +610,7 @@ impl WiseDb {
             .into_iter()
             .filter_map(normalize_quick_action_item)
             .collect();
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         replace_quick_actions_conn(&g, "repository", &scope_id, &dedupe_quick_actions(normalized))
     }
 
@@ -615,7 +625,7 @@ impl WiseDb {
                 items: vec![],
             });
         }
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         list_todos_conn(&g, "project", id)
     }
 
@@ -632,7 +642,7 @@ impl WiseDb {
             .into_iter()
             .filter_map(normalize_todo_item)
             .collect();
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         replace_todos_conn(&g, "project", id, &dedupe_todos(normalized))
     }
 
@@ -647,7 +657,7 @@ impl WiseDb {
             });
         }
         let scope_id = repository_id.to_string();
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         list_todos_conn(&g, "repository", &scope_id)
     }
 
@@ -664,12 +674,12 @@ impl WiseDb {
             .into_iter()
             .filter_map(normalize_todo_item)
             .collect();
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         replace_todos_conn(&g, "repository", &scope_id, &dedupe_todos(normalized))
     }
 
     pub fn list_global_workspace_todos(&self) -> Result<WorkspaceTodosPayloadDto, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         list_todos_conn(&g, "global", GLOBAL_TODO_SCOPE_ID)
     }
 
@@ -681,12 +691,12 @@ impl WiseDb {
             .into_iter()
             .filter_map(normalize_todo_item)
             .collect();
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         replace_todos_conn(&g, "global", GLOBAL_TODO_SCOPE_ID, &dedupe_todos(normalized))
     }
 
     pub fn get_workspace_global_memo(&self) -> Result<WorkspaceGlobalMemoDto, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         get_workspace_global_memo_conn(&g)
     }
 
@@ -701,7 +711,7 @@ impl WiseDb {
             ));
         }
         let updated_at = crate::wise_db::unix_now_ms();
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         g.execute(
             "INSERT INTO workspace_global_memo (id, body_markdown, updated_at)
              VALUES (?1, ?2, ?3)
@@ -723,7 +733,7 @@ impl WiseDb {
         if id.is_empty() {
             return Ok(());
         }
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         for sql in [
             "DELETE FROM workspace_quick_actions WHERE scope_kind = 'project' AND scope_id = ?1",
             "DELETE FROM workspace_todos WHERE scope_kind = 'project' AND scope_id = ?1",
@@ -742,7 +752,7 @@ impl WiseDb {
             return Ok(());
         }
         let scope_id = repository_id.to_string();
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let g = self.conn();
         for sql in [
             "DELETE FROM workspace_quick_actions WHERE scope_kind = 'repository' AND scope_id = ?1",
             "DELETE FROM workspace_todos WHERE scope_kind = 'repository' AND scope_id = ?1",

@@ -405,7 +405,14 @@ fn collect_system_memory_bytes() -> (u64, u64) {
 
 /// 终止本机扫描到的 Claude 子进程（无 Wise 注册表 / session 绑定时用 PID）。
 #[tauri::command]
-pub fn kill_claude_host_process(pid: u32) -> Result<(), String> {
+pub async fn kill_claude_host_process(pid: u32) -> Result<(), String> {
+    crate::blocking_ipc::run_blocking("kill_claude_host_process", move || {
+        kill_claude_host_process_blocking(pid)
+    })
+    .await
+}
+
+fn kill_claude_host_process_blocking(pid: u32) -> Result<(), String> {
     if pid == 0 {
         return Err("无效 PID".to_string());
     }

@@ -5,6 +5,8 @@ mod app_shutdown;
 mod app_state_commands;
 mod agent_registry;
 mod assistants;
+mod blocking_ipc;
+mod panic_log;
 mod ai_usage_multi_source;
 mod child_slot_wait;
 mod cli_probe;

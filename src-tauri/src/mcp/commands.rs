@@ -37,19 +37,19 @@ pub struct EngineIdArg {
 
 #[tauri::command]
 pub fn mcp_list_servers(db: State<'_, WiseDb>) -> Result<Vec<McpServer>, String> {
-    let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+    let conn = db.conn();
     storage::list(&conn)
 }
 
 #[tauri::command]
 pub fn mcp_save_server(db: State<'_, WiseDb>, arg: ServerArg) -> Result<McpServer, String> {
-    let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+    let conn = db.conn();
     storage::upsert(&conn, &arg.server)
 }
 
 #[tauri::command]
 pub fn mcp_delete_server(db: State<'_, WiseDb>, arg: IdArg) -> Result<(), String> {
-    let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+    let conn = db.conn();
     storage::delete(&conn, &arg.id)
 }
 
@@ -60,7 +60,7 @@ pub async fn mcp_test_connection(
 ) -> Result<McpConnectionTestResult, String> {
     let server = match (arg.id, arg.draft) {
         (Some(id), None) => {
-            let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+            let conn = db.conn();
             storage::get_by_id(&conn, &id)?.ok_or_else(|| format!("no server with id {id}"))?
         }
         (None, Some(draft)) => McpServer {

@@ -149,7 +149,16 @@ fn subagent_merge_group_key(scope: &str, agent_md_path: &Path, agent_name: &str)
 }
 
 #[tauri::command]
-pub(crate) fn list_claude_subagents(
+pub(crate) async fn list_claude_subagents(
+    project_path: Option<String>,
+) -> Result<Vec<ClaudeSubagentItem>, String> {
+    crate::blocking_ipc::run_blocking("list_claude_subagents", move || {
+        list_claude_subagents_blocking(project_path)
+    })
+    .await
+}
+
+pub(crate) fn list_claude_subagents_blocking(
     project_path: Option<String>,
 ) -> Result<Vec<ClaudeSubagentItem>, String> {
     let mut candidates: Vec<(String, PathBuf)> = Vec::new();
@@ -439,7 +448,7 @@ mod plugin_subagent_tests {
         .expect("write installed_plugins");
 
         crate::claude_config_dir::set_user_claude_dir_for_tests(Some(claude_dir.clone()));
-        let result = list_claude_subagents(None);
+        let result = list_claude_subagents_blocking(None);
         crate::claude_config_dir::set_user_claude_dir_for_tests(None);
 
         let items = result.expect("list_claude_subagents");
@@ -480,7 +489,7 @@ mod plugin_subagent_tests {
         .expect("write agent md");
 
         crate::claude_config_dir::set_user_claude_dir_for_tests(Some(claude_dir.clone()));
-        let result = list_claude_subagents(None);
+        let result = list_claude_subagents_blocking(None);
         crate::claude_config_dir::set_user_claude_dir_for_tests(None);
 
         let items = result.expect("list_claude_subagents");

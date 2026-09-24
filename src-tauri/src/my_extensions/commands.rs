@@ -109,7 +109,14 @@ pub fn my_extensions_library_list() -> Result<Vec<LibraryItem>, String> {
 }
 
 #[tauri::command]
-pub fn my_extensions_library_remove(args: LibraryItemIdArgs) -> Result<(), String> {
+pub async fn my_extensions_library_remove(args: LibraryItemIdArgs) -> Result<(), String> {
+    crate::blocking_ipc::run_blocking("my_extensions_library_remove", move || {
+        my_extensions_library_remove_blocking(args)
+    })
+    .await
+}
+
+pub fn my_extensions_library_remove_blocking(args: LibraryItemIdArgs) -> Result<(), String> {
     remove_item(&args.library_item_id)
 }
 
@@ -185,9 +192,14 @@ pub fn my_extensions_library_create_snapshot_directory(
 }
 
 #[tauri::command]
-pub fn my_extensions_library_delete_snapshot_entry(args: SnapshotPathArgs) -> Result<(), String> {
-    let item = get_item(&args.library_item_id)?;
-    delete_snapshot_entry(&item, &args.relative_path)
+pub async fn my_extensions_library_delete_snapshot_entry(
+    args: SnapshotPathArgs,
+) -> Result<(), String> {
+    crate::blocking_ipc::run_blocking("my_extensions_library_delete_snapshot_entry", move || {
+        let item = get_item(&args.library_item_id)?;
+        delete_snapshot_entry(&item, &args.relative_path)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -196,22 +208,56 @@ pub fn my_extensions_discover(args: RepositoryPathArgs) -> Result<Vec<DiscoverCa
 }
 
 #[tauri::command]
-pub fn my_extensions_capture(args: CaptureArgs) -> Result<LibraryItem, String> {
+pub async fn my_extensions_capture(args: CaptureArgs) -> Result<LibraryItem, String> {
+    crate::blocking_ipc::run_blocking("my_extensions_capture", move || {
+        my_extensions_capture_blocking(args)
+    })
+    .await
+}
+
+pub fn my_extensions_capture_blocking(args: CaptureArgs) -> Result<LibraryItem, String> {
     capture_candidate(args)
 }
 
 #[tauri::command]
-pub fn my_extensions_capture_all(args: CaptureAllArgs) -> Result<Vec<LibraryItem>, String> {
+pub async fn my_extensions_capture_all(args: CaptureAllArgs) -> Result<Vec<LibraryItem>, String> {
+    crate::blocking_ipc::run_blocking("my_extensions_capture_all", move || {
+        my_extensions_capture_all_blocking(args)
+    })
+    .await
+}
+
+pub fn my_extensions_capture_all_blocking(
+    args: CaptureAllArgs,
+) -> Result<Vec<LibraryItem>, String> {
     capture_all_visible(args)
 }
 
 #[tauri::command]
-pub fn my_extensions_capture_from_path(args: CapturePathArgs) -> Result<LibraryItem, String> {
+pub async fn my_extensions_capture_from_path(args: CapturePathArgs) -> Result<LibraryItem, String> {
+    crate::blocking_ipc::run_blocking("my_extensions_capture_from_path", move || {
+        my_extensions_capture_from_path_blocking(args)
+    })
+    .await
+}
+
+pub fn my_extensions_capture_from_path_blocking(
+    args: CapturePathArgs,
+) -> Result<LibraryItem, String> {
     capture_from_repository_path(args)
 }
 
 #[tauri::command]
-pub fn my_extensions_install_from_library(
+pub async fn my_extensions_install_from_library(
+    args: InstallLibraryArgs,
+) -> Result<InstallLibraryResult, String> {
+    crate::blocking_ipc::run_blocking("my_extensions_install_from_library", move || {
+        my_extensions_install_from_library_blocking(args)
+    })
+    .await
+}
+
+pub fn my_extensions_install_from_library_blocking(
     args: InstallLibraryArgs,
 ) -> Result<InstallLibraryResult, String> {
     install_library_item(args)

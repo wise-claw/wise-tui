@@ -785,11 +785,3 @@ export function WorkspaceMemoPanel() {
     </div>
   );
 }
-
-/** Host 包装：稳定节点 identity 不变，HMR 时仍渲染最新 WorkspaceMemoPanel。 */
-function WorkspaceMemoPanelHost() {
-  return <WorkspaceMemoPanel />;
-}
-
-/** 稳定节点：写入 `panelBelowMessages` 时 identity 不随 layout 重渲变化。 */
-export const WORKSPACE_MEMO_PANEL_NODE = <WorkspaceMemoPanelHost />;

@@ -128,7 +128,7 @@ impl ExtensionRegistry {
     ) -> Result<(), String> {
         let outcome = scan_all(extra_dirs);
         let next = build_inner(home, outcome)?;
-        let mut guard = self.inner.write().map_err(|e| format!("lock poisoned: {e}"))?;
+        let mut guard = self.inner.write().unwrap_or_else(|e| e.into_inner());
         *guard = next;
         Ok(())
     }
@@ -137,18 +137,18 @@ impl ExtensionRegistry {
         let home = self
             .inner
             .read()
-            .map_err(|e| format!("lock poisoned: {e}"))?
+            .unwrap_or_else(|e| e.into_inner())
             .home
             .clone();
         let outcome = scan_all(extra_dirs);
         let next = build_inner(home, outcome)?;
-        let mut guard = self.inner.write().map_err(|e| format!("lock poisoned: {e}"))?;
+        let mut guard = self.inner.write().unwrap_or_else(|e| e.into_inner());
         *guard = next;
         Ok(())
     }
 
     pub fn list(&self) -> Vec<ExtensionListEntry> {
-        let guard = self.inner.read().expect("lock poisoned");
+        let guard = self.inner.read().unwrap_or_else(|e| e.into_inner());
         let mut out = Vec::new();
         for ext in &guard.loaded {
             let name = ext.manifest.name.clone();
@@ -181,7 +181,7 @@ impl ExtensionRegistry {
     }
 
     pub fn skills(&self) -> Vec<ResolvedSkill> {
-        let guard = self.inner.read().expect("lock poisoned");
+        let guard = self.inner.read().unwrap_or_else(|e| e.into_inner());
         let mut out = Vec::new();
         for ext in &guard.loaded {
             if !is_enabled(&guard.persisted, &ext.manifest.name) {
@@ -201,7 +201,7 @@ impl ExtensionRegistry {
     }
 
     pub fn themes(&self) -> Vec<ResolvedTheme> {
-        let guard = self.inner.read().expect("lock poisoned");
+        let guard = self.inner.read().unwrap_or_else(|e| e.into_inner());
         let mut out = Vec::new();
         for ext in &guard.loaded {
             if !is_enabled(&guard.persisted, &ext.manifest.name) {
@@ -220,7 +220,7 @@ impl ExtensionRegistry {
     }
 
     pub fn settings_declarations(&self) -> Vec<ResolvedSettingsDeclaration> {
-        let guard = self.inner.read().expect("lock poisoned");
+        let guard = self.inner.read().unwrap_or_else(|e| e.into_inner());
         let mut out = Vec::new();
         for ext in &guard.loaded {
             if !is_enabled(&guard.persisted, &ext.manifest.name) {
@@ -240,7 +240,7 @@ impl ExtensionRegistry {
     }
 
     pub fn permissions(&self, name: &str) -> Option<Permissions> {
-        let guard = self.inner.read().expect("lock poisoned");
+        let guard = self.inner.read().unwrap_or_else(|e| e.into_inner());
         guard
             .loaded
             .iter()
@@ -249,7 +249,7 @@ impl ExtensionRegistry {
     }
 
     pub fn mcp_servers(&self) -> Vec<ResolvedMcpServer> {
-        let guard = self.inner.read().expect("lock poisoned");
+        let guard = self.inner.read().unwrap_or_else(|e| e.into_inner());
         let mut out = Vec::new();
         for ext in &guard.loaded {
             if !is_enabled(&guard.persisted, &ext.manifest.name) {
@@ -270,7 +270,7 @@ impl ExtensionRegistry {
     }
 
     pub fn settings_tabs(&self) -> Vec<ResolvedSettingsTab> {
-        let guard = self.inner.read().expect("lock poisoned");
+        let guard = self.inner.read().unwrap_or_else(|e| e.into_inner());
         let mut out = Vec::new();
         for ext in &guard.loaded {
             if !is_enabled(&guard.persisted, &ext.manifest.name) {
@@ -305,7 +305,7 @@ impl ExtensionRegistry {
     /// Read a markdown body for a settings tab, with path-traversal check
     /// against the contributing extension's directory.
     pub fn read_settings_tab_body(&self, id: &str) -> Result<String, String> {
-        let guard = self.inner.read().expect("lock poisoned");
+        let guard = self.inner.read().unwrap_or_else(|e| e.into_inner());
         for ext in &guard.loaded {
             if !is_enabled(&guard.persisted, &ext.manifest.name) {
                 continue;
@@ -334,7 +334,7 @@ impl ExtensionRegistry {
     }
 
     pub fn assistants(&self) -> Vec<ResolvedAssistant> {
-        let guard = self.inner.read().expect("lock poisoned");
+        let guard = self.inner.read().unwrap_or_else(|e| e.into_inner());
         let mut out = Vec::new();
         for ext in &guard.loaded {
             if !is_enabled(&guard.persisted, &ext.manifest.name) {
@@ -358,7 +358,7 @@ impl ExtensionRegistry {
 
     /// Read assistant system prompt with the same path-traversal check.
     pub fn read_assistant_system_prompt(&self, id: &str) -> Result<String, String> {
-        let guard = self.inner.read().expect("lock poisoned");
+        let guard = self.inner.read().unwrap_or_else(|e| e.into_inner());
         for ext in &guard.loaded {
             if !is_enabled(&guard.persisted, &ext.manifest.name) {
                 continue;
@@ -388,7 +388,7 @@ impl ExtensionRegistry {
     }
 
     pub fn set_enabled(&self, name: &str, enabled: bool) -> Result<(), String> {
-        let mut guard = self.inner.write().map_err(|e| format!("lock poisoned: {e}"))?;
+        let mut guard = self.inner.write().unwrap_or_else(|e| e.into_inner());
         let entry = guard
             .persisted
             .extensions

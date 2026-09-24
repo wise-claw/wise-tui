@@ -20,7 +20,7 @@ pub(crate) struct PendingResponse<K: Eq + Hash, V> {
 impl<K: Clone + Eq + Hash, V> PendingResponse<K, V> {
     pub(crate) fn register(pending: &PendingRequestMap<K, V>, id: K) -> Self {
         let (sender, receiver) = oneshot::channel();
-        pending.lock().unwrap().insert(id.clone(), sender);
+        pending.lock().unwrap_or_else(|e| e.into_inner()).insert(id.clone(), sender);
         Self {
             id,
             pending: Arc::clone(pending),
@@ -49,7 +49,7 @@ impl<K: Eq + Hash, V> Future for PendingResponse<K, V> {
 impl<K: Eq + Hash, V> Drop for PendingResponse<K, V> {
     fn drop(&mut self) {
         // Only short map operations hold this mutex; none await or do I/O.
-        self.pending.lock().unwrap().remove(&self.id);
+        self.pending.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.id);
     }
 }
 

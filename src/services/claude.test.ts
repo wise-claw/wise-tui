@@ -4,7 +4,10 @@ const invoke = mock(async () => undefined);
 
 mock.module("@tauri-apps/api/core", () => ({ invoke, isTauri: () => true }));
 mock.module("@tauri-apps/api/event", () => ({ listen: mock(async () => () => {}) }));
-mock.module("../utils/safeTauriUnlisten", () => ({ safeUnlisten: mock(() => undefined) }));
+mock.module("../utils/safeTauriUnlisten", () => ({
+  safeUnlisten: mock(() => undefined),
+  collectTauriListeners: (pending: Promise<unknown>[]) => Promise.all(pending),
+}));
 
 describe("claude service", () => {
   beforeEach(() => {
