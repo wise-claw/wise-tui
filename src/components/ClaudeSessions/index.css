@@ -4860,7 +4860,6 @@
 .app-claude-messages .app-claude-message--assistant .app-message-part--long-prose .app-markdown code {
   font-size: 0.92em;
   padding: 0.08em 0.35em;
-  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 75%, transparent);
   word-break: break-word;
 }
 
@@ -7238,10 +7237,15 @@ button.app-message-part-header:disabled:hover {
 .app-markdown code {
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 12px;
-  background: var(--ant-color-fill-quaternary);
+  background: var(--ant-color-fill-tertiary);
+  /* 行内代码要能辨认成「胶囊」：仅靠 2% 底色 + 无描边，在白底上几乎不可见；
+     clone 让折行后的每一段都保留圆角与描边，长路径不会被切成一截截裸文本。 */
+  border: 1px solid var(--ant-color-border-secondary);
   padding: 1px 4px;
-  border-radius: 3px;
+  border-radius: 4px;
   color: var(--ant-color-text);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 .app-markdown pre {
@@ -7250,7 +7254,10 @@ button.app-message-part-header:disabled:hover {
 
 .app-markdown pre code {
   background: none;
+  border: none;
   padding: 0;
+  -webkit-box-decoration-break: slice;
+  box-decoration-break: slice;
 }
 
 .app-markdown blockquote {
@@ -7426,6 +7433,7 @@ button.app-message-part-header:disabled:hover {
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 12px;
   background: none;
+  border: none;
   padding: 0;
   color: var(--ant-color-text);
   white-space: pre;

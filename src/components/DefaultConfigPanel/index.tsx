@@ -36,6 +36,7 @@ import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useComposerFooterChromeDefaultSetting } from "./useComposerFooterChromeDefaultSetting";
 import { useFeaturePanelChromeDefaultSetting } from "./useFeaturePanelChromeDefaultSetting";
 import { useHudDetailsSetting } from "./useHudDetailsSetting";
+import { useShowThinkingMessagesSetting } from "./useShowThinkingMessagesSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
 import { useDefaultExecutionEngineSetting } from "./useDefaultExecutionEngineSetting";
 import { useTerminalThemeModeSetting } from "./useTerminalThemeModeSetting";
@@ -94,6 +95,7 @@ export function DefaultConfigPanel() {
   const composerFooterChrome = useComposerFooterChromeDefaultSetting();
   const featurePanelChrome = useFeaturePanelChromeDefaultSetting();
   const hudDetails = useHudDetailsSetting();
+  const thinkingMessages = useShowThinkingMessagesSetting();
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
   const monitorPanel = useMonitorPanelSetting();
   const leftSidebarWorkspaceList = useLeftSidebarWorkspaceListSetting();
@@ -1267,6 +1269,21 @@ export function DefaultConfigPanel() {
                 disabled={hudDetails.loading || hudDetails.saving}
                 onChange={(checked) => {
                   void hudDetails.save(checked);
+                }}
+              />
+            }
+          />
+          <DefaultConfigRow
+            title="思考消息"
+            detail="会话消息里的「思考」卡片（推理过程）；默认不显示，只保留结论与动作"
+            control={
+              <Switch
+                size="small"
+                checked={thinkingMessages.enabled}
+                loading={thinkingMessages.saving}
+                disabled={thinkingMessages.loading || thinkingMessages.saving}
+                onChange={(checked) => {
+                  void thinkingMessages.save(checked);
                 }}
               />
             }

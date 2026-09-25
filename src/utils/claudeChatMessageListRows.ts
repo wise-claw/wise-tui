@@ -61,6 +61,7 @@ const THINKING_HINT_ROW: ChatMessageListThinkingRow = { kind: "thinking-hint", k
 export function shouldShowListEndThinkingHint(
   messages: readonly ClaudeMessage[],
   status: ClaudeSession["status"],
+  showThinkingMessages = true,
 ): boolean {
   if (messages.length === 0) return false;
   if (status !== "running" && status !== "connecting") return false;
@@ -71,13 +72,15 @@ export function shouldShowListEndThinkingHint(
   // 造成非 Claude Code 发送后用户气泡与首段回复之间的空白断层。
   let last: ClaudeMessage | undefined;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (hasRenderableChatMessageBody(messages[i]!)) {
+    if (hasRenderableChatMessageBody(messages[i]!, showThinkingMessages)) {
       last = messages[i];
       break;
     }
   }
   if (!last) return false;
   if (last.role !== "user" && last.role !== "assistant") return false;
+  // 思考卡片被隐藏（默认配置「思考消息」关闭）时，卡片不再充当「正在思考」指示，提示行必须出现。
+  if (!showThinkingMessages) return true;
   // 末条 assistant 含 reasoning 时，reasoning 卡片本身已是明确的「正在思考」指示
   // （正文为空时也渲染「思考中」，作为消息内容的一部分），底部不再叠加 thinking-hint，
   // 避免出现左侧空白、与内容重复的提示行。
@@ -99,6 +102,11 @@ export function shouldShowListEndThinkingHint(
 export interface ChatMessageListRowsBuildOptions {
   sessionStatus: ClaudeSession["status"];
   showListEndThinkingHint: boolean;
+  /**
+   * 会话「思考」卡片是否可见；缺省 true 保持既有调用方语义。
+   * 产品默认（不显示）来自 `wise.defaultConfig.showThinkingMessages`，由 useChatMessageListRows 显式传入。
+   */
+  showThinkingMessages?: boolean;
 }
 
 function buildSingleChatMessageListRow(
@@ -107,7 +115,8 @@ function buildSingleChatMessageListRow(
   options: ChatMessageListRowsBuildOptions,
 ): ChatMessageListMessageRow | null {
   const msg = messages[originalIndex]!;
-  if (!hasRenderableChatMessageBody(msg)) return null;
+  const showThinkingMessages = options.showThinkingMessages ?? true;
+  if (!hasRenderableChatMessageBody(msg, showThinkingMessages)) return null;
 
   const lastIndex = messages.length - 1;
   const streamingThisBubble =
@@ -115,7 +124,11 @@ function buildSingleChatMessageListRow(
     msg.role === "assistant" &&
     originalIndex === lastIndex;
   const toolUser = isToolOnlyUserMessage(msg);
-  const prevRenderableIndex = indexOfPreviousRenderableMessage(messages, originalIndex);
+  const prevRenderableIndex = indexOfPreviousRenderableMessage(
+    messages,
+    originalIndex,
+    showThinkingMessages,
+  );
   const prevInSession = prevRenderableIndex >= 0 ? messages[prevRenderableIndex] : undefined;
   const shouldMergeSystemMessages = msg.role !== "system" && prevInSession?.role !== "system";
   const mergedWithPrevious =
@@ -430,7 +443,9 @@ export function tryPatchChatMessageListRowsTail(
 
   let renderableBeforeLast = 0;
   for (let i = 0; i < lastMessageIndex; i += 1) {
-    if (hasRenderableChatMessageBody(nextFolded[i]!)) renderableBeforeLast += 1;
+    if (hasRenderableChatMessageBody(nextFolded[i]!, options.showThinkingMessages ?? true)) {
+      renderableBeforeLast += 1;
+    }
   }
   const prefixMessageCount = prefixRows.reduce((count, row) => {
     if (row.kind !== "message") return count;

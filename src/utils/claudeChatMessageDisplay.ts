@@ -154,8 +154,16 @@ export function isToolActivityOnlyMessage(msg: ClaudeMessage): boolean {
   return visible.every((part) => part.type === "tool_use");
 }
 
-/** 消息行是否应在主会话列表中渲染（无正文则整行跳过）。 */
-export function hasRenderableChatMessageBody(msg: ClaudeMessage): boolean {
+/**
+ * 消息行是否应在主会话列表中渲染（无正文则整行跳过）。
+ *
+ * `showReasoning=false`（默认配置「思考消息」关闭）时思考卡片不算内容：
+ * 只有推理过程、没有正文/工具的消息整行跳过，由列表底部提示行承接「思考中」。
+ */
+export function hasRenderableChatMessageBody(
+  msg: ClaudeMessage,
+  showReasoning = true,
+): boolean {
   if (msg.role === "system") {
     const text = systemMessagePlainText(msg).trim();
     if (text.length === 0) return false;
@@ -172,7 +180,9 @@ export function hasRenderableChatMessageBody(msg: ClaudeMessage): boolean {
   if (Array.isArray(parts) && parts.length > 0) {
     // 空 reasoning（流式启动、正文尚未到达）也要渲染「思考中」卡片，作为消息内容的一部分，
     // 避免整行被跳过、只剩底部左侧空白的提示行。
-    return parts.some((part) => part.type === "reasoning" || isRenderableMessagePart(part));
+    return parts.some((part) =>
+      part.type === "reasoning" ? showReasoning : isRenderableMessagePart(part),
+    );
   }
   const content = msg.content ?? "";
   if (isBlankDisplayText(content)) return false;
@@ -184,9 +194,10 @@ export function hasRenderableChatMessageBody(msg: ClaudeMessage): boolean {
 export function indexOfPreviousRenderableMessage(
   messages: readonly ClaudeMessage[],
   fromIndex: number,
+  showReasoning = true,
 ): number {
   for (let i = fromIndex - 1; i >= 0; i -= 1) {
-    if (hasRenderableChatMessageBody(messages[i]!)) return i;
+    if (hasRenderableChatMessageBody(messages[i]!, showReasoning)) return i;
   }
   return -1;
 }

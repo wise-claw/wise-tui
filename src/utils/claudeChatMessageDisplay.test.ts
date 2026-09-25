@@ -673,3 +673,29 @@ describe("userMessagePlainTextForDisplay — tool_result 防护", () => {
     expect(userMessagePlainTextForDisplay(msg)).toBe("看下这个 PR");
   });
 });
+
+describe("hasRenderableChatMessageBody：思考消息隐藏（默认配置关闭）", () => {
+  const onlyReasoning: ClaudeMessage = {
+    id: 1,
+    role: "assistant",
+    content: "",
+    parts: [{ type: "reasoning", text: "先拆解问题" }],
+    timestamp: 0,
+  };
+
+  test("只含思考的消息：默认算内容，隐藏后整行跳过", () => {
+    expect(hasRenderableChatMessageBody(onlyReasoning)).toBe(true);
+    expect(hasRenderableChatMessageBody(onlyReasoning, false)).toBe(false);
+  });
+
+  test("正文与工具仍算可渲染内容", () => {
+    const withText: ClaudeMessage = {
+      ...onlyReasoning,
+      parts: [
+        { type: "reasoning", text: "先拆解问题" },
+        { type: "text", text: "结论如下" },
+      ],
+    };
+    expect(hasRenderableChatMessageBody(withText, false)).toBe(true);
+  });
+});

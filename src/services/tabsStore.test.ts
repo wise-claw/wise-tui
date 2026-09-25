@@ -20,6 +20,7 @@ const {
   buildPersistedTabsState,
   getSessionTabsPersistStatsForTests,
   LEGACY_TABS_BACKUP_STORAGE_KEY,
+  loadSessionTabsState,
   normalizePersistedSession,
   resetSessionTabsPersistForTests,
   saveSessionTabsState,
@@ -151,6 +152,53 @@ describe("normalizePersistedSession claudeReasoningEffort coercion", () => {
       claudeReasoningEffort: "ultracode",
     });
     expect(out.claudeReasoningEffort).toBe("ultracode");
+  });
+});
+
+describe("loadSessionTabsState resilience", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("启动期 IPC 抖动时重试读取，而不是把整份存档当成「没有会话」", async () => {
+    let calls = 0;
+    invoke.mockImplementation(async (cmd: string) => {
+      calls += 1;
+      if (cmd === "load_session_tabs" && calls === 1) {
+        throw new Error("IPC 尚未就绪");
+      }
+      return {
+        version: 1,
+        activeSessionId: "s1",
+        sessions: [{ id: "s1", repositoryPath: "/r", repositoryName: "r", messages: [] }],
+      };
+    });
+
+    const state = await loadSessionTabsState();
+    expect(calls).toBeGreaterThanOrEqual(2);
+    expect(state?.activeSessionId).toBe("s1");
+    expect(state?.sessions.map((session) => session.id)).toEqual(["s1"]);
+  });
+
+  it("坏条目被跳过，其余会话仍可恢复", async () => {
+    invoke.mockImplementation(async () => ({
+      version: 1,
+      activeSessionId: "s1",
+      sessions: [
+        { id: "s1", repositoryPath: "/r", repositoryName: "r", messages: [] },
+        null,
+      ],
+    }));
+
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    let state: Awaited<ReturnType<typeof loadSessionTabsState>> = null;
+    try {
+      state = await loadSessionTabsState();
+    } finally {
+      console.warn = originalWarn;
+    }
+    expect(state?.sessions.map((session) => session.id)).toEqual(["s1"]);
   });
 });
 

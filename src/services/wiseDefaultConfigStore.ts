@@ -95,6 +95,8 @@ export const WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED =
 export const WISE_FEATURE_PANEL_CHROME_DEFAULT_CHANGED =
   "wise:feature-panel-chrome-default-changed";
 
+export const WISE_SHOW_THINKING_MESSAGES_CHANGED = "wise:show-thinking-messages-changed";
+
 export const WISE_LEFT_SIDEBAR_HUB_QUICK_ENTRIES_CHANGED = "wise:left-sidebar-hub-quick-entries-changed";
 
 export const WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED = "wise:left-sidebar-monitor-panel-changed";
@@ -350,6 +352,8 @@ export interface WiseDefaultConfigV1 {
   showFeaturePanelScheduledTasks: boolean;
   /** 进入 HUD 后在输入条上方显示当前会话的两行常驻详情。 */
   showHudPersistentDetails: boolean;
+  /** 会话消息中的「思考」卡片（reasoning 过程）；默认不显示。 */
+  showThinkingMessages: boolean;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -416,6 +420,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showFeaturePanelHistoryMessages: true,
   showFeaturePanelScheduledTasks: true,
   showHudPersistentDetails: false,
+  showThinkingMessages: false,
   openInTerminalShortcut: "",
   openInEditorShortcut: "",
   terminalThemeMode: "follow",
@@ -792,6 +797,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.showHudPersistentDetails === undefined
           ? DEFAULT_CONFIG.showHudPersistentDetails
           : normalizeBoolean(parsed.showHudPersistentDetails),
+      showThinkingMessages:
+        parsed.showThinkingMessages === undefined
+          ? DEFAULT_CONFIG.showThinkingMessages
+          : normalizeBoolean(parsed.showThinkingMessages),
       openInTerminalShortcut:
         typeof parsed.openInTerminalShortcut === "string"
           ? normalizeChord(parsed.openInTerminalShortcut)
@@ -973,6 +982,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showFeaturePanelHistoryMessages: DEFAULT_CONFIG.showFeaturePanelHistoryMessages,
     showFeaturePanelScheduledTasks: DEFAULT_CONFIG.showFeaturePanelScheduledTasks,
     showHudPersistentDetails: DEFAULT_CONFIG.showHudPersistentDetails,
+    showThinkingMessages: DEFAULT_CONFIG.showThinkingMessages,
     openInTerminalShortcut: DEFAULT_CONFIG.openInTerminalShortcut,
     openInEditorShortcut: DEFAULT_CONFIG.openInEditorShortcut,
     terminalThemeMode: DEFAULT_CONFIG.terminalThemeMode,
@@ -1296,6 +1306,7 @@ export async function saveWiseDefaultConfig(
       | "showFeaturePanelHistoryMessages"
       | "showFeaturePanelScheduledTasks"
       | "showHudPersistentDetails"
+      | "showThinkingMessages"
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceTodosPanel"
       | "fileTreeOpenInNewPane"
@@ -1456,6 +1467,7 @@ export async function saveWiseDefaultConfig(
       patch.showFeaturePanelScheduledTasks ?? current.showFeaturePanelScheduledTasks,
     showHudPersistentDetails:
       patch.showHudPersistentDetails ?? current.showHudPersistentDetails,
+    showThinkingMessages: patch.showThinkingMessages ?? current.showThinkingMessages,
     openInTerminalShortcut:
       patch.openInTerminalShortcut !== undefined
         ? normalizeChord(patch.openInTerminalShortcut)
@@ -2036,7 +2048,23 @@ export async function saveWiseDefaultConfig(
     }
   }
 
+  if (
+    patch.showThinkingMessages !== undefined &&
+    next.showThinkingMessages !== current.showThinkingMessages
+  ) {
+    dispatchShowThinkingMessagesChanged(next.showThinkingMessages);
+  }
+
   return next;
+}
+
+function dispatchShowThinkingMessagesChanged(show: boolean): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_SHOW_THINKING_MESSAGES_CHANGED, {
+      detail: { showThinkingMessages: show },
+    }),
+  );
 }
 
 function dispatchExecutionEnvironmentDispatchHistoryDaysChanged(
@@ -2530,6 +2558,14 @@ export async function saveHudDetailsDefaultsToStore(
   patch: Partial<HudDetailsDefaults>,
 ): Promise<void> {
   await saveWiseDefaultConfig(patch);
+}
+
+export async function loadShowThinkingMessagesFromStore(): Promise<boolean> {
+  return (await loadWiseDefaultConfig()).showThinkingMessages;
+}
+
+export async function saveShowThinkingMessagesToStore(show: boolean): Promise<void> {
+  await saveWiseDefaultConfig({ showThinkingMessages: show });
 }
 
 export async function loadWorkspaceInspectorPanelsFromStore(): Promise<WorkspaceInspectorPanelsDefaults> {

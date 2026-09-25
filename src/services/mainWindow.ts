@@ -15,7 +15,9 @@ function resolveCurrentWindowLabel(): string | null {
   try {
     cachedWindowLabel = getCurrentWindow().label;
   } catch {
-    cachedWindowLabel = null;
+    // IPC 桥尚未就绪时取值会抛错：这里不能把 null 缓存下来，否则本窗口会被永久
+    // 当成「非主工作区窗口」——定时任务、协作桥、会话标签落盘范围都会跟着失效。
+    return null;
   }
   return cachedWindowLabel;
 }

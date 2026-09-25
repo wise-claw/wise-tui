@@ -3849,11 +3849,6 @@ function ComposerInner({
       onPointerDownCapture={() => noteComposerScreenshotFocus(session.id)}
       onKeyDown={handleKeyDown}
     >
-      {isSessionBusy && canSteerSession ? (
-        <div className="app-claude-composer-steering-hint" role="note" style={{ fontSize: 12, opacity: 0.65 }}>
-          Tab 发送瞬时消息 · 在下个处理节点生效 · Enter 加入队列
-        </div>
-      ) : null}
       {/* Docks above editor：同仓库多路 AskUserQuestion 时 Tabs 嵌在题卡顶栏（原「待你确认」行） */}
       {hudChrome ? null : useAggregatedQuestionDock && activeQuestionDockTab ? (
         <div style={{ padding: "0 6px" }}>

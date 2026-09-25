@@ -16,6 +16,7 @@ import { DispatchRecordMessage } from "./DispatchRecordMessage";
 import { UserMessageDisplayBody } from "./UserMessageDisplayBody";
 import { ChatMessageRowActions } from "./ChatMessageRowActions";
 import { useChatMessageCopyText } from "./useChatMessageCopyText";
+import { useShowThinkingMessages } from "../../stores/showThinkingMessagesStore";
 
 interface Props {
   sessionId?: string;
@@ -66,6 +67,7 @@ function ClaudeChatMessageRowInner({
   onReplayUserMessage,
 }: Props) {
   const copyText = useChatMessageCopyText(msg, sessionsForDispatchLookup);
+  const showThinking = useShowThinkingMessages();
   const systemPlainText = useMemo(
     () => (msg.role === "system" ? systemMessagePlainText(msg) : ""),
     [msg],
@@ -101,7 +103,12 @@ function ClaudeChatMessageRowInner({
     if (msg.parts && msg.parts.length > 0) {
       return (
         <>
-          <MessagePartsDisplay parts={msg.parts} streaming={streamingThisBubble} inlinePendingHint={false} />
+          <MessagePartsDisplay
+            parts={msg.parts}
+            streaming={streamingThisBubble}
+            inlinePendingHint={false}
+            showThinking={showThinking}
+          />
           {orphanMarkdown ? renderAssistantMarkdownPart(orphanMarkdown, false) : null}
         </>
       );
@@ -122,7 +129,7 @@ function ClaudeChatMessageRowInner({
 
   // 用户消息使用独立的 sticky 行；滚动到下一条用户消息时，上一条会自然让位。
   const visibleBody = msg.role === "system" ? renderSystemBody() : renderNonSystemContent();
-  if (!visibleBody || !hasRenderableChatMessageBody(msg)) {
+  if (!visibleBody || !hasRenderableChatMessageBody(msg, showThinking)) {
     return null;
   }
 

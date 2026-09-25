@@ -1380,11 +1380,22 @@ export function buildMergedTextGroups(visibleParts: readonly MessagePart[]): Par
 }
 
 function messagePartsDisplayEqual(
-  prev: Readonly<{ parts: MessagePart[]; streaming: boolean; inlinePendingHint?: boolean }>,
-  next: Readonly<{ parts: MessagePart[]; streaming: boolean; inlinePendingHint?: boolean }>,
+  prev: Readonly<{
+    parts: MessagePart[];
+    streaming: boolean;
+    inlinePendingHint?: boolean;
+    showThinking?: boolean;
+  }>,
+  next: Readonly<{
+    parts: MessagePart[];
+    streaming: boolean;
+    inlinePendingHint?: boolean;
+    showThinking?: boolean;
+  }>,
 ): boolean {
   if (prev.streaming !== next.streaming) return false;
   if (prev.inlinePendingHint !== next.inlinePendingHint) return false;
+  if (prev.showThinking !== next.showThinking) return false;
   if (prev.parts === next.parts) return true;
   if (prev.parts.length !== next.parts.length) return false;
   for (let i = 0; i < prev.parts.length; i += 1) {
@@ -1398,15 +1409,19 @@ export const MessagePartsDisplay = memo(function MessagePartsDisplay({
   streaming,
   /** 为 false 时不在各 part 内展示「思考中」（由消息列表底部统一展示） */
   inlinePendingHint = true,
+  /** 为 false 时整条隐藏「思考」卡片（默认配置「思考消息」关闭）。 */
+  showThinking = true,
 }: {
   parts: MessagePart[];
   streaming: boolean;
   inlinePendingHint?: boolean;
+  showThinking?: boolean;
 }) {
   // reasoning 即使正文为空也要渲染（流式启动期的「思考中」卡片）；空正文由
   // ReasoningPartDisplay 走 head 分支（图标 + 思考中/思考:），其余 part 仍按可渲染性过滤。
+  // showThinking=false 时 reasoning 直接出局，避免隐藏后仍占位（折叠卡/正在思考卡）。
   const visibleParts = parts.filter(
-    (part) => part.type === "reasoning" || isRenderableMessagePart(part),
+    (part) => (part.type === "reasoning" ? showThinking : isRenderableMessagePart(part)),
   );
   if (visibleParts.length === 0) return null;
 

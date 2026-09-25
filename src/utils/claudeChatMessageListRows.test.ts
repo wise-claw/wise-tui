@@ -830,3 +830,64 @@ describe("tryPatchChatMessageListRowsTail", () => {
     expect(foldChatMessagesForList(nextMessages)).toEqual(patched!.folded);
   });
 });
+
+describe("showThinkingMessages=false：思考消息隐藏（默认配置关闭）", () => {
+  const reasoningOnly = [
+    msg({ id: 1, role: "user", content: "hi" }),
+    msg({ id: 2, role: "assistant", parts: [{ type: "reasoning", text: "先拆解问题" }] }),
+  ];
+
+  test("只含思考的助手消息不再建行，底部提示行接管「思考中」", () => {
+    expect(shouldShowListEndThinkingHint(reasoningOnly, "running", false)).toBe(true);
+    const rows = buildChatMessageListRows(reasoningOnly, {
+      sessionStatus: "running",
+      showListEndThinkingHint: true,
+      showThinkingMessages: false,
+    });
+    expect(rows.map((row) => (row.kind === "message" ? row.msg.id : row.kind))).toEqual([
+      1,
+      "thinking-hint",
+    ]);
+  });
+
+  test("含正文的助手消息保留，思考段不影响建行", () => {
+    const messages = [
+      msg({ id: 1, role: "user", content: "hi" }),
+      msg({
+        id: 2,
+        role: "assistant",
+        parts: [
+          { type: "reasoning", text: "先拆解问题" },
+          { type: "text", text: "结论如下" },
+        ],
+      }),
+    ];
+    const rows = buildChatMessageListRows(messages, {
+      sessionStatus: "idle",
+      showListEndThinkingHint: false,
+      showThinkingMessages: false,
+    });
+    expect(rows.map((row) => (row.kind === "message" ? row.msg.id : row.kind))).toEqual([1, 2]);
+  });
+
+  test("未传 showThinkingMessages 时保持旧语义（思考消息建行）", () => {
+    const rows = buildChatMessageListRows(reasoningOnly, {
+      sessionStatus: "running",
+      showListEndThinkingHint: false,
+    });
+    expect(rows.map((row) => (row.kind === "message" ? row.msg.id : row.kind))).toEqual([1, 2]);
+  });
+
+  test("隐藏思考后末尾思考不再抑制提示行", () => {
+    expect(
+      shouldShowListEndThinkingHint(
+        [
+          msg({ id: 1, role: "user", content: "hi" }),
+          msg({ id: 2, role: "assistant", parts: [{ type: "reasoning", text: "   " }] }),
+        ],
+        "running",
+        false,
+      ),
+    ).toBe(true);
+  });
+});

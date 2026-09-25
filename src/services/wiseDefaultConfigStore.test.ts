@@ -16,6 +16,7 @@ mock.module("./appSettingsStore", () => ({
 import {
   loadWiseDefaultConfig,
   loadHudDetailsDefaultsFromStore,
+  loadShowThinkingMessagesFromStore,
   saveHudDetailsDefaultsToStore,
   getCachedDefaultExecutionEngine,
   saveWiseDefaultConfig,
@@ -34,6 +35,7 @@ import {
   WISE_TERMINAL_THEME_MODE_CHANGED,
   WISE_MARKDOWN_DEFAULT_OPEN_MODE_CHANGED,
   WISE_SESSION_AUX_REUSE_IN_CENTER_TABS_CHANGED,
+  WISE_SHOW_THINKING_MESSAGES_CHANGED,
 } from "./wiseDefaultConfigStore";
 
 function installWindowLocalStorageStub(): Storage {
@@ -632,6 +634,30 @@ describe("wiseDefaultConfigStore", () => {
     await saveHudDetailsDefaultsToStore({ showHudPersistentDetails: true });
     const lastCall = setAppSetting.mock.calls.at(-1);
     expect(JSON.parse(String(lastCall?.[1]))).toMatchObject({ showHudPersistentDetails: true });
+  });
+
+  test("思考消息默认不显示，保存后派发事件并可读取", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({ version: 1, connectionKind: "streaming" });
+      }
+      return null;
+    });
+    expect(await loadShowThinkingMessagesFromStore()).toBe(false);
+
+    const seen: boolean[] = [];
+    window.addEventListener(WISE_SHOW_THINKING_MESSAGES_CHANGED, (e: Event) => {
+      const show = (e as CustomEvent<{ showThinkingMessages?: boolean }>).detail
+        ?.showThinkingMessages;
+      if (typeof show === "boolean") seen.push(show);
+    });
+    const next = await saveWiseDefaultConfig({ showThinkingMessages: true });
+    expect(next.showThinkingMessages).toBe(true);
+    expect(seen).toEqual([true]);
+    expect(JSON.parse(String(setAppSetting.mock.calls.at(-1)?.[1]))).toMatchObject({
+      showThinkingMessages: true,
+    });
   });
 
   test("save workspace sidebar row preview limit clamps and dispatches event", async () => {

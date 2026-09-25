@@ -15,6 +15,7 @@ import { DispatchRecordMessage } from "./DispatchRecordMessage";
 import { UserMessageDisplayBody } from "./UserMessageDisplayBody";
 import { ChatMessageRowActions } from "./ChatMessageRowActions";
 import { useChatMessageCopyText } from "./useChatMessageCopyText";
+import { useShowThinkingMessages } from "../../stores/showThinkingMessagesStore";
 
 interface Props {
   sessionId?: string;
@@ -44,6 +45,7 @@ function ClaudeSessionMonitorMessageRowInner({
   onReplayUserMessage,
 }: Props) {
   const copyText = useChatMessageCopyText(msg, sessionsForDispatchLookup);
+  const showThinking = useShowThinkingMessages();
   const systemPlainText = useMemo(
     () => (msg.role === "system" ? systemMessagePlainText(msg) : ""),
     [msg],
@@ -56,7 +58,12 @@ function ClaudeSessionMonitorMessageRowInner({
   function renderChatBody() {
     if (msg.parts && msg.parts.length > 0) {
       return (
-        <MessagePartsDisplay parts={msg.parts} streaming={streamingThisBubble} inlinePendingHint={false} />
+        <MessagePartsDisplay
+          parts={msg.parts}
+          streaming={streamingThisBubble}
+          inlinePendingHint={false}
+          showThinking={showThinking}
+        />
       );
     }
     const text = msg.content ?? "";
@@ -93,7 +100,7 @@ function ClaudeSessionMonitorMessageRowInner({
           ? <SystemMessageContent text={systemPlainText} />
           : null
       : renderNonSystemContent();
-  if (!visibleBody || !hasRenderableChatMessageBody(msg)) {
+  if (!visibleBody || !hasRenderableChatMessageBody(msg, showThinking)) {
     return null;
   }
 

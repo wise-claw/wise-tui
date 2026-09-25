@@ -419,7 +419,7 @@ function flattenSessionMessages(sessions: ClaudeSession[]): SessionMessageRow[] 
   return sessions
     .flatMap((session) =>
       session.messages
-        .filter(hasRenderableChatMessageBody)
+        .filter((msg) => hasRenderableChatMessageBody(msg))
         .map((msg) => ({
           sessionId: session.id,
           sessionTitle: session.repositoryName || session.id,

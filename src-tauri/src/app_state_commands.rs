@@ -374,12 +374,42 @@ fn save_repositories(
 #[tauri::command]
 pub(crate) fn load_session_tabs(window_label: Option<String>) -> Option<serde_json::Value> {
     let path = crate::wise_paths::wise_tabs_json_for_window(window_label.as_deref()).ok()?;
-    if !path.exists() {
-        return None;
+    match read_session_tabs_file(&path) {
+        Ok(Some(value)) => return Some(value),
+        // 首次启动或用户清空后确实没有存档：交给前端走 localStorage 备份。
+        Ok(None) => return None,
+        Err(err) => eprintln!("[wise] 会话标签读取失败：{err}"),
     }
-    fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
+    // 主文件损坏（例如被并发写坏）时回退到上一次快照，避免整份会话列表静默消失。
+    let backup = session_tabs_backup_path(&path);
+    match read_session_tabs_file(&backup) {
+        Ok(Some(value)) => {
+            eprintln!("[wise] 已从备份恢复会话标签：{}", backup.display());
+            Some(value)
+        }
+        _ => {
+            eprintln!(
+                "[wise] 会话标签与备份均不可读，本次以空会话启动：{}",
+                path.display()
+            );
+            None
+        }
+    }
+}
+
+/// 会话标签备份路径：主文件被写坏时用于恢复。
+fn session_tabs_backup_path(path: &std::path::Path) -> PathBuf {
+    path.with_extension("json.bak")
+}
+
+/// 读取会话标签文件：`Ok(None)` 表示文件不存在，`Err` 表示存在但不可读/不可解析。
+fn read_session_tabs_file(path: &std::path::Path) -> Result<Option<serde_json::Value>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = fs::read_to_string(path).map_err(|e| format!("读取 {} 失败: {e}", path.display()))?;
+    let value = serde_json::from_str(&raw).map_err(|e| format!("解析 {} 失败: {e}", path.display()))?;
+    Ok(Some(value))
 }
 
 #[tauri::command]
@@ -395,8 +425,54 @@ pub(crate) fn save_session_tabs(
                 return Ok(());
             }
         }
+        let next_session_count = state
+            .get("sessions")
+            .and_then(|value| value.as_array())
+            .map_or(0, |sessions| sessions.len());
+        backup_session_tabs_before_overwrite(&path, next_session_count);
     }
     write_file_atomic(&path, &json)
+}
+
+/// 覆盖 `tabs.json` 前留一份上次快照（最佳努力，失败不影响写入）。
+///
+/// 另一个实例带着退化状态（例如启动时没读到存档，只剩空的新会话）覆盖写入后，
+/// 会话列表不会就此永久丢失，可从 `.bak` 恢复。
+/// 若主文件本身已经损坏，则另存 `.corrupt-<时间戳>` 保留现场，而不是把坏文件当备份。
+fn backup_session_tabs_before_overwrite(path: &std::path::Path, next_session_count: usize) {
+    if !path.exists() {
+        return;
+    }
+    let existing = match read_session_tabs_file(path) {
+        Ok(Some(value)) => value,
+        Ok(None) => return,
+        Err(err) => {
+            let corrupt = path.with_extension(format!("json.corrupt-{}", unix_now_ms()));
+            let _ = fs::copy(path, &corrupt);
+            eprintln!("[wise] 会话标签损坏（{err}），已另存现场：{}", corrupt.display());
+            return;
+        }
+    };
+    // tabs.json 可达 MB 级、流式期间每几秒落一次盘：只在这次写入会丢会话
+    // （会话数变少）时才多留一份快照，其余情况不整份复制。
+    let existing_session_count = existing
+        .get("sessions")
+        .and_then(|value| value.as_array())
+        .map_or(0, |sessions| sessions.len());
+    if next_session_count >= existing_session_count {
+        return;
+    }
+    let backup = session_tabs_backup_path(path);
+    // 备份只增不减：连续几次缩小写入不要把更完整的旧快照覆盖成同样退化的状态。
+    let backup_session_count = read_session_tabs_file(&backup)
+        .ok()
+        .flatten()
+        .and_then(|value| value.get("sessions").and_then(|s| s.as_array()).map(|s| s.len()))
+        .unwrap_or(0);
+    if existing_session_count <= backup_session_count {
+        return;
+    }
+    let _ = fs::copy(path, backup);
 }
 
 /// 为每个仓库补齐当前 git 分支。
@@ -2294,5 +2370,116 @@ mod repository_id_tests {
         let next2 = allocate_repository_id(&[sample_repo(seed, "/tmp/a"), sample_repo(seed + 1, "/tmp/b")]);
         assert_eq!(next2, seed + 2);
         assert!(!vec![seed, seed + 1].contains(&next2));
+    }
+}
+
+#[cfg(test)]
+mod session_tabs_file_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_DIR_SEQ: AtomicU64 = AtomicU64::new(0);
+
+    fn unique_dir(prefix: &str) -> PathBuf {
+        let seq = TEST_DIR_SEQ.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("{prefix}-{}-{seq}", std::process::id()))
+    }
+
+    #[test]
+    fn read_session_tabs_file_distinguishes_missing_from_broken() {
+        let dir = unique_dir("wise-tabs-read");
+        fs::create_dir_all(&dir).expect("dir");
+        let path = dir.join("tabs.json");
+
+        // 文件不存在：首次启动，不是错误。
+        assert!(matches!(read_session_tabs_file(&path), Ok(None)));
+
+        // 文件存在但解析不了：必须报错，避免上层把它当成「没有会话」而清空列表。
+        fs::write(&path, r#"{"version":1,"sessions":[{"id":"#).expect("write broken");
+        assert!(read_session_tabs_file(&path).is_err());
+
+        fs::write(&path, r#"{"version":1,"sessions":[]}"#).expect("write good");
+        let value = read_session_tabs_file(&path).expect("read").expect("some");
+        assert_eq!(value["version"], 1);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn session_tabs_backup_keeps_previous_snapshot_before_overwrite() {
+        let dir = unique_dir("wise-tabs-backup");
+        fs::create_dir_all(&dir).expect("dir");
+        let path = dir.join("tabs.json");
+        let backup = session_tabs_backup_path(&path);
+
+        let full = serde_json::json!({
+            "version": 1,
+            "activeSessionId": "session_full",
+            "sessions": (0..8)
+                .map(|index| serde_json::json!({ "id": format!("session_{index}") }))
+                .collect::<Vec<_>>(),
+        });
+        let degenerate = serde_json::json!({
+            "version": 1,
+            "activeSessionId": "session_new",
+            "sessions": [{ "id": "session_new" }],
+        });
+
+        write_file_atomic(&path, &full.to_string()).expect("write full");
+        let json = degenerate.to_string();
+        // 模拟另一个实例带着退化的会话列表覆盖写入。
+        backup_session_tabs_before_overwrite(&path, 0);
+        write_file_atomic(&path, &json).expect("write degenerate");
+
+        let restored = read_session_tabs_file(&backup)
+            .expect("read backup")
+            .expect("backup exists");
+        assert_eq!(restored["sessions"].as_array().expect("sessions").len(), 8);
+        assert_eq!(restored["activeSessionId"], "session_full");
+
+        // 再缩小一次：更完整的旧快照不能被同样退化的状态覆盖。
+        backup_session_tabs_before_overwrite(&path, 0);
+        let still_full = read_session_tabs_file(&backup).expect("read").expect("exists");
+        assert_eq!(still_full["sessions"].as_array().expect("sessions").len(), 8);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn session_tabs_backup_is_skipped_when_session_count_grows() {
+        let dir = unique_dir("wise-tabs-grow");
+        fs::create_dir_all(&dir).expect("dir");
+        let path = dir.join("tabs.json");
+        fs::write(&path, r#"{"version":1,"sessions":[{"id":"a"}]}"#).expect("write");
+
+        // 会话数没有变少：不做整份复制，避免流式期间反复拷贝 MB 级存档。
+        backup_session_tabs_before_overwrite(&path, 2);
+        assert!(!session_tabs_backup_path(&path).exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn broken_tabs_file_is_preserved_before_overwrite() {
+        let dir = unique_dir("wise-tabs-corrupt");
+        fs::create_dir_all(&dir).expect("dir");
+        let path = dir.join("tabs.json");
+        fs::write(&path, r#"{"version":1,"sessions":[{"id":"#).expect("write broken");
+
+        backup_session_tabs_before_overwrite(&path, 1);
+
+        let preserved: Vec<String> = fs::read_dir(&dir)
+            .expect("read dir")
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .filter(|name| name.contains("corrupt"))
+            .collect();
+        assert_eq!(preserved.len(), 1, "损坏的主文件必须另存现场: {preserved:?}");
+        assert!(
+            !session_tabs_backup_path(&path).exists(),
+            "损坏内容不能写进 .bak，否则回退读到的还是坏数据"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -9,6 +9,7 @@ import { ensureMainThreadCongestionProbe } from "./stores/mainThreadCongestionSt
 import "./stores/wireAdaptivePollInteractionRelief";
 import { bootstrapAppTheme, startSystemThemeWatch } from "./stores/appThemeStore";
 import { bootstrapTerminalThemeStore } from "./stores/terminalThemeStore";
+import { bootstrapShowThinkingMessages } from "./stores/showThinkingMessagesStore";
 import { startTerminalThemeSync } from "./services/terminalThemeSync";
 import { prefetchModule } from "./utils/prefetchModule";
 
@@ -34,6 +35,8 @@ startSystemThemeWatch();
 // 内置终端主题可独立于应用外观（默认跟随）；后端 ANSI 调色板由全局订阅推送。
 bootstrapTerminalThemeStore();
 startTerminalThemeSync();
+// 思考卡片默认隐藏：React 挂载前灌入持久化值，避免首帧闪出思考过程。
+bootstrapShowThinkingMessages();
 
 /** 与 App / AppImpl 解析并行预拉工作区首屏 chunk，缩短壳体出现后的等待。 */
 prefetchModule(() => import("./components/AppWorkspaceLayout.lazy"), "AppWorkspaceLayout.lazy");
@@ -51,4 +54,3 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     </ErrorBoundary>
   </React.StrictMode>,
 );
-

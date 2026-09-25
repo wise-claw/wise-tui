@@ -7,11 +7,14 @@ import {
   tryPatchChatMessageListRowsTail,
   type ChatMessageListRow,
 } from "../utils/claudeChatMessageListRows";
+import { useShowThinkingMessages } from "../stores/showThinkingMessagesStore";
 
 type RowsCache = {
   messages: ClaudeSession["messages"];
   status: ClaudeSession["status"];
   showListEndThinkingHint: boolean;
+  /** 思考卡片可见性：与行内容绑定，变化时必须整体重建而非复用缓存。 */
+  showThinkingMessages: boolean;
   rows: ChatMessageListRow[];
   /** 上次 fold 结果，供 tail-patch 增量复用，避免每 tick 全量 fold 历史工具消息。 */
   folded: ClaudeMessage[];
@@ -20,12 +23,18 @@ type RowsCache = {
 /** 构建消息列表行；流式时尽量 patch 尾部，减少主线程与 DOM 重渲染。 */
 export function useChatMessageListRows(session: ClaudeSession): ChatMessageListRow[] {
   const cacheRef = useRef(new Map<string, RowsCache>());
+  const showThinkingMessages = useShowThinkingMessages();
 
   return useMemo(() => {
-    const showListEndThinkingHint = shouldShowListEndThinkingHint(session.messages, session.status);
+    const showListEndThinkingHint = shouldShowListEndThinkingHint(
+      session.messages,
+      session.status,
+      showThinkingMessages,
+    );
     const options = {
       sessionStatus: session.status,
       showListEndThinkingHint,
+      showThinkingMessages,
     };
     const cached = cacheRef.current.get(session.id);
     const remember = (entry: RowsCache) => {
@@ -43,6 +52,7 @@ export function useChatMessageListRows(session: ClaudeSession): ChatMessageListR
     if (
       cached &&
       cached.status === session.status &&
+      cached.showThinkingMessages === showThinkingMessages &&
       cached.showListEndThinkingHint === showListEndThinkingHint
     ) {
       if (cached.messages === session.messages) {
@@ -61,6 +71,7 @@ export function useChatMessageListRows(session: ClaudeSession): ChatMessageListR
           messages: session.messages,
           status: session.status,
           showListEndThinkingHint,
+          showThinkingMessages,
           rows: patched.rows,
           folded: patched.folded,
         });
@@ -73,9 +84,10 @@ export function useChatMessageListRows(session: ClaudeSession): ChatMessageListR
       messages: session.messages,
       status: session.status,
       showListEndThinkingHint,
+      showThinkingMessages,
       rows,
       folded,
     });
     return rows;
-  }, [session.id, session.messages, session.status]);
+  }, [session.id, session.messages, session.status, showThinkingMessages]);
 }

@@ -17,6 +17,9 @@
 
 ### 🐛 问题修复
 
+- **会话标签存档不再被并发写坏 / 静默清空**：`write_file_atomic` 固定使用 `<name>.json.save_tmp`，打包版与 dev 版（或用户连续启动两次）同时写 `~/.wise/tabs.json` 时会互相搬走、写坏同一个临时文件：一侧写盘静默失败，或留下解析不了的 JSON，下次启动读不出整份会话列表，工作区只剩几个「新会话」。现在临时文件名带进程 id / 序号 / 纳秒后缀，写入者互不干扰，失败时清理临时文件。
+- **读不出会话标签时不再当成「没有存档」**：`load_session_tabs` 原先把读取/解析失败一律映射为 `None`，前端随即用（可能很旧的）localStorage 备份启动并覆盖写盘。现在区分「文件不存在」与「文件损坏」：损坏时回退 `<name>.json.bak`，坏文件另存 `.corrupt-<时间戳>` 现场；写入前若会话数将变少，先留一份更完整的 `.bak`（备份只增不减，连续缩小不会把旧快照冲掉）；前端读取遇到启动期 IPC 抖动会短暂重试并留下警告，单条坏会话也只会被跳过而不是丢掉整份存档。
+- **窗口 label 取值失败不再被永久缓存**：`getCurrentMainWorkspaceWindowLabel` 在 IPC 桥未就绪时取值抛错会被缓存成 `null`，使该窗口此后永远被当成「非主工作区窗口」，定时任务、协作桥与会话标签落盘范围一并失效；现在失败不缓存，下次调用重试。
 - **DeepSeek Harness 回合不再丢输出**：ACP 回合循环原先先读 `session/prompt` 结算、后取 `session/update` 通知。dsh 只发送「已提交」的助手消息，整轮输出与结算几乎同时到达，于是所有更新都被丢掉：转写里只剩用户消息、会话却标记为成功，界面看起来「输入了但没有会话执行」。现改为先把队列中的更新（与权限请求）全部下发给 UI，再处理结算。
 - **DeepSeek 会话按 Composer 选择的模型下发**：主发送路径的 `modelArg` 解析漏了 `deepseek`，会话模型（dsh 目录项 `["provider","model"]`）会被当成 Claude 档案模型解析并替换，`session/set_config_option` 失败后静默退回 dsh 默认模型。现与 OpenCode / Qoder 一致，直接下发会话模型。
 - **DeepSeek Harness 模型选择恢复可用**：`deepseek_list_models` 之前把 `session.config_options`（`configOptions` 数组本身）当成完整 `session/new` 结果解析，模型目录恒为空，Composer / HUD 里没有任何可选模型，底栏模型名也是空白；现按数组形态解析 dsh 广告的 provider 分组目录，并在「沿用 dsh 默认模型」时显示 `默认模型（dsh 配置）`。

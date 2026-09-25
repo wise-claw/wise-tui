@@ -132,21 +132,53 @@ export function buildPersistedTabsState(
 }
 
 export async function loadSessionTabsState(): Promise<PersistedTabsState | null> {
-  if (!isTauriIpcAlive()) return null;
-  try {
-    const windowLabel = getCurrentMainWorkspaceWindowLabel();
-    const raw = await invoke<unknown>("load_session_tabs", { windowLabel });
-    if (raw == null) return null;
-    const o = raw as Record<string, unknown>;
-    if (o.version !== 1 || !Array.isArray(o.sessions)) return null;
-    return {
-      version: 1,
-      activeSessionId: typeof o.activeSessionId === "string" ? o.activeSessionId : null,
-      sessions: o.sessions.map(normalizePersistedSession),
-    };
-  } catch {
-    return null;
+  const raw = await invokeLoadSessionTabsWithRetry();
+  if (raw == null) return null;
+  const o = raw as Record<string, unknown>;
+  if (o.version !== 1 || !Array.isArray(o.sessions)) return null;
+  const sessions: ClaudeSession[] = [];
+  let skipped = 0;
+  for (const entry of o.sessions) {
+    // 单条坏会话不能让整份存档读不出来：坏的那条跳过，其余照常恢复。
+    try {
+      sessions.push(normalizePersistedSession(entry));
+    } catch (err) {
+      skipped += 1;
+      console.warn("[wise] 跳过无法恢复的会话标签条目：", err);
+    }
   }
+  if (skipped > 0) {
+    console.warn(`[wise] 会话标签存档有 ${skipped} 条损坏，已跳过`);
+  }
+  return {
+    version: 1,
+    activeSessionId: typeof o.activeSessionId === "string" ? o.activeSessionId : null,
+    sessions,
+  };
+}
+
+/** 启动期 IPC 可能尚未就绪：读取失败时短暂重试，避免整份会话列表被误判为「没有存档」。 */
+const SESSION_TABS_LOAD_RETRY_DELAYS_MS = [0, 150, 450];
+
+async function invokeLoadSessionTabsWithRetry(): Promise<unknown> {
+  let lastError: unknown = null;
+  for (const delayMs of SESSION_TABS_LOAD_RETRY_DELAYS_MS) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    if (!isTauriIpcAlive()) {
+      lastError = new Error("Tauri IPC 尚未就绪");
+      continue;
+    }
+    try {
+      const windowLabel = getCurrentMainWorkspaceWindowLabel();
+      return await invoke<unknown>("load_session_tabs", { windowLabel });
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  console.warn("[wise] 读取会话标签失败，本次回退 localStorage 备份：", lastError);
+  return null;
 }
 
 type TabsPersistGate = {
