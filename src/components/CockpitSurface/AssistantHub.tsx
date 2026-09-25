@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { App as AntdApp, Button, Input, Select } from "antd";
 import { CloseOutlined, SendOutlined } from "@ant-design/icons";
 import { AssistantHubBody } from "../AssistantHubShared/AssistantHubBody";
+import { CollabAgentsHubSection } from "../Collaboration/agents/CollabAgentsHubSection";
+import { CollabResourcesHubSection } from "../Collaboration/resources/CollabResourcesHubSection";
 import { resolveAssistantKind } from "./assistantKind";
 import { listAssistants } from "../../services/assistants";
 import type { AssistantEntry } from "../../types/assistant";
@@ -145,6 +147,9 @@ export function AssistantHub({
             </ul>
           </section>
         ) : null}
+
+        <CollabAgentsHubSection />
+        <CollabResourcesHubSection />
 
         <AssistantHubBody
           assistants={list}

@@ -40,6 +40,12 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
       { key: "agents", label: "席位", description: "职责、默认仓库和派发目标", icon: <RobotOutlined /> },
       { key: "workflows", label: "工作流", description: "阶段派发、验收和工作流画布", icon: <BranchesOutlined /> },
       { key: "assistants", label: "助手模板", description: "角色模板、模型和系统提示词", icon: <UserOutlined /> },
+      {
+        key: "collab-agents",
+        label: "协作智能体",
+        description: "绑定仓库、独立配置，从输入框派发多仓库需求",
+        icon: <ApartmentOutlined />,
+      },
       { key: "engine-registry", label: "执行环境", description: "本机 CLI 与 Agent 运行入口", icon: <ThunderboltOutlined /> },
       {
         key: "agents-explorer",

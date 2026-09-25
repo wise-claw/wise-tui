@@ -60,6 +60,20 @@ pub(crate) struct StoredRepository {
     open_app_id: Option<String>,
 }
 
+impl StoredRepository {
+    pub(crate) fn path(&self) -> &str {
+        &self.path
+    }
+
+    pub(crate) fn effective_role_tags(&self) -> Vec<String> {
+        if self.role_tags.is_empty() {
+            vec![self.repository_type.clone()]
+        } else {
+            self.role_tags.clone()
+        }
+    }
+}
+
 fn default_repository_type() -> String {
     "frontend".to_string()
 }

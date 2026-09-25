@@ -41,6 +41,7 @@ export type AuthorPane =
   | "extensions"
   | "my-extensions"
   | "assistants"
+  | "collab-agents"
   | "engine-registry"
   | "channels"
   | "automation"

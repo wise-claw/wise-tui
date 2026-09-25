@@ -3,6 +3,7 @@ import {
   CloudServerOutlined,
   DingdingOutlined,
   GatewayOutlined,
+  InboxOutlined,
   MessageOutlined,
   ReloadOutlined,
   SendOutlined,
@@ -25,9 +26,10 @@ import { FeishuChannelBody } from "./FeishuChannelBody";
 import { WecomChannelBody } from "./WecomChannelBody";
 import { TelegramChannelBody } from "./TelegramChannelBody";
 import { GenericWebSocketChannelBody } from "./GenericWebSocketChannelBody";
+import { CollabInboxChannelBody } from "../Collaboration/channel/CollabInboxChannelBody";
 import "./index.css";
 
-type ChannelKey = "dingtalk" | "feishu" | "wecom" | "telegram" | "websocket";
+type ChannelKey = "collab" | "dingtalk" | "feishu" | "wecom" | "telegram" | "websocket";
 
 interface ChannelDefinition {
   key: ChannelKey;
@@ -36,6 +38,7 @@ interface ChannelDefinition {
 }
 
 const CHANNELS: ChannelDefinition[] = [
+  { key: "collab", title: "协作收件箱", icon: <InboxOutlined /> },
   { key: "dingtalk", title: "钉钉", icon: <DingdingOutlined /> },
   { key: "feishu", title: "飞书", icon: <MessageOutlined /> },
   { key: "wecom", title: "企业微信", icon: <SendOutlined /> },
@@ -123,6 +126,8 @@ export function ChannelsPanel() {
   const cardMeta = useCallback(
     (channel: ChannelDefinition): { label: string; configured: boolean; running?: boolean } => {
       switch (channel.key) {
+        case "collab":
+          return { configured: true, label: "多仓库协作通知与投递" };
         case "dingtalk":
           return {
             configured: dingTalkConfigured,
@@ -219,7 +224,9 @@ export function ChannelsPanel() {
         </div>
 
         <div className="app-channels-hub__detail">
-          {activeKey === "dingtalk" ? (
+          {activeKey === "collab" ? (
+            <CollabInboxChannelBody />
+          ) : activeKey === "dingtalk" ? (
             <DingtalkChannelBody
               dingTalkConfigured={dingTalkConfigured}
               streamStatus={streamStatus}

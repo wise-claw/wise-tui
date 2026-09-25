@@ -67,6 +67,7 @@ const MIGRATION_049: &str = include_str!("../migrations/049_workspace_global_mem
 const MIGRATION_050: &str = include_str!("../migrations/050_terminal_quick_commands.sql");
 const MIGRATION_052: &str = include_str!("../migrations/052_workspace_quick_actions_category.sql");
 const MIGRATION_053: &str = include_str!("../migrations/053_assistant_custom_script_file.sql");
+const MIGRATION_054: &str = include_str!("../migrations/054_collaboration.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -294,6 +295,10 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "053_assistant_custom_script_file",
         action: MigrationAction::Sql(MIGRATION_053),
+    },
+    Migration {
+        name: "054_collaboration",
+        action: MigrationAction::Sql(MIGRATION_054),
     },
 ];
 
@@ -1768,6 +1773,15 @@ impl WiseDb {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn open_migrated_test_connection() -> Connection {
+    let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
+    conn.execute_batch("PRAGMA foreign_keys = ON;")
+        .expect("foreign keys pragma");
+    run_migrations(&conn).expect("migrations succeed");
+    conn
+}
+
 fn run_migrations(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS _migrations (
@@ -1990,6 +2004,7 @@ mod tests {
                 "051_terminal_quick_commands_seed",
                 "052_workspace_quick_actions_category",
                 "053_assistant_custom_script_file",
+                "054_collaboration",
             ]
         );
     }

@@ -39,6 +39,10 @@ mock.module("../AgentsExplorerPanel", () => ({
   ),
 }));
 
+mock.module("../Collaboration/agents/CollabAgentsAuthorPage", () => ({
+  CollabAgentsAuthorPage: () => <section data-stub="collab-agents">协作智能体页</section>,
+}));
+
 mock.module("../ClaudeHooksConfigPanel", () => ({
   ClaudeHooksConfigPanel: ({ listSearch }: { listSearch?: string }) => (
     <section data-stub="hooks">Hooks:{listSearch ?? ""}</section>
@@ -318,6 +322,7 @@ describe("AuthorPanel", () => {
       "我的扩展",
       "扩展市场",
       "助手模板",
+      "协作智能体",
       "MCP 工具",
       "技能",
       "仓库智能体",
@@ -421,6 +426,13 @@ describe("AuthorPanel", () => {
     const { props } = buildProps({ pane: "skills" });
     const html = await renderAuthorPanel(props);
     expect(html).toContain("技能");
+  });
+
+  test("collab-agents pane mounts the collaboration agents page", async () => {
+    const { props } = buildProps({ pane: "collab-agents" });
+    const html = await renderAuthorPanel(props);
+    expect(html).toContain('data-stub="collab-agents"');
+    expect(html).toContain("协作智能体页");
   });
 
   test("agents-explorer pane mounts AgentsExplorerPanel with repository path", async () => {

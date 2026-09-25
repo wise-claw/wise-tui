@@ -5,7 +5,7 @@ import {
 } from "./leftSidebarHubQuickEntries";
 
 describe("normalizeLeftSidebarHubQuickEntries", () => {
-  test("defaults to mcp, skills, automation", () => {
+  test("defaults to mcp, skills, automation, assistants", () => {
     expect(normalizeLeftSidebarHubQuickEntries(undefined)).toEqual([
       ...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES,
     ]);

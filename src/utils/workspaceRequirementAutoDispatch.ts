@@ -1,4 +1,4 @@
-import type { WorkspaceRequirementItem } from "../types/workspaceRequirements";
+import { isMigratedToCollaboration, type WorkspaceRequirementItem } from "../types/workspaceRequirements";
 
 /** 一次轮询最多自动派发的条数（避免一次性刷爆执行环境队列）。 */
 export const AUTO_DISPATCH_MAX_PER_SWEEP = 2;
@@ -17,6 +17,7 @@ export function isRequirementAutoDispatchEligible(
   item: WorkspaceRequirementItem,
 ): boolean {
   if (item.status !== "open") return false;
+  if (isMigratedToCollaboration(item)) return false;
   if (item.lastDispatchedAt == null) return true;
   return item.updatedAt > item.lastDispatchedAt;
 }
@@ -72,6 +73,7 @@ export function isRequirementAutoDispatchRetryEligible(
   runningRequirementIds: ReadonlySet<string>,
 ): boolean {
   if (item.status !== "open") return false;
+  if (isMigratedToCollaboration(item)) return false;
   if (item.lastDispatchedAt == null) return false;
   if (isRequirementAutoDispatchEligible(item)) return false;
   if ((item.dispatchAttemptCount ?? 0) >= AUTO_DISPATCH_MAX_RETRY_ATTEMPTS) return false;

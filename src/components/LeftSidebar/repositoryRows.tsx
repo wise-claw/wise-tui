@@ -16,6 +16,7 @@ import {
   isRepositoryRowNestedActionTarget,
 } from "./repositoryRowPointerActivate";
 import { FLAT_WORKSPACE_DRAG_SOURCE_ID } from "../../utils/workspaceRepositoryOrder";
+import { dispatchWiseUiNavigation } from "../../services/wiseUiNavigation";
 
 export interface RepositoryReorderUi {
   dragHandleEnabled: boolean;
@@ -53,6 +54,7 @@ import {
   type RepositoryRunCommandRowPinnedMap,
 } from "../../services/repositoryRunCommandRowActionPreference";
 import { RunningMainSessionDot } from "./RunningMainSessionDot";
+import { openCollabAgentScope, openCollabProjectSharing } from "../../stores/collabUiStore";
 import { RepositorySddStackBadge } from "./RepositorySddStackBadge";
 
 function repositoryTrellisEntrypointsEnabled(repository: Repository, trellisReady: boolean): boolean {
@@ -455,6 +457,7 @@ function RepositoryRowInner({
     trellisReady,
     trellisRootActionEnabled: false,
     onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
+    onOpenCollabAgents: true,
     onConfigureRepositoryIconBadge: Boolean(onConfigureRepositoryIconBadge),
     onConfigureSddMode: Boolean(onConfigureSddMode),
     onMainSessionRun: true,
@@ -622,6 +625,16 @@ function RepositoryRowInner({
               if (key === "open-terminal") onOpenInTerminal?.(repository);
               if (key === "browser") onOpenRepositoryInBrowser(repository);
               if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
+              if (key === "collab-agents") {
+                openCollabAgentScope({
+                  projectId: project.id,
+                  repositoryId: repository.id,
+                  title: repositoryFolderBasename(repository),
+                });
+              }
+              if (key === "collab-sharing") {
+                openCollabProjectSharing({ projectId: project.id, title: project.name });
+              }
               if (key === "detach") onDetachFromProject(project.id, repository.id);
               if (key === "icon-badge") onConfigureRepositoryIconBadge?.(repository);
               if (key === "sdd-mode") onConfigureSddMode?.(repository);
@@ -803,6 +816,7 @@ function FloatingRepositoryRowInner({
     onPromoteToNewProject: Boolean(onPromoteToNewProject),
     onJoinExistingProject: Boolean(onJoinExistingProject),
     onHide: Boolean(onHide),
+    onOpenCollabAgents: true,
     repositoryOpenAppId: repository.openAppId,
   });
   // 「移除仓库」菜单项点击后由行内受控 Popconfirm 承接确认（锚点独立于下拉菜单，避免随菜单销毁）。
@@ -1001,6 +1015,9 @@ function FloatingRepositoryRowInner({
               if (key === "open-terminal") onOpenInTerminal?.(repository);
               if (key === "browser") onOpenRepositoryInBrowser(repository);
               if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
+              if (key === "collab-agents") {
+                dispatchWiseUiNavigation({ kind: "author", pane: "collab-agents" });
+              }
               if (key === "icon-badge") onConfigureRepositoryIconBadge?.(repository);
               if (key === "sdd-mode") onConfigureSddMode?.(repository);
               if (key === "run-configure") onConfigureRepositoryMainSessionRun?.(repository);

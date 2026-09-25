@@ -224,6 +224,9 @@ import { useWorkspaceListPlacementDefault } from "./hooks/useWorkspaceListPlacem
 import { useLeftSidebarSectionOrder } from "./hooks/useLeftSidebarSectionOrder";
 import { useLeftSidebarRepositoryIconBadgesDefault } from "./hooks/useLeftSidebarRepositoryIconBadgesDefault";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
+import { useCollaborationExecutionBridge } from "./hooks/useCollaborationExecutionBridge";
+import { useCollaborationChannelPump } from "./hooks/useCollaborationChannelPump";
+import { getCollabSessionSpawnExtras } from "./stores/collabSessionSpawnStore";
 import { useWorkspaceRequirementAutoDispatchEngine } from "./hooks/useWorkspaceRequirementAutoDispatch";
 import { invalidateWorkflowRunCacheForRepository } from "./hooks/useWorkflowRun";
 import { deleteAppSetting, getAppSetting, setAppSetting } from "./services/appSettingsStore";
@@ -276,6 +279,7 @@ import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbou
 import { useCodeReviewFixDispatch } from "./hooks/useCodeReviewFixDispatch";
 import { CodeReviewHost } from "./components/CodeReviewPanel/CodeReviewHost";
 import { CodexApprovalOverlay } from "./components/CodexApprovalOverlay";
+import { CollabUiHost } from "./components/Collaboration/CollabUiHost";
 import { useOmcPluginInstalled } from "./hooks/useOmcPluginInstalled";
 import { useOmcRuntime } from "./hooks/useOmcRuntime";
 import { useWorkflowTeamAutomation } from "./hooks/useWorkflowTeamAutomation";
@@ -1351,6 +1355,8 @@ export default function App() {
   executeSessionRef.current = executeSession;
   const closeSessionRef = useRef(closeSession);
   closeSessionRef.current = closeSession;
+  const cancelSessionRef = useRef(cancelSession);
+  cancelSessionRef.current = cancelSession;
   const handleComposerExecuteRef = useRef(handleComposerExecute);
   handleComposerExecuteRef.current = handleComposerExecute;
   const sendMessageToSessionRef = useRef(sendMessageToSession);
@@ -1497,6 +1503,14 @@ export default function App() {
     closeSessionRef,
   });
 
+  useCollaborationExecutionBridge({
+    createSessionRef,
+    executeSessionRef,
+    cancelSessionRef,
+    closeSessionRef,
+  });
+  useCollaborationChannelPump();
+
   // 自动派发并发控制：实时统计当前运行/连接中的会话数，动态决定每轮可派发条数。
   const countRunningSessionsRef = useRef<() => number>(() => 0);
   countRunningSessionsRef.current = () => {
@@ -1562,6 +1576,7 @@ export default function App() {
     });
 
   claudeSpawnExtrasContextRef.current = async (session) =>
+    getCollabSessionSpawnExtras(session.id) ??
     resolveClaudeSpawnExtrasForSession({
       session,
       projects,
@@ -1804,7 +1819,7 @@ export default function App() {
     enterCockpit(cockpitView("automation"));
   }, [enterCockpit]);
   const openAssistantsFromSidebar = useCallback(() => {
-    enterAuthorPane("assistants");
+    enterAuthorPane("collab-agents");
   }, [enterAuthorPane]);
   const openClaudePluginsFromSidebar = useCallback(() => {
     enterAuthorPane("claude-plugins");
@@ -3110,7 +3125,9 @@ export default function App() {
         onOpenSkillsHub: openSkillsHubFromSidebar,
         automationHubActive: viewMode.view.kind === "cockpit" && viewMode.view.hubPane === "automation",
         onOpenAutomationHub: openAutomationHubFromSidebar,
-        assistantsHubActive: viewMode.view.kind === "author" && viewMode.view.pane === "assistants",
+        assistantsHubActive:
+          viewMode.view.kind === "author" &&
+          (viewMode.view.pane === "assistants" || viewMode.view.pane === "collab-agents"),
         onOpenAssistantsHub: openAssistantsFromSidebar,
         claudePluginsHubActive: viewMode.view.kind === "author" && viewMode.view.pane === "claude-plugins",
         onOpenClaudePluginsHub: openClaudePluginsFromSidebar,
@@ -3744,6 +3761,7 @@ export default function App() {
       }}
     />
     <CodexApprovalOverlay />
+    <CollabUiHost />
     </>
   );
 }

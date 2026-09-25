@@ -15,18 +15,19 @@ export const LEFT_SIDEBAR_HUB_QUICK_ENTRY_ORDER: readonly LeftSidebarHubQuickEnt
   "claude-plugins",
 ] as const;
 
-/** 默认勾选：MCP、技能、自动化。 */
+/** 默认勾选：MCP、技能、自动化、协作智能体。 */
 export const DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES: readonly LeftSidebarHubQuickEntryId[] = [
   "mcp",
   "skills",
   "automation",
+  "assistants",
 ] as const;
 
 export const LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS: Record<LeftSidebarHubQuickEntryId, string> = {
   mcp: "MCP",
   skills: "技能",
   automation: "自动化",
-  assistants: "助手",
+  assistants: "协作智能体",
   "claude-plugins": "插件",
 };
 

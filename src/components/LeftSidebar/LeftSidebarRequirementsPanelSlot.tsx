@@ -59,6 +59,10 @@ import { ExpandIcon, PlusIcon, WorkspaceMemoIcon } from "./SidebarIcons";
 import { useClaudeSessionsStructureSnapshot } from "../../stores/claudeSessionsLiveStore";
 import { isRequirementExecutionActive, requirementExecutionState, type RequirementExecutionState } from "../../utils/workspaceRequirementExecution";
 import { RequirementExecutionBadge } from "../WorkspaceMemoPanel/RequirementExecutionHistory";
+import { CollabRequirementsSidebarList } from "../Collaboration/requirement/CollabRequirementsSidebarList";
+import { describeCollabImportReport, formatCollabError, upgradeWorkspaceRequirementsToCollab } from "../../services/collaboration";
+import { isMigratedToCollaboration } from "../../types/workspaceRequirements";
+import { openCollabRequirementCreate } from "../../stores/collabUiStore";
 import "./LeftSidebarRequirementsPanelSlot.css";
 
 export type LeftSidebarRequirementsPanelSlotProps = {
@@ -308,6 +312,7 @@ function LeftSidebarRequirementsPanelSlotInner({
   const [items, setItems] = useState<WorkspaceRequirementItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+  const [collabOpenCount, setCollabOpenCount] = useState(0);
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const mountedRef = useRef(true);
@@ -365,17 +370,19 @@ function LeftSidebarRequirementsPanelSlotInner({
     }
   }, []);
 
+  // 已升级到多仓库协作的旧需求由协作列表展示，避免重复与误走旧派发链路。
+  const legacyItems = useMemo(() => items.filter((item) => !isMigratedToCollaboration(item)), [items]);
   const openItems = useMemo(
-    () => items.filter((item) => item.status === "open"),
-    [items],
+    () => legacyItems.filter((item) => item.status === "open"),
+    [legacyItems],
   );
   const verifyingItems = useMemo(
-    () => items.filter((item) => item.status === "verifying"),
-    [items],
+    () => legacyItems.filter((item) => item.status === "verifying"),
+    [legacyItems],
   );
   const doneItems = useMemo(
-    () => items.filter((item) => item.status === "done"),
-    [items],
+    () => legacyItems.filter((item) => item.status === "done"),
+    [legacyItems],
   );
   const executionStates = useMemo(() => new Map(items.map((item) => [item.id, requirementExecutionState(item, sessions)])), [items, sessions]);
   const displayItems = useMemo(
@@ -501,6 +508,25 @@ function LeftSidebarRequirementsPanelSlotInner({
     });
   }, [persist]);
 
+  const upgradeToCollaboration = useCallback(() => {
+    const pending = itemsRef.current.filter((row) => !isMigratedToCollaboration(row));
+    if (pending.length === 0) return;
+    Modal.confirm({
+      title: "升级为多仓库协作需求？",
+      content: `将把 ${pending.length} 条需求导入协作层：正文、图片、排序、状态、关联会话与执行记录保留可读，原数据先备份；仍在运行的会话继续执行、不会重复派发。之后由仓库智能体按仓库拆分任务。`,
+      okText: "升级",
+      cancelText: "取消",
+      onOk: async () => {
+        try {
+          const report = await upgradeWorkspaceRequirementsToCollab();
+          message.success(describeCollabImportReport(report));
+        } catch (err) {
+          message.error(formatCollabError(err));
+        }
+      },
+    });
+  }, [message]);
+
   const handleDispatch = useCallback(
     async (item: WorkspaceRequirementItem) => {
       setDispatchingId(item.id);
@@ -568,9 +594,9 @@ function LeftSidebarRequirementsPanelSlotInner({
       >
         <span className="app-repository-header-title">
          需求
-          {!loading && openItems.length + verifyingItems.length > 0 ? (
+          {!loading && openItems.length + verifyingItems.length + collabOpenCount > 0 ? (
             <span className="app-left-sidebar-requirements-panel__count">
-              {openItems.length + verifyingItems.length}
+              {openItems.length + verifyingItems.length + collabOpenCount}
             </span>
           ) : null}
         </span>
@@ -639,6 +665,13 @@ function LeftSidebarRequirementsPanelSlotInner({
               menu={{
                 className: "app-workspace-requirements-more-menu",
                 items: [
+                  { key: "new-collab", label: "新建多仓库协作需求…" },
+                  {
+                    key: "upgrade-collab",
+                    label: "升级为多仓库协作…",
+                    disabled: legacyItems.length === 0,
+                  },
+                  { type: "divider" },
                   {
                     key: "reset-all",
                     icon: <UndoOutlined />,
@@ -655,6 +688,8 @@ function LeftSidebarRequirementsPanelSlotInner({
                   },
                 ],
                 onClick: ({ key }) => {
+                  if (key === "new-collab") openCollabRequirementCreate();
+                  if (key === "upgrade-collab") upgradeToCollaboration();
                   if (key === "reset-all") resetAllRequirements();
                   if (key === "delete-all") deleteAllRequirements();
                 },
@@ -723,9 +758,15 @@ function LeftSidebarRequirementsPanelSlotInner({
             </div>
           </div>
           <div ref={scrollRootRef} className="app-left-sidebar-requirements-panel__body">
+          <CollabRequirementsSidebarList
+            visible={visible}
+            statusFilters={statusFilters}
+            executionFilter={executionFilter}
+            onCountChange={setCollabOpenCount}
+          />
           {loading ? (
             <div className="app-left-sidebar-requirements-panel__empty">加载中…</div>
-          ) : displayItems.length === 0 ? (
+          ) : displayItems.length === 0 && collabOpenCount > 0 ? null : displayItems.length === 0 ? (
             <div className="app-left-sidebar-requirements-panel__empty app-left-sidebar-requirements-panel__empty--with-action">
               <span className="app-left-sidebar-requirements-panel__empty-text">
                 {items.length === 0 ? "暂无需求" : "当前状态暂无"}

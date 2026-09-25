@@ -83,6 +83,8 @@ describe("AutomationPanel", () => {
     expect(html).toContain("app-automation-console__repos");
     expect(html).toContain("/repo/wise");
     expect(html).toContain("计划任务弹窗:/repo/wise");
+    expect(html).toContain("多仓库协作调度");
+    expect(html).toContain("暂停领取");
   });
 
   test("renders close control when onClose is provided", () => {

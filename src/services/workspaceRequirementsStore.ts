@@ -101,6 +101,15 @@ export async function loadWorkspaceRequirements(): Promise<WorkspaceRequirements
   }
 }
 
+/** 外部（如协作层 V1 迁移）直接改写存储后，重新读取并广播，避免面板用旧列表覆盖迁移标记。 */
+export function reloadWorkspaceRequirementsFromStorage(): Promise<WorkspaceRequirementsPayloadV1> {
+  return enqueueRequirementsWrite(async () => {
+    const next = await readRequirementsPayload();
+    dispatchRequirementsChanged(next);
+    return next;
+  });
+}
+
 /** 读取需求自动派发开关。 */
 export async function getWorkspaceRequirementAutoDispatch(): Promise<boolean> {
   const raw = await getAppSetting(WORKSPACE_REQUIREMENTS_AUTO_DISPATCH_KEY);

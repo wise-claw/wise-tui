@@ -4,6 +4,7 @@ import {
   deriveRequirementTitle,
   extractRequirementsFromMemoMarkdown,
   formatRequirementDispatchPrompt,
+  isMigratedToCollaboration,
   parseWorkspaceRequirementsPayload,
   sortWorkspaceRequirementItems,
 } from "./workspaceRequirements";
@@ -64,6 +65,21 @@ describe("workspaceRequirements", () => {
     });
     const parsed = parseWorkspaceRequirementsPayload(raw);
     expect(parsed.items[0]!.repositoryId).toBe("42");
+  });
+
+  test("parseWorkspaceRequirementsPayload keeps the collaboration migration marker", () => {
+    const raw = JSON.stringify({
+      version: 1,
+      items: [
+        { id: "m", title: "M", bodyMarkdown: "b", status: "open", collaborationRequirementId: " m " },
+        { id: "n", title: "N", bodyMarkdown: "b", status: "open", collaborationRequirementId: 3 },
+      ],
+    });
+    const parsed = parseWorkspaceRequirementsPayload(raw);
+    const byId = new Map(parsed.items.map((i) => [i.id, i]));
+    expect(byId.get("m")!.collaborationRequirementId).toBe("m");
+    expect(isMigratedToCollaboration(byId.get("m")!)).toBe(true);
+    expect("collaborationRequirementId" in byId.get("n")!).toBe(false);
   });
 
   test("parseWorkspaceRequirementsPayload keeps execution session bindings", () => {

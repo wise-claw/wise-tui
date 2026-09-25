@@ -36,6 +36,17 @@ describe("workspaceRequirementAutoDispatch", () => {
     expect(isRequirementAutoDispatchEligible(item({ id: "a" }))).toBe(true);
   });
 
+  test("items migrated to collaboration are skipped by dispatch and retry", () => {
+    const migrated = item({ id: "m", collaborationRequirementId: "m" });
+    expect(isRequirementAutoDispatchEligible(migrated)).toBe(false);
+    expect(
+      isRequirementAutoDispatchRetryEligible(
+        { ...migrated, lastDispatchedAt: 5, updatedAt: 1 },
+        new Set(),
+      ),
+    ).toBe(false);
+  });
+
   test("isRequirementAutoDispatchEligible rejects done items", () => {
     expect(
       isRequirementAutoDispatchEligible(

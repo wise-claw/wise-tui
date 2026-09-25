@@ -30,6 +30,11 @@ export interface WorkspaceRequirementItem {
    * 旧数据可能为 null；新增时必须指定。
    */
   repositoryId: string | null;
+  /**
+   * 已迁移到多仓库协作需求时的协作需求 id；存在时旧自动派发与补派一律跳过，
+   * 执行与状态以协作需求为准。保存时必须保留该字段。
+   */
+  collaborationRequirementId?: string;
 }
 
 export interface WorkspaceRequirementsPayloadV1 {
@@ -142,6 +147,8 @@ function normalizeItem(raw: unknown): WorkspaceRequirementItem | null {
   const title = titleRaw || deriveRequirementTitle(bodyMarkdown) || "无标题需求";
   const repositoryIdRaw = typeof row.repositoryId === "string" ? row.repositoryId.trim() : "";
   const repositoryId = repositoryIdRaw || null;
+  const collaborationRequirementId =
+    typeof row.collaborationRequirementId === "string" ? row.collaborationRequirementId.trim() : "";
 
   return {
     id,
@@ -156,7 +163,12 @@ function normalizeItem(raw: unknown): WorkspaceRequirementItem | null {
     dispatchAttemptCount,
     executionSessionIds: normalizeExecutionSessionIds(row.executionSessionIds),
     repositoryId,
+    ...(collaborationRequirementId ? { collaborationRequirementId } : {}),
   };
+}
+
+export function isMigratedToCollaboration(item: Pick<WorkspaceRequirementItem, "collaborationRequirementId">): boolean {
+  return typeof item.collaborationRequirementId === "string" && item.collaborationRequirementId.length > 0;
 }
 
 export function sortWorkspaceRequirementItems(

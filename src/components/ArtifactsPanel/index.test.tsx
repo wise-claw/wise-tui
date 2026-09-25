@@ -31,5 +31,6 @@ describe("ArtifactsPanel", () => {
     expect(html).toContain("Diff");
     expect(html).toContain("Office");
     expect(html).toContain("运行");
+    expect(html).toContain("跨仓库交付");
   });
 });

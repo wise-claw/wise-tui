@@ -76,6 +76,7 @@ describe("ChannelsPanel", () => {
     const html = renderToStaticMarkup(<ChannelsPanel />);
 
     expect(html).toContain("远程入口");
+    expect(html).toContain("协作收件箱");
     expect(html).toContain("钉钉");
     expect(html).toContain("钉钉 Stream 网关");
     expect(html).toContain("飞书");

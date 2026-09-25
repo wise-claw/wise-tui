@@ -108,6 +108,19 @@ import { PermissionDock } from "./dock/permission-dock";
 import { FollowupDock } from "./dock/followup-dock";
 
 import { RevertDock } from "./dock/revert-dock";
+import { CollabComposerBar } from "../Collaboration/CollabComposerBar";
+import {
+  decideCollabComposerIntent,
+  dispatchComposerToCollabAgent,
+  formatCollabError,
+} from "../../services/collaboration";
+import {
+  getCachedCollabSessionRequirements,
+  getCollabComposerAgents,
+  getCollabComposerSelection,
+  refreshCollabSessionRequirements,
+  selectCollabComposerAgent,
+} from "../../stores/collabComposerStore";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
 import { Button, message, Popover, Select, Tabs, Tag } from "antd";
 import { buildWorkspaceRepositoryFlatSelectOptions } from "../../utils/workspaceRepositoryTreeSelect";
@@ -1848,6 +1861,11 @@ function ComposerInner({
     return () => shell.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [session.id]);
 
+  const collabRepositoryOptions = useMemo(
+    () => projectRepositoryMentionOptions.map((o) => ({ repositoryId: o.repositoryId, label: o.label })),
+    [projectRepositoryMentionOptions],
+  );
+
   const handleSend = useCallback(
     async (plainFromEditor?: string, mode?: "steer") => {
       if (composerSendInFlightRef.current) return;
@@ -2069,6 +2087,59 @@ function ComposerInner({
             onAppendSystemMessage?.(session.id, `斜杠命令失败：${errText}`);
             message.error(errText);
           });
+        return;
+      }
+
+      // 仓库智能体派发：接收者由选择器或行首 `@智能体名` 决定；不占用当前会话，忙碌时也可发送。
+      const collabDecision = decideCollabComposerIntent({
+        text: logicalSnap,
+        selection: getCollabComposerSelection(session.id),
+        agents: getCollabComposerAgents(),
+        sessionRequirements: getCachedCollabSessionRequirements(session.id),
+      });
+      if (collabDecision.kind === "error") {
+        message.warning(collabDecision.message);
+        return;
+      }
+      if (collabDecision.kind === "dispatch") {
+        clearComposerSurfaceSync(logicalSnap.trim());
+        const agentName =
+          getCollabComposerAgents().find((a) => a.id === collabDecision.agentId)?.name ?? "智能体";
+        let body = collabDecision.body;
+        let attachments: string[] = [];
+        if (imagesSnap.length > 0 || contextSnap.length > 0) {
+          const payload = await awaitForComposer(buildClaudeComposerSendPayload({
+            prompt: singleTextPrompt(collabDecision.body),
+            contextItems: contextSnap,
+            images: imagesSnap,
+            repositoryPath: session.repositoryPath,
+            userBubbleMain: collabDecision.body,
+          }));
+          body = payload.outbound.replace(/\u200B/g, "").trim() || body;
+          attachments = payload.imageDiskPaths.filter((p): p is string => typeof p === "string" && p.length > 0);
+        }
+        if (collabDecision.fromMention) selectCollabComposerAgent(session.id, collabDecision.agentId);
+        let outcome;
+        try {
+          outcome = await awaitForComposer(dispatchComposerToCollabAgent({
+            originSessionId: session.id,
+            agentId: collabDecision.agentId,
+            agentName,
+            mode: collabDecision.mode,
+            body,
+            requirementId: collabDecision.requirementId,
+            attachments,
+          }));
+        } catch (e) {
+          throw new Error(formatCollabError(e));
+        }
+        onAppendUserMessage?.(session.id, `@${agentName} ${collabDecision.body}`);
+        onAppendSystemMessage?.(session.id, outcome.result.message);
+        addToHistory(historyPrompt, "normal", undefined, rollbackDraft.images);
+        lastSentDraftRef.current = null;
+        if (isCurrentComposer()) setHistoryIndex(-1);
+        void refreshCollabSessionRequirements(session.id);
+        message.success(outcome.result.replayed ? "该发送已处理过，返回原需求" : outcome.result.message);
         return;
       }
 
@@ -3864,6 +3935,9 @@ function ComposerInner({
           />
         </div>
       ) : null}
+      {hudChrome ? null : (
+        <CollabComposerBar sessionId={session.id} repositories={collabRepositoryOptions} />
+      )}
 
       {/* Input area：整区（含底栏）支持从外部拖入文件；图片粘贴见 inputAreaRef capture 监听 */}
       <div

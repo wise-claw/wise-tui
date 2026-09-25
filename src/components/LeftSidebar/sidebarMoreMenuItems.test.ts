@@ -113,6 +113,17 @@ describe("buildProjectRepositoryMoreMenuItems", () => {
     expect(labels).not.toContain("可执行任务");
   });
 
+  test("collaboration entries sit at the top of a workspace repository menu", () => {
+    const labels = menuLabels(
+      buildProjectRepositoryMoreMenuItems({
+        onOpenCollabAgents: true,
+        repositoryOpenAppId: "cursor",
+      }),
+    );
+    expect(labels[0]).toBe("协作智能体…");
+    expect(labels).toContain("项目协作与共享…");
+  });
+
   test("repository editor label reflects scoped open app", () => {
     const labels = menuLabels(
       buildProjectRepositoryMoreMenuItems({

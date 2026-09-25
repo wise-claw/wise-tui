@@ -157,6 +157,7 @@ function repositoryConfigureMenuItems(input: {
   onConfigureRepositoryIconBadge?: boolean;
   onOpenRepositoryMainOwner?: boolean;
   mainOwnerLabel?: string;
+  onOpenCollabAgents?: boolean;
   onConfigureSddMode?: boolean;
   onConfigureOpenApp?: boolean;
   scopeOpenAppId?: string | null;
@@ -170,6 +171,7 @@ function repositoryConfigureMenuItems(input: {
     onConfigureRepositoryIconBadge,
     onOpenRepositoryMainOwner,
     mainOwnerLabel = "配置 Owner",
+    onOpenCollabAgents,
     onConfigureSddMode,
     onConfigureOpenApp = true,
     scopeOpenAppId,
@@ -185,6 +187,8 @@ function repositoryConfigureMenuItems(input: {
     REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
       ? { key: "main-owner", label: mainOwnerLabel }
       : null,
+    onOpenCollabAgents ? { key: "collab-agents", label: "仓库智能体…" } : null,
+    onOpenCollabAgents ? { key: "collab-sharing", label: "项目协作与共享…" } : null,
     onConfigureOpenApp ? openAppConfigureMenuItem(scopeOpenAppId) : null,
     onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
     repositoryMainSessionRunMenuItem({ onMainSessionRun, runCommandRunning, runRowPinned }),
@@ -283,6 +287,8 @@ export interface BuildProjectRepositoryMoreMenuItemsInput {
   trellisRootActionEnabled?: boolean;
   onConfigureRepositoryIconBadge?: boolean;
   onOpenRepositoryMainOwner?: boolean;
+  /** 仓库智能体（多仓库协作）绑定管理；仅工作区内仓库可绑定。 */
+  onOpenCollabAgents?: boolean;
   onConfigureSddMode?: boolean;
   /** 仓库运行指令（顶栏运行指令同款） */
   onMainSessionRun?: boolean;
@@ -304,6 +310,7 @@ export function buildProjectRepositoryMoreMenuItems(
   const {
     onConfigureRepositoryIconBadge,
     onOpenRepositoryMainOwner,
+    onOpenCollabAgents,
     trellisEnabled = false,
     trellisReady = false,
     trellisRootActionEnabled = trellisEnabled,
@@ -337,12 +344,19 @@ export function buildProjectRepositoryMoreMenuItems(
 
   return sidebarMenuWithSectionsAndDanger(
     [
+      onOpenCollabAgents
+        ? sidebarMenuSection([
+            { key: "collab-agents", label: "协作智能体…" },
+            { key: "collab-sharing", label: "项目协作与共享…" },
+          ])
+        : null,
       sidebarMenuSection(accessItems),
       sessionItems.length > 0 ? sidebarMenuSection(sessionItems) : null,
       sidebarMenuSection(
         repositoryConfigureMenuItems({
           onConfigureRepositoryIconBadge,
           onOpenRepositoryMainOwner,
+          onOpenCollabAgents: false,
           onConfigureSddMode,
           scopeOpenAppId: repositoryOpenAppId,
           onMainSessionRun,
@@ -385,6 +399,8 @@ export interface BuildFloatingRepositoryMoreMenuItemsInput {
   onHide?: boolean;
   onOpenRepositoryInTerminal?: boolean;
   repositoryOpenAppId?: string | null;
+  /** 打开配置中心协作智能体页（游离仓库没有项目绑定，不走仓库弹层）。 */
+  onOpenCollabAgents?: boolean;
 }
 
 /** 游离仓库行「更多」菜单，按功能分组。 */
@@ -411,6 +427,7 @@ export function buildFloatingRepositoryMoreMenuItems(
     runCommandRunning = false,
     runRowPinned = false,
     repositoryOpenAppId,
+    onOpenCollabAgents,
   } = input;
 
   const openItems = repositoryOpenMenuItems({
@@ -435,6 +452,7 @@ export function buildFloatingRepositoryMoreMenuItems(
 
   return sidebarMenuWithSectionsAndDanger(
     [
+      onOpenCollabAgents ? sidebarMenuSection([{ key: "collab-agents", label: "协作智能体…" }]) : null,
       sidebarMenuSection(accessItems),
       sessionItems.length > 0 ? sidebarMenuSection(sessionItems) : null,
       sidebarMenuSection(

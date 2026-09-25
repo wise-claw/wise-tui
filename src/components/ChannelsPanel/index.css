@@ -101,6 +101,11 @@
   transform: scale(1.08);
 }
 
+.app-channels-hub__card-icon--collab {
+  background: color-mix(in srgb, #13c2c2 12%, transparent);
+  color: #13c2c2;
+}
+
 /* 钉钉图标 */
 .app-channels-hub__card-icon--dingtalk {
   background: color-mix(in srgb, #1677ff 12%, transparent);

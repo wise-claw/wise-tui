@@ -1,4 +1,5 @@
 import {
+  ApartmentOutlined,
   CodeOutlined,
   DiffOutlined,
   EyeOutlined,
@@ -39,6 +40,7 @@ import {
   AuthorPanelPageShell,
 } from "../AuthorPanel/AuthorPanelPageShell";
 import { HubItem, HubItems, HubTag } from "../HubCard";
+import { CollabDeliverablesLane } from "../Collaboration/artifacts/CollabDeliverablesLane";
 import "./index.css";
 
 interface ArtifactsPanelProps {
@@ -53,7 +55,7 @@ interface PreviewLane {
   icon: ReactNode;
 }
 
-type PreviewLaneKey = "all" | "markdown" | "diff" | "image" | "pdf" | "office" | "html" | "code" | "runs";
+type PreviewLaneKey = "all" | "markdown" | "diff" | "image" | "pdf" | "office" | "html" | "code" | "runs" | "collab";
 
 interface ArtifactFile {
   path: string;
@@ -73,6 +75,7 @@ const PREVIEW_LANES: PreviewLane[] = [
   { key: "html", title: "画布 · 页面与方案", icon: <Html5Outlined /> },
   { key: "code", title: "代码文本", icon: <CodeOutlined /> },
   { key: "runs", title: "运行", icon: <HistoryOutlined /> },
+  { key: "collab", title: "跨仓库交付", icon: <ApartmentOutlined /> },
 ];
 
 function isPreviewablePath(path: string): boolean {
@@ -228,6 +231,7 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
 
   const activeLane = PREVIEW_LANES.find((lane) => lane.key === selectedLane) ?? PREVIEW_LANES[0];
   const showingRuns = selectedLane === "runs";
+  const showingCollab = selectedLane === "collab";
 
   const emptyDescription = !selectedRepository
     ? "请先在右上角选择仓库"
@@ -292,7 +296,13 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
         </AuthorPanelHubTabs>
       }
     >
-      {selectedRepository && (showingRuns ? repositoryRuns.length > 0 : repositoryArtifacts.length > 0) ? (
+      {showingCollab ? (
+        <AuthorPanelListShell>
+          <CollabDeliverablesLane repositories={repositories} repositoryId={selectedRepositoryId} query={query} />
+        </AuthorPanelListShell>
+      ) : null}
+
+      {showingCollab ? null : selectedRepository && (showingRuns ? repositoryRuns.length > 0 : repositoryArtifacts.length > 0) ? (
         <div className="app-artifacts-panel__status" aria-live="polite">
           <span className="app-artifacts-panel__status-repo">{selectedRepository.name || selectedRepository.path}</span>
           <span>
@@ -306,7 +316,7 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
         </div>
       ) : null}
 
-      {loading && visibleArtifacts.length === 0 && selectedRepository && !showingRuns ? (
+      {showingCollab ? null : loading && visibleArtifacts.length === 0 && selectedRepository && !showingRuns ? (
         <div className="author-panel-page__loading">
           <Spin size="small" />
         </div>

@@ -20,6 +20,7 @@ import {
 import { readRepositoryScheduledClaudeTasks } from "../../services/repositoryScheduledClaudeTasksStore";
 import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import { RepositoryScheduledTasksModal } from "../RepositoryScheduledTasksModal";
+import { CollabAutomationSection } from "../Collaboration/automation/CollabAutomationSection";
 import { mapWithConcurrency } from "../../utils/mapWithConcurrency";
 import { summarizeScheduledTaskKinds } from "../../utils/scheduledTaskReliability";
 import "./index.css";
@@ -343,6 +344,8 @@ export function AutomationPanel({
           })}
         </div>
       )}
+
+      <CollabAutomationSection repositories={repositories} />
 
       {selectedRepository ? (
         <RepositoryScheduledTasksModal

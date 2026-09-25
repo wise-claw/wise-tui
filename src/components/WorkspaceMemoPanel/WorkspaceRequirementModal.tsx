@@ -24,6 +24,8 @@ import {
   useWorkspaceRequirementEditModalOpen,
   useWorkspaceRequirementEditModalRequirementId,
 } from "../../stores/workspaceMemoPanelStore";
+import { openCollabRequirementCreate, openCollabRequirementDetail } from "../../stores/collabUiStore";
+import { listProjects } from "../../services/projectState";
 import type { Repository } from "../../types";
 import {
   createWorkspaceRequirementItem,
@@ -89,6 +91,10 @@ async function dispatchSavedRequirementToEnvironment(
   savedItem: WorkspaceRequirementItem,
   dispatchedAt: number,
 ): Promise<boolean> {
+  if (savedItem.collaborationRequirementId) {
+    openCollabRequirementDetail(savedItem.collaborationRequirementId);
+    return false;
+  }
   const payload = await buildRequirementDispatchPayload(savedItem);
   const accepted = dispatchRequirementToExecutionEnvironment({
     promptText: payload.promptText,
@@ -393,6 +399,23 @@ export function WorkspaceRequirementModal({
     [mode, repositories, repositoryId, requirementId],
   );
 
+  const handleSwitchToCollab = useCallback(async () => {
+    const rawBody = draftBodyRef.current.trim();
+    setSaving(true);
+    try {
+      const materialized = rawBody ? await materializeRequirementBodyImages(rawBody) : { bodyMarkdown: "", imagePaths: [] };
+      const repoId = repositoryId ? Number(repositoryId) : null;
+      const projects = await listProjects().catch(() => []);
+      const projectId = repoId != null ? projects.find((p) => p.repositoryIds.includes(repoId))?.id ?? null : null;
+      closeWorkspaceRequirementCreateModal();
+      openCollabRequirementCreate({ body: materialized.bodyMarkdown, imagePaths: materialized.imagePaths, projectId });
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "无法转为协作需求");
+    } finally {
+      setSaving(false);
+    }
+  }, [repositoryId]);
+
   const draftImageCount = countMarkdownImages(draftBody);
   const isEdit = mode === "edit";
 
@@ -409,6 +432,11 @@ export function WorkspaceRequirementModal({
       footer={
         (_, { OkBtn, CancelBtn }) => (
           <Space>
+            {!isEdit ? (
+              <Button type="link" disabled={saving} onClick={() => void handleSwitchToCollab()}>
+                改为多仓库协作…
+              </Button>
+            ) : null}
             <CancelBtn />
             <Button loading={saving} disabled={loadingItem} onClick={() => void handleSave(true)}>
               保存并派发

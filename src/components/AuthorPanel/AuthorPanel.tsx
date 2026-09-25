@@ -41,6 +41,9 @@ const ArtifactsPanel = lazy(() =>
 const AssistantsPanel = lazy(() =>
   import("../AssistantsPanel").then((m) => ({ default: m.AssistantsPanel })),
 );
+const CollabAgentsAuthorPage = lazy(() =>
+  import("../Collaboration/agents/CollabAgentsAuthorPage").then((m) => ({ default: m.CollabAgentsAuthorPage })),
+);
 const AutomationPanel = lazy(() =>
   import("../AutomationPanel").then((m) => ({ default: m.AutomationPanel })),
 );
@@ -93,6 +96,7 @@ const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
   "extensions",
   "my-extensions",
   "assistants",
+  "collab-agents",
   "mcp",
   "skills",
   "agents-explorer",
@@ -267,6 +271,8 @@ export function AuthorPanel({
         return <ExtensionsPanel />;
       case "assistants":
         return <AssistantsPanel {...assistantsPanelProps} />;
+      case "collab-agents":
+        return <CollabAgentsAuthorPage />;
       case "engine-registry":
         return <AgentRegistrySection />;
       case "automation":

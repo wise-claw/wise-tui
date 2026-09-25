@@ -53,6 +53,7 @@ import {
   WORKSPACE_REQUIREMENT_STATUS_FILTER_OPTIONS,
   type WorkspaceRequirementStatusFilter,
 } from "../../constants/workspaceRequirementStatusFilter";
+import { openCollabRequirementDetail } from "../../stores/collabUiStore";
 import type { WorkspaceRequirementItem, WorkspaceRequirementsPayloadV1 } from "../../types/workspaceRequirements";
 import { MarkdownBody } from "../ClaudeSessions/MarkdownElements";
 import { MonitorDrawerSessionComposer } from "../ProgressMonitorPanel/MonitorDrawerSessionComposer";
@@ -471,6 +472,11 @@ export function WorkspaceMemoPanel() {
 
   const handleDispatch = useCallback(
     async (item: WorkspaceRequirementItem) => {
+      if (item.collaborationRequirementId) {
+        openCollabRequirementDetail(item.collaborationRequirementId);
+        message.info("该需求已升级为多仓库协作，由仓库智能体推进");
+        return;
+      }
       setDispatchingId(item.id);
       try {
         const payload = await buildRequirementDispatchPayload(item);

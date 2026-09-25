@@ -99,7 +99,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.connectionKind).toBe("streaming");
     expect(config.defaultExecutionEngine).toBe("claude");
     expect(config.showLlmProxyTopbar).toBe(false);
-    expect(config.leftSidebarHubQuickEntries).toEqual(["mcp", "skills", "automation"]);
+    expect(config.leftSidebarHubQuickEntries).toEqual(["mcp", "skills", "automation", "assistants"]);
     expect(config.showLeftSidebarMonitorPanel).toBe(true);
     expect(config.showLeftSidebarWorkspaceList).toBe(true);
     expect(config.showLeftSidebarRequirementsPanel).toBe(true);
@@ -132,7 +132,7 @@ describe("wiseDefaultConfigStore", () => {
       connectionKind: "streaming",
       defaultExecutionEngine: "claude",
       showLlmProxyTopbar: false,
-      leftSidebarHubQuickEntries: ["mcp", "skills", "automation"],
+      leftSidebarHubQuickEntries: ["mcp", "skills", "automation", "assistants"],
       showLeftSidebarMonitorPanel: true,
       monitorPanelPlacement: "left",
     });

@@ -11,6 +11,7 @@ mod ai_usage_multi_source;
 mod child_slot_wait;
 mod cli_probe;
 mod cli_stderr_log;
+mod collaboration;
 #[cfg(test)]
 mod ipc_thread_guard_tests;
 #[cfg(unix)]

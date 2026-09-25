@@ -21,6 +21,7 @@ describe("AuthorPanelTabs", () => {
     expect(labels).toContain("claude-plugins:插件");
     expect(labels).toContain("hooks:钩子");
     expect(labels).toContain("agents-explorer:仓库智能体");
+    expect(labels).toContain("collab-agents:协作智能体");
     expect(isAuthorPane("artifacts")).toBe(true);
     expect(AUTHOR_TABS.some((tab) => tab.key === "workspaces")).toBe(true);
   });
