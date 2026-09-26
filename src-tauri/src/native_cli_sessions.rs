@@ -1,9 +1,10 @@
-//! 原生 CLI 会话索引：让 Codex / DeepSeek Harness 在 Wise 之外的会话进入 Wise。
+//! 原生 CLI 会话索引：让 Codex / DeepSeek Harness / Cursor ACP 在 Wise 之外的会话进入 Wise。
 //!
-//! 两类会话都落在各自 CLI 的用户目录里，与 Wise 自己的 `~/.wise/*-runs` 转录彼此独立：
+//! 三类会话都落在各自 CLI 的用户目录里，与 Wise 自己的 `~/.wise/*-runs` 转录彼此独立：
 //!
 //! - Codex：`~/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-*.jsonl`（含 app-server 线程）
 //! - DeepSeek Harness：`~/.dsh/sessions/<encoded-cwd>/<session-id>/session*.jsonl.zstd`
+//! - Cursor：ACP meta 索引及编辑器 `~/.cursor/projects/<repo>/agent-transcripts` 转录
 //!
 //! 这里只负责「发现 + 读回 Wise 流式行」；列表合并、引擎绑定和续接判定在前端完成，
 //! 与既有 `list_claude_disk_sessions` 路径保持一致。
@@ -19,6 +20,7 @@ use crate::codex_rollout_adapter::{
     map_codex_rollout_line, parse_codex_rollout_meta, parse_codex_rollout_model,
     parse_codex_rollout_user_preview,
 };
+use crate::cursor_disk::{find_cursor_tab_id_for_agent, load_cursor_session_jsonl};
 use crate::dsh_session_adapter::{
     map_dsh_session_line, parse_dsh_session_title, parse_dsh_user_preview,
 };
@@ -41,6 +43,7 @@ const TRANSCRIPT_MAX_LINES: usize = 20_000;
 enum NativeEngine {
     Codex,
     DeepSeek,
+    Cursor,
 }
 
 impl NativeEngine {
@@ -48,6 +51,7 @@ impl NativeEngine {
         match raw.trim() {
             "codex" => Ok(NativeEngine::Codex),
             "deepseek" => Ok(NativeEngine::DeepSeek),
+            "cursor" => Ok(NativeEngine::Cursor),
             other => Err(format!("不支持的原生会话引擎: {other}")),
         }
     }
@@ -56,6 +60,7 @@ impl NativeEngine {
         match self {
             NativeEngine::Codex => "codex",
             NativeEngine::DeepSeek => "deepseek",
+            NativeEngine::Cursor => "cursor",
         }
     }
 }
@@ -64,7 +69,7 @@ impl NativeEngine {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct NativeCliDiskSessionItem {
-    /// `codex` / `deepseek`。
+    /// `codex` / `deepseek` / `cursor`。
     engine: String,
     session_id: String,
     /// 会话最后活跃时间（ms）。Codex 取 rollout 文件 mtime，dsh 取会话文件 mtime。
@@ -89,6 +94,11 @@ fn dsh_sessions_root() -> Option<PathBuf> {
     root.is_dir().then_some(root)
 }
 
+fn cursor_acp_sessions_root() -> Option<PathBuf> {
+    let root = home_dir()?.join(".cursor").join("acp-sessions");
+    root.is_dir().then_some(root)
+}
+
 fn file_mtime_ms(path: &Path) -> i64 {
     fs::metadata(path)
         .and_then(|meta| meta.modified())
@@ -99,7 +109,10 @@ fn file_mtime_ms(path: &Path) -> i64 {
 }
 
 fn normalize_path_key(raw: &str) -> String {
-    raw.trim().replace('\\', "/").trim_end_matches('/').to_string()
+    raw.trim()
+        .replace('\\', "/")
+        .trim_end_matches('/')
+        .to_string()
 }
 
 /// `candidate` 是否等于 `project_path` 或位于其下。
@@ -119,9 +132,14 @@ fn encoded_dsh_project_dir(project_path: &str) -> String {
         if let Some(rest) = text.strip_prefix("//?/") {
             text = rest.to_string();
         }
-        text.replace(':', "").trim_start_matches('/').replace('/', "-")
+        text.replace(':', "")
+            .trim_start_matches('/')
+            .replace('/', "-")
     } else {
-        project_path.trim().trim_start_matches('/').replace('/', "-")
+        project_path
+            .trim()
+            .trim_start_matches('/')
+            .replace('/', "-")
     };
     format!("--{normalized}--")
 }
@@ -399,6 +417,229 @@ fn list_dsh_disk_sessions_blocking(project_path: &str) -> Vec<NativeCliDiskSessi
     out
 }
 
+/// Cursor editor exports live transcripts separately from ACP / Wise runs.
+fn cursor_project_transcripts_root(project_path: &str) -> Option<PathBuf> {
+    let project = fs::canonicalize(project_path).ok()?;
+    let encoded = project
+        .to_string_lossy()
+        .trim_start_matches('/')
+        .replace(['/', '\\', ':'], "-");
+    Some(
+        home_dir()?
+            .join(".cursor/projects")
+            .join(encoded)
+            .join("agent-transcripts"),
+    )
+}
+
+fn cursor_project_transcript_path(root: &Path, id: &str) -> Option<PathBuf> {
+    if !is_safe_native_session_id(id) {
+        return None;
+    }
+    // Current nested layout and older flat JSONL exports. Never import subagents.
+    [
+        root.join(id).join(format!("{id}.jsonl")),
+        root.join(format!("{id}.jsonl")),
+    ]
+    .into_iter()
+    .find(|path| path.is_file())
+}
+
+fn cursor_editor_preview(path: &Path) -> String {
+    let Ok(file) = fs::File::open(path) else {
+        return String::new();
+    };
+    for line in BufReader::new(file.take(PREVIEW_MAX_BYTES as u64))
+        .lines()
+        .take(PREVIEW_MAX_LINES)
+        .map_while(Result::ok)
+    {
+        let Ok(row) = serde_json::from_str::<serde_json::Value>(&line) else {
+            continue;
+        };
+        if row.get("role").and_then(|v| v.as_str()) != Some("user") {
+            continue;
+        }
+        let Some(content) = row.pointer("/message/content") else {
+            continue;
+        };
+        let text = if let Some(text) = content.as_str() {
+            text.to_string()
+        } else {
+            content
+                .as_array()
+                .map(|blocks| {
+                    blocks
+                        .iter()
+                        .filter_map(|b| b.get("text").and_then(|v| v.as_str()))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .unwrap_or_default()
+        };
+        let preview = text
+            .split_once("<user_query>")
+            .and_then(|(_, rest)| rest.split_once("</user_query>"))
+            .map(|(query, _)| query)
+            .unwrap_or(&text)
+            .trim();
+        if !preview.is_empty() {
+            return preview.chars().take(160).collect();
+        }
+    }
+    String::new()
+}
+
+fn list_cursor_editor_sessions_in_root(root: &Path) -> Vec<NativeCliDiskSessionItem> {
+    let Ok(entries) = fs::read_dir(root) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        let id = if path.is_dir() {
+            path.file_name()
+        } else if path.extension().and_then(|v| v.to_str()) == Some("jsonl") {
+            path.file_stem()
+        } else {
+            None
+        };
+        let Some(id) = id.and_then(|v| v.to_str()) else {
+            continue;
+        };
+        let Some(path) = cursor_project_transcript_path(root, id) else {
+            continue;
+        };
+        let preview = cursor_editor_preview(&path);
+        // Failed startup exports can contain only turn_ended; they have no conversation to show.
+        if preview.is_empty() { continue; }
+        out.push(NativeCliDiskSessionItem {
+            engine: "cursor".to_string(),
+            session_id: id.to_string(),
+            updated_at_ms: file_mtime_ms(&path),
+            preview,
+            model_hint: None,
+            title: None,
+        });
+    }
+    out.sort_by(|a, b| b.updated_at_ms.cmp(&a.updated_at_ms));
+    out.dedup_by(|a, b| a.session_id == b.session_id);
+    out.truncate(NATIVE_MAX_RESULTS);
+    out
+}
+
+fn read_cursor_editor_transcript(path: &Path) -> Vec<String> {
+    let Ok(file) = fs::File::open(path) else {
+        return Vec::new();
+    };
+    let timestamp = file_mtime_ms(path);
+    BufReader::new(file.take(TRANSCRIPT_MAX_BYTES as u64))
+        .lines()
+        .take(TRANSCRIPT_MAX_LINES)
+        .map_while(Result::ok)
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let mut row: serde_json::Value = serde_json::from_str(&line).ok()?;
+            row.get("message")?.as_object()?;
+            let role = row.get("role")?.as_str()?.to_string();
+            if role != "user" && role != "assistant" {
+                return None;
+            }
+            row["type"] = serde_json::json!(role);
+            row["message"]["role"] = serde_json::json!(role);
+            // Exports omit message timestamps; use disk activity, never hydration time.
+            if row.get("timestamp").is_none() {
+                row["timestamp"] = serde_json::json!(timestamp);
+            }
+            if let Some(blocks) = row["message"]["content"].as_array_mut() {
+                for (block_index, block) in blocks.iter_mut().enumerate() {
+                    if block.get("type").and_then(|v| v.as_str()) == Some("tool_use")
+                        && block.get("id").is_none()
+                    {
+                        block["id"] = serde_json::json!(format!("cursor-{index}-{block_index}"));
+                    }
+                }
+            }
+            Some(row.to_string())
+        })
+        .collect()
+}
+
+/// Cursor ACP：扫 `~/.cursor/acp-sessions/*/meta.json`，按 cwd 匹配仓库。
+fn list_cursor_acp_disk_sessions_blocking(project_path: &str) -> Vec<NativeCliDiskSessionItem> {
+    let mut sessions = cursor_acp_sessions_root()
+        .map(|root| list_cursor_acp_disk_sessions_in_root(&root, project_path))
+        .unwrap_or_default();
+    if let Some(root) = cursor_project_transcripts_root(project_path) {
+        for row in list_cursor_editor_sessions_in_root(&root) {
+            if let Some(existing) = sessions.iter_mut().find(|s| s.session_id == row.session_id) {
+                *existing = row;
+            } else {
+                sessions.push(row);
+            }
+        }
+    }
+    sessions.sort_by(|a, b| b.updated_at_ms.cmp(&a.updated_at_ms));
+    sessions.truncate(NATIVE_MAX_RESULTS);
+    sessions
+}
+
+fn list_cursor_acp_disk_sessions_in_root(
+    root: &Path,
+    project_path: &str,
+) -> Vec<NativeCliDiskSessionItem> {
+    let Ok(entries) = fs::read_dir(root) else {
+        return Vec::new();
+    };
+    let mut out: Vec<NativeCliDiskSessionItem> = Vec::new();
+    for entry in entries.filter_map(Result::ok) {
+        let session_dir = entry.path();
+        if !session_dir.is_dir() {
+            continue;
+        }
+        let session_id = entry.file_name().to_string_lossy().to_string();
+        if !is_safe_native_session_id(&session_id) {
+            continue;
+        }
+        let meta_path = session_dir.join("meta.json");
+        if !meta_path.is_file() {
+            continue;
+        }
+        let Ok(raw) = fs::read_to_string(&meta_path) else {
+            continue;
+        };
+        let Ok(meta) = serde_json::from_str::<serde_json::Value>(&raw) else {
+            continue;
+        };
+        let cwd = meta
+            .get("cwd")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        if !path_matches_project(cwd, project_path) {
+            continue;
+        }
+        let title = meta
+            .get("title")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let preview = title.clone().unwrap_or_default();
+        out.push(NativeCliDiskSessionItem {
+            engine: NativeEngine::Cursor.kind().to_string(),
+            session_id,
+            updated_at_ms: file_mtime_ms(&meta_path),
+            preview,
+            model_hint: None,
+            title,
+        });
+    }
+    out.sort_by(|a, b| b.updated_at_ms.cmp(&a.updated_at_ms));
+    out.truncate(NATIVE_MAX_RESULTS);
+    out
+}
+
 fn list_blocking(
     engine: NativeEngine,
     project_path: String,
@@ -410,6 +651,7 @@ fn list_blocking(
     Ok(match engine {
         NativeEngine::Codex => list_codex_disk_sessions_blocking(project),
         NativeEngine::DeepSeek => list_dsh_disk_sessions_blocking(project),
+        NativeEngine::Cursor => list_cursor_acp_disk_sessions_blocking(project),
     })
 }
 
@@ -508,6 +750,34 @@ fn read_dsh_transcript(project_path: &str, session_id: &str) -> Vec<String> {
     map_dsh_lines(decode_zstd_bytes(&jsonl, TRANSCRIPT_MAX_BYTES))
 }
 
+/// Cursor 转录：先读编辑器导出，再回读 Wise `cursor-runs` 中绑定该 agent id 的 jsonl；
+/// 否则只返回 `cursor_agent` 绑定行，保证续接可用（ACP store.db 不直接可读）。
+fn read_cursor_acp_transcript(project_path: &str, agent_id: &str) -> Vec<String> {
+    if !is_safe_native_session_id(agent_id) {
+        return Vec::new();
+    }
+    if let Some(path) = cursor_project_transcripts_root(project_path)
+        .and_then(|root| cursor_project_transcript_path(&root, agent_id))
+    {
+        let lines = read_cursor_editor_transcript(&path);
+        if !lines.is_empty() {
+            return lines;
+        }
+    }
+    if let Some(tab_id) = find_cursor_tab_id_for_agent(project_path, agent_id) {
+        if let Ok(lines) = load_cursor_session_jsonl(project_path, &tab_id, None) {
+            if !lines.is_empty() {
+                return lines;
+            }
+        }
+    }
+    vec![serde_json::json!({
+        "type": "cursor_agent",
+        "agentId": agent_id,
+    })
+    .to_string()]
+}
+
 fn map_dsh_lines(bytes: Vec<u8>) -> Vec<String> {
     let text = String::from_utf8_lossy(&bytes);
     let mut out: Vec<String> = Vec::new();
@@ -545,7 +815,7 @@ pub(crate) async fn load_native_cli_session_transcript(
     engine: String,
     project_path: String,
     session_id: String,
-    tail: Option<usize>,
+    tail_lines: Option<usize>,
 ) -> Result<Vec<String>, String> {
     let engine = NativeEngine::parse(&engine)?;
     let session_id = session_id.trim().to_string();
@@ -560,8 +830,9 @@ pub(crate) async fn load_native_cli_session_transcript(
         let lines = match engine {
             NativeEngine::Codex => read_codex_transcript(&session_id),
             NativeEngine::DeepSeek => read_dsh_transcript(&project, &session_id),
+            NativeEngine::Cursor => read_cursor_acp_transcript(&project, &session_id),
         };
-        tail_lines(lines, tail)
+        self::tail_lines(lines, tail_lines)
     })
     .await
     .map_err(|e| format!("load_native_cli_session_transcript 任务异常: {e}"))
@@ -572,13 +843,52 @@ mod tests {
     use super::*;
 
     #[test]
+    fn cursor_editor_nested_and_flat_transcripts_are_listed_and_read() {
+        let root =
+            std::env::temp_dir().join(format!("wise-cursor-editor-{}", uuid::Uuid::new_v4()));
+        let id = "cursor-editor-session";
+        fs::create_dir_all(root.join(id).join("subagents")).unwrap();
+        let path = root.join(id).join(format!("{id}.jsonl"));
+        let user = serde_json::json!({"role":"user","message":{"content":[{"type":"text","text":"<timestamp>today</timestamp><user_query>今天的 Cursor 请求</user_query>"}]}});
+        let assistant = serde_json::json!({"role":"assistant","message":{"content":[{"type":"text","text":"已处理"},{"type":"tool_use","name":"Read","input":{"path":"a.rs"}}]}});
+        fs::write(
+            &path,
+            format!("{user}\n{assistant}\n{{\"type\":\"turn_ended\"}}\ninvalid"),
+        )
+        .unwrap();
+        fs::write(root.join("flat-session.jsonl"), user.to_string()).unwrap();
+        fs::write(root.join("failed-session.jsonl"), r#"{"type":"turn_ended","status":"error"}"#).unwrap();
+        fs::write(
+            root.join(id).join("subagents/child-session.jsonl"),
+            user.to_string(),
+        )
+        .unwrap();
+        let listed = list_cursor_editor_sessions_in_root(&root);
+        assert_eq!(listed.len(), 2);
+        assert!(listed.iter().all(|s| s.preview == "今天的 Cursor 请求"));
+        let lines = read_cursor_editor_transcript(&path);
+        assert_eq!(lines.len(), 2);
+        let user_row: serde_json::Value = serde_json::from_str(&lines[0]).unwrap();
+        assert_eq!(user_row["type"], "user");
+        assert_eq!(user_row["timestamp"], file_mtime_ms(&path));
+        let assistant_row: serde_json::Value = serde_json::from_str(&lines[1]).unwrap();
+        assert_eq!(assistant_row["type"], "assistant");
+        assert_eq!(assistant_row["message"]["content"][1]["id"], "cursor-1-1");
+        assert!(cursor_project_transcript_path(&root, "../../escape").is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn dsh_dir_encoding_matches_harness_layout() {
         assert_eq!(
             encoded_dsh_project_dir("/Users/sjl/Documents/github/wise-tui"),
             "--Users-sjl-Documents-github-wise-tui--"
         );
         assert_eq!(encoded_dsh_project_dir("/Users/sjl"), "--Users-sjl--");
-        assert_eq!(encoded_dsh_project_dir("/tmp/dsh-probe2"), "--tmp-dsh-probe2--");
+        assert_eq!(
+            encoded_dsh_project_dir("/tmp/dsh-probe2"),
+            "--tmp-dsh-probe2--"
+        );
     }
 
     #[test]
@@ -592,8 +902,12 @@ mod tests {
 
     #[test]
     fn native_session_id_guard_blocks_traversal() {
-        assert!(is_safe_native_session_id("01a0daf1-ee64-7910-9a93-feea5e003c94"));
-        assert!(is_safe_native_session_id("session-f2056067-976e-46fe-8f3b-36a05e883967"));
+        assert!(is_safe_native_session_id(
+            "01a0daf1-ee64-7910-9a93-feea5e003c94"
+        ));
+        assert!(is_safe_native_session_id(
+            "session-f2056067-976e-46fe-8f3b-36a05e883967"
+        ));
         assert!(!is_safe_native_session_id("../../etc/passwd"));
         assert!(!is_safe_native_session_id("short"));
         assert!(!is_safe_native_session_id("has/slash-12345678"));
@@ -606,6 +920,7 @@ mod tests {
             NativeEngine::parse(" deepseek ").unwrap(),
             NativeEngine::DeepSeek
         );
+        assert_eq!(NativeEngine::parse("cursor").unwrap(), NativeEngine::Cursor);
         assert!(NativeEngine::parse("claude").is_err());
     }
 
@@ -638,10 +953,12 @@ mod tests {
 
     #[test]
     fn codex_head_scan_reports_preview_and_model() {
-        let dir = std::env::temp_dir().join(format!("wise-native-codex-test-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("wise-native-codex-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("temp dir");
-        let path = dir.join("rollout-2026-09-26T07-41-23-019fb8a4-4a38-77c0-a390-cfd7f1b9edfc.jsonl");
+        let path =
+            dir.join("rollout-2026-09-26T07-41-23-019fb8a4-4a38-77c0-a390-cfd7f1b9edfc.jsonl");
         let body = [
             r#"{"timestamp":"2026-09-26T07:41:23.511Z","ordinal":0,"type":"session_meta","payload":{"session_id":"019fb8a4-4a38-77c0-a390-cfd7f1b9edfc","cwd":"/repo","source":"vscode"}}"#,
             r#"{"timestamp":"2026-09-26T07:41:24.000Z","ordinal":4,"type":"turn_context","payload":{"model":"gpt-6-astra"}}"#,
@@ -653,5 +970,39 @@ mod tests {
         assert_eq!(preview, "帮我修一下构建");
         assert_eq!(model.as_deref(), Some("gpt-6-astra"));
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cursor_acp_meta_matches_cwd_and_uses_title_as_preview() {
+        let root = std::env::temp_dir().join(format!(
+            "wise-native-cursor-acp-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let agent_id = "9525465f-23a0-4f16-a873-07207ff85bc4";
+        let session_dir = root.join(agent_id);
+        fs::create_dir_all(&session_dir).expect("session dir");
+        fs::write(
+            session_dir.join("meta.json"),
+            r#"{"schemaVersion":1,"cwd":"/Users/demo/wise-tui","title":"Git Commit Generator"}"#,
+        )
+        .expect("meta");
+        // 其它仓库的会话不应进入当前仓库索引。
+        let other_id = "0647d2ed-1c21-40e1-98de-f761c5b5972a";
+        let other_dir = root.join(other_id);
+        fs::create_dir_all(&other_dir).expect("other dir");
+        fs::write(
+            other_dir.join("meta.json"),
+            r#"{"schemaVersion":1,"cwd":"/Users/demo/other","title":"Other"}"#,
+        )
+        .expect("other meta");
+
+        let listed = list_cursor_acp_disk_sessions_in_root(&root, "/Users/demo/wise-tui");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].session_id, agent_id);
+        assert_eq!(listed[0].preview, "Git Commit Generator");
+        assert_eq!(listed[0].title.as_deref(), Some("Git Commit Generator"));
+        assert_eq!(listed[0].engine, "cursor");
+        let _ = fs::remove_dir_all(&root);
     }
 }

@@ -67,7 +67,7 @@ export const UserMessageDisplayBody = memo(function UserMessageDisplayBody({ msg
               className="app-claude-user-message-attachments"
               title={display.attachmentPaths.join("\n")}
             >
-              {display.attachmentPaths.length} 张附图
+              {display.attachmentPaths.length} 个附件
             </div>
           ) : null}
           {display.hasStrippedContext ? (

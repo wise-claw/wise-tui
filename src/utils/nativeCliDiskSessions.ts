@@ -12,14 +12,16 @@ import {
 export const NATIVE_CLI_ENGINE_EXECUTION_ENGINE: Record<NativeCliEngine, SessionExecutionEngine> = {
   codex: "codex-rpc",
   deepseek: "deepseek",
+  cursor: "cursor",
 };
 
 export const NATIVE_CLI_ENGINE_LABELS: Record<NativeCliEngine, string> = {
   codex: "Codex",
   deepseek: "DeepSeek",
+  cursor: "Cursor",
 };
 
-export const NATIVE_CLI_ENGINES: readonly NativeCliEngine[] = ["codex", "deepseek"];
+export const NATIVE_CLI_ENGINES: readonly NativeCliEngine[] = ["codex", "deepseek", "cursor"];
 
 function sessionMatchesNativeId(
   session: Pick<ClaudeSession, "id" | "claudeSessionId">,
@@ -48,7 +50,7 @@ export function isDroppableNativeCliPlaceholder(
 }
 
 /**
- * 合并一类原生 CLI 会话索引（Codex / DeepSeek Harness）。
+ * 合并一类原生 CLI 会话索引（Codex / DeepSeek Harness / Cursor ACP）。
  *
  * 与 `mergeRepositoryDiskSessions` 同构，但：
  * - 命中既有行时只补预览 / 模型 / `claudeSessionId`，并在引擎一致时打上 `nativeCliSource`；
@@ -86,6 +88,7 @@ export function mergeNativeCliDiskSessions(
       ...session,
       claudeSessionId: item.sessionId,
       repositoryPath: canonicalPath,
+      diskUpdatedAtMs: item.updatedAtMs,
       model: item.modelHint?.trim() || session.model,
       diskPreview: item.preview.trim() || item.title?.trim() || session.diskPreview,
       ...(claimsNativeSource ? { nativeCliSource: engine } : {}),
@@ -119,6 +122,7 @@ export function mergeNativeCliDiskSessions(
     status: "completed" as const,
     messages: [],
     createdAt: entry.updatedAtMs,
+    diskUpdatedAtMs: entry.updatedAtMs,
     pendingPrompt: "",
     diskPreview: entry.preview.trim() || entry.title?.trim() || "",
     executionEngine: expectedEngine,

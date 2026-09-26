@@ -93,13 +93,19 @@ pub struct ThreadStartResponse {
 }
 
 /// Parameters for the `thread/resume` request.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThreadResumeParams {
     pub thread_id: String,
     /// Wise 从本地转录记录恢复会话 UI，不需要 app-server 回填完整 turns。
     /// 避免 paginated threads 的 full-history hydration 弃用提醒。
     pub exclude_turns: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<HashMap<String, Value>>,
 }
 
 /// Response payload from `thread/resume` (same envelope as `thread/start`).
@@ -2092,9 +2098,13 @@ mod tests {
         let resume = serde_json::to_value(ThreadResumeParams {
             thread_id: "thr_resume".to_string(),
             exclude_turns: true,
+            ..Default::default()
         })
         .expect("serialize resume");
         assert_eq!(resume["excludeTurns"], true);
+        assert!(resume.get("model").is_none());
+        assert!(resume.get("cwd").is_none());
+        assert!(resume.get("config").is_none());
 
         let fork = serde_json::to_value(ThreadForkParams {
             thread_id: "thr_fork".to_string(),
@@ -2110,6 +2120,31 @@ mod tests {
         })
         .expect("serialize read");
         assert_eq!(read["includeTurns"], false);
+    }
+
+    #[test]
+    fn resume_forwards_current_model_workspace_and_permissions() {
+        let config = HashMap::from([
+            ("sandbox_mode".into(), json!("read-only")),
+            ("approval_policy".into(), json!("never")),
+        ]);
+        let start = serde_json::to_value(ThreadStartParams {
+            model: Some("chosen-model".into()),
+            cwd: Some("/workspace/repo".into()),
+            config: Some(config.clone()),
+        }).unwrap();
+        let resume = serde_json::to_value(ThreadResumeParams {
+            thread_id: "existing-thread".into(),
+            exclude_turns: true,
+            model: Some("chosen-model".into()),
+            cwd: Some("/workspace/repo".into()),
+            config: Some(config),
+        }).unwrap();
+        for key in ["model", "cwd", "config"] {
+            assert_eq!(resume[key], start[key], "resume must honor {key}");
+        }
+        assert_eq!(resume["threadId"], "existing-thread");
+        assert_eq!(resume["excludeTurns"], true);
     }
 
     #[test]

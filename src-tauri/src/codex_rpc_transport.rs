@@ -13,9 +13,37 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{mpsc, oneshot, Mutex, OwnedSemaphorePermit, Semaphore};
 
 use crate::pending_rpc_request::{PendingRequestMap, PendingResponse};
+
+// Keep stdout responsive to RPC responses even while UI/disk consumption is slow.
+// Bound queued wire bytes, rather than silently dropping events at 256 items.
+const EVENT_BACKLOG_BYTES: usize = 32 * 1024 * 1024;
+pub struct QueuedRpcEvent<T> {
+    pub value: T,
+    _budget: Option<OwnedSemaphorePermit>,
+}
+
+impl<T> QueuedRpcEvent<T> {
+    fn reserve(value: T, bytes: usize, budget: &Arc<Semaphore>) -> Result<Self> {
+        let count = u32::try_from(bytes.max(1)).context("RPC event too large")?;
+        let permit = budget.clone().try_acquire_many_owned(count)
+            .context("Codex event backlog exceeded 32 MiB; consumer cannot keep up")?;
+        Ok(Self { value, _budget: Some(permit) })
+    }
+}
+
+pub type RawNotification = QueuedRpcEvent<(String, Option<Value>)>;
+pub type RawServerRequest = QueuedRpcEvent<(u64, String, Option<Value>)>;
+
+fn report_event_stream_failure(tx: &mpsc::UnboundedSender<RawNotification>, error: &str) {
+    // One terminal error bypasses the backlog budget so overflow is visible.
+    let _ = tx.send(QueuedRpcEvent {
+        value: ("error".into(), Some(serde_json::json!({ "message": error }))),
+        _budget: None,
+    });
+}
 
 // ---------------------------------------------------------------------------
 // Wire-level JSON-RPC message types
@@ -81,10 +109,10 @@ pub struct CodexRpcTransport {
     /// Buffered writer for the child's stdin.
     stdin: Mutex<tokio::process::ChildStdin>,
     /// Receiver for notifications dispatched by the reader task.
-    notification_rx: mpsc::Receiver<(String, Option<Value>)>,
+    notification_rx: mpsc::UnboundedReceiver<RawNotification>,
     /// Receiver for server-initiated requests dispatched by the reader task.
     /// Each item is `(request_id, method, params)`.
-    server_request_rx: mpsc::Receiver<(u64, String, Option<Value>)>,
+    server_request_rx: mpsc::UnboundedReceiver<RawServerRequest>,
     /// Pending requests awaiting a response, keyed by request id.
     pending_requests: PendingRequestMap<u64, JsonRpcMessage>,
     /// Monotonically increasing request id counter.
@@ -114,10 +142,9 @@ impl CodexRpcTransport {
         cmd.stderr(Stdio::piped());
 
         // Apply the same env enrichment used by the existing codex integration.
-        crate::codex_binary::apply_codex_child_env(
-            &mut cmd,
-            &crate::codex_binary::codex_merged_path_env(),
-        );
+        let path_env = tokio::task::spawn_blocking(crate::codex_binary::codex_merged_path_env)
+            .await.context("Failed to resolve Codex PATH")?;
+        crate::codex_binary::apply_codex_child_env(&mut cmd, &path_env);
         if let Some((api_key, base_url)) = spawn_env_overrides {
             cmd.env("OPENAI_API_KEY", api_key);
             cmd.env("OPENAI_BASE_URL", base_url);
@@ -140,11 +167,11 @@ impl CodexRpcTransport {
         let pending_requests = Arc::new(std::sync::Mutex::new(pending));
 
         // Notification channel: reader task → session layer.
-        let (notification_tx, notification_rx) = mpsc::channel::<(String, Option<Value>)>(256);
+        let (notification_tx, notification_rx) = mpsc::unbounded_channel();
+        let event_budget = Arc::new(Semaphore::new(EVENT_BACKLOG_BYTES));
 
         // Server-request channel: reader task → session layer.
-        let (server_request_tx, server_request_rx) =
-            mpsc::channel::<(u64, String, Option<Value>)>(128);
+        let (server_request_tx, server_request_rx) = mpsc::unbounded_channel();
 
         // Spawn the stderr drain (best-effort, log at debug level).
         if let Some(stderr) = child.stderr.take() {
@@ -170,13 +197,17 @@ impl CodexRpcTransport {
                             if trimmed.is_empty() {
                                 continue;
                             }
-                            Self::handle_stdout_line(
+                            if let Err(error) = Self::handle_stdout_line(
                                 &trimmed,
                                 &pending_for_reader,
                                 &notification_tx,
                                 &server_request_tx,
+                                &event_budget,
                             )
-                            .await;
+                            .await {
+                                report_event_stream_failure(&notification_tx, &error.to_string());
+                                break;
+                            }
                         }
                         Ok(None) => break,
                         Err(_) => break,
@@ -202,22 +233,23 @@ impl CodexRpcTransport {
     async fn handle_stdout_line(
         line: &str,
         pending_requests: &PendingRequestMap<u64, JsonRpcMessage>,
-        notification_tx: &mpsc::Sender<(String, Option<Value>)>,
-        server_request_tx: &mpsc::Sender<(u64, String, Option<Value>)>,
-    ) {
+        notification_tx: &mpsc::UnboundedSender<RawNotification>,
+        server_request_tx: &mpsc::UnboundedSender<RawServerRequest>,
+        event_budget: &Arc<Semaphore>,
+    ) -> Result<()> {
         let msg: JsonRpcMessage = match serde_json::from_str(line) {
             Ok(m) => m,
             Err(e) => {
                 eprintln!("[codex_rpc] Failed to parse JSON-RPC message: {e}");
-                return;
+                return Ok(());
             }
         };
 
-        match &msg {
-            JsonRpcMessage::Response { id, .. } | JsonRpcMessage::Error { id, .. } => {
+        match msg {
+            msg @ JsonRpcMessage::Response { id, .. } | msg @ JsonRpcMessage::Error { id, .. } => {
                 let sender = {
                     let mut pending = pending_requests.lock().unwrap_or_else(|e| e.into_inner());
-                    pending.remove(id)
+                    pending.remove(&id)
                 };
                 if let Some(tx) = sender {
                     let _ = tx.send(msg);
@@ -226,25 +258,15 @@ impl CodexRpcTransport {
                 }
             }
             JsonRpcMessage::Notification { method, params } => {
-                if notification_tx
-                    .try_send((method.clone(), params.clone()))
-                    .is_err()
-                {
-                    eprintln!("[codex_rpc] Notification channel full, dropping: {method}");
-                }
+                notification_tx.send(QueuedRpcEvent::reserve((method, params), line.len(), event_budget)?)
+                    .map_err(|_| anyhow!("Codex notification consumer closed"))?;
             }
             JsonRpcMessage::Request { id, method, params } => {
-                if server_request_tx
-                    .send((*id, method.clone(), params.clone()))
-                    .await
-                    .is_err()
-                {
-                    eprintln!(
-                        "[codex_rpc] Server-request channel closed, dropping: {method} (id={id})"
-                    );
-                }
+                server_request_tx.send(QueuedRpcEvent::reserve((id, method, params), line.len(), event_budget)?)
+                    .map_err(|_| anyhow!("Codex request consumer closed"))?;
             }
         }
+        Ok(())
     }
 
     /// Allocate the next unique request id.
@@ -329,16 +351,16 @@ impl CodexRpcTransport {
     }
 
     /// Take the notification receiver out of the transport (called once during bootstrap).
-    pub fn take_notification_rx(&mut self) -> mpsc::Receiver<(String, Option<Value>)> {
-        let (_dummy_tx, dummy_rx) = mpsc::channel(1);
+    pub fn take_notification_rx(&mut self) -> mpsc::UnboundedReceiver<RawNotification> {
+        let (_dummy_tx, dummy_rx) = mpsc::unbounded_channel();
         std::mem::replace(&mut self.notification_rx, dummy_rx)
     }
 
     /// Take the server-request receiver out of the transport (called once during bootstrap).
     pub fn take_server_request_rx(
         &mut self,
-    ) -> mpsc::Receiver<(u64, String, Option<Value>)> {
-        let (_dummy_tx, dummy_rx) = mpsc::channel(1);
+    ) -> mpsc::UnboundedReceiver<RawServerRequest> {
+        let (_dummy_tx, dummy_rx) = mpsc::unbounded_channel();
         std::mem::replace(&mut self.server_request_rx, dummy_rx)
     }
 
@@ -380,6 +402,66 @@ impl CodexRpcTransport {
     }
 }
 
+#[cfg(test)]
+mod event_delivery_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn burst_preserves_all_events_and_does_not_block_rpc_responses() {
+        let pending = PendingRequestMap::default();
+        let (notifications, mut rx) = mpsc::unbounded_channel();
+        let (requests, mut requests_rx) = mpsc::unbounded_channel();
+        let budget = Arc::new(Semaphore::new(EVENT_BACKLOG_BYTES));
+        // More than both old channel capacities, with no event consumer running.
+        for index in 0..4096 {
+            let line = serde_json::json!({ "method": "test/delta", "params": { "index": index } }).to_string();
+            CodexRpcTransport::handle_stdout_line(&line, &pending, &notifications, &requests, &budget)
+                .await.unwrap();
+        }
+        for id in 0..256 {
+            let line = serde_json::json!({ "id": id, "method": "test/approval" }).to_string();
+            CodexRpcTransport::handle_stdout_line(&line, &pending, &notifications, &requests, &budget)
+                .await.unwrap();
+        }
+        let (response_tx, response_rx) = oneshot::channel();
+        pending.lock().unwrap().insert(9000, response_tx);
+        CodexRpcTransport::handle_stdout_line(r#"{"id":9000,"result":{}}"#, &pending, &notifications, &requests, &budget)
+            .await.unwrap();
+        assert!(matches!(response_rx.await.unwrap(), JsonRpcMessage::Response { id: 9000, .. }));
+        CodexRpcTransport::handle_stdout_line(r#"{"method":"turn/completed"}"#, &pending, &notifications, &requests, &budget)
+            .await.unwrap();
+        for index in 0..4096 {
+            let event = rx.recv().await.unwrap();
+            assert_eq!(event.value.1.as_ref().unwrap()["index"], index);
+        }
+        assert_eq!(rx.recv().await.unwrap().value.0, "turn/completed");
+        for id in 0..256 {
+            assert_eq!(requests_rx.recv().await.unwrap().value.0, id);
+        }
+        assert_eq!(budget.available_permits(), EVENT_BACKLOG_BYTES);
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn backlog_exhaustion_is_explicit_and_releases_budget_when_drained() {
+        let pending = PendingRequestMap::default();
+        let (notifications, mut rx) = mpsc::unbounded_channel();
+        let (requests, _requests_rx) = mpsc::unbounded_channel();
+        let line = r#"{"method":"turn/completed"}"#;
+        let budget = Arc::new(Semaphore::new(line.len()));
+        CodexRpcTransport::handle_stdout_line(line, &pending, &notifications, &requests, &budget)
+            .await.unwrap();
+        let error = CodexRpcTransport::handle_stdout_line(line, &pending, &notifications, &requests, &budget)
+            .await.unwrap_err();
+        report_event_stream_failure(&notifications, &error.to_string());
+        assert_eq!(rx.recv().await.unwrap().value.0, "turn/completed");
+        let failure = rx.recv().await.unwrap();
+        assert_eq!(failure.value.0, "error");
+        assert!(failure.value.1.unwrap()["message"].as_str().unwrap().contains("backlog"));
+        assert_eq!(budget.available_permits(), line.len());
+    }
+}
+
 #[cfg(all(test, unix))]
 mod request_lifecycle_tests {
     use super::*;
@@ -396,8 +478,8 @@ mod request_lifecycle_tests {
         let mut transport = CodexRpcTransport {
             child,
             stdin: Mutex::new(stdin),
-            notification_rx: mpsc::channel(1).1,
-            server_request_rx: mpsc::channel(1).1,
+            notification_rx: mpsc::unbounded_channel().1,
+            server_request_rx: mpsc::unbounded_channel().1,
             pending_requests: Arc::default(),
             next_id: AtomicU64::new(1),
         };

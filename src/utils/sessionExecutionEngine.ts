@@ -296,7 +296,9 @@ export type DiskTranscriptSource =
   /** 外部 CLI 自己的原生会话存储（`~/.codex/sessions`）。 */
   | "native_codex"
   /** 外部 CLI 自己的原生会话存储（`~/.dsh/sessions`）。 */
-  | "native_deepseek";
+  | "native_deepseek"
+  /** 外部 Cursor ACP 会话（`~/.cursor/acp-sessions`；转录优先回读 Wise cursor-runs）。 */
+  | "native_cursor";
 
 export function resolveDiskTranscriptSource(
   engine: SessionExecutionEngine,

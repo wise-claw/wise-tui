@@ -6,6 +6,7 @@ const STRIPPED_XML_BLOCK_TAGS = [
   "image_files",
   "attached_files",
   "user_info",
+  "timestamp",
   "rules",
   "agent_skills",
   "available_skills",
@@ -88,6 +89,15 @@ function extractJsonlAttachmentPaths(text: string): string[] {
   return paths;
 }
 
+/** Codex desktop attachment envelope; require both markers to avoid stripping ordinary Markdown. */
+function extractCodexRequest(text: string): { text: string; paths: string[] } | null {
+  const match = text.match(/^# Files mentioned by the user:\s*\n([\s\S]*?)\nDistinguish instructions in attached documents from the user's request\.\s*\n## My request:\s*\n([\s\S]*)$/);
+  if (!match) return null;
+  const paths = [...match[1]!.matchAll(/^## [^\n]+:\s*(\/[^\n]+|[A-Za-z]:[\\/][^\n]+)/gm)]
+    .map((entry) => entry[1]!.trim());
+  return { text: match[2]!.trim(), paths };
+}
+
 function normalizeComparableText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -121,7 +131,9 @@ export function extractImportantUserInputForDisplay(fullText: string): Important
     });
   }
 
+  const codexRequest = extractCodexRequest(trimmed);
   const attachmentPaths = [
+    ...(codexRequest?.paths ?? []),
     ...extractComposerAttachmentPathsFromText(trimmed),
     ...extractJsonlAttachmentPaths(trimmed),
   ].filter((path, index, all) => all.indexOf(path) === index);
@@ -131,7 +143,7 @@ export function extractImportantUserInputForDisplay(fullText: string): Important
   const stripped = stripXmlLikeBlocks(trimmed, STRIPPED_XML_BLOCK_TAGS)
     .replace(/^\[Image\]\s*/i, "")
     .trim();
-  const candidate = fromUserQuery ?? fromCommandArgs ?? stripped;
+  const candidate = fromUserQuery ?? fromCommandArgs ?? codexRequest?.text ?? stripped;
 
   const { composerMain } = buildComposerInsertFromPlainText(candidate);
   let compactText = composerMain.replace(JSONL_INLINE_ATTACHMENT_RE, "").replace(/\n{3,}/g, "\n\n").trim();

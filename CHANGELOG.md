@@ -17,8 +17,9 @@
 
 ### 🔗 原生 CLI 会话接入
 
-- **外部 CLI 会话可在 Wise 中显示并续接**：新增原生会话索引，扫描并读取 Codex CLI / Codex Desktop / codex-tui 的 `~/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-*.jsonl` 与 DeepSeek Harness 的 `~/.dsh/sessions/<encoded-cwd>/<session-id>/session.v3.jsonl.zstd`，把「不是在 Wise 里创建」的会话补进左栏（带 Codex / DeepSeek 徽标），点开即可读回完整历史。
-- **续接用原生会话 id**：这些会话即使尚未在 Wise 里跑过回合，也会以 `thread/resume`（Codex）/ `session/resume`（DeepSeek Harness）续接，并优先读取 CLI 自己的权威转录（包含加入 Wise 之前的历史）；Wise 侧 `*-runs` 仍作为兜底。
+- **外部 CLI 会话可在 Wise 中显示并续接**：新增原生会话索引，扫描并读取 Codex CLI / Codex Desktop / codex-tui 的 `~/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-*.jsonl`、DeepSeek Harness 的 `~/.dsh/sessions/<encoded-cwd>/<session-id>/session.v3.jsonl.zstd`，以及 Cursor ACP 的 `~/.cursor/acp-sessions/<agent-id>/meta.json`（按 cwd 归属仓库），把「不是在 Wise 里创建」的会话补进左栏（带 Codex / DeepSeek / Cursor 徽标）。
+- **Wise 自有 Cursor 落盘一并回侧栏**：`~/.wise/cursor-runs` 索引与原生 ACP 并列合并；点开优先回读 Wise 流式转录，无 Wise 转录时仍可用 agent id 续接（ACP `store.db` 不直接可读，仅标题预览）。
+- **续接用原生会话 id**：这些会话即使尚未在 Wise 里跑过回合，也会以 `thread/resume`（Codex）/ `session/resume`（DeepSeek Harness）/ Cursor `--resume` 续接，并优先读取 CLI 自己的权威转录（包含加入 Wise 之前的历史）；Wise 侧 `*-runs` 仍作为兜底。
 - **与既有索引共用一份上限**：原生会话与 Claude 磁盘历史按最后活跃时间统一裁剪、单次提交，避免侧栏出现「先删后加」的中间态；`codex exec` 一次性运行、以及 Wise 自己通过 app-server 跑的 rollout 不计入（后者已有 `~/.wise` 转录）。
 
 ### 🎨 交互调整
@@ -27,6 +28,7 @@
 
 ### 🐛 问题修复
 
+- **Codex / Cursor 会话冷启动后只剩 2～3 条残片、今天的完整消息看不到**：`tabs.json` 不持久化 `diskTranscriptPartial`，而带 `executionEngine` 的会话又禁止清空内存正文，重启后 hydrate 把「user + 半截 assistant」当成完整会话跳过；磁盘上其实已有完整 `~/.wise/codex-runs` / `cursor-runs`。现对 Wise 落盘引擎在气泡 ≤4 且有磁盘证据时强制补全，磁盘索引合并后也会批量触发 hydrate；尾窗若丢掉用户回显则改拉全量而非直接放弃。
 - **Codex 会话不再出现空的「reasoning」幽灵行**：Codex app-server 的 `item/started` 会把 reasoning item 兜底映射成 `name="reasoning"` 的空工具卡（无入参、无输出），消息列表里就多出一行永远「执行中」、点不开的 `reasoning`；真正的思考内容其实另以 thinking part 完整到达（受「思考消息」开关控制）。现在 `item/started(reasoning)` 静默不再生成占位卡，前端合并时也会按 item id 回收这类无载荷占位卡，历史落盘的会话刷新后同样不再显示幽灵行。
 - **会话标签存档不再被并发写坏 / 静默清空**：`write_file_atomic` 固定使用 `<name>.json.save_tmp`，打包版与 dev 版（或用户连续启动两次）同时写 `~/.wise/tabs.json` 时会互相搬走、写坏同一个临时文件：一侧写盘静默失败，或留下解析不了的 JSON，下次启动读不出整份会话列表，工作区只剩几个「新会话」。现在临时文件名带进程 id / 序号 / 纳秒后缀，写入者互不干扰，失败时清理临时文件。
 - **读不出会话标签时不再当成「没有存档」**：`load_session_tabs` 原先把读取/解析失败一律映射为 `None`，前端随即用（可能很旧的）localStorage 备份启动并覆盖写盘。现在区分「文件不存在」与「文件损坏」：损坏时回退 `<name>.json.bak`，坏文件另存 `.corrupt-<时间戳>` 现场；写入前若会话数将变少，先留一份更完整的 `.bak`（备份只增不减，连续缩小不会把旧快照冲掉）；前端读取遇到启动期 IPC 抖动会短暂重试并留下警告，单条坏会话也只会被跳过而不是丢掉整份存档。

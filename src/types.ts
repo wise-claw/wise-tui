@@ -800,6 +800,8 @@ export interface ClaudeSession {
   pendingPrompt: string; // buffered input after session ID detected
   /** First user-line preview from ~/.claude/projects JSONL before messages are loaded */
   diskPreview?: string;
+  /** 磁盘索引的最后活跃时间（毫秒），独立于创建时间和内存转录窗口。 */
+  diskUpdatedAtMs?: number;
   /**
    * Codex 线程名（`thread/name/updated`）；非空时优先作为侧栏标题。
    * 落盘到 tabs.json，重启后恢复。
@@ -864,8 +866,8 @@ export interface ClaudeSession {
   nativeCliSource?: NativeCliEngine;
 }
 
-/** 支持原生会话索引的执行环境（`~/.codex`、`~/.dsh`）。 */
-export type NativeCliEngine = "codex" | "deepseek";
+/** 支持原生会话索引的执行环境（`~/.codex`、`~/.dsh`、`~/.cursor/acp-sessions`）。 */
+export type NativeCliEngine = "codex" | "deepseek" | "cursor";
 
 /** One session row from `list_native_cli_disk_sessions` (native CLI on-disk index). */
 export interface NativeCliDiskSessionItem {
@@ -875,7 +877,7 @@ export interface NativeCliDiskSessionItem {
   /** 首条真实用户输入的预览（注入的上下文与系统提醒不会出现在这里）。 */
   preview: string;
   modelHint: string | null;
-  /** 会话标题（DeepSeek Harness `session/title`；Codex rollout 暂无）。 */
+  /** 会话标题（DeepSeek Harness `session/title`；Cursor ACP `meta.title`；Codex rollout 暂无）。 */
   title: string | null;
 }
 
@@ -895,6 +897,17 @@ export interface CodexRpcDiskSessionItem {
   preview: string;
   modelHint: string | null;
   /** Codex thread id，用于续接。 */
+  resumeSessionId: string | null;
+}
+
+/** One session row from `list_cursor_disk_sessions` (`~/.wise/cursor-runs`). */
+export interface CursorDiskSessionItem {
+  /** Wise tab id（jsonl 文件名）。 */
+  sessionId: string;
+  updatedAtMs: number;
+  preview: string;
+  modelHint: string | null;
+  /** Cursor ACP agent id，用于续接。 */
   resumeSessionId: string | null;
 }
 

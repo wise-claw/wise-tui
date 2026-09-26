@@ -3,7 +3,7 @@
 //! These commands wire [`CodexRpcSession`] to the frontend, providing
 //! `execute_codex_rpc`, `interrupt_codex_rpc`, and `shutdown_codex_rpc`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use serde::Deserialize;
@@ -67,6 +67,29 @@ fn build_codex_rpc_thread_config(
 // Shared state for active RPC sessions
 // ---------------------------------------------------------------------------
 
+/// Refresh guidance periodically instead of growing every turn's history with
+/// identical host text. Re-app startup/eviction safely starts a new interval.
+#[derive(Default)]
+struct ExecutionGuidanceSchedule {
+    turns: VecDeque<(String, u8)>,
+}
+
+impl ExecutionGuidanceSchedule {
+    fn should_inject(&self, thread_id: &str) -> bool {
+        self.turns.iter().find(|(id, _)| id == thread_id)
+            .is_none_or(|(_, count)| *count == 0)
+    }
+
+    // Call only after turn/start succeeds; failed dispatches must not consume a slot.
+    fn record_accepted(&mut self, thread_id: &str) {
+        let count = self.turns.iter().position(|(id, _)| id == thread_id)
+            .and_then(|index| self.turns.remove(index))
+            .map(|(_, count)| count).unwrap_or(0);
+        self.turns.push_back((thread_id.to_string(), (count + 1) % 8));
+        if self.turns.len() > 256 { self.turns.pop_front(); }
+    }
+}
+
 /// Tauri-managed state holding active [`CodexRpcSession`] instances keyed by session id.
 #[derive(Default, Clone)]
 pub(crate) struct CodexRpcSessionStore {
@@ -74,6 +97,7 @@ pub(crate) struct CodexRpcSessionStore {
     /// 已发起取消的 session id：`execute_codex_rpc` 在 bootstrap/start_turn 完成前
     /// 尚未写入 `sessions`，点「结束」时 cancel 只能登记此标记，待 turn 启动后自检中止。
     pub(crate) cancelled: Arc<TokioMutex<HashSet<String>>>,
+    guidance: Arc<TokioMutex<ExecutionGuidanceSchedule>>,
 }
 
 impl CodexRpcSessionStore {
@@ -200,6 +224,28 @@ fn persist_codex_rpc_transcript_line(project_path: &str, tab_session_id: &str, l
     }
 }
 
+fn persist_codex_rpc_event_lines(
+    writer: &mut Option<crate::codex_rpc_disk::CodexRpcTranscriptWriter>,
+    project_path: &str,
+    tab_session_id: &str,
+    lines: &[String],
+) {
+    if lines.is_empty() { return; }
+    let result = (|| {
+        if writer.is_none() {
+            *writer = Some(crate::codex_rpc_disk::CodexRpcTranscriptWriter::open(
+                project_path, tab_session_id,
+            )?);
+        }
+        writer.as_mut().expect("writer initialized").append_lines(lines)
+    })();
+    if let Err(error) = result {
+        // Retry opening on the next durable event, matching prior recovery behavior.
+        *writer = None;
+        eprintln!("[codex_rpc] transcript append failed (tab={tab_session_id}): {error}");
+    }
+}
+
 /// 续接旧 thread 失败时应改为新建 thread：
 /// - 切 provider 后旧配置里的 model_provider 已不存在；
 /// - 误把 Wise 标签 id（`session_…`）当成 Codex UUID。
@@ -273,7 +319,9 @@ pub(crate) async fn execute_codex_rpc(
     }
     let spawn_env_overrides = crate::opencode_go_proxy::codex_spawn_env_overrides(&db);
 
-    let codex_path = find_codex_binary().map_err(|e| format!("codex binary: {e}"))?;
+    let codex_path = tokio::task::spawn_blocking(find_codex_binary)
+        .await.map_err(|e| format!("codex binary discovery task: {e}"))?
+        .map_err(|e| format!("codex binary: {e}"))?;
 
     let session_id = params
         .tab_session_id
@@ -380,7 +428,15 @@ pub(crate) async fn execute_codex_rpc(
     let mut started_new_thread = false;
     let had_resume_id = resume_id.is_some();
     let thread_result = if let Some(thread_id) = resume_id.as_deref().filter(|_| !provider_switched) {
-        match session.resume_thread(thread_id).await {
+        match session
+            .resume_thread(
+                thread_id,
+                Some(params.project_path.as_str()),
+                effective_model.as_deref(),
+                thread_config.clone(),
+            )
+            .await
+        {
             Ok(()) => Ok(()),
             Err(e) if codex_rpc_resume_should_start_fresh(&e.to_string()) => {
                 eprintln!(
@@ -477,7 +533,15 @@ pub(crate) async fn execute_codex_rpc(
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty());
-    let turn_result = session.start_turn(trimmed_prompt, effort).await;
+    let guidance_thread = session.current_thread_id()
+        .filter(|_| !params.read_only && !trimmed_prompt.starts_with('/'))
+        .map(str::to_string);
+    let inject_guidance = if let Some(thread_id) = guidance_thread.as_deref() {
+        app.state::<CodexRpcSessionStore>().guidance.lock().await.should_inject(thread_id)
+    } else { false };
+    let turn_result = session
+        .start_turn(trimmed_prompt, effort, inject_guidance)
+        .await;
     if let Err(e) = turn_result {
         let msg = format!("Codex turn 启动失败: {e}");
         eprintln!("[codex_rpc] {msg}");
@@ -498,6 +562,12 @@ pub(crate) async fn execute_codex_rpc(
         return Err(msg);
     }
 
+    if let Some(thread_id) = guidance_thread.as_deref() {
+        app.state::<CodexRpcSessionStore>().guidance.lock().await.record_accepted(thread_id);
+    }
+
+    // Consume events without taking the control mutex or polling on a timer.
+    let mut events = session.take_events();
     // Store the session for potential interrupt/shutdown.
     let session_arc = Arc::new(TokioMutex::new(session));
     {
@@ -532,9 +602,8 @@ pub(crate) async fn execute_codex_rpc(
             .insert(inv.to_string(), session_id.clone());
     }
 
-    // Notification loop: consume server notifications until turn completes or channel closes.
-    // The session lock is NOT held continuously — it is acquired per-iteration to poll
-    // the next notification, then immediately dropped so interrupt_codex_rpc can proceed.
+    // Notification loop owns its receivers; approvals/interrupts can use the session
+    // concurrently even when a long RPC is waiting for its response.
     let app_loop = app.clone();
     let session_id_loop = session_id.clone();
     let invocation_key_loop = invocation_key.clone();
@@ -543,17 +612,11 @@ pub(crate) async fn execute_codex_rpc(
     tokio::spawn(async move {
         let mut success = true;
         let mut stream_adapt_state = CodexRpcStreamAdaptState::default();
+        let mut transcript_writer = None;
 
         loop {
-            // Take the session lock only long enough to poll one notification
-            // or one server request, then drop it so interrupt/approval can proceed.
             use crate::codex_rpc_session::CodexRpcSessionEvent;
-            let poll_result = session_arc.lock().await.poll_event();
-
-            let Some(result) = poll_result else {
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                continue;
-            };
+            let result = events.next().await;
 
             match result {
                 CodexRpcSessionEvent::Notification(ServerNotification::TurnCompleted {
@@ -578,10 +641,11 @@ pub(crate) async fn execute_codex_rpc(
                                 }
                             })
                             .to_string();
-                            persist_codex_rpc_transcript_line(
+                            persist_codex_rpc_event_lines(
+                                &mut transcript_writer,
                                 &project_path_loop,
                                 &session_id_loop,
-                                &line,
+                                std::slice::from_ref(&line),
                             );
                             emit_adapted_stream_payload(
                                 &app_loop,
@@ -612,13 +676,12 @@ pub(crate) async fn execute_codex_rpc(
                         &session_id_loop,
                         &mut stream_adapt_state,
                     );
-                    for line in &output.persist {
-                        persist_codex_rpc_transcript_line(
-                            &project_path_loop,
-                            &session_id_loop,
-                            line,
-                        );
-                    }
+                    persist_codex_rpc_event_lines(
+                        &mut transcript_writer,
+                        &project_path_loop,
+                        &session_id_loop,
+                        &output.persist,
+                    );
                     for line in &output.emit {
                         emit_adapted_stream_payload(
                             &app_loop,
@@ -1658,6 +1721,29 @@ pub(crate) async fn respond_codex_rpc_dynamic_tool(
 mod tests {
     use super::{codex_rpc_resume_should_start_fresh, is_codex_rpc_thread_id};
     use crate::codex_config_dir::codex_provider_switched;
+
+    #[test]
+    fn guidance_refreshes_every_eight_accepted_turns_per_thread() {
+        let mut schedule = super::ExecutionGuidanceSchedule::default();
+        for turn in 0..24 {
+            assert_eq!(schedule.should_inject("thread"), turn % 8 == 0);
+            // Reading the decision (or failing turn/start) doesn't advance it.
+            assert_eq!(schedule.should_inject("thread"), turn % 8 == 0);
+            assert!(schedule.should_inject("other-thread"));
+            schedule.record_accepted("thread");
+        }
+    }
+
+    #[test]
+    fn guidance_history_is_bounded_and_evicted_threads_get_fresh_guidance() {
+        let mut schedule = super::ExecutionGuidanceSchedule::default();
+        for thread in 0..256 { schedule.record_accepted(&thread.to_string()); }
+        schedule.record_accepted("0"); // Keep this recently used thread.
+        schedule.record_accepted("new-thread");
+        assert_eq!(schedule.turns.len(), 256);
+        assert!(!schedule.should_inject("0"));
+        assert!(schedule.should_inject("1"));
+    }
 
     #[test]
     fn gpt_to_deepseek_skips_resume() {

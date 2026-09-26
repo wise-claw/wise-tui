@@ -82,6 +82,42 @@ pub fn append_codex_rpc_session_line(
     Ok(())
 }
 
+/// One append handle per running turn. Each event's durable lines are written
+/// together, with no userspace buffer left pending when completion is emitted.
+pub(crate) struct CodexRpcTranscriptWriter {
+    file: fs::File,
+}
+
+impl CodexRpcTranscriptWriter {
+    pub(crate) fn open(project_path: &str, tab_session_id: &str) -> Result<Self, String> {
+        let path = codex_rpc_session_jsonl_path(project_path, tab_session_id)?;
+        Self::open_path(&path)
+    }
+
+    fn open_path(path: &Path) -> Result<Self, String> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let file = OpenOptions::new().create(true).append(true).open(path)
+            .map_err(|e| format!("打开 Codex 会话记录失败: {e}"))?;
+        Ok(Self { file })
+    }
+
+    pub(crate) fn append_lines(&mut self, lines: &[String]) -> Result<(), String> {
+        let mut batch = String::new();
+        for line in lines {
+            let line = line.trim();
+            if !line.is_empty() {
+                batch.push_str(line);
+                batch.push('\n');
+            }
+        }
+        if batch.is_empty() { return Ok(()); }
+        self.file.write_all(batch.as_bytes())
+            .map_err(|e| format!("写入 Codex 会话记录失败: {e}"))
+    }
+}
+
 /// Load JSONL lines from a Codex RPC session transcript on disk.
 pub fn load_codex_rpc_session_jsonl(
     project_path: &str,
@@ -314,6 +350,24 @@ pub async fn list_codex_rpc_disk_sessions(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn turn_writer_batches_lines_and_preserves_history_on_reopen() {
+        let dir = std::env::temp_dir().join(format!("wise-transcript-{}", uuid::Uuid::new_v4()));
+        let path = dir.join("transcript.jsonl");
+        {
+            let mut writer = CodexRpcTranscriptWriter::open_path(&path).unwrap();
+            writer.append_lines(&["  first  ".into(), " ".into(), "second".into()]).unwrap();
+            writer.append_lines(&["third".into()]).unwrap();
+            // Visible before drop: completion doesn't leave a buffered tail behind.
+            assert_eq!(fs::read_to_string(&path).unwrap(), "first\nsecond\nthird\n");
+        }
+        let mut writer = CodexRpcTranscriptWriter::open_path(&path).unwrap();
+        writer.append_lines(&["fourth".into()]).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "first\nsecond\nthird\nfourth\n");
+        drop(writer);
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn codex_tab_session_id_validation() {

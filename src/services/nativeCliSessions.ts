@@ -6,6 +6,7 @@ import type { NativeCliDiskSessionItem, NativeCliEngine } from "../types";
  *
  * - `codex`：`~/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-<id>.jsonl`（`codex exec` 一次性运行不计入）
  * - `deepseek`：`~/.dsh/sessions/<encoded-cwd>/<session-id>/session.jsonl.zstd`（含分片变体）
+ * - `cursor`：`~/.cursor/acp-sessions/<agent-id>/meta.json` 及 `~/.cursor/projects/<repo>/agent-transcripts`
  *
  * 原生索引只在后台补充列表，失败时调用方按「无外部会话」处理。
  */

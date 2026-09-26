@@ -10,7 +10,7 @@
 //! 5. `shutdown` — tear down the subprocess.
 
 use anyhow::{anyhow, Context, Result};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 
 use crate::codex_rpc_transport::CodexRpcTransport;
 use crate::codex_rpc_types::{
@@ -35,6 +35,7 @@ pub struct CodexRpcSession {
     notification_rx: mpsc::Receiver<ServerNotification>,
     /// Receiver for typed server-initiated requests (approval prompts, etc.).
     server_request_rx: mpsc::Receiver<ServerRequest>,
+    event_stop: watch::Sender<bool>,
     current_thread_id: Option<String>,
     current_turn_id: Option<String>,
     /// Effective model used for turn input shaping (vision vs path-only).
@@ -46,6 +47,36 @@ pub(crate) enum CodexRpcSessionEvent {
     Notification(ServerNotification),
     ServerRequest(ServerRequest),
     Disconnected,
+}
+
+/// Owned by the event task, independently of the session's RPC/control mutex.
+pub(crate) struct CodexRpcEvents {
+    notifications: mpsc::Receiver<ServerNotification>,
+    requests: mpsc::Receiver<ServerRequest>,
+    stopped: watch::Receiver<bool>,
+}
+
+impl CodexRpcEvents {
+    pub(crate) async fn next(&mut self) -> CodexRpcSessionEvent {
+        loop {
+            if *self.stopped.borrow() {
+                return CodexRpcSessionEvent::Disconnected;
+            }
+            tokio::select! {
+                _ = self.stopped.changed() => return CodexRpcSessionEvent::Disconnected,
+                notification = self.notifications.recv() => {
+                    return notification.map(CodexRpcSessionEvent::Notification)
+                        .unwrap_or(CodexRpcSessionEvent::Disconnected);
+                }
+                // A closed approval stream must not spin or terminate live notifications.
+                request = self.requests.recv(), if !self.requests.is_closed() || !self.requests.is_empty() => {
+                    if let Some(request) = request {
+                        return CodexRpcSessionEvent::ServerRequest(request);
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn poll_session_event(
@@ -145,7 +176,8 @@ impl CodexRpcSession {
         let (typed_tx, typed_rx) = mpsc::channel::<ServerNotification>(256);
         tokio::spawn(async move {
             let mut raw_rx = raw_rx;
-            while let Some((method, params)) = raw_rx.recv().await {
+            while let Some(event) = raw_rx.recv().await {
+                let (method, params) = event.value;
                 let notification = parse_notification(&method, params);
                 if typed_tx.send(notification).await.is_err() {
                     break; // receiver dropped
@@ -160,7 +192,8 @@ impl CodexRpcSession {
         let (srv_tx, srv_rx) = mpsc::channel::<ServerRequest>(128);
         tokio::spawn(async move {
             let mut raw_srv_rx = raw_srv_rx;
-            while let Some((id, method, params)) = raw_srv_rx.recv().await {
+            while let Some(event) = raw_srv_rx.recv().await {
+                let (id, method, params) = event.value;
                 let request = parse_server_request(id, &method, params);
                 if srv_tx.send(request).await.is_err() {
                     break; // receiver dropped
@@ -172,6 +205,7 @@ impl CodexRpcSession {
             transport,
             notification_rx: typed_rx,
             server_request_rx: srv_rx,
+            event_stop: watch::channel(false).0,
             current_thread_id: None,
             current_turn_id: None,
             active_model: None,
@@ -244,10 +278,19 @@ impl CodexRpcSession {
     }
 
     /// Resume an existing thread by id.
-    pub async fn resume_thread(&mut self, thread_id: &str) -> Result<()> {
+    pub async fn resume_thread(
+        &mut self,
+        thread_id: &str,
+        cwd: Option<&str>,
+        model: Option<&str>,
+        config: Option<std::collections::HashMap<String, serde_json::Value>>,
+    ) -> Result<()> {
         let params = ThreadResumeParams {
             thread_id: thread_id.to_string(),
             exclude_turns: true,
+            model: model.map(str::to_string),
+            cwd: cwd.map(str::to_string),
+            config,
         };
         let params_value =
             serde_json::to_value(&params).context("Failed to serialize thread/resume params")?;
@@ -287,12 +330,13 @@ impl CodexRpcSession {
     /// Non-vision models: keep path text only (avoids `[Unsupported Image]`).
     ///
     /// `effort` maps to app-server `turn/start.effort` (ChatGPT-style reasoning intensity).
-    pub async fn start_turn(&mut self, input: &str, effort: Option<&str>) -> Result<String> {
-        let items =
-            crate::codex_rpc_types::build_turn_input_items_from_composer_prompt_for_model(
-                input,
-                self.active_model.as_deref(),
-            );
+    pub async fn start_turn(
+        &mut self,
+        input: &str,
+        effort: Option<&str>,
+        optimize_execution: bool,
+    ) -> Result<String> {
+        let items = build_wise_turn_input(input, self.active_model.as_deref(), optimize_execution);
         self.start_turn_with_items(items, effort).await
     }
 
@@ -412,6 +456,14 @@ impl CodexRpcSession {
         poll_session_event(&mut self.notification_rx, &mut self.server_request_rx)
     }
 
+    pub(crate) fn take_events(&mut self) -> CodexRpcEvents {
+        CodexRpcEvents {
+            notifications: std::mem::replace(&mut self.notification_rx, mpsc::channel(1).1),
+            requests: std::mem::replace(&mut self.server_request_rx, mpsc::channel(1).1),
+            stopped: self.event_stop.subscribe(),
+        }
+    }
+
     /// Blocking wait for the next server notification.
     ///
     /// Returns `None` when the notification channel is closed (e.g. the
@@ -450,6 +502,7 @@ impl CodexRpcSession {
 
     /// Shut down the session: kill the child process and clean up state.
     pub async fn shutdown(&mut self) -> Result<()> {
+        self.event_stop.send_replace(true);
         self.initialized = false;
         self.current_thread_id = None;
         self.current_turn_id = None;
@@ -1240,6 +1293,23 @@ impl CodexRpcSession {
     }
 }
 
+/// Add host guidance as a separate input item, after attachment extraction.
+/// This preserves the original prompt, config instructions and attachment paths.
+/// It applies to resumed turns too; short read-only jobs and native commands opt out.
+fn build_wise_turn_input(input: &str, model: Option<&str>, optimize: bool) -> Vec<TurnInputItem> {
+    let mut items = crate::codex_rpc_types::build_turn_input_items_from_composer_prompt_for_model(
+        input,
+        model,
+    );
+    if optimize && !items.is_empty() && !input.trim_start().starts_with('/') {
+        items.insert(
+            0,
+            TurnInputItem::text(include_str!("prompts/efficient_execution.md").trim()),
+        );
+    }
+    items
+}
+
 fn truncate_json_for_error(value: &serde_json::Value) -> String {
     let raw = value.to_string();
     const MAX: usize = 400;
@@ -1253,6 +1323,71 @@ fn truncate_json_for_error(value: &serde_json::Value) -> String {
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn event_wait_delivers_completion_before_eof_with_closed_requests() {
+        let (tx, notifications) = mpsc::channel(4);
+        let (stop, stopped) = watch::channel(false);
+        let mut events = CodexRpcEvents { notifications, requests: mpsc::channel(1).1, stopped };
+        tx.send(parse_notification("turn/completed", Some(serde_json::json!({
+            "threadId": "thread", "turn": { "id": "turn", "status": "completed" }
+        })))).await.unwrap();
+        drop(tx);
+        assert!(matches!(events.next().await, CodexRpcSessionEvent::Notification(ServerNotification::TurnCompleted { .. })));
+        assert!(matches!(events.next().await, CodexRpcSessionEvent::Disconnected));
+        drop(stop);
+    }
+
+    #[tokio::test]
+    async fn event_wait_sleeps_until_input_and_shutdown_wakes_it_without_polling() {
+        let (_tx, notifications) = mpsc::channel(1);
+        let (stop, stopped) = watch::channel(false);
+        let mut events = CodexRpcEvents { notifications, requests: mpsc::channel(1).1, stopped };
+        // A closed approval stream cannot cause a busy loop or a false disconnect.
+        assert!(tokio::time::timeout(std::time::Duration::from_millis(10), events.next()).await.is_err());
+        let waiter = tokio::spawn(async move { events.next().await });
+        tokio::task::yield_now().await;
+        stop.send_replace(true);
+        let event = tokio::time::timeout(std::time::Duration::from_secs(1), waiter).await.unwrap().unwrap();
+        assert!(matches!(event, CodexRpcSessionEvent::Disconnected));
+    }
+
+    #[tokio::test]
+    async fn event_wait_receives_approval_without_needing_a_notification() {
+        let (_tx, notifications) = mpsc::channel(1);
+        let (request_tx, requests) = mpsc::channel(1);
+        let (_stop, stopped) = watch::channel(false);
+        let mut events = CodexRpcEvents { notifications, requests, stopped };
+        request_tx.send(parse_server_request(42, "test/approval".into(), None)).await.unwrap();
+        assert!(matches!(events.next().await, CodexRpcSessionEvent::ServerRequest(_)));
+    }
+
+    #[test]
+    fn execution_guidance_preserves_user_input_and_nonvision_attachments() {
+        let prompt = "只分析，不修改。\n\n附图：@/tmp/wise-example.png";
+        let original = build_wise_turn_input(prompt, Some("deepseek-flash"), false);
+        let optimized = build_wise_turn_input(prompt, Some("deepseek-flash"), true);
+        assert_eq!(&optimized[1..], original.as_slice());
+        assert!(matches!(&optimized[0], TurnInputItem::Text { text }
+            if text.starts_with("<system_reminder>")));
+        // Each turn is shaped from its own input, never from accumulated history.
+        let follow_up = build_wise_turn_input("继续", None, true);
+        assert_eq!(follow_up.len(), 2);
+        assert_eq!(follow_up[1], TurnInputItem::text("继续"));
+    }
+
+    #[test]
+    fn execution_guidance_does_not_turn_empty_input_into_a_task() {
+        assert!(build_wise_turn_input("  ", None, true).is_empty());
+        for (prompt, optimize) in [("/review", true), ("  /compact", true), ("生成一条提交信息", false)] {
+            assert_eq!(
+                build_wise_turn_input(prompt, None, optimize),
+                crate::codex_rpc_types::build_turn_input_items_from_composer_prompt_for_model(
+                    prompt, None,
+                ),
+            );
+        }
+    }
 
     #[test]
     fn idle_channel_and_disconnected_session_are_distinct() {

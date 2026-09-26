@@ -539,6 +539,7 @@ export function mergeRepositoryDiskSessions(
         repositoryName: shouldPreserveRepositoryDisplayName(s.repositoryName) ? s.repositoryName : repositoryName,
         model: item.modelHint ?? s.model,
         diskPreview: item.preview || s.diskPreview,
+        diskUpdatedAtMs: item.updatedAtMs,
         // 内存有消息：取较早时间，让 createdAt 不晚于首次出现时刻（历史正确语义）。
         // 内存无消息（磁盘索引占位）：磁盘 mtime 才是「上次活跃」真值，
         // 用 max 让 createdAt 与磁盘 updatedAtMs 对齐，左栏 groupSessionsByDay
@@ -571,6 +572,7 @@ export function mergeRepositoryDiskSessions(
     status: "completed" as const,
     messages: [],
     createdAt: item.updatedAtMs,
+    diskUpdatedAtMs: item.updatedAtMs,
     pendingPrompt: "",
     diskPreview: item.preview,
   }));

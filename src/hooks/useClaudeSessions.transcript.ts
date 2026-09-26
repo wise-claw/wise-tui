@@ -69,6 +69,7 @@ function diskSourceToKeyEngine(source: DiskTranscriptSource): SessionExecutionEn
   if (source === "codex_rpc") return "codex-rpc";
   if (source === "native_codex") return "codex-rpc";
   if (source === "native_deepseek") return "deepseek";
+  if (source === "native_cursor") return "cursor";
   return "claude";
 }
 
@@ -77,10 +78,16 @@ export function resolveNativeCliTranscriptSource(
   session: { nativeCliSource?: NativeCliDiskSessionEngine | null; claudeSessionId?: string | null; id?: string },
 ): DiskTranscriptCandidate | null {
   const engine = session.nativeCliSource;
-  if (engine !== "codex" && engine !== "deepseek") return null;
+  if (engine !== "codex" && engine !== "deepseek" && engine !== "cursor") return null;
   const key = session.claudeSessionId?.trim() || session.id?.trim() || "";
   if (!key) return null;
-  return { source: engine === "codex" ? "native_codex" : "native_deepseek", key };
+  const source =
+    engine === "codex"
+      ? "native_codex"
+      : engine === "deepseek"
+        ? "native_deepseek"
+        : "native_cursor";
+  return { source, key };
 }
 
 /**
@@ -358,11 +365,13 @@ export function shouldSkipFullDiskReloadForRunningSession(
 /**
  * 内存 transcript 是否仍是流式残片、需要被磁盘覆盖。
  *
- * Wise tab 落盘引擎（Codex RPC 等）在回合结束后常把「执行中」system + 截断助手留在
- * tabs.json；`sessionShouldRetainMessagesWhenInactive` 又禁止清空，导致切回时
- * `messages.length > 0` 永久跳过 hydrate，消息列表只剩 2～3 条残片。
+ * Wise tab 落盘引擎（Codex RPC / Cursor 等）在回合结束后常把截断助手留在
+ * tabs.json；`sessionShouldRetainMessagesWhenInactive` 又因 `executionEngine` 禁止清空，
+ * 且 `diskTranscriptPartial` **不落盘**，冷启动后 `messages.length > 0` 会永久跳过 hydrate，
+ * 消息列表只剩 2～3 条残片（磁盘上其实有完整 jsonl）。
  *
- * 已有 `diskTranscriptPartial` 尾窗（侧栏展示用 24 条 cap）不视为残片——交给滚动加载更多。
+ * 因此：只要有可恢复的磁盘证据且气泡极少（≤4），一律视为残片强制覆盖。
+ * 已有较长侧栏窗口（>4）的 partial 交给滚动「加载更多」，不在此重拉。
  */
 export function memoryTranscriptNeedsDiskRefresh(
   session: ClaudeSession,
@@ -376,15 +385,14 @@ export function memoryTranscriptNeedsDiskRefresh(
     return systemMessagePlainText(message).includes("执行中");
   });
   if (hasRunningSystem) return true;
-  // merge 刚从 codex-runs 标 partial、内存却只有极少流式气泡：强制覆盖。
-  if (
-    session.diskTranscriptPartial === true &&
-    session.messages.length > 0 &&
-    session.messages.length <= 4
-  ) {
-    return true;
-  }
-  return false;
+  if (session.messages.length === 0 || session.messages.length > 4) return false;
+  // tabs.json 不持久化 diskTranscriptPartial；冷启动残片常无此标记，但不能因此跳过补全。
+  // 不靠 sessionHasDiskTranscript（Wise tab 仅凭 id 即为 true），避免无落盘的草稿反复空转。
+  return (
+    session.diskTranscriptPartial === true ||
+    Boolean(session.claudeSessionId?.trim()) ||
+    Boolean(session.diskPreview?.trim())
+  );
 }
 
 /**
@@ -628,9 +636,16 @@ export async function applyDiskTranscriptTail(params: {
     : messages;
   if (!isTerminalWorker) {
     if (sanitizedDisk.length === 0) return false;
-    // 与全量重载一致：内存已有完整用户回显时，禁止残片尾窗覆盖（启动快照预检）。
+    // 内存已有完整用户回显、尾窗却丢掉用户或从助手中段切入：不能用残片覆盖，改拉全量。
     if (shouldPreserveMemoryTranscriptOverDisk(params.session, sanitizedDisk)) {
-      return false;
+      return reloadFullDiskTranscriptByKey({
+        sessionKey: params.session.id,
+        sessions: [params.session],
+        setSessions: params.setSessions,
+        diskTailLinesBySession: params.diskTailLinesBySession,
+        resolveSessionExecutionEngine: params.resolveSessionExecutionEngine,
+        loadSessionTranscriptLines: params.loadSessionTranscriptLines,
+      });
     }
   }
   let applied = false;

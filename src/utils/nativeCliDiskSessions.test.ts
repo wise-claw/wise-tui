@@ -61,6 +61,31 @@ describe("mergeNativeCliDiskSessions", () => {
     expect(next[0]!.executionEngine).toBe("deepseek");
   });
 
+  test("adds a Cursor ACP row bound to the cursor execution engine", () => {
+    const next = mergeNativeCliDiskSessions(
+      [],
+      "/repo",
+      "demo",
+      "cursor",
+      [
+        diskItem({
+          engine: "cursor",
+          sessionId: "9525465f-23a0-4f16-a873-07207ff85bc4",
+          preview: "Git Commit Generator",
+          modelHint: null,
+          title: "Git Commit Generator",
+        }),
+      ],
+      "sonnet",
+    );
+    expect(next).toHaveLength(1);
+    expect(next[0]!.nativeCliSource).toBe("cursor");
+    expect(next[0]!.executionEngine).toBe("cursor");
+    expect(next[0]!.id).toBe("9525465f-23a0-4f16-a873-07207ff85bc4");
+    expect(next[0]!.claudeSessionId).toBe("9525465f-23a0-4f16-a873-07207ff85bc4");
+    expect(next[0]!.diskPreview).toBe("Git Commit Generator");
+  });
+
   test("hydrates an existing Wise row without changing its tab id", () => {
     const prev = [
       session({

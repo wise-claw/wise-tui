@@ -639,6 +639,22 @@ describe("resolveDiskTranscriptCandidates", () => {
     expect(candidates[0]).toEqual({ source: "native_deepseek", key: "session-0c2b" });
   });
 
+  test("native cursor sessions prefer ACP transcript then Wise cursor-runs", () => {
+    const candidates = resolveDiskTranscriptCandidates(
+      {
+        id: "9525465f-23a0-4f16-a873-07207ff85bc4",
+        claudeSessionId: "9525465f-23a0-4f16-a873-07207ff85bc4",
+        nativeCliSource: "cursor",
+      },
+      "cursor",
+    );
+    expect(candidates[0]).toEqual({
+      source: "native_cursor",
+      key: "9525465f-23a0-4f16-a873-07207ff85bc4",
+    });
+    expect(candidates.some((c) => c.source === "cursor")).toBe(true);
+  });
+
   test("native source falls back to tab id when claudeSessionId is not hydrated yet", () => {
     expect(
       resolveDiskTranscriptCandidates({ id: "019fba5c-thread", nativeCliSource: "codex" }, "codex-rpc")[0],
@@ -1028,6 +1044,58 @@ describe("shouldRequestDiskTranscriptHydration", () => {
         "codex-rpc",
       ),
     ).toBe(true);
+  });
+
+  test("Wise Codex RPC cold-start stub without diskTranscriptPartial still re-hydrates", () => {
+    // tabs.json 不持久化 diskTranscriptPartial；重启后只剩 user+半截 assistant。
+    expect(
+      shouldRequestDiskTranscriptHydration(
+        plainSession({
+          id: "session_1790347812878_sqbzah",
+          claudeSessionId: "01a0daf0-f0a6-7f71-a88e-4dae6cbfe58d",
+          executionEngine: "codex-rpc",
+          status: "completed",
+          diskPreview: "打通原生codex",
+          messages: [
+            { role: "user", content: "打通原生codex", timestamp: 1 },
+            { role: "assistant", content: "I'll start by looking", timestamp: 2 },
+          ],
+        }),
+        "codex-rpc",
+      ),
+    ).toBe(true);
+  });
+
+  test("Wise Cursor cold-start stub with only diskPreview re-hydrates", () => {
+    expect(
+      shouldRequestDiskTranscriptHydration(
+        plainSession({
+          id: "tab-cursor-1",
+          claudeSessionId: null,
+          executionEngine: "cursor",
+          status: "idle",
+          diskPreview: "分析项目",
+          messages: [{ role: "user", content: "分析项目", timestamp: 1 }],
+        }),
+        "cursor",
+      ),
+    ).toBe(true);
+  });
+
+  test("short Wise draft without disk evidence does not hydrate", () => {
+    expect(
+      shouldRequestDiskTranscriptHydration(
+        plainSession({
+          id: "session_draft",
+          claudeSessionId: null,
+          executionEngine: "codex-rpc",
+          status: "idle",
+          diskPreview: "",
+          messages: [{ role: "user", content: "草稿", timestamp: 1 }],
+        }),
+        "codex-rpc",
+      ),
+    ).toBe(false);
   });
 
   test("capped partial sidebar window does not re-hydrate just because partial", () => {

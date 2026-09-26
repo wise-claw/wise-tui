@@ -16,18 +16,23 @@ export function normalizeSessionTimestampMs(value: number): number {
  * 侧栏 / 历史列表排序用「最近活跃」时间。
  *
  * 末条消息可能缺 timestamp（工具行、部分 Codex RPC 行）；从尾部向前找第一条有效时间。
+ * 同时保留磁盘索引的最后活跃时间，避免旧内存消息把今天续跑的会话排回昨天。
  * 与 `createdAt` 取 max：切走会话清空 messages 前会把活跃时间写回 `createdAt`，
  * 避免回落到更早的建标签时间导致「新会话」短暂顶到「你好」前面再跳回。
  */
 export function getSessionUpdatedAt(session: ClaudeSession): number {
   const created = normalizeSessionTimestampMs(session.createdAt);
+  const diskUpdated = session.diskUpdatedAtMs;
+  const activity = typeof diskUpdated === "number" && Number.isFinite(diskUpdated) && diskUpdated > 0
+    ? Math.max(created, diskUpdated)
+    : created;
   for (let i = session.messages.length - 1; i >= 0; i -= 1) {
     const ts = session.messages[i]?.timestamp;
     if (typeof ts === "number" && Number.isFinite(ts) && ts > 0) {
-      return Math.max(created, normalizeSessionTimestampMs(ts));
+      return Math.max(activity, normalizeSessionTimestampMs(ts));
     }
   }
-  return created;
+  return activity;
 }
 
 /** 丢弃 messages 前：把当前活跃时间锁进 createdAt，保证侧栏排序不因空 messages 抖动。 */

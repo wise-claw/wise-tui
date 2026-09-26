@@ -110,6 +110,10 @@ import {
   listCodexRpcDiskSessionsForRepositoryScope,
   mergeCodexRpcDiskSessions,
 } from "../utils/codexRpcDiskSessions";
+import {
+  listCursorDiskSessionsForRepositoryScope,
+  mergeCursorDiskSessions,
+} from "../utils/cursorDiskSessions";
 import { loadSessionTabsState, saveSessionTabsState, buildPersistedTabsState, takeLocalTabsBackupRaw, writeLocalTabsBackupRaw } from "../services/tabsStore";
 import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import {
@@ -202,12 +206,11 @@ import { normalizeSessionExecutionEngine } from "../constants/sessionExecutionEn
 import {
   resolveDiskTranscriptSessionKey,
   resolveDiskTranscriptSource,
-  sessionHasDiskTranscript,
   sessionMessagesSafeToDropForDiskReload,
   type DiskTranscriptSource,
 } from "../utils/sessionExecutionEngine";
 import { findSessionByTabOrClaudeId } from "../utils/claudeSessionSelection";
-import { bumpSessionCreatedAtForSortActivity } from "../components/ClaudeSessions/sessionGrouping";
+import { bumpSessionCreatedAtForSortActivity, getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGrouping";
 import { retainSessionListPreviewOnMessageDrop } from "../utils/sessionListPreview";
 import {
   findSessionForMonitorDrawerResume,
@@ -802,9 +805,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (!rp || !diskKey.trim()) return [];
       const target =
         source ?? resolveDiskTranscriptSource(resolveSessionExecutionEngine(session));
-      if (target === "native_codex" || target === "native_deepseek") {
+      if (target === "native_codex" || target === "native_deepseek" || target === "native_cursor") {
         return loadNativeCliSessionTranscript(
-          target === "native_codex" ? "codex" : "deepseek",
+          target === "native_codex" ? "codex" : target === "native_deepseek" ? "deepseek" : "cursor",
           rp,
           diskKey,
           { tailLines: tailLines ?? null },
@@ -2463,7 +2466,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   ]);
 
   /**
-   * 把外部 CLI（Codex / DeepSeek Harness）原生会话索引并入同一份会话列表。
+   * 把外部 CLI（Codex / DeepSeek Harness / Cursor ACP）原生会话索引并入同一份会话列表。
    *
    * 这些会话不是 Wise 创建的，但落在各自 CLI 的用户目录里；并入后
    * `nativeCliSource` 会让 transcript 走原生权威转录，并允许用对应引擎续接。
@@ -2549,7 +2552,20 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           sessionsRef.current,
         );
       } catch {
-        /* Wise 落盘索引失败不阻断 Claude / 原生索引 */
+        /* Wise Codex 落盘索引失败不阻断 Claude / 原生索引 */
+      }
+
+      let wiseCursorDisk: Awaited<ReturnType<typeof listCursorDiskSessionsForRepositoryScope>> = {
+        disk: [],
+        listingPath: mergePath,
+      };
+      try {
+        wiseCursorDisk = await listCursorDiskSessionsForRepositoryScope(
+          trimmedPath,
+          sessionsRef.current,
+        );
+      } catch {
+        /* Wise Cursor 落盘索引失败不阻断其余索引 */
       }
 
       let migrations: Array<{ fromTabId: string; toClaudeSessionId: string }> = [];
@@ -2563,7 +2579,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           "sonnet",
           companionSessionIdsRef.current,
         );
-        // Wise 自己的 Codex RPC 落盘优先并入：它们被原生索引排除，必须靠这里回侧栏。
+        // Wise 自己的 Codex RPC / Cursor 落盘优先并入：它们被原生索引排除或仅有元数据，必须靠这里回侧栏。
         const wiseCodexMerged = mergeCodexRpcDiskSessions(
           claudeMerged,
           wiseCodexDisk.listingPath || mergePath,
@@ -2571,8 +2587,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           wiseCodexDisk.disk,
           getCachedExecutionEngineDefaultModel("codex-rpc") ?? "sonnet",
         );
-        const next = mergeNativeCliDiskSessionsForRepository(
+        const wiseCursorMerged = mergeCursorDiskSessions(
           wiseCodexMerged,
+          wiseCursorDisk.listingPath || mergePath,
+          repositoryName,
+          wiseCursorDisk.disk,
+          getCachedExecutionEngineDefaultModel("cursor") ?? "sonnet",
+        );
+        const next = mergeNativeCliDiskSessionsForRepository(
+          wiseCursorMerged,
           mergePath,
           repositoryName,
           nativeDiskByEngine,
@@ -2600,9 +2623,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       for (const migration of migrations) {
         applySessionTabIdMigration(migration.fromTabId, migration.toClaudeSessionId);
       }
-      const activeKey = activeSessionIdRef.current?.trim();
-      if (activeKey) {
-        requestDiskTranscriptHydration(activeKey);
+      // 磁盘索引合并后：冷启动残片（≤4 气泡且无落盘的 partial 标记）也要补全，
+      // 不能只 hydrate 当前活动标签——否则侧栏点开前看不到今天的完整消息。
+      const needingHydration = sessionsRef.current.filter(
+        (row) =>
+          repositoryPathsMatch(row.repositoryPath, mergePath) &&
+          shouldRequestDiskTranscriptHydration(row, resolveSessionExecutionEngine(row)),
+      );
+      for (const row of needingHydration.sort((a, b) => getSessionUpdatedAt(b) - getSessionUpdatedAt(a)).slice(0, 16)) {
+        requestDiskTranscriptHydration(row.id);
       }
 
       void (async () => {
@@ -3914,10 +3943,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       const claudeSidEarly =
         session.claudeSessionId?.trim() ?? sessionIdMapRef.current.get(sessionId)?.trim() ?? null;
-      const needsHostIpc =
-        session.status === "running" ||
-        session.status === "connecting" ||
-        Boolean(claudeSidEarly?.trim());
+      const needsHostIpc = Boolean(claudeSidEarly?.trim());
       if (!needsHostIpc) {
         return;
       }

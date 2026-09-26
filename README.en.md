@@ -56,7 +56,7 @@ Workspace & context → Agent / assistant → Runtime → Session / workflow →
 - Create, restore, stop, and run multiple AI sessions in parallel.
 - Use multi-pane layouts for sessions, terminals, files, and message lists.
 - Select an execution engine per session, repository, or assistant and inspect local Agent availability.
-- Discover Codex / DeepSeek Harness sessions that were run natively outside Wise (`~/.codex/sessions`, `~/.dsh/sessions`), see them badged in the sidebar, and resume them by their native session id.
+- Discover Codex / DeepSeek Harness / Cursor ACP sessions that were run natively outside Wise (`~/.codex/sessions`, `~/.dsh/sessions`, `~/.cursor/acp-sessions`), plus Wise-owned Cursor transcripts under `~/.wise/cursor-runs`, see them badged in the sidebar, and resume them by their native session id.
 - Use Composer for rich text, file / image context, snippets, voice input, and slash commands.
 - Set the assistant reply language per session defaults (Follow engine / Simplified Chinese / English / Japanese) under Workspace Config → New Session; code, commands, and quoted source text stay untouched.
 - Configure auto-approval, sandbox behavior, permissions, model profiles, usage, and session processes.
