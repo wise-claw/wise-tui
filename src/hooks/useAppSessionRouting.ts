@@ -13,6 +13,7 @@ import {
   resolveMainOwnerAgentNameForRepositoryPath,
   resolveSessionFromBindingValue,
   isProjectMainSessionBindingKey,
+  shouldReleasePreviousMainSessionHostOnRebind,
 } from "../utils/repositoryMainSessionBinding";
 import {
   isOmcBatchHistoryStubSessionId,
@@ -194,7 +195,11 @@ export function useAppSessionRouting({
         const prevSession =
           (prevTabId ? sessionsLatestRef.current.find((s) => s.id === prevTabId) : null) ??
           resolveSessionFromBindingValue(prevRaw, sessionsLatestRef.current);
-        if (prevSession && prevSession.id !== nextId) {
+        if (
+          prevSession &&
+          prevSession.id !== nextId &&
+          shouldReleasePreviousMainSessionHostOnRebind(prevSession)
+        ) {
           window.setTimeout(() => {
             void releaseSessionHostProcessRef.current(prevSession.id);
           }, 0);

@@ -19,6 +19,8 @@ import { getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGroupin
 import { isClaudeSessionRunningByHostProcesses } from "../utils/claudeHostRunningSessionIds";
 import { isProjectRootSessionDisplayName, normalizeRepositoryPathKey, repositoryPathsMatch } from "../utils/repositoryMainSessionBinding";
 import { collectTauriListeners, safeUnlisten } from "../utils/safeTauriUnlisten";
+import { normalizeSessionExecutionEngine } from "../constants/sessionExecutionEngine";
+import { usesWiseTabIdForDiskTranscript } from "../utils/sessionExecutionEngine";
 
 export type ClaudeStreamRuntimeHandlers = ReturnType<typeof createClaudeStreamRuntime>;
 
@@ -438,6 +440,19 @@ export function pruneGhostRepositorySessions(
   return sessions.filter((s) => {
     if (!repositoryPathsMatch(s.repositoryPath, repositoryPath)) return true;
     if (isTerminalWorkerWiseTab(s)) return true;
+    // 外部 CLI 原生索引行由 `mergeNativeCliDiskSessions` 单独维护：
+    // 它们的 claudeSessionId 是 Codex / dsh 的会话 id，不会出现在 ~/.claude/projects 索引里，
+    // 不能按 Claude 幽灵行删掉。
+    if (s.nativeCliSource) return true;
+    // Wise 内 Codex RPC / Cursor / DeepSeek 等：transcript 在 ~/.wise/*-runs，
+    // claudeSessionId 是引擎 thread id，同样不在 Claude 磁盘索引里。
+    const boundEngine = s.executionEngine?.trim();
+    if (
+      boundEngine &&
+      usesWiseTabIdForDiskTranscript(normalizeSessionExecutionEngine(boundEngine))
+    ) {
+      return true;
+    }
     if (s.status === "running" || s.status === "connecting") return true;
     const claudeId = s.claudeSessionId?.trim();
     if (!claudeId) return true;

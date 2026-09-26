@@ -608,6 +608,42 @@ describe("resolveDiskTranscriptCandidates", () => {
       { source: "claude", key: "agent-uuid-1" },
     ]);
   });
+
+  test("native codex sessions read the CLI transcript first and keep Wise fallbacks", () => {
+    expect(
+      resolveDiskTranscriptCandidates(
+        {
+          id: "019fba5c-thread",
+          claudeSessionId: "019fba5c-thread",
+          nativeCliSource: "codex",
+        },
+        "codex-rpc",
+      ),
+    ).toEqual([
+      { source: "native_codex", key: "019fba5c-thread" },
+      { source: "codex_rpc", key: "019fba5c-thread" },
+      { source: "cursor", key: "019fba5c-thread" },
+      { source: "claude", key: "019fba5c-thread" },
+    ]);
+  });
+
+  test("native deepseek sessions read the dsh transcript first", () => {
+    const candidates = resolveDiskTranscriptCandidates(
+      {
+        id: "session-0c2b",
+        claudeSessionId: "session-0c2b",
+        nativeCliSource: "deepseek",
+      },
+      "deepseek",
+    );
+    expect(candidates[0]).toEqual({ source: "native_deepseek", key: "session-0c2b" });
+  });
+
+  test("native source falls back to tab id when claudeSessionId is not hydrated yet", () => {
+    expect(
+      resolveDiskTranscriptCandidates({ id: "019fba5c-thread", nativeCliSource: "codex" }, "codex-rpc")[0],
+    ).toEqual({ source: "native_codex", key: "019fba5c-thread" });
+  });
 });
 
 describe("applyDiskTranscriptTail sidebar preview", () => {
@@ -952,6 +988,65 @@ describe("shouldRequestDiskTranscriptHydration", () => {
       shouldRequestDiskTranscriptHydration(
         plainSession({ status: "running", messages: [{ role: "user", content: "你好", timestamp: 1 }] }),
         "claude",
+      ),
+    ).toBe(false);
+  });
+
+  test("Wise Codex RPC idle session with leftover 执行中 system re-hydrates", () => {
+    expect(
+      shouldRequestDiskTranscriptHydration(
+        plainSession({
+          id: "session_1",
+          claudeSessionId: "01a0-thread",
+          executionEngine: "codex-rpc",
+          status: "idle",
+          messages: [
+            { role: "user", content: "你好", timestamp: 1 },
+            { role: "system", content: "Codex RPC 执行中（新会话，模型：gpt-5）…", timestamp: 2 },
+            { role: "assistant", content: "I'll start", timestamp: 3 },
+          ],
+        }),
+        "codex-rpc",
+      ),
+    ).toBe(true);
+  });
+
+  test("Wise Codex RPC partial stream fragment (≤4 msgs) re-hydrates", () => {
+    expect(
+      shouldRequestDiskTranscriptHydration(
+        plainSession({
+          id: "session_2",
+          claudeSessionId: "01a0-thread",
+          executionEngine: "codex-rpc",
+          status: "completed",
+          diskTranscriptPartial: true,
+          messages: [
+            { role: "user", content: "你好", timestamp: 1 },
+            { role: "assistant", content: "半截", timestamp: 2 },
+          ],
+        }),
+        "codex-rpc",
+      ),
+    ).toBe(true);
+  });
+
+  test("capped partial sidebar window does not re-hydrate just because partial", () => {
+    const messages = Array.from({ length: 12 }, (_, i) => ({
+      role: i % 2 === 0 ? ("user" as const) : ("assistant" as const),
+      content: `m${i}`,
+      timestamp: i,
+    }));
+    expect(
+      shouldRequestDiskTranscriptHydration(
+        plainSession({
+          id: "session_3",
+          claudeSessionId: "01a0-thread",
+          executionEngine: "codex-rpc",
+          status: "idle",
+          diskTranscriptPartial: true,
+          messages,
+        }),
+        "codex-rpc",
       ),
     ).toBe(false);
   });

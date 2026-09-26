@@ -12,6 +12,7 @@ import {
   resolveRepositoryForSession,
   resolveRepositoryMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
+  shouldReleasePreviousMainSessionHostOnRebind,
 } from "./repositoryMainSessionBinding";
 
 function session(path: string, repositoryName: string, overrides: Partial<ClaudeSession> = {}): ClaudeSession {
@@ -300,5 +301,19 @@ describe("findReusableEmptyMainSession", () => {
     const empty = session(path, "wise-tui", { id: "empty", createdAt: 1 });
     expect(findReusableEmptyMainSession([projectRoot, empty], path)?.id).toBe("empty");
     expect(findReusableEmptyMainSession([projectRoot], path)).toBeNull();
+  });
+});
+
+describe("shouldReleasePreviousMainSessionHostOnRebind", () => {
+  it("keeps running / connecting previous main sessions as background work", () => {
+    expect(shouldReleasePreviousMainSessionHostOnRebind({ status: "running" })).toBe(false);
+    expect(shouldReleasePreviousMainSessionHostOnRebind({ status: "connecting" })).toBe(false);
+  });
+
+  it("allows releasing idle / completed previous main sessions", () => {
+    expect(shouldReleasePreviousMainSessionHostOnRebind({ status: "idle" })).toBe(true);
+    expect(shouldReleasePreviousMainSessionHostOnRebind({ status: "completed" })).toBe(true);
+    expect(shouldReleasePreviousMainSessionHostOnRebind({ status: "cancelled" })).toBe(true);
+    expect(shouldReleasePreviousMainSessionHostOnRebind(null)).toBe(false);
   });
 });

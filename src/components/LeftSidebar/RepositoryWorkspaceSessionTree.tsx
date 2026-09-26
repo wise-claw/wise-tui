@@ -15,6 +15,7 @@ import {
   formatWorkspaceSidebarRelativeTime,
   workspaceSidebarSessionUpdatedAt,
 } from "../../utils/repositoryWorkspaceTree";
+import { NATIVE_CLI_ENGINE_LABELS } from "../../utils/nativeCliDiskSessions";
 import { WorkspaceSessionRowStatusSlot } from "./WorkspaceSessionRowStatus";
 import "./RepositoryWorkspaceSessionTree.css";
 
@@ -351,6 +352,10 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
         }
 
         const session = row.item;
+        // 外部 CLI 原生会话才挂引擎徽标；默认 Claude 会话不加，避免每行一个无信息量标签。
+        // 落盘数据可能被改坏，取不到标签就不渲染，避免出现空徽标。
+        const nativeCliEngine = session.nativeCliSource;
+        const nativeCliBadgeLabel = nativeCliEngine ? NATIVE_CLI_ENGINE_LABELS[nativeCliEngine] : "";
         const title = getSessionPreview(session);
         const updatedAt = workspaceSidebarSessionUpdatedAt(session);
         const activeKey = activeSessionId?.trim() ?? "";
@@ -368,6 +373,11 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
             onClick={openSession}
           >
             <WorkspaceSessionRowStatusSlot liveStatus={session.status} />
+            {nativeCliEngine && nativeCliBadgeLabel ? (
+              <span className="app-workspace-session-tree__kind" data-kind={nativeCliEngine}>
+                {nativeCliBadgeLabel}
+              </span>
+            ) : null}
             <span className="app-workspace-session-tree__title" title={title}>
               {title}
             </span>

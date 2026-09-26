@@ -10,6 +10,11 @@ import {
   SESSION_EXECUTION_ENGINES_OFFERED,
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
+import {
+  SESSION_DISPLAY_LANGUAGES,
+  SESSION_DISPLAY_LANGUAGE_LABELS,
+  type SessionDisplayLanguage,
+} from "../../constants/sessionDisplayLanguage";
 import { MONITOR_PANEL_VISIBLE_ROWS_OPTIONS } from "../../constants/monitorPanelLayout";
 import { REQUIREMENTS_PANEL_VISIBLE_ROWS_OPTIONS } from "../../constants/requirementsPanelLayout";
 import { WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS, formatWorkspaceListVisibleRowsLabel } from "../../constants/workspaceListLayout";
@@ -57,6 +62,7 @@ import { useMarkdownDefaultOpenModeSetting } from "./useMarkdownDefaultOpenModeS
 import type { MarkdownDefaultOpenMode } from "../../services/wiseDefaultConfigStore";
 import { useRepoPanelPlacementSetting } from "./useRepoPanelPlacementSetting";
 import { useSessionFeedbackLoopSetting } from "./useSessionFeedbackLoopSetting";
+import { useSessionDisplayLanguageSetting } from "./useSessionDisplayLanguageSetting";
 import { useOpenInTerminalShortcutSetting } from "./useOpenInTerminalShortcutSetting";
 import { useOpenInEditorShortcutSetting } from "./useOpenInEditorShortcutSetting";
 import {
@@ -111,6 +117,7 @@ export function DefaultConfigPanel() {
   const sessionAuxReuseInCenterTabs = useSessionAuxReuseInCenterTabsSetting();
   const markdownDefaultOpenMode = useMarkdownDefaultOpenModeSetting();
   const feedbackLoop = useSessionFeedbackLoopSetting();
+  const sessionDisplayLanguage = useSessionDisplayLanguageSetting();
   const openInTerminalShortcut = useOpenInTerminalShortcutSetting();
   const openInEditorShortcut = useOpenInEditorShortcutSetting();
   const [terminalEmployees, setTerminalEmployees] = useState<EmployeeItem[]>([]);
@@ -465,6 +472,27 @@ export function DefaultConfigPanel() {
                 }))}
                 onChange={(value) => {
                   void defaultExecutionEngine.save(value as SessionExecutionEngine);
+                }}
+              />
+            }
+          />
+          <DefaultConfigRow
+            title="回复语言"
+            hint="助手输出"
+            detail="会话助手默认使用的回复语言；「默认」跟随各引擎 / 助手的提示词。代码、命令、路径与引用原文不受影响。"
+            control={
+              <Select
+                size="small"
+                aria-label="会话回复语言"
+                disabled={sessionDisplayLanguage.loading || sessionDisplayLanguage.saving}
+                value={sessionDisplayLanguage.language}
+                style={{ minWidth: 140 }}
+                options={SESSION_DISPLAY_LANGUAGES.map((language) => ({
+                  value: language,
+                  label: SESSION_DISPLAY_LANGUAGE_LABELS[language],
+                }))}
+                onChange={(value) => {
+                  void sessionDisplayLanguage.save(value as SessionDisplayLanguage);
                 }}
               />
             }

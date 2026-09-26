@@ -359,3 +359,15 @@ export function sessionMatchesRepository(params: {
   });
   return resolved?.id === repository.id;
 }
+
+/**
+ * 换绑主会话时是否应释放上一标签的宿主进程。
+ *
+ * 仍在执行的会话必须保留为后台跑：新建/复用空会话不得把它打成 idle。
+ */
+export function shouldReleasePreviousMainSessionHostOnRebind(
+  previous: Pick<ClaudeSession, "status"> | null | undefined,
+): boolean {
+  if (!previous) return false;
+  return previous.status !== "running" && previous.status !== "connecting";
+}

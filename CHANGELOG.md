@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 🗣️ 会话回复语言
+
+- **新增「回复语言」设置**：工作台配置 → 新建会话新增「回复语言」（默认跟随引擎 / 简体中文 / English / 日本語）。非「默认」时向会话注入语言要求：Claude 走 `--append-system-prompt`，Codex / Cursor / OpenCode / DeepSeek / Qoder 在每轮消息前缀注入；长驻会话下一轮即生效。代码、命令、路径、标识符与引用原文不受影响。
+
 ### 🤖 DeepSeek Harness 接入
 
 - **新增 DeepSeek Harness 执行环境**：接入 `dsh`（`@deepseek-ai/dsh`）作为一等执行引擎，与 Claude Code / Codex RPC / Cursor / OpenCode / Qoder 并列，可在执行环境选择器、Composer 模型选择器和 HUD 中切换。
@@ -11,12 +15,19 @@
 - **模型目录**：`deepseek_list_models` 通过一次性的 ACP `session/new` 读取 dsh 广告的 `model` 配置项，作为 Composer / HUD 的可选模型；模型 id 为不透明的 `provider/model`，空值表示沿用 dsh 本地配置的默认模型。
 - **Agent 注册表**：新增 `deepseek` 内置 kind（命令 `dsh`），支持探测、一键安装/更新（npm 全局）与卸载提示，配置面板展示对应安装命令。
 
+### 🔗 原生 CLI 会话接入
+
+- **外部 CLI 会话可在 Wise 中显示并续接**：新增原生会话索引，扫描并读取 Codex CLI / Codex Desktop / codex-tui 的 `~/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-*.jsonl` 与 DeepSeek Harness 的 `~/.dsh/sessions/<encoded-cwd>/<session-id>/session.v3.jsonl.zstd`，把「不是在 Wise 里创建」的会话补进左栏（带 Codex / DeepSeek 徽标），点开即可读回完整历史。
+- **续接用原生会话 id**：这些会话即使尚未在 Wise 里跑过回合，也会以 `thread/resume`（Codex）/ `session/resume`（DeepSeek Harness）续接，并优先读取 CLI 自己的权威转录（包含加入 Wise 之前的历史）；Wise 侧 `*-runs` 仍作为兜底。
+- **与既有索引共用一份上限**：原生会话与 Claude 磁盘历史按最后活跃时间统一裁剪、单次提交，避免侧栏出现「先删后加」的中间态；`codex exec` 一次性运行、以及 Wise 自己通过 app-server 跑的 rollout 不计入（后者已有 `~/.wise` 转录）。
+
 ### 🎨 交互调整
 
 - **移除会话快捷条的「推送」按钮**：快捷条不再显示「新建会话」右侧的一体化提交/推送按钮；git 提交与推送能力保留在 Git 面板，快捷动作目录同步下线 `push` 项。
 
 ### 🐛 问题修复
 
+- **Codex 会话不再出现空的「reasoning」幽灵行**：Codex app-server 的 `item/started` 会把 reasoning item 兜底映射成 `name="reasoning"` 的空工具卡（无入参、无输出），消息列表里就多出一行永远「执行中」、点不开的 `reasoning`；真正的思考内容其实另以 thinking part 完整到达（受「思考消息」开关控制）。现在 `item/started(reasoning)` 静默不再生成占位卡，前端合并时也会按 item id 回收这类无载荷占位卡，历史落盘的会话刷新后同样不再显示幽灵行。
 - **会话标签存档不再被并发写坏 / 静默清空**：`write_file_atomic` 固定使用 `<name>.json.save_tmp`，打包版与 dev 版（或用户连续启动两次）同时写 `~/.wise/tabs.json` 时会互相搬走、写坏同一个临时文件：一侧写盘静默失败，或留下解析不了的 JSON，下次启动读不出整份会话列表，工作区只剩几个「新会话」。现在临时文件名带进程 id / 序号 / 纳秒后缀，写入者互不干扰，失败时清理临时文件。
 - **读不出会话标签时不再当成「没有存档」**：`load_session_tabs` 原先把读取/解析失败一律映射为 `None`，前端随即用（可能很旧的）localStorage 备份启动并覆盖写盘。现在区分「文件不存在」与「文件损坏」：损坏时回退 `<name>.json.bak`，坏文件另存 `.corrupt-<时间戳>` 现场；写入前若会话数将变少，先留一份更完整的 `.bak`（备份只增不减，连续缩小不会把旧快照冲掉）；前端读取遇到启动期 IPC 抖动会短暂重试并留下警告，单条坏会话也只会被跳过而不是丢掉整份存档。
 - **窗口 label 取值失败不再被永久缓存**：`getCurrentMainWorkspaceWindowLabel` 在 IPC 桥未就绪时取值抛错会被缓存成 `null`，使该窗口此后永远被当成「非主工作区窗口」，定时任务、协作桥与会话标签落盘范围一并失效；现在失败不缓存，下次调用重试。

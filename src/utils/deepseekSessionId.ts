@@ -1,4 +1,4 @@
-import type { ClaudeSession } from "../types";
+import type { ClaudeSession, NativeCliEngine } from "../types";
 
 /** dsh ACP session ids are opaque; keep validation permissive like Qoder's. */
 const DEEPSEEK_RESUME_SESSION_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$/;
@@ -19,11 +19,16 @@ export function sessionHasPriorDeepseekTurn(
 }
 
 export function resolveDeepseekResumeSessionId(
-  session: { claudeSessionId?: string | null; messages: ClaudeSession["messages"] },
+  session: {
+    claudeSessionId?: string | null;
+    messages: ClaudeSession["messages"];
+    /** 外部 CLI 原生会话索引来源：即使尚未 hydrate 也允许 `session/resume`。 */
+    nativeCliSource?: NativeCliEngine | null;
+  },
   tabSessionId: string,
   sessionIdMap?: ReadonlyMap<string, string>,
 ): string | null {
-  if (!sessionHasPriorDeepseekTurn(session.messages)) {
+  if (!sessionHasPriorDeepseekTurn(session.messages) && session.nativeCliSource !== "deepseek") {
     return null;
   }
   const candidates = [session.claudeSessionId, sessionIdMap?.get(tabSessionId)];

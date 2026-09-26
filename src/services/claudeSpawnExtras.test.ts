@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 const materializeClaudeSpawnMcpConfig = mock(async () => "/tmp/wise-spawn-mcp/test.json");
 
@@ -26,8 +26,14 @@ mock.module("./assistantPromptLayers", () => ({
 
 // ultracode 全局开关默认关闭；按测试需要可 override。
 let mockedGlobalUltracodeRaw: string | null = '{"ultracode": false}';
+// 会话回复语言默认 auto（不注入）；按测试需要可 override。
+let mockedSessionDisplayLanguageRaw: string | null = null;
+const SESSION_DISPLAY_LANGUAGE_KEY = "wise.sessionDisplayLanguage.v1";
 mock.module("./appSettingsStore", () => ({
-  getAppSetting: mock(async () => mockedGlobalUltracodeRaw),
+  getAppSetting: mock(async (key: string) => {
+    if (key === SESSION_DISPLAY_LANGUAGE_KEY) return mockedSessionDisplayLanguageRaw;
+    return mockedGlobalUltracodeRaw;
+  }),
   setAppSetting: mock(async () => undefined),
   WISE_CLAUDE_DEFAULT_SETTINGS_KEY: "wise.claudeDefaultSettings.v1",
 }));
@@ -147,6 +153,33 @@ describe("claudeSpawnExtras", () => {
       mockedGlobalUltracodeRaw = "{not-json}";
       const extras = await resolveClaudeSpawnExtrasForSession(baseParams);
       expect(extras?.appendSystemPrompt ?? "").not.toContain(ULTRACODE_SYSTEM_PROMPT_BLOCK);
+    });
+  });
+
+  describe("resolveClaudeSpawnExtrasForSession 回复语言", () => {
+    const baseParams = {
+      session: { id: "s1", repositoryPath: "/repo/a", repositoryName: "repo" },
+      projects: [],
+      repositories: [],
+      preferredProjectId: null,
+      activeAssistantId: null,
+    };
+
+    beforeEach(() => {
+      mockedSessionDisplayLanguageRaw = null;
+      mockedGlobalUltracodeRaw = '{"ultracode": false}';
+    });
+
+    test("auto（默认）不注入语言块", async () => {
+      const extras = await resolveClaudeSpawnExtrasForSession(baseParams);
+      expect(extras?.appendSystemPrompt ?? "").not.toContain("会话回复语言");
+    });
+
+    test("指定语言后注入语言块", async () => {
+      mockedSessionDisplayLanguageRaw = "zh-CN";
+      const extras = await resolveClaudeSpawnExtrasForSession(baseParams);
+      expect(extras?.appendSystemPrompt).toContain("会话回复语言");
+      expect(extras?.appendSystemPrompt).toContain("简体中文");
     });
   });
 

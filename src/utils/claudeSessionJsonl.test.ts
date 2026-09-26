@@ -524,3 +524,56 @@ describe("parseClaudeSessionJsonlLines — Cursor 流式 assistant 碎片合并"
     expect(first[1]?.timestamp).toBeLessThan(Date.now() - 60_000);
   });
 });
+
+describe("parseClaudeSessionJsonlLines — Codex reasoning 占位工具卡", () => {
+  test("drops the ghost name=reasoning tool card recorded by item/started", () => {
+    // 真实落盘形态（~/.wise/codex-runs）：item/started 的占位 tool_use + 同 id 的 thinking 行。
+    const lines = [
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: [{ id: "itm_r1", name: "reasoning", status: "running", type: "tool_use" }],
+        },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              stream_id: "itm_r1",
+              thinking: "先看仓库结构，再定位会话接入点。",
+              type: "thinking",
+            },
+          ],
+        },
+        timestamp: 1_700_000_000_000,
+      }),
+    ];
+
+    const messages = parseClaudeSessionJsonlLines(lines);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.parts).toEqual([
+      {
+        type: "reasoning",
+        text: "先看仓库结构，再定位会话接入点。",
+        streamId: "itm_r1",
+      },
+    ]);
+  });
+
+  test("drops orphan ghost name=reasoning tool cards with no thinking follow-up", () => {
+    const lines = [
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: [{ id: "itm_orphan", name: "reasoning", status: "running", type: "tool_use" }],
+        },
+      }),
+    ];
+    const messages = parseClaudeSessionJsonlLines(lines);
+    expect(messages).toEqual([]);
+  });
+});

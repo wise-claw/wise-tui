@@ -42,6 +42,8 @@ import {
 import type { ClaudeSpawnCliExtras } from "../services/claudeSpawnExtras";
 import { notificationHub } from "../notifications";
 import { appendSystemMessageBySessionId } from "../services/claudeSessionState";
+import { applySessionDisplayLanguageToPrompt } from "../utils/sessionDisplayLanguagePrompt";
+import { ensureSessionDisplayLanguageLoaded } from "../services/sessionDisplayLanguage";
 import {
   CLAUDE_STREAM_RUNTIME_READY_POLL_MS,
   CLAUDE_STREAM_RUNTIME_READY_WAIT_MS,
@@ -810,6 +812,12 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     const isFollowUp = Boolean(entry && liveSid && entry.claudeSessionId?.trim() === liveSid);
 
     if (isFollowUp && liveSid) {
+      // 长驻进程的 `--append-system-prompt` 在 spawn 时固定；回复语言改动后，
+      // 后续轮次用前缀补一遍，保证设置即时生效。
+      const followUpPrompt = applySessionDisplayLanguageToPrompt(
+        await ensureSessionDisplayLanguageLoaded().catch(() => null),
+        prompt,
+      );
       const rt = streamRuntimeRef.current;
       let detachFollowUp: (() => void) | null = null;
       const followInv = crypto.randomUUID();
@@ -846,7 +854,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
           tabSessionId,
         );
         assertCanSpawn(tabSessionId, signal);
-        await sendStreamingUserMessage(liveSid, prompt);
+        await sendStreamingUserMessage(liveSid, followUpPrompt);
         return;
       } catch (err) {
         detachFollowUp?.();
@@ -955,6 +963,14 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     const resolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
     const engine: SessionExecutionEngine =
       session && resolver ? resolver(session) : getCachedDefaultExecutionEngine();
+    // Claude 走 `--append-system-prompt` 注入回复语言；其余引擎把语言要求并入本轮消息。
+    const enginePrompt =
+      engine === "claude"
+        ? params.prompt
+        : applySessionDisplayLanguageToPrompt(
+            await ensureSessionDisplayLanguageLoaded().catch(() => null),
+            params.prompt,
+          );
     // Interactive Codex sessions use app-server so Tab can steer the active turn.
     // Keep the exec runner available for explicit oneshot/background invocations.
     if (engine === "codex" || engine === "codex-rpc") {
@@ -970,7 +986,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         tabSessionId: params.tabSessionId,
         turnNonce: params.turnNonce,
         repositoryPath: params.repositoryPath,
-        prompt: params.prompt,
+        prompt: enginePrompt,
         modelArg: params.modelArg,
         contextExecutionEngine,
         codexResumeSessionId,
@@ -985,7 +1001,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         tabSessionId: params.tabSessionId,
         turnNonce: params.turnNonce,
         repositoryPath: params.repositoryPath,
-        prompt: params.prompt,
+        prompt: enginePrompt,
         modelArg: params.modelArg,
         cursorAgentId,
         cursorAttachments: params.cursorAttachments,
@@ -1002,7 +1018,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         tabSessionId: params.tabSessionId,
         turnNonce: params.turnNonce,
         repositoryPath: params.repositoryPath,
-        prompt: params.prompt,
+        prompt: enginePrompt,
         modelArg: params.modelArg,
         contextExecutionEngine: "opencode",
         opencodeResumeSessionId,
@@ -1019,7 +1035,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         tabSessionId: params.tabSessionId,
         turnNonce: params.turnNonce,
         repositoryPath: params.repositoryPath,
-        prompt: params.prompt,
+        prompt: enginePrompt,
         modelArg: params.modelArg,
         deepseekResumeSessionId,
         forceNewClaudeConversation: params.forceNewClaudeConversation,
@@ -1035,7 +1051,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         tabSessionId: params.tabSessionId,
         turnNonce: params.turnNonce,
         repositoryPath: params.repositoryPath,
-        prompt: params.prompt,
+        prompt: enginePrompt,
         modelArg: params.modelArg,
         qoderResumeSessionId,
         forceNewClaudeConversation: params.forceNewClaudeConversation,

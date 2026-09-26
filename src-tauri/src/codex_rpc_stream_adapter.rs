@@ -1188,8 +1188,10 @@ fn map_item_started(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> {
             }
         }
         "fileChange" => map_file_change_changes(&item.id, &item.raw, "running"),
-        // 计划 / hook 提示在 completed 时输出；started 静默避免空卡。
-        "plan" | "hookPrompt" => vec![],
+        // 计划 / hook 提示 / 推理在 completed（或 delta）时输出；started 静默避免空卡。
+        // `reasoning` 必须列在这里：否则会落到下方通用兜底，生成 `name="reasoning"` 的空
+        // tool_use，前端渲染成一行「只有 reasoning、无正文、永远 running」的幽灵工具卡。
+        "plan" | "hookPrompt" | "reasoning" => vec![],
         "webSearch" => {
             let query = item
                 .raw
@@ -1379,7 +1381,8 @@ fn map_item_started(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> {
     }
 }
 
-fn map_item_completed(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> {
+/// 与 app-server `item/completed` 同源的映射；原生 rollout 归一化后也复用它。
+pub(crate) fn map_item_completed(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> {
     match item.item_type.as_str() {
         // 勿把 userMessage（含 localImage 回显）或 imageView 当成助手文本/工具卡片。
         "userMessage" | "imageView" | "image_view" => vec![],
@@ -2483,6 +2486,27 @@ mod tests {
                 "{item_type} completed should be silent"
             );
         }
+    }
+
+    #[test]
+    fn reasoning_item_started_is_silent() {
+        let mut state = CodexRpcStreamAdaptState::default();
+        let started = ServerNotification::ItemStarted {
+            item_id: "itm_r".to_string(),
+            turn_id: "t1".to_string(),
+            item: crate::codex_rpc_types::ThreadItem {
+                id: "itm_r".to_string(),
+                item_type: "reasoning".to_string(),
+                raw: json!({}),
+            },
+        };
+        let out = adapt(&started, &mut state);
+        assert!(
+            out.emit.is_empty(),
+            "reasoning started must not emit a placeholder tool card: {:?}",
+            out.emit
+        );
+        assert!(out.persist.is_empty());
     }
 
     #[test]

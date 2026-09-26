@@ -17,6 +17,7 @@ import {
   usesWiseTabIdForDiskTranscript,
   type DiskTranscriptSource,
 } from "../utils/sessionExecutionEngine";
+import type { NativeCliEngine as NativeCliDiskSessionEngine } from "../types";
 import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
 import { userMessagePlainTextForDisplay, systemMessagePlainText } from "../utils/claudeChatMessageDisplay";
 import { findSessionByTabOrClaudeId } from "../utils/claudeSessionSelection";
@@ -66,7 +67,20 @@ export function resolveDiskTranscriptKeyCandidates(
 function diskSourceToKeyEngine(source: DiskTranscriptSource): SessionExecutionEngine {
   if (source === "cursor") return "cursor";
   if (source === "codex_rpc") return "codex-rpc";
+  if (source === "native_codex") return "codex-rpc";
+  if (source === "native_deepseek") return "deepseek";
   return "claude";
+}
+
+/** 会话被标记为外部 CLI 原生会话时，对应的原生转录来源。 */
+export function resolveNativeCliTranscriptSource(
+  session: { nativeCliSource?: NativeCliDiskSessionEngine | null; claudeSessionId?: string | null; id?: string },
+): DiskTranscriptCandidate | null {
+  const engine = session.nativeCliSource;
+  if (engine !== "codex" && engine !== "deepseek") return null;
+  const key = session.claudeSessionId?.trim() || session.id?.trim() || "";
+  if (!key) return null;
+  return { source: engine === "codex" ? "native_codex" : "native_deepseek", key };
 }
 
 /**
@@ -75,12 +89,24 @@ function diskSourceToKeyEngine(source: DiskTranscriptSource): SessionExecutionEn
  * 找不到再到另一个目录兜底，避免历史消息读不出来只显示空状态。
  */
 export function resolveDiskTranscriptCandidates(
-  session: { id: string; claudeSessionId?: string | null },
+  session: {
+    id: string;
+    claudeSessionId?: string | null;
+    /** 外部 CLI 原生会话：其转录优先于 Wise 侧 `*-runs`。 */
+    nativeCliSource?: NativeCliDiskSessionEngine | null;
+  },
   engine: SessionExecutionEngine,
 ): DiskTranscriptCandidate[] {
   const primarySource = resolveDiskTranscriptSource(engine);
   const out: DiskTranscriptCandidate[] = [];
   const seen = new Set<string>();
+  // 原生会话优先读 CLI 自己的转录：它包含加入 Wise 之前的完整历史，
+  // 且 Wise 侧 `*-runs` 只会记录 Wise 跑过的那些回合。
+  const nativeCandidate = resolveNativeCliTranscriptSource(session);
+  if (nativeCandidate) {
+    seen.add(`${nativeCandidate.source}:${nativeCandidate.key}`);
+    out.push(nativeCandidate);
+  }
   for (const source of resolveDiskTranscriptSourceCandidates(engine)) {
     // 兜底目录用该目录自身的 key 规则，避免拿 Wise tab id 去撞 Claude 目录里的无关 jsonl。
     const keyEngine = source === primarySource ? engine : diskSourceToKeyEngine(source);
@@ -330,24 +356,61 @@ export function shouldSkipFullDiskReloadForRunningSession(
 }
 
 /**
+ * 内存 transcript 是否仍是流式残片、需要被磁盘覆盖。
+ *
+ * Wise tab 落盘引擎（Codex RPC 等）在回合结束后常把「执行中」system + 截断助手留在
+ * tabs.json；`sessionShouldRetainMessagesWhenInactive` 又禁止清空，导致切回时
+ * `messages.length > 0` 永久跳过 hydrate，消息列表只剩 2～3 条残片。
+ *
+ * 已有 `diskTranscriptPartial` 尾窗（侧栏展示用 24 条 cap）不视为残片——交给滚动加载更多。
+ */
+export function memoryTranscriptNeedsDiskRefresh(
+  session: ClaudeSession,
+  engine: SessionExecutionEngine,
+): boolean {
+  if (session.transcriptMemoryUnlimited === true) return false;
+  if (!usesWiseTabIdForDiskTranscript(engine)) return false;
+  if (session.status === "running" || session.status === "connecting") return false;
+  const hasRunningSystem = session.messages.some((message) => {
+    if (message.role !== "system") return false;
+    return systemMessagePlainText(message).includes("执行中");
+  });
+  if (hasRunningSystem) return true;
+  // merge 刚从 codex-runs 标 partial、内存却只有极少流式气泡：强制覆盖。
+  if (
+    session.diskTranscriptPartial === true &&
+    session.messages.length > 0 &&
+    session.messages.length <= 4
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * 是否应为该会话发起磁盘 transcript 补全。
  *
- * 内存已有消息或尚无可恢复的磁盘证据时不发起。运行中/连接中的会话**也允许发起**：
+ * 尚无可恢复的磁盘证据时不发起。运行中/连接中的会话**也允许发起**：
  * @派发 / 新建会话并行执行时，非活动标签的内存正文可能已被淘汰清空（diskTranscriptPartial），
  * 切回时若因 running 跳过补全，整轮消息都不可见；运行态保护由
  * `shouldPreserveMemoryTranscriptOverDisk` / `shouldSkipFullDiskReloadForRunningSession`
  * 在写入时按最新 row 复判，不会覆盖进行中的回合。
+ *
+ * 内存已有消息时默认跳过；Wise 流式残片（「执行中」system / 极少气泡 + partial）必须覆盖，
+ * 否则执行完成的会话永远看不到完整消息列表。
  */
 export function shouldRequestDiskTranscriptHydration(
   session: ClaudeSession,
   engine: SessionExecutionEngine,
 ): boolean {
-  if (session.messages.length > 0) return false;
-  return (
+  const hasDiskEvidence =
     sessionHasDiskTranscript(session, engine) ||
     Boolean(session.claudeSessionId?.trim()) ||
-    Boolean(session.diskTranscriptPartial)
-  );
+    Boolean(session.diskTranscriptPartial);
+  if (!hasDiskEvidence) return false;
+
+  if (session.messages.length === 0) return true;
+  return memoryTranscriptNeedsDiskRefresh(session, engine);
 }
 
 function lastDiskAssistantMessage(disk: readonly ClaudeMessage[]): ClaudeMessage | null {

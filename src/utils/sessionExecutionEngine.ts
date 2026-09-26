@@ -289,7 +289,14 @@ export function usesWiseTabIdForDiskTranscript(engine: SessionExecutionEngine): 
  * transcript 落盘位置：`cursor` 指 `~/.wise/cursor-runs`，`codex_rpc` 指 `~/.wise/codex-runs`，`claude` 指 `~/.claude/projects`。
  * 会话可能先由某个引擎写盘、之后仓库执行引擎被改成另一个，故来源与当前引擎不是一一绑定。
  */
-export type DiskTranscriptSource = "cursor" | "codex_rpc" | "claude";
+export type DiskTranscriptSource =
+  | "cursor"
+  | "codex_rpc"
+  | "claude"
+  /** 外部 CLI 自己的原生会话存储（`~/.codex/sessions`）。 */
+  | "native_codex"
+  /** 外部 CLI 自己的原生会话存储（`~/.dsh/sessions`）。 */
+  | "native_deepseek";
 
 export function resolveDiskTranscriptSource(
   engine: SessionExecutionEngine,

@@ -102,6 +102,19 @@ function toolUsePartHasVisiblePayload(part: ToolUsePart): boolean {
 }
 
 /**
+ * Codex `item/started(reasoning)` 留下的空工具卡：`name="reasoning"` 且无入参/输出/定位。
+ * 思考正文走 reasoning part；这类占位卡不应出现在消息列表。
+ */
+export function isReasoningPlaceholderToolPart(part: ToolUsePart): boolean {
+  if (part.name.trim().toLowerCase() !== "reasoning") return false;
+  if (part.output?.trim() || part.error?.trim()) return false;
+  if (Array.isArray(part.locations) && part.locations.length > 0) return false;
+  const input = part.input;
+  if (!input || typeof input !== "object" || Array.isArray(input)) return true;
+  return Object.keys(input as Record<string, unknown>).length === 0;
+}
+
+/**
  * AskUserQuestion 工具名识别（与 `notifications/streamIngest` 同源，统一来源避免分叉）。
  * 该工具的问答交互已在 Dock 题卡中呈现，消息列表不再重复渲染其 tool_use 卡片。
  */
@@ -136,6 +149,8 @@ export function isRenderableMessagePart(part: MessagePart): boolean {
       // 已 fold 进同一 tool_use（按 id），一并隐藏，避免「只见答案不见问题」的割裂。
       if (isAskUserQuestionToolName(part.name)) return false;
       if (isImageViewToolName(part.name)) return false;
+      // Codex reasoning 占位卡：仅有 name、无载荷，思考正文另有 reasoning part。
+      if (isReasoningPlaceholderToolPart(part)) return false;
       return toolUsePartHasVisiblePayload(part);
     default:
       return false;

@@ -1,8 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ClaudeDiskSessionItem } from "../types";
+import type { ClaudeDiskSessionItem, CodexRpcDiskSessionItem } from "../types";
 
 export async function listClaudeDiskSessions(repositoryPath: string): Promise<ClaudeDiskSessionItem[]> {
   return invoke<ClaudeDiskSessionItem[]>("list_claude_disk_sessions", { projectPath: repositoryPath });
+}
+
+/** 列出 Wise 在本仓库通过 Codex RPC 落盘的会话（`~/.wise/codex-runs`）。 */
+export async function listCodexRpcDiskSessions(
+  repositoryPath: string,
+): Promise<CodexRpcDiskSessionItem[]> {
+  return invoke<CodexRpcDiskSessionItem[]>("list_codex_rpc_disk_sessions", {
+    projectPath: repositoryPath,
+  });
 }
 
 export type LoadClaudeSessionJsonlOptions = {

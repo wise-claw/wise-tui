@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ClaudeMessage, ClaudeSession, ToolUsePart } from "../types";
+import type { ClaudeMessage, ClaudeSession, MessagePart, ToolUsePart } from "../types";
 import {
   appendAssistantStreamParts,
   applyToolResultPartsToMessages,
@@ -437,6 +437,53 @@ describe("mergeAssistantParts reasoning containment", () => {
     expect(merged).toHaveLength(3);
     expect(merged[0]).toMatchObject({ type: "reasoning", text: "Two issues:" });
     expect(merged[2]).toMatchObject({ type: "reasoning", text: "So:" });
+  });
+
+  test("drops the empty reasoning placeholder tool card once the thinking part arrives", () => {
+    // Codex `item/started(reasoning)` 先发一条 name="reasoning" 的空 tool_use（id = item id），
+    // 思考文本随后以同 id 的 reasoning part 到达 —— 占位卡必须回收，否则渲染成幽灵行。
+    const placeholder: MessagePart = {
+      type: "tool_use",
+      id: "itm_r",
+      name: "reasoning",
+      input: {},
+      status: "running",
+    };
+    const merged = mergeAssistantParts(
+      [placeholder],
+      [{ type: "reasoning", text: "先分析需求", streamId: "itm_r" }],
+    );
+    expect(merged).toEqual([{ type: "reasoning", text: "先分析需求", streamId: "itm_r" }]);
+  });
+
+  test("drops empty name=reasoning tool cards even before thinking arrives", () => {
+    // 思考尚未到达时也不能闪「reasoning」幽灵行；真正「思考中」由空 reasoning part 承担。
+    const merged = mergeAssistantParts(
+      [],
+      [
+        {
+          type: "tool_use",
+          id: "itm_r",
+          name: "reasoning",
+          input: {},
+          status: "running",
+        },
+      ],
+    );
+    expect(merged).toEqual([]);
+  });
+
+  test("keeps tool cards that share an id with reasoning but carry a payload", () => {
+    const merged = mergeAssistantParts(
+      [
+        { type: "tool_use", id: "itm_r", name: "reasoning", input: {}, status: "running" },
+        { type: "tool_use", id: "itm_x", name: "Bash", input: { command: "ls" }, status: "completed" },
+      ],
+      [{ type: "reasoning", text: "思考", streamId: "itm_r" }],
+    );
+    expect(merged.filter((part) => part.type === "tool_use")).toEqual([
+      { type: "tool_use", id: "itm_x", name: "Bash", input: { command: "ls" }, status: "completed" },
+    ]);
   });
 });
 

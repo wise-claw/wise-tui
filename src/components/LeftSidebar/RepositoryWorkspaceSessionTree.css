@@ -90,6 +90,14 @@
   color: var(--ant-color-success);
 }
 
+.app-workspace-session-tree__kind[data-kind="codex"] {
+  color: var(--ant-color-link);
+}
+
+.app-workspace-session-tree__kind[data-kind="deepseek"] {
+  color: var(--ant-color-purple);
+}
+
 .app-workspace-session-tree__title {
   flex: 1 1 auto;
   min-width: 0;

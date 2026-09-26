@@ -250,6 +250,27 @@ describe("isRenderableMessagePart", () => {
       }),
     ).toBe(true);
   });
+
+  test("skips Codex name=reasoning placeholder tool cards with no payload", () => {
+    expect(
+      isRenderableMessagePart({
+        type: "tool_use",
+        id: "itm_r",
+        name: "reasoning",
+        input: {},
+        status: "running",
+      }),
+    ).toBe(false);
+    expect(
+      isRenderableMessagePart({
+        type: "tool_use",
+        id: "itm_r",
+        name: "reasoning",
+        input: { note: "not a real tool but has payload" },
+        status: "completed",
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("isToolActivityOnlyMessage", () => {

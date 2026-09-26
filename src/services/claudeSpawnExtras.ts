@@ -10,6 +10,8 @@ import {
   resolveFeedbackLoopSystemPromptAppend,
 } from "./sessionFeedbackLoopSystemPrompt";
 import { buildFeedbackGlobalRulesSystemPromptBlock } from "../utils/sessionFeedbackGlobalRules";
+import { buildSessionDisplayLanguageSystemPromptBlock } from "../utils/sessionDisplayLanguagePrompt";
+import { loadSessionDisplayLanguageFromStore } from "./sessionDisplayLanguage";
 import { loadSessionFeedbackLoopSettingsFromStore } from "./wiseDefaultConfigStore";
 import { getAppSetting, WISE_CLAUDE_DEFAULT_SETTINGS_KEY } from "./appSettingsStore";
 import { isSessionUltracodeActive } from "../constants/claudeConnection";
@@ -169,6 +171,22 @@ async function mergeFeedbackLoopHabitsIntoSpawnExtras(
   });
 }
 
+/**
+ * 会话回复语言：把全局「回复语言」设置追加到 `--append-system-prompt`。
+ * `auto`（跟随引擎）不注入，返回原 extras。
+ */
+async function mergeSessionDisplayLanguageIntoSpawnExtras(
+  base: ClaudeSpawnCliExtras | null,
+): Promise<ClaudeSpawnCliExtras | null> {
+  const language = await loadSessionDisplayLanguageFromStore();
+  const block = buildSessionDisplayLanguageSystemPromptBlock(language);
+  if (!block) return base;
+  return compactClaudeSpawnCliExtras({
+    ...(base ?? {}),
+    appendSystemPrompt: mergeAppendSystemPromptParts(base?.appendSystemPrompt, block),
+  });
+}
+
 async function mergeFeedbackLoopGlobalRulesIntoSpawnExtras(
   base: ClaudeSpawnCliExtras | null,
 ): Promise<ClaudeSpawnCliExtras | null> {
@@ -238,6 +256,7 @@ async function mergeUltracodeIntoSpawnExtras(
 
 /**
  * 主会话 spawn：按 Cockpit 当前助手 + 会话归属项目/仓库解析 CLI 扩展；
+ * 全局「回复语言」非 auto 时先追加语言块；
  * 反馈神经网开启且启用注入时，将仓库/会话习惯追加到 `--append-system-prompt`；
  * 全局规则（跨仓库）在 injectGlobalRules 开启时一并注入；
  * 会话级推理强度先注入 `--effort`；ultracode（OMC）开启时后置覆盖为 max 并追加 system-prompt 块。
@@ -268,7 +287,8 @@ export async function resolveClaudeSpawnExtrasForSession(params: {
       repositoryPath: params.session.repositoryPath?.trim() || null,
     });
   }
-  let result = await mergeFeedbackLoopHabitsIntoSpawnExtras(base, params.session);
+  let result = await mergeSessionDisplayLanguageIntoSpawnExtras(base);
+  result = await mergeFeedbackLoopHabitsIntoSpawnExtras(result, params.session);
   result = await mergeFeedbackLoopGlobalRulesIntoSpawnExtras(result);
   result = mergeClaudeReasoningEffortIntoSpawnExtras(result, params.session);
   const globalUltracodeEnabled = await loadGlobalUltracodeEnabled();

@@ -24,6 +24,15 @@ function isWriteToolName(name: unknown): name is string {
   return typeof name === "string" && name.trim().toLowerCase() === "write";
 }
 
+/**
+ * 流式 part 的稳定来源 id（与 `services/claudeStreamParser.ts` 的同名解析一致）：
+ * Codex RPC 落盘写 `stream_id`，老格式可能写 `item_id`。
+ */
+function streamPartIdFromBlock(block: Record<string, unknown>): string | undefined {
+  const value = block.stream_id ?? block.streamId ?? block.item_id ?? block.itemId;
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 /** Same predicate as the live stream parser; reused so JSONL reloads keep the diagnostic. */
 function describeWriteInputDefect(input: unknown): {
   suspected: boolean;
@@ -48,16 +57,29 @@ function blocksToParts(content: unknown, textMax = 12_000): MessagePart[] {
     const t = block.type;
     if (t === "text" && typeof block.text === "string") {
       const text = block.text.length > textMax ? block.text.slice(-textMax) : block.text;
-      parts.push({ type: "text", text });
+      // 保留 `stream_id`：Codex RPC 用它与后续 delta 对齐（同一 item 的增量续写），
+      // 丢字段会让刷新后同类 part 变成新碎片，也会让 reasoning 占位卡无法被同 id 回收。
+      const streamId = streamPartIdFromBlock(block);
+      parts.push({ type: "text", text, ...(streamId ? { streamId } : {}) });
     } else if (t === "thinking" && typeof block.thinking === "string") {
       const text = block.thinking.length > textMax ? block.thinking.slice(-textMax) : block.thinking;
-      parts.push({ type: "reasoning", text });
+      const streamId = streamPartIdFromBlock(block);
+      parts.push({ type: "reasoning", text, ...(streamId ? { streamId } : {}) });
     } else if (t === "tool_use") {
       const name = typeof block.name === "string" ? block.name : "unknown";
       const input =
         typeof block.input === "object" && block.input !== null && !Array.isArray(block.input)
           ? (block.input as Record<string, unknown>)
           : {};
+      // Codex item/started(reasoning) 空占位：hydrate 阶段直接丢掉，避免进消息列表。
+      if (
+        name.trim().toLowerCase() === "reasoning" &&
+        Object.keys(input).length === 0 &&
+        !(typeof block.output === "string" && block.output.trim()) &&
+        !(typeof block.error === "string" && block.error.trim())
+      ) {
+        continue;
+      }
       let diagnostics: ToolUseDiagnostics | undefined;
       if (isWriteToolName(name)) {
         const defect = describeWriteInputDefect(input);

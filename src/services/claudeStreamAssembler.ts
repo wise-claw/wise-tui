@@ -266,6 +266,32 @@ export type MergeAssistantPartsOptions = {
   replaceAllText?: boolean;
 };
 
+/** 工具卡除 `name` 之外是否带可见载荷（入参 / 输出 / 错误 / 定位）。 */
+function toolUsePartHasPayload(part: ToolUsePart): boolean {
+  if (part.output?.trim() || part.error?.trim()) return true;
+  if (Array.isArray(part.locations) && part.locations.length > 0) return true;
+  const input = part.input;
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  return Object.keys(input).length > 0;
+}
+
+/**
+ * 回收 reasoning 的「占位工具卡」。
+ *
+ * Codex app-server 的 `item/started` 曾为 reasoning item 发一条 `name="reasoning"` 的空
+ * tool_use（无入参/输出）。这不是真实工具，渲染成一行「只有 reasoning、永远 running」的幽灵卡。
+ * 真正的思考文本走 thinking / reasoning part；无载荷的同名工具卡一律丢弃（不必等思考到达，
+ * 也覆盖历史落盘里残留的幽灵）。带 input/output 的真实工具不受影响。
+ */
+function dropReasoningPlaceholderToolParts(parts: MessagePart[]): MessagePart[] {
+  const kept = parts.filter((part) => {
+    if (part.type !== "tool_use") return true;
+    if (part.name.trim().toLowerCase() !== "reasoning") return true;
+    return toolUsePartHasPayload(part);
+  });
+  return kept.length === parts.length ? parts : kept;
+}
+
 export function mergeAssistantParts(
   existingParts: MessagePart[],
   incomingParts: MessagePart[],
@@ -287,7 +313,7 @@ export function mergeAssistantParts(
       next.push(part);
     }
     if (!textPlaced) next.push({ type: "text", text: resultText });
-    return next;
+    return dropReasoningPlaceholderToolParts(next);
   }
 
   const merged = [...existingParts];
@@ -397,7 +423,7 @@ export function mergeAssistantParts(
       merged.push(part);
     }
   }
-  return merged;
+  return dropReasoningPlaceholderToolParts(merged);
 }
 
 function textContentFromParts(parts: MessagePart[]): string {
@@ -674,26 +700,38 @@ export function foldToolResultUserMessagesIntoAssistant(messages: readonly Claud
  * Cursor CLI `--stream-partial-output` 会把每个 text delta 落成独立 JSONL `assistant` 行；
  * 若按行各建一条消息，UI 会把一行 Markdown 拆成多个气泡（`**` / 词片断裂）。
  * 累积快照走 containment 去重，增量碎片走拼接。
+ * 合并时顺带清掉 Codex reasoning 空占位工具卡；仅占位的助手气泡直接丢弃。
  */
 export function coalesceConsecutiveAssistantMessages(
   messages: readonly ClaudeMessage[],
 ): ClaudeMessage[] {
-  if (messages.length < 2) return messages as ClaudeMessage[];
+  if (messages.length === 0) return [];
   const out: ClaudeMessage[] = [];
   for (const msg of messages) {
     if (msg.role !== "assistant") {
       out.push(msg);
       continue;
     }
+    const scrubbedParts = dropReasoningPlaceholderToolParts(assistantPartsForCoalesce(msg));
+    if (scrubbedParts.length === 0) continue;
+    const scrubbed: ClaudeMessage = {
+      ...msg,
+      parts: scrubbedParts,
+      content: textContentFromParts(scrubbedParts),
+    };
     const last = out[out.length - 1];
     if (last?.role !== "assistant") {
-      out.push(msg);
+      out.push(scrubbed);
       continue;
     }
     const mergedParts = mergeAssistantParts(
       assistantPartsForCoalesce(last),
-      assistantPartsForCoalesce(msg),
+      scrubbedParts,
     );
+    if (mergedParts.length === 0) {
+      out.pop();
+      continue;
+    }
     out[out.length - 1] = {
       ...last,
       parts: mergedParts,
@@ -731,6 +769,13 @@ export function appendAssistantStreamParts(
   let nextMessages: ClaudeSession["messages"];
   if (lastMsg?.role === "assistant") {
     const mergedParts = mergeAssistantParts(lastMsg.parts, parts, mergeOptions);
+    // 仅占位卡被吃掉、且原消息本就无内容：撤掉空助手气泡，避免闪一帧空行。
+    if (mergedParts.length === 0 && (lastMsg.parts?.length ?? 0) === 0) {
+      return {
+        ...session,
+        messages: session.messages.slice(0, -1),
+      };
+    }
     const merged: ClaudeMessage = {
       ...lastMsg,
       parts: mergedParts,
@@ -739,7 +784,9 @@ export function appendAssistantStreamParts(
     const capped = enforceAssistantMessageMemoryLimits(merged, merged.content);
     nextMessages = [...session.messages.slice(0, -1), capped];
   } else {
-    const built = buildAssistantMessage(parts);
+    const mergedParts = mergeAssistantParts([], parts, mergeOptions);
+    if (mergedParts.length === 0) return session;
+    const built = buildAssistantMessage(mergedParts);
     const cappedNew = enforceAssistantMessageMemoryLimits(built, built.content);
     nextMessages = [...session.messages, cappedNew];
   }

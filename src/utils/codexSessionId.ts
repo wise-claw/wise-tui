@@ -1,4 +1,5 @@
 import type { ClaudeSession } from "../types";
+import type { NativeCliEngine } from "../types";
 import { isLikelyCursorSdkAgentId } from "./cursorAgentId";
 
 const CODEX_RESUME_UUID_RE =
@@ -41,12 +42,19 @@ export function sessionHasPriorCodexTurn(
 }
 
 export function resolveCodexResumeSessionId(
-  session: { claudeSessionId?: string | null; messages: ClaudeSession["messages"] },
+  session: {
+    claudeSessionId?: string | null;
+    messages: ClaudeSession["messages"];
+    /** 外部 CLI 原生会话索引来源：即使尚未 hydrate 也允许续接。 */
+    nativeCliSource?: NativeCliEngine | null;
+  },
   tabSessionId: string,
   sessionIdMap?: ReadonlyMap<string, string>,
   options?: { requireUuid?: boolean },
 ): string | null {
-  if (!sessionHasPriorCodexTurn(session.messages)) {
+  // 原生 Codex 会话在 Wise 里没有「Codex RPC 执行中…」系统行；
+  // 只要它来自 `~/.codex/sessions` 索引，就说明已经有过真实回合。
+  if (!sessionHasPriorCodexTurn(session.messages) && session.nativeCliSource !== "codex") {
     return null;
   }
   const candidates = [session.claudeSessionId, sessionIdMap?.get(tabSessionId)];

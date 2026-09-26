@@ -240,6 +240,7 @@ import {
   type ClaudeConcurrencyLimitsMap,
 } from "./services/claudeConcurrencyLimits";
 import { resolveClaudeSpawnExtrasForSession } from "./services/claudeSpawnExtras";
+import { ensureSessionDisplayLanguageLoaded } from "./services/sessionDisplayLanguage";
 import {
   evaluateBeforeSpawnClaudeCode,
   resolveClaudeConcurrencyInvokeContext,
@@ -544,6 +545,8 @@ export default function App() {
     void loadWiseDefaultConfig().catch(() => {
       /* 启动时确保默认配置已迁入 app_settings */
     });
+    // 回复语言供每轮对话同步读取，启动即 hydrate 内存缓存。
+    void ensureSessionDisplayLanguageLoaded().catch(() => undefined);
     // 执行环境的模型 / 推理默认值供 Composer 与新建会话同步读取，启动即 hydrate。
     void loadExecutionEngineModelDefaults().catch(() => undefined);
     void loadExecutionEngineReasoningDefaults().catch(() => undefined);

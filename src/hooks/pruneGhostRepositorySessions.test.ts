@@ -102,6 +102,30 @@ describe("pruneGhostRepositorySessions", () => {
     expect(withCompanion[0]?.id).toBe(companionId);
   });
 
+  test("keeps native CLI index rows whose ids never appear in the Claude disk index", () => {
+    const disk: ClaudeDiskSessionItem[] = [
+      { sessionId: "fedcba9876543210fedcba9876543210", updatedAtMs: 1, preview: "" },
+    ];
+    const codexNative = session({
+      id: "019fba5c-25c7-7972-8424-10ac7ec823d4",
+      claudeSessionId: "019fba5c-25c7-7972-8424-10ac7ec823d4",
+      nativeCliSource: "codex",
+      status: "completed",
+    });
+    const deepseekNative = session({
+      id: "da37c6f1-cf3e-4b37-83d7-59eb6c15b7c0",
+      claudeSessionId: "da37c6f1-cf3e-4b37-83d7-59eb6c15b7c0",
+      nativeCliSource: "deepseek",
+      status: "completed",
+    });
+
+    const next = pruneGhostRepositorySessions([codexNative, deepseekNative], REPO, disk);
+    expect(next.map((s) => s.id)).toEqual([
+      "019fba5c-25c7-7972-8424-10ac7ec823d4",
+      "da37c6f1-cf3e-4b37-83d7-59eb6c15b7c0",
+    ]);
+  });
+
   test("keeps Codex RPC / Cursor wise tab after memory recycle even when Claude disk lacks thread id", () => {
     const disk: ClaudeDiskSessionItem[] = [
       { sessionId: "fedcba9876543210fedcba9876543210", updatedAtMs: 1, preview: "" },
@@ -124,5 +148,21 @@ describe("pruneGhostRepositorySessions", () => {
       "session_1785537573277_5xpjlf",
       "session_1785510555885_mdnml1",
     ]);
+  });
+
+  test("keeps Wise Codex RPC tab even after id was migrated to equal thread id", () => {
+    const disk: ClaudeDiskSessionItem[] = [
+      { sessionId: "fedcba9876543210fedcba9876543210", updatedAtMs: 1, preview: "" },
+    ];
+    // 内存回收后 tab id 已与 thread id 对齐时，仍不能当 Claude 幽灵删掉。
+    const migrated = session({
+      id: "019fba5c-25c7-7972-8424-10ac7ec823d4",
+      claudeSessionId: "019fba5c-25c7-7972-8424-10ac7ec823d4",
+      executionEngine: "codex-rpc",
+      messages: [],
+      status: "completed",
+    });
+    const next = pruneGhostRepositorySessions([migrated], REPO, disk);
+    expect(next.map((s) => s.id)).toEqual(["019fba5c-25c7-7972-8424-10ac7ec823d4"]);
   });
 });

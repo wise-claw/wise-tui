@@ -72,6 +72,8 @@ tar = "0.4"
 bzip2 = "0.4"
 flate2 = "1"
 alacritty_terminal = { version = "0.25", features = ["serde"] }
+# DeepSeek Harness 原生会话转录是 zstd 压缩的 jsonl（~/.dsh/sessions）。
+zstd = { version = "0.13", default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"

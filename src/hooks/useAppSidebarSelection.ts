@@ -321,7 +321,14 @@ export function useAppSidebarSelection({
       // 复用旧空白标签时仍应顶到侧栏（与真正 createSession 的 Date.now() 一致）。
       promoteReusableEmptyMainSession(reusable.id, sessionsLatestRef, patch);
       switchSessionIfNeeded(reusable.id);
-      void bindRepositoryMainSession(target.path, reusable.id);
+      // 与真正新建一致：延后清理僵尸宿主，勿在换绑时打断仍在执行的上一主会话。
+      void bindRepositoryMainSession(target.path, reusable.id, { deferHostRelease: true });
+      scheduleReleaseScopedClaudeHostsBeforeNewMain({
+        kind: "repository",
+        repositoryPath: target.path,
+        newSessionId: reusable.id,
+        priorActiveId,
+      });
       return reusable.id;
     }
     const carryDraftFromId = opts?.carryDraft ? priorActiveId ?? undefined : undefined;
@@ -376,7 +383,15 @@ export function useAppSidebarSelection({
       );
       promoteReusableEmptyMainSession(reusable.id, sessionsLatestRef, patch);
       switchSessionIfNeeded(reusable.id);
-      void bindRepositoryMainSession(projectMainSessionBindingKey(project.id), reusable.id);
+      void bindRepositoryMainSession(projectMainSessionBindingKey(project.id), reusable.id, {
+        deferHostRelease: true,
+      });
+      scheduleReleaseScopedClaudeHostsBeforeNewMain({
+        kind: "project",
+        project,
+        newSessionId: reusable.id,
+        priorActiveId,
+      });
       return reusable.id;
     }
     const carryDraftFromId = opts?.carryDraft ? priorActiveId ?? undefined : undefined;

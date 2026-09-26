@@ -32,6 +32,7 @@ import {
 } from "../services/executionEngineReasoningDefaults";
 import type {
   ClaudeSession,
+  NativeCliDiskSessionItem,
   QuestionRequest,
   SessionConversationTaskItem,
   SessionExecutionEngine,
@@ -85,6 +86,7 @@ import {
 import type { ClaudeSpawnCliExtras } from "../services/claudeSpawnExtras";
 import { claudeSpawnExtrasForNativeSlashCommand } from "../services/claudeSpawnExtras";
 import { deleteClaudeDiskSession, loadClaudeSessionJsonl, loadCodexRpcSessionJsonl } from "../services/claudeDisk";
+import { loadNativeCliSessionTranscript } from "../services/nativeCliSessions";
 import { loadCursorSessionJsonl } from "../services/cursorDisk";
 import {
   collectInvocationSnapshotMemoryKeys,
@@ -98,6 +100,16 @@ import {
   listClaudeDiskSessionsForRepositoryScope,
   normalizeSessionRepositoryPath,
 } from "../utils/sessionHistoryScope";
+import {
+  NATIVE_CLI_ENGINE_EXECUTION_ENGINE,
+  NATIVE_CLI_ENGINES,
+  listNativeCliDiskSessionsForRepositoryScope,
+  mergeNativeCliDiskSessions,
+} from "../utils/nativeCliDiskSessions";
+import {
+  listCodexRpcDiskSessionsForRepositoryScope,
+  mergeCodexRpcDiskSessions,
+} from "../utils/codexRpcDiskSessions";
 import { loadSessionTabsState, saveSessionTabsState, buildPersistedTabsState, takeLocalTabsBackupRaw, writeLocalTabsBackupRaw } from "../services/tabsStore";
 import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import {
@@ -790,6 +802,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (!rp || !diskKey.trim()) return [];
       const target =
         source ?? resolveDiskTranscriptSource(resolveSessionExecutionEngine(session));
+      if (target === "native_codex" || target === "native_deepseek") {
+        return loadNativeCliSessionTranscript(
+          target === "native_codex" ? "codex" : "deepseek",
+          rp,
+          diskKey,
+          { tailLines: tailLines ?? null },
+        );
+      }
       if (target === "cursor") {
         return loadCursorSessionJsonl(rp, diskKey, {
           tailLines: tailLines ?? null,
@@ -1900,14 +1920,26 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       const attempt = (allowRetry: boolean) => {
         const fresh = sessionsRef.current.find((x) => x.id === loadKey);
-        if (!fresh || fresh.messages.length > 0) {
+        if (!fresh) {
+          release();
+          return;
+        }
+        // 必须用最新 row 复判：流式残片（有 messages 但 diskTranscriptPartial / 「执行中」）仍需覆盖。
+        if (!shouldRequestDiskTranscriptHydration(fresh, resolveSessionExecutionEngine(fresh))) {
           release();
           return;
         }
         void hydrateSessionTranscriptFromDisk(fresh, tailLines)
           .then((ok) => {
             const latest = sessionsRef.current.find((x) => x.id === loadKey);
-            if (ok || (latest?.messages.length ?? 0) > 0) {
+            if (
+              ok ||
+              (latest &&
+                !shouldRequestDiskTranscriptHydration(
+                  latest,
+                  resolveSessionExecutionEngine(latest),
+                ))
+            ) {
               release();
               return;
             }
@@ -2430,6 +2462,48 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     scheduleStreamStallTimer,
   ]);
 
+  /**
+   * 把外部 CLI（Codex / DeepSeek Harness）原生会话索引并入同一份会话列表。
+   *
+   * 这些会话不是 Wise 创建的，但落在各自 CLI 的用户目录里；并入后
+   * `nativeCliSource` 会让 transcript 走原生权威转录，并允许用对应引擎续接。
+   * 调用方须先完成异步索引拉取，再把结果传入，以便在 `setSessions` 函数式更新里
+   * 对「最新内存列表」做合并，避免 await 期间新建的 Wise 会话被旧快照冲掉。
+   * 单个引擎失败不影响其它引擎（调用方跳过失败项即可）。
+   */
+  const mergeNativeCliDiskSessionsForRepository = useCallback(
+    (
+      base: ClaudeSession[],
+      repositoryPath: string,
+      repositoryName: string,
+      nativeDiskByEngine: ReadonlyArray<{
+        engine: (typeof NATIVE_CLI_ENGINES)[number];
+        disk: NativeCliDiskSessionItem[];
+        listingPath: string;
+      }>,
+    ): ClaudeSession[] => {
+      const trimmedPath = repositoryPath.trim();
+      if (!trimmedPath || nativeDiskByEngine.length === 0) return base;
+      let next = base;
+      for (const { engine: nativeEngine, disk, listingPath } of nativeDiskByEngine) {
+        const executionEngine = NATIVE_CLI_ENGINE_EXECUTION_ENGINE[nativeEngine];
+        const configFallbackModel = getCachedExecutionEngineDefaultModel(executionEngine) ?? "";
+        next = mergeNativeCliDiskSessions(
+          next,
+          listingPath,
+          repositoryName,
+          nativeEngine,
+          disk,
+          configFallbackModel,
+        );
+      }
+      if (next === base) return base;
+      // 与 Claude 磁盘索引共用同一份「纯索引行」上限，两类会话按最后活跃时间统一取舍。
+      return pruneRepoDiskIndexSessions(next, repositoryPath);
+    },
+    [],
+  );
+
   const refreshDiskSessionsForRepository = useCallback(async (repositoryPath: string, repositoryName: string) => {
     const trimmedPath = repositoryPath.trim();
     if (!trimmedPath) return;
@@ -2440,31 +2514,95 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         trimmedPath,
         sessionsRef.current,
       );
-      const prev = sessionsRef.current;
-      const next = mergeRepositoryDiskSessions(prev, mergePath, repositoryName, disk, "sonnet", companionSessionIdsRef.current);
-      const migrations = collectDiskMergeTabIdMigrations(prev, next, mergePath);
-      if (next !== prev) {
-        for (const migration of migrations) {
-          memoryKeepSessionIdsRef.current.add(migration.toClaudeSessionId);
-          memoryKeepSessionIdsRef.current.delete(migration.fromTabId);
-          if (activeSessionIdRef.current === migration.fromTabId) {
-            activeSessionIdRef.current = migration.toClaudeSessionId;
-          }
+
+      // 异步只拉索引；合并必须基于 setSessions 收到的最新列表，否则 await 期间
+      // 新建/执行的 Wise 会话会被旧快照一次性冲掉（侧栏只剩「新会话」或原生索引行）。
+      const nativeDiskByEngine: Array<{
+        engine: (typeof NATIVE_CLI_ENGINES)[number];
+        disk: NativeCliDiskSessionItem[];
+        listingPath: string;
+      }> = [];
+      for (const nativeEngine of NATIVE_CLI_ENGINES) {
+        try {
+          const scope = await listNativeCliDiskSessionsForRepositoryScope(
+            nativeEngine,
+            trimmedPath,
+            sessionsRef.current,
+          );
+          nativeDiskByEngine.push({
+            engine: nativeEngine,
+            disk: scope.disk,
+            listingPath: scope.listingPath,
+          });
+        } catch {
+          /* 单个引擎失败不影响其它引擎 */
         }
-        for (const row of next) {
-          if (!repositoryPathsMatch(row.repositoryPath, mergePath)) continue;
-          if (row.messages.length > 0 || row.id === activeSessionIdRef.current) {
-            memoryKeepSessionIdsRef.current.add(row.id);
-          }
+      }
+
+      let wiseCodexDisk: Awaited<ReturnType<typeof listCodexRpcDiskSessionsForRepositoryScope>> = {
+        disk: [],
+        listingPath: mergePath,
+      };
+      try {
+        wiseCodexDisk = await listCodexRpcDiskSessionsForRepositoryScope(
+          trimmedPath,
+          sessionsRef.current,
+        );
+      } catch {
+        /* Wise 落盘索引失败不阻断 Claude / 原生索引 */
+      }
+
+      let migrations: Array<{ fromTabId: string; toClaudeSessionId: string }> = [];
+      let applied = false;
+      setSessions((latest) => {
+        const claudeMerged = mergeRepositoryDiskSessions(
+          latest,
+          mergePath,
+          repositoryName,
+          disk,
+          "sonnet",
+          companionSessionIdsRef.current,
+        );
+        // Wise 自己的 Codex RPC 落盘优先并入：它们被原生索引排除，必须靠这里回侧栏。
+        const wiseCodexMerged = mergeCodexRpcDiskSessions(
+          claudeMerged,
+          wiseCodexDisk.listingPath || mergePath,
+          repositoryName,
+          wiseCodexDisk.disk,
+          getCachedExecutionEngineDefaultModel("codex-rpc") ?? "sonnet",
+        );
+        const next = mergeNativeCliDiskSessionsForRepository(
+          wiseCodexMerged,
+          mergePath,
+          repositoryName,
+          nativeDiskByEngine,
+        );
+        migrations = collectDiskMergeTabIdMigrations(latest, next, mergePath);
+        if (next === latest) return latest;
+        applied = true;
+        return next;
+      });
+      if (!applied) return;
+
+      for (const migration of migrations) {
+        memoryKeepSessionIdsRef.current.add(migration.toClaudeSessionId);
+        memoryKeepSessionIdsRef.current.delete(migration.fromTabId);
+        if (activeSessionIdRef.current === migration.fromTabId) {
+          activeSessionIdRef.current = migration.toClaudeSessionId;
         }
-        setSessions(next);
-        for (const migration of migrations) {
-          applySessionTabIdMigration(migration.fromTabId, migration.toClaudeSessionId);
+      }
+      for (const row of sessionsRef.current) {
+        if (!repositoryPathsMatch(row.repositoryPath, mergePath)) continue;
+        if (row.messages.length > 0 || row.id === activeSessionIdRef.current) {
+          memoryKeepSessionIdsRef.current.add(row.id);
         }
-        const activeKey = activeSessionIdRef.current?.trim();
-        if (activeKey) {
-          requestDiskTranscriptHydration(activeKey);
-        }
+      }
+      for (const migration of migrations) {
+        applySessionTabIdMigration(migration.fromTabId, migration.toClaudeSessionId);
+      }
+      const activeKey = activeSessionIdRef.current?.trim();
+      if (activeKey) {
+        requestDiskTranscriptHydration(activeKey);
       }
 
       void (async () => {
@@ -2488,7 +2626,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         });
       })();
     });
-  }, [applySessionTabIdMigration, getCachedClaudeConfigModel, requestDiskTranscriptHydration, setSessions]);
+  }, [
+    applySessionTabIdMigration,
+    getCachedClaudeConfigModel,
+    mergeNativeCliDiskSessionsForRepository,
+    requestDiskTranscriptHydration,
+    setSessions,
+  ]);
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -2529,10 +2673,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     let cancelled = false;
     const cancelIdle = runWhenIdle(() => {
       if (cancelled) return;
-      const candidates = sessionsRef.current.filter((session) => {
-        if (session.messages.length > 0) return false;
-        return sessionHasDiskTranscript(session, resolveSessionExecutionEngine(session));
-      });
+      const candidates = sessionsRef.current.filter((session) =>
+        shouldRequestDiskTranscriptHydration(session, resolveSessionExecutionEngine(session)),
+      );
       for (const session of candidates.slice(0, 16)) {
         requestDiskTranscriptHydration(session.id);
       }
@@ -2554,10 +2697,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const timer = setTimeout(() => {
         if (cancelled) return;
         const s = sessionsRef.current.find((x) => x.id === cid);
-        if (!s || s.messages.length > 0) return;
+        if (!s) return;
         const engine = resolveSessionExecutionEngine(s);
-        const hasDisk = sessionHasDiskTranscript(s, engine);
-        if (!hasDisk) return;
+        if (!shouldRequestDiskTranscriptHydration(s, engine)) return;
         idleCleanups.push(
           runWhenIdle(() => {
             if (cancelled) return;
@@ -3755,6 +3897,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (!session) {
         return;
       }
+      // 仍在执行的会话只能当后台继续跑：换绑主会话不得在此 kill / 改 idle。
+      // 用户主动停止走 cancelSession。
+      if (session.status === "running" || session.status === "connecting") {
+        return;
+      }
 
       purgeStreamSidecarsForSession(sessionId, session.claudeSessionId);
       clearStreamStallTimer(sessionId);
@@ -3850,10 +3997,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     );
     setActiveSessionId(sessionId);
     const target = sessionsRef.current.find((s) => s.id === sessionId);
-    if (target && target.messages.length === 0) {
+    if (
+      target &&
+      shouldRequestDiskTranscriptHydration(target, resolveSessionExecutionEngine(target))
+    ) {
       requestDiskTranscriptHydration(sessionId);
     }
-  }, [requestDiskTranscriptHydration]);
+  }, [requestDiskTranscriptHydration, resolveSessionExecutionEngine]);
 
   const stopSessionConversationTask = useCallback((item: SessionConversationTaskItem): boolean => {
     if (item.status !== "running" || !item.cancellable) return false;

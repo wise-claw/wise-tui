@@ -854,6 +854,29 @@ export interface ClaudeSession {
    * 仅 Claude 引擎有意义；OMC UltracodeChip 开启时 spawn 仍强制 max。落盘到 tabs.json，并作为该执行环境新建会话默认值。
    */
   claudeReasoningEffort?: string;
+  /**
+   * 该会话来自外部 CLI 的原生会话索引（`~/.codex/sessions`、`~/.dsh/sessions`），
+   * 而不是 Wise 自己创建/落盘的标签。用于：
+   * - transcript 优先读原生转录（CLI 自己的权威日志，包含加入 Wise 之前的历史）；
+   * - 续接判定：原生会话即使尚未 hydrate 也允许 `thread/resume` / `session/resume`。
+   * 由磁盘扫描派生，随会话一起落盘到 tabs.json。
+   */
+  nativeCliSource?: NativeCliEngine;
+}
+
+/** 支持原生会话索引的执行环境（`~/.codex`、`~/.dsh`）。 */
+export type NativeCliEngine = "codex" | "deepseek";
+
+/** One session row from `list_native_cli_disk_sessions` (native CLI on-disk index). */
+export interface NativeCliDiskSessionItem {
+  engine: NativeCliEngine;
+  sessionId: string;
+  updatedAtMs: number;
+  /** 首条真实用户输入的预览（注入的上下文与系统提醒不会出现在这里）。 */
+  preview: string;
+  modelHint: string | null;
+  /** 会话标题（DeepSeek Harness `session/title`；Codex rollout 暂无）。 */
+  title: string | null;
 }
 
 /** One session row from `list_claude_disk_sessions` (Claude Code on-disk index). */
@@ -862,6 +885,17 @@ export interface ClaudeDiskSessionItem {
   updatedAtMs: number;
   preview: string;
   modelHint: string | null;
+}
+
+/** One session row from `list_codex_rpc_disk_sessions` (`~/.wise/codex-runs`). */
+export interface CodexRpcDiskSessionItem {
+  /** Wise tab id（jsonl 文件名）。 */
+  sessionId: string;
+  updatedAtMs: number;
+  preview: string;
+  modelHint: string | null;
+  /** Codex thread id，用于续接。 */
+  resumeSessionId: string | null;
 }
 
 export interface ClaudeMessage {
