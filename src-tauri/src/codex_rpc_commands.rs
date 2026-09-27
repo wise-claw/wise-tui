@@ -11,7 +11,7 @@ use std::time::Instant;
 use serde::Deserialize;
 use serde_json::json;
 use tauri::{AppHandle, Manager};
-use tokio::sync::Mutex as TokioMutex;
+use tokio::sync::{Mutex as TokioMutex, Notify};
 use uuid::Uuid;
 
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
@@ -27,7 +27,8 @@ use crate::codex_config_dir::{
     codex_provider_switched, ensure_codex_project_trusted, read_codex_profile_envelope,
 };
 use crate::codex_rpc_session::CodexRpcSession;
-use crate::codex_rpc_reuse::{IdleSessionPool, IDLE_TTL, runtime_fingerprint};
+use crate::codex_rpc_reuse::{IdleSessionPool, runtime_fingerprint};
+use crate::rpc_background_tasks::RpcBackgroundTasks;
 use crate::codex_rpc_stream_adapter::{
     adapt_notification_to_stream_lines, emit_approval_request, emit_dynamic_tool_request,
     emit_mcp_elicitation_request, emit_rpc_complete, CodexRpcStreamAdaptState,
@@ -103,12 +104,15 @@ pub(crate) struct CodexRpcSessionStore {
     guidance: Arc<TokioMutex<ExecutionGuidanceSchedule>>,
     idle: Arc<TokioMutex<IdleSessionPool<CodexRpcSession>>>,
     closing: Arc<AtomicBool>,
+    idle_changed: Arc<Notify>,
+    idle_reaper: Arc<TokioMutex<RpcBackgroundTasks>>,
 }
 
 impl CodexRpcSessionStore {
     /// 应用退出时关闭全部 app-server 子进程；返回关闭的会话数。
     pub(crate) async fn shutdown_all(&self) -> usize {
         self.closing.store(true, Ordering::Release);
+        self.idle_reaper.lock().await.shutdown().await;
         let sessions: Vec<_> = self.sessions.lock().await.drain().map(|(_, s)| s).collect();
         let idle = self.idle.lock().await.drain();
         self.cancelled.lock().await.clear();
@@ -122,9 +126,44 @@ impl CodexRpcSessionStore {
 
     pub(crate) async fn shutdown_idle(&self, tab: &str) -> bool {
         let idle = self.idle.lock().await.remove(tab);
+        self.idle_changed.notify_one();
         let found = idle.is_some();
         shutdown_idle_runtimes(idle.into_iter().collect()).await;
         found
+    }
+
+    /// One owned reaper for the whole store; no per-turn sleeping tasks retaining
+    /// the pool. The weak reference also lets dropping the store release it.
+    async fn wake_idle_reaper(&self) {
+        let mut tasks = self.idle_reaper.lock().await;
+        if self.closing.load(Ordering::Acquire) { return; }
+        if tasks.is_empty() {
+            let idle = Arc::downgrade(&self.idle);
+            let changed = self.idle_changed.clone();
+            tasks.spawn(async move {
+                loop {
+                    let Some(pool) = idle.upgrade() else { break; };
+                    let (expired, deadline) = {
+                        let mut pool = pool.lock().await;
+                        let mut retired = pool.expire(Instant::now());
+                        retired.extend(pool.trim_resident_memory(CodexRpcSession::resident_bytes));
+                        let deadline = pool.next_expiry().map(|expiry|
+                            expiry.min(Instant::now() + std::time::Duration::from_secs(15)));
+                        (retired, deadline)
+                    };
+                    drop(pool);
+                    shutdown_idle_runtimes(expired).await;
+                    match deadline {
+                        Some(deadline) => tokio::select! {
+                            _ = tokio::time::sleep_until(deadline.into()) => {},
+                            _ = changed.notified() => {},
+                        },
+                        None => changed.notified().await,
+                    }
+                }
+            });
+        }
+        self.idle_changed.notify_one();
     }
 }
 
@@ -787,9 +826,11 @@ pub(crate) async fn execute_codex_rpc(
                             let mut runtime = mutex.into_inner();
                             runtime.restore_events(events);
                             if runtime.is_connected() {
-                                retired = session_store.idle.lock().await.park(
+                                let mut idle = session_store.idle.lock().await;
+                                retired = idle.park(
                                     session_id_loop.clone(), active_thread_id, fingerprint, runtime, Instant::now(),
                                 );
+                                retired.extend(idle.trim_resident_memory(CodexRpcSession::resident_bytes));
                                 parked = true;
                             } else { retired.push(runtime); }
                         }
@@ -803,12 +844,7 @@ pub(crate) async fn execute_codex_rpc(
         if let Some(shared) = shutdown_shared { let _ = shared.lock().await.shutdown().await; }
         shutdown_idle_runtimes(retired).await;
         if parked {
-            let idle = app_loop.state::<CodexRpcSessionStore>().idle.clone();
-            tokio::spawn(async move {
-                tokio::time::sleep(IDLE_TTL).await;
-                let expired = idle.lock().await.expire(Instant::now());
-                shutdown_idle_runtimes(expired).await;
-            });
+            app_loop.state::<CodexRpcSessionStore>().wake_idle_reaper().await;
         }
         if let Some(inv) = invocation_key_loop.as_deref() {
             app_loop.state::<ClaudeProcessState>()

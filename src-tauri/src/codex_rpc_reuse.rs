@@ -5,6 +5,8 @@ use std::time::{Duration, Instant};
 
 pub(crate) const IDLE_TTL: Duration = Duration::from_secs(120);
 const IDLE_CAPACITY: usize = 4;
+const IDLE_RESIDENT_BUDGET: u64 = 512 * 1024 * 1024;
+const UNKNOWN_RESIDENT_BYTES: u64 = IDLE_RESIDENT_BUDGET / IDLE_CAPACITY as u64;
 
 struct Entry<T> {
     tab: String,
@@ -93,6 +95,48 @@ impl<T> IdleSessionPool<T> {
     pub fn drain(&mut self) -> Vec<T> {
         self.entries.drain(..).map(|entry| entry.runtime).collect()
     }
+
+    pub fn next_expiry(&self) -> Option<Instant> {
+        self.entries.front().map(|entry| entry.parked_at + IDLE_TTL)
+    }
+
+    /// Sample only idle runtimes. Active turns are never evicted for memory use.
+    pub fn trim_resident_memory(&mut self, mut measure: impl FnMut(&T) -> Option<u64>) -> Vec<T> {
+        let mut sizes: VecDeque<_> = self.entries.iter()
+            .map(|entry| measure(&entry.runtime).unwrap_or(UNKNOWN_RESIDENT_BYTES)).collect();
+        let mut total = sizes.iter().fold(0_u64, |sum, size| sum.saturating_add(*size));
+        let mut retired = Vec::new();
+        while total > IDLE_RESIDENT_BUDGET {
+            let Some(entry) = self.entries.pop_front() else { break; };
+            total = total.saturating_sub(sizes.pop_front().unwrap_or(0));
+            retired.push(entry.runtime);
+        }
+        retired
+    }
+}
+
+/// Native primary-process RSS, without spawning `ps`. Descendant MCP processes
+/// are not included. Unsupported platforms retain the count/TTL fallback.
+pub(crate) fn process_resident_bytes(pid: u32) -> Option<u64> {
+    #[cfg(target_os = "macos")]
+    {
+        let pid = i32::try_from(pid).ok()?;
+        let mut usage = std::mem::MaybeUninit::<libc::rusage_info_v2>::uninit();
+        // SAFETY: flavor V2 writes exactly rusage_info_v2 into the supplied buffer;
+        // read it only after proc_pid_rusage reports success.
+        let result = unsafe { libc::proc_pid_rusage(pid, libc::RUSAGE_INFO_V2, usage.as_mut_ptr().cast()) };
+        if result == 0 { Some(unsafe { usage.assume_init() }.ri_resident_size) } else { None }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let statm = std::fs::read_to_string(format!("/proc/{pid}/statm")).ok()?;
+        let pages: u64 = statm.split_whitespace().nth(1)?.parse().ok()?;
+        // SAFETY: sysconf takes a constant selector and no pointers.
+        let page_size = u64::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).ok()?;
+        pages.checked_mul(page_size)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    { let _ = pid; None }
 }
 
 /// Include startup inputs and native config/instruction files, without retaining

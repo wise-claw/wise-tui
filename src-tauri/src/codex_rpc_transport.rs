@@ -10,27 +10,51 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use std::sync::{Arc, OnceLock};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex, OwnedSemaphorePermit, Semaphore};
 
 use crate::pending_rpc_request::{PendingRequestMap, PendingResponse};
+use crate::rpc_background_tasks::RpcBackgroundTasks;
 
 // Keep stdout responsive to RPC responses even while UI/disk consumption is slow.
 // Bound queued wire bytes, rather than silently dropping events at 256 items.
 const EVENT_BACKLOG_BYTES: usize = 32 * 1024 * 1024;
+const GLOBAL_EVENT_BACKLOG_BYTES: usize = 128 * 1024 * 1024;
+const MAX_RPC_FRAME_BYTES: usize = 32 * 1024 * 1024;
+const RETAINED_FRAME_BYTES: usize = 256 * 1024;
+static GLOBAL_EVENT_BUDGET: OnceLock<Arc<Semaphore>> = OnceLock::new();
+#[derive(Debug)]
 pub struct QueuedRpcEvent<T> {
     pub value: T,
     _budget: Option<OwnedSemaphorePermit>,
+    _global_budget: Option<OwnedSemaphorePermit>,
 }
 
 impl<T> QueuedRpcEvent<T> {
-    fn reserve(value: T, bytes: usize, budget: &Arc<Semaphore>) -> Result<Self> {
+    pub(crate) fn reserve(value: T, bytes: usize, budget: &Arc<Semaphore>) -> Result<Self> {
+        Self::reserve_with_shared(value, bytes, budget,
+            GLOBAL_EVENT_BUDGET.get_or_init(|| Arc::new(Semaphore::new(GLOBAL_EVENT_BACKLOG_BYTES))))
+    }
+
+    fn reserve_with_shared(value: T, bytes: usize, budget: &Arc<Semaphore>, shared: &Arc<Semaphore>) -> Result<Self> {
         let count = u32::try_from(bytes.max(1)).context("RPC event too large")?;
         let permit = budget.clone().try_acquire_many_owned(count)
             .context("Codex event backlog exceeded 32 MiB; consumer cannot keep up")?;
-        Ok(Self { value, _budget: Some(permit) })
+        let global = shared.clone().try_acquire_many_owned(count)
+            .context("Codex combined event backlog exceeded 128 MiB; consumers cannot keep up")?;
+        Ok(Self { value, _budget: Some(permit), _global_budget: Some(global) })
+    }
+
+    /// Keep both permits through parsing and all intermediate queues.
+    pub(crate) fn map<U>(self, convert: impl FnOnce(T) -> U) -> QueuedRpcEvent<U> {
+        QueuedRpcEvent { value: convert(self.value), _budget: self._budget, _global_budget: self._global_budget }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test(value: T) -> Self {
+        Self { value, _budget: None, _global_budget: None }
     }
 }
 
@@ -42,7 +66,26 @@ fn report_event_stream_failure(tx: &mpsc::UnboundedSender<RawNotification>, erro
     let _ = tx.send(QueuedRpcEvent {
         value: ("error".into(), Some(serde_json::json!({ "message": error }))),
         _budget: None,
+        _global_budget: None,
     });
+}
+
+/// Check the limit before growing the buffer, including streams without newlines.
+async fn read_rpc_frame(reader: &mut (impl AsyncBufRead + Unpin), buffer: &mut Vec<u8>, limit: usize) -> std::io::Result<bool> {
+    if buffer.capacity() > RETAINED_FRAME_BYTES { *buffer = Vec::new(); }
+    buffer.clear();
+    loop {
+        let available = reader.fill_buf().await?;
+        if available.is_empty() { return Ok(!buffer.is_empty()); }
+        let end = available.iter().position(|byte| *byte == b'\n').map(|index| index + 1);
+        let count = end.unwrap_or(available.len());
+        if count > limit.saturating_sub(buffer.len()) {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "Codex RPC frame exceeded 32 MiB"));
+        }
+        buffer.extend_from_slice(&available[..count]);
+        reader.consume(count);
+        if end.is_some() { return Ok(true); }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -117,15 +160,21 @@ pub struct CodexRpcTransport {
     pending_requests: PendingRequestMap<u64, JsonRpcMessage>,
     /// Monotonically increasing request id counter.
     next_id: AtomicU64,
+    background_tasks: RpcBackgroundTasks,
 }
 
 impl Drop for CodexRpcTransport {
     fn drop(&mut self) {
         let _ = self.child.start_kill();
+        self.pending_requests.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 }
 
 impl CodexRpcTransport {
+    pub(crate) fn resident_bytes(&self) -> Option<u64> {
+        crate::codex_rpc_reuse::process_resident_bytes(self.child.id()?)
+    }
+
     /// Spawn a `codex app-server --stdio` subprocess and start the stdout reader task.
     ///
     /// `binary_path` is the resolved path to the `codex` binary.
@@ -178,32 +227,34 @@ impl CodexRpcTransport {
         // Server-request channel: reader task → session layer.
         let (server_request_tx, server_request_rx) = mpsc::unbounded_channel();
 
-        // Spawn the stderr drain (best-effort, log at debug level).
+        let mut background_tasks = RpcBackgroundTasks::default();
+        // stderr is discarded in fixed-size chunks, never accumulated as lines.
         if let Some(stderr) = child.stderr.take() {
-            tokio::spawn(async move {
-                let reader = BufReader::new(stderr);
-                let mut lines = reader.lines();
-                while let Ok(Some(line)) = lines.next_line().await {
-                    let _ = line; // stderr drained silently
-                }
+            background_tasks.spawn(async move {
+                let mut stderr = stderr;
+                let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
             });
         }
 
         // Spawn the stdout reader task.
         let pending_for_reader = Arc::clone(&pending_requests);
         {
-            tokio::spawn(async move {
-                let reader = BufReader::new(stdout);
-                let mut lines = reader.lines();
+            background_tasks.spawn(async move {
+                let mut reader = BufReader::new(stdout);
+                let mut frame = Vec::new();
                 loop {
-                    match lines.next_line().await {
-                        Ok(Some(line)) => {
-                            let trimmed = line.trim().to_string();
+                    match read_rpc_frame(&mut reader, &mut frame, MAX_RPC_FRAME_BYTES).await {
+                        Ok(true) => {
+                            let Ok(line) = std::str::from_utf8(&frame) else {
+                                report_event_stream_failure(&notification_tx, "Codex RPC stream contains invalid UTF-8");
+                                break;
+                            };
+                            let trimmed = line.trim();
                             if trimmed.is_empty() {
                                 continue;
                             }
                             if let Err(error) = Self::handle_stdout_line(
-                                &trimmed,
+                                trimmed,
                                 &pending_for_reader,
                                 &notification_tx,
                                 &server_request_tx,
@@ -214,8 +265,11 @@ impl CodexRpcTransport {
                                 break;
                             }
                         }
-                        Ok(None) => break,
-                        Err(_) => break,
+                        Ok(false) => break,
+                        Err(error) => {
+                            report_event_stream_failure(&notification_tx, &error.to_string());
+                            break;
+                        }
                     }
                 }
                 // On exit, drop all pending senders so waiters unblock with errors.
@@ -231,6 +285,7 @@ impl CodexRpcTransport {
             server_request_rx,
             pending_requests,
             next_id: AtomicU64::new(1),
+            background_tasks,
         })
     }
 
@@ -396,6 +451,12 @@ impl CodexRpcTransport {
 
     /// Gracefully shut down the child process.
     pub async fn shutdown(&mut self) -> Result<()> {
+        self.pending_requests.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        self.background_tasks.shutdown().await;
+        self.notification_rx.close();
+        self.server_request_rx.close();
+        while self.notification_rx.try_recv().is_ok() {}
+        while self.server_request_rx.try_recv().is_ok() {}
         match self.child.kill().await {
             Ok(()) => {}
             Err(_) => {
@@ -487,6 +548,7 @@ mod request_lifecycle_tests {
             server_request_rx: mpsc::unbounded_channel().1,
             pending_requests: Arc::default(),
             next_id: AtomicU64::new(1),
+            background_tasks: RpcBackgroundTasks::default(),
         };
         let timeout = std::time::Duration::from_millis(5);
         // Cancellation while waiting to acquire stdin must release registration too.

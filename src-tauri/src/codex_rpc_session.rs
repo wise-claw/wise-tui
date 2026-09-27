@@ -12,7 +12,8 @@
 use anyhow::{anyhow, Context, Result};
 use tokio::sync::{mpsc, watch};
 
-use crate::codex_rpc_transport::CodexRpcTransport;
+use crate::codex_rpc_transport::{CodexRpcTransport, QueuedRpcEvent};
+use crate::rpc_background_tasks::RpcBackgroundTasks;
 use crate::codex_rpc_types::{
     parse_notification, parse_server_request, ApprovalDecision, ClientCapabilities, ClientInfo,
     CommandExecParams, CommandExecResponse, CommandExecResizeParams, CommandExecTerminateParams,
@@ -32,15 +33,22 @@ use crate::codex_rpc_types::{
 /// A fully-initialized Codex App-Server session.
 pub struct CodexRpcSession {
     transport: CodexRpcTransport,
-    notification_rx: mpsc::Receiver<ServerNotification>,
+    notification_rx: mpsc::Receiver<QueuedRpcEvent<ServerNotification>>,
     /// Receiver for typed server-initiated requests (approval prompts, etc.).
-    server_request_rx: mpsc::Receiver<ServerRequest>,
+    server_request_rx: mpsc::Receiver<QueuedRpcEvent<ServerRequest>>,
     event_stop: watch::Sender<bool>,
     current_thread_id: Option<String>,
     current_turn_id: Option<String>,
     /// Effective model used for turn input shaping (vision vs path-only).
     active_model: Option<String>,
     initialized: bool,
+    background_tasks: RpcBackgroundTasks,
+}
+
+impl Drop for CodexRpcSession {
+    fn drop(&mut self) {
+        self.event_stop.send_replace(true);
+    }
 }
 
 pub(crate) enum CodexRpcSessionEvent {
@@ -51,27 +59,38 @@ pub(crate) enum CodexRpcSessionEvent {
 
 /// Owned by the event task, independently of the session's RPC/control mutex.
 pub(crate) struct CodexRpcEvents {
-    notifications: mpsc::Receiver<ServerNotification>,
-    requests: mpsc::Receiver<ServerRequest>,
+    notifications: mpsc::Receiver<QueuedRpcEvent<ServerNotification>>,
+    requests: mpsc::Receiver<QueuedRpcEvent<ServerRequest>>,
     stopped: watch::Receiver<bool>,
 }
 
 impl CodexRpcEvents {
+    fn discard_queued(&mut self) {
+        self.notifications.close();
+        self.requests.close();
+        while self.notifications.try_recv().is_ok() {}
+        while self.requests.try_recv().is_ok() {}
+    }
+
     pub(crate) async fn next(&mut self) -> CodexRpcSessionEvent {
         loop {
             if *self.stopped.borrow() {
+                self.discard_queued();
                 return CodexRpcSessionEvent::Disconnected;
             }
             tokio::select! {
-                _ = self.stopped.changed() => return CodexRpcSessionEvent::Disconnected,
+                _ = self.stopped.changed() => {
+                    self.discard_queued();
+                    return CodexRpcSessionEvent::Disconnected;
+                },
                 notification = self.notifications.recv() => {
-                    return notification.map(CodexRpcSessionEvent::Notification)
+                    return notification.map(|event| CodexRpcSessionEvent::Notification(event.value))
                         .unwrap_or(CodexRpcSessionEvent::Disconnected);
                 }
                 // A closed approval stream must not spin or terminate live notifications.
                 request = self.requests.recv(), if !self.requests.is_closed() || !self.requests.is_empty() => {
                     if let Some(request) = request {
-                        return CodexRpcSessionEvent::ServerRequest(request);
+                        return CodexRpcSessionEvent::ServerRequest(request.value);
                     }
                 }
             }
@@ -80,19 +99,19 @@ impl CodexRpcEvents {
 }
 
 fn poll_session_event(
-    notifications: &mut mpsc::Receiver<ServerNotification>,
-    requests: &mut mpsc::Receiver<ServerRequest>,
+    notifications: &mut mpsc::Receiver<QueuedRpcEvent<ServerNotification>>,
+    requests: &mut mpsc::Receiver<QueuedRpcEvent<ServerRequest>>,
 ) -> Option<CodexRpcSessionEvent> {
     use mpsc::error::TryRecvError;
     match notifications.try_recv() {
-        Ok(notification) => Some(CodexRpcSessionEvent::Notification(notification)),
+        Ok(notification) => Some(CodexRpcSessionEvent::Notification(notification.value)),
         // Drain buffered notifications first, including a final turn/completed.
         // Empty is temporary; Disconnected must end the owner task.
         Err(TryRecvError::Disconnected) => Some(CodexRpcSessionEvent::Disconnected),
         Err(TryRecvError::Empty) => requests
             .try_recv()
             .ok()
-            .map(CodexRpcSessionEvent::ServerRequest),
+            .map(|event| CodexRpcSessionEvent::ServerRequest(event.value)),
     }
 }
 
@@ -174,12 +193,12 @@ impl CodexRpcSession {
         // Take the raw notification receiver from the transport and spawn a
         // forwarding task that converts (method, params) → ServerNotification.
         let raw_rx = transport.take_notification_rx();
-        let (typed_tx, typed_rx) = mpsc::channel::<ServerNotification>(256);
-        tokio::spawn(async move {
+        let (typed_tx, typed_rx) = mpsc::channel(256);
+        let mut background_tasks = RpcBackgroundTasks::default();
+        background_tasks.spawn(async move {
             let mut raw_rx = raw_rx;
             while let Some(event) = raw_rx.recv().await {
-                let (method, params) = event.value;
-                let notification = parse_notification(&method, params);
+                let notification = event.map(|(method, params)| parse_notification(&method, params));
                 if typed_tx.send(notification).await.is_err() {
                     break; // receiver dropped
                 }
@@ -190,12 +209,11 @@ impl CodexRpcSession {
         // Take the raw server-request receiver from the transport and spawn a
         // forwarding task that converts (id, method, params) → ServerRequest.
         let raw_srv_rx = transport.take_server_request_rx();
-        let (srv_tx, srv_rx) = mpsc::channel::<ServerRequest>(128);
-        tokio::spawn(async move {
+        let (srv_tx, srv_rx) = mpsc::channel(128);
+        background_tasks.spawn(async move {
             let mut raw_srv_rx = raw_srv_rx;
             while let Some(event) = raw_srv_rx.recv().await {
-                let (id, method, params) = event.value;
-                let request = parse_server_request(id, &method, params);
+                let request = event.map(|(id, method, params)| parse_server_request(id, &method, params));
                 if srv_tx.send(request).await.is_err() {
                     break; // receiver dropped
                 }
@@ -211,6 +229,7 @@ impl CodexRpcSession {
             current_turn_id: None,
             active_model: None,
             initialized: true,
+            background_tasks,
         })
     }
 
@@ -452,7 +471,7 @@ impl CodexRpcSession {
 
     /// Non-blocking poll for the next server notification.
     pub fn poll_notification(&mut self) -> Option<ServerNotification> {
-        self.notification_rx.try_recv().ok()
+        self.notification_rx.try_recv().ok().map(|event| event.value)
     }
 
     pub(crate) fn poll_event(&mut self) -> Option<CodexRpcSessionEvent> {
@@ -481,24 +500,28 @@ impl CodexRpcSession {
         self.initialized && !self.notification_rx.is_closed() && !*self.event_stop.borrow()
     }
 
+    pub(crate) fn resident_bytes(&self) -> Option<u64> {
+        self.transport.resident_bytes()
+    }
+
     /// Blocking wait for the next server notification.
     ///
     /// Returns `None` when the notification channel is closed (e.g. the
     /// subprocess has exited).
     pub async fn next_notification(&mut self) -> Option<ServerNotification> {
-        self.notification_rx.recv().await
+        self.notification_rx.recv().await.map(|event| event.value)
     }
 
     /// Non-blocking poll for the next server-initiated request.
     pub fn poll_server_request(&mut self) -> Option<ServerRequest> {
-        self.server_request_rx.try_recv().ok()
+        self.server_request_rx.try_recv().ok().map(|event| event.value)
     }
 
     /// Blocking wait for the next server-initiated request.
     ///
     /// Returns `None` when the server-request channel is closed.
     pub async fn next_server_request(&mut self) -> Option<ServerRequest> {
-        self.server_request_rx.recv().await
+        self.server_request_rx.recv().await.map(|event| event.value)
     }
 
     /// Send an approval decision back to the server for a server-initiated request.
@@ -523,6 +546,12 @@ impl CodexRpcSession {
         self.initialized = false;
         self.current_thread_id = None;
         self.current_turn_id = None;
+        self.active_model = None;
+        self.background_tasks.shutdown().await;
+        self.notification_rx.close();
+        self.server_request_rx.close();
+        while self.notification_rx.try_recv().is_ok() {}
+        while self.server_request_rx.try_recv().is_ok() {}
         self.transport.shutdown().await
     }
 
@@ -1420,9 +1449,9 @@ done
         let (tx, notifications) = mpsc::channel(4);
         let (stop, stopped) = watch::channel(false);
         let mut events = CodexRpcEvents { notifications, requests: mpsc::channel(1).1, stopped };
-        tx.send(parse_notification("turn/completed", Some(serde_json::json!({
+        tx.send(QueuedRpcEvent::for_test(parse_notification("turn/completed", Some(serde_json::json!({
             "threadId": "thread", "turn": { "id": "turn", "status": "completed" }
-        })))).await.unwrap();
+        }))))).await.unwrap();
         drop(tx);
         assert!(matches!(events.next().await, CodexRpcSessionEvent::Notification(ServerNotification::TurnCompleted { .. })));
         assert!(matches!(events.next().await, CodexRpcSessionEvent::Disconnected));
@@ -1449,7 +1478,7 @@ done
         let (request_tx, requests) = mpsc::channel(1);
         let (_stop, stopped) = watch::channel(false);
         let mut events = CodexRpcEvents { notifications, requests, stopped };
-        request_tx.send(parse_server_request(42, "test/approval".into(), None)).await.unwrap();
+        request_tx.send(QueuedRpcEvent::for_test(parse_server_request(42, "test/approval".into(), None))).await.unwrap();
         assert!(matches!(events.next().await, CodexRpcSessionEvent::ServerRequest(_)));
     }
 
@@ -1498,12 +1527,12 @@ done
     fn queued_completion_is_delivered_before_disconnect() {
         let (notifications_tx, mut notifications) = mpsc::channel(2);
         let (_requests_tx, mut requests) = mpsc::channel(2);
-        notifications_tx.try_send(parse_notification(
+        notifications_tx.try_send(QueuedRpcEvent::for_test(parse_notification(
             "turn/completed",
             Some(serde_json::json!({
                 "threadId": "thread", "turn": { "id": "turn", "status": "completed" }
             })),
-        )).unwrap();
+        ))).unwrap();
         drop(notifications_tx);
         assert!(matches!(
             poll_session_event(&mut notifications, &mut requests),
