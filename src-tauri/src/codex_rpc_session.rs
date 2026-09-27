@@ -108,9 +108,10 @@ impl CodexRpcSession {
     pub async fn bootstrap(
         binary_path: &str,
         spawn_env_overrides: Option<&(String, String)>,
+        cwd: Option<&str>,
     ) -> Result<Self> {
         let mut transport =
-            CodexRpcTransport::spawn(binary_path, &["--stdio"], spawn_env_overrides).await?;
+            CodexRpcTransport::spawn(binary_path, &["--stdio"], spawn_env_overrides, cwd).await?;
 
         // --- Initialize handshake ---
         let init_params = InitializeParams {
@@ -261,6 +262,9 @@ impl CodexRpcSession {
                             truncate_json_for_error(result)
                         )
                     })?;
+                if let Some(model) = thread_resp.model.as_deref() {
+                    self.set_active_model(Some(model));
+                }
                 thread_resp.thread.id
             }
             crate::codex_rpc_transport::JsonRpcMessage::Error { error, .. } => {
@@ -309,8 +313,10 @@ impl CodexRpcSession {
                         result.clone(),
                     )
                 {
+                    self.set_active_model(parsed.model.as_deref().or(model));
                     self.current_thread_id = Some(parsed.thread.id);
                 } else {
+                    self.set_active_model(model);
                     self.current_thread_id = Some(thread_id.to_string());
                 }
                 Ok(())
@@ -1323,6 +1329,51 @@ fn truncate_json_for_error(value: &serde_json::Value) -> String {
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn native_session_uses_project_cwd_and_server_resolved_models() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let binary = dir.path().join("fake-codex");
+        std::fs::write(&binary, r#"#!/bin/sh
+pwd > spawn-cwd
+while IFS= read -r line; do
+  printf '%s\n' "$line" >> requests.jsonl
+  case "$line" in
+    *'"id":'*) id=$(printf '%s\n' "$line" | sed -n 's/.*"id":\([0-9]*\).*/\1/p') ;;
+    *) continue ;;
+  esac
+  case "$line" in
+    *'"method":"initialize"'*) result='{}' ;;
+    *'"method":"thread/start"'*) result='{"thread":{"id":"native-thread"},"model":"deepseek-v4-flash"}' ;;
+    *'"method":"thread/resume"'*) result='{"thread":{"id":"native-thread"},"model":"gpt-5.4"}' ;;
+    *'"method":"turn/start"'*) result='{"turn":{"id":"native-turn"}}' ;;
+    *) result='{}' ;;
+  esac
+  printf '{"id":%s,"result":%s}\n' "$id" "$result"
+done
+"#).unwrap();
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let cwd = dir.path().to_str().unwrap();
+        let mut session = CodexRpcSession::bootstrap(binary.to_str().unwrap(), None, Some(cwd)).await.unwrap();
+        session.start_thread(Some(cwd), None, None).await.unwrap();
+        assert_eq!(session.active_model(), Some("deepseek-v4-flash"));
+        session.start_turn("查看\n附图：@/tmp/example.png", None, false).await.unwrap();
+        session.resume_thread("native-thread", Some(cwd), None, None).await.unwrap();
+        assert_eq!(session.active_model(), Some("gpt-5.4"));
+        session.shutdown().await.unwrap();
+        let actual_cwd = std::fs::read_to_string(dir.path().join("spawn-cwd")).unwrap();
+        assert_eq!(std::path::Path::new(actual_cwd.trim()).canonicalize().unwrap(), dir.path().canonicalize().unwrap());
+        let requests = std::fs::read_to_string(dir.path().join("requests.jsonl")).unwrap();
+        let requests: Vec<serde_json::Value> = requests.lines().map(|line| serde_json::from_str(line).unwrap()).collect();
+        for request in requests.iter().filter(|r| r["method"] == "thread/start" || r["method"] == "thread/resume") {
+            assert!(request["params"].get("model").is_none(), "native model precedence must be preserved");
+        }
+        let turn = requests.iter().find(|r| r["method"] == "turn/start").unwrap();
+        assert!(turn["params"]["input"].as_array().unwrap().iter().all(|item| item["type"] == "text"));
+        assert!(turn["params"]["input"].to_string().contains("/tmp/example.png"));
+    }
 
     #[tokio::test]
     async fn event_wait_delivers_completion_before_eof_with_closed_requests() {

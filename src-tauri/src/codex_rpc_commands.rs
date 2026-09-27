@@ -366,7 +366,9 @@ pub(crate) async fn execute_codex_rpc(
     persist_codex_rpc_transcript_line(&params.project_path, &session_id, &user_line);
 
     // Bootstrap the session (spawn subprocess + initialize handshake).
-    let mut session = match CodexRpcSession::bootstrap(&codex_path, spawn_env_overrides.as_ref()).await {
+    let mut session = match CodexRpcSession::bootstrap(
+        &codex_path, spawn_env_overrides.as_ref(), Some(&params.project_path),
+    ).await {
         Ok(s) => s,
         Err(e) => {
             let msg = format!("Codex app-server 启动失败: {e}");
@@ -404,10 +406,10 @@ pub(crate) async fn execute_codex_rpc(
     };
     let thread_config = build_codex_rpc_thread_config(default_settings.as_ref());
 
-    // Resolve effective model for vision vs path-only turn shaping.
-    // params.model wins; otherwise fall back to ~/.codex/config.toml `model =`.
+    // Only an explicit selection overrides native config precedence. The server
+    // resolves project/profile defaults and returns the actual model for images.
     // 模型白名单护栏：未知模型（如 Claude 侧泄漏的 MiniMax-M3）不下发，
-    // 回退 config.toml 默认模型，避免 provider 以 invalid_request_error 拒绝。
+    // 交给原生配置解析默认模型，避免 provider 以 invalid_request_error 拒绝。
     let mut effective_model = params
         .model
         .as_deref()
@@ -419,11 +421,6 @@ pub(crate) async fn execute_codex_rpc(
             effective_model = None;
         }
     }
-    let effective_model = effective_model.or_else(|| {
-        let envelope = crate::codex_config_dir::read_codex_profile_envelope();
-        crate::codex_config_dir::read_effective_codex_model_from_envelope(&envelope)
-    });
-    session.set_active_model(effective_model.as_deref());
 
     let mut started_new_thread = false;
     let had_resume_id = resume_id.is_some();

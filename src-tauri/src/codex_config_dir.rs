@@ -8,9 +8,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 pub fn user_codex_dir() -> PathBuf {
-    dirs::home_dir()
-        .map(|h| h.join(".codex"))
-        .unwrap_or_else(|| PathBuf::from(".codex"))
+    resolve_codex_dir(std::env::var_os("CODEX_HOME").as_deref(), dirs::home_dir().as_deref())
+}
+
+fn resolve_codex_dir(codex_home: Option<&std::ffi::OsStr>, home: Option<&Path>) -> PathBuf {
+    codex_home.filter(|path| !path.is_empty()).map(PathBuf::from)
+        .unwrap_or_else(|| home.unwrap_or_else(|| Path::new("")).join(".codex"))
 }
 
 /// Codex 0.134+ profile overlay：`~/.codex/{name}.config.toml`
@@ -33,6 +36,7 @@ fn file_mtime(path: &Path) -> Option<SystemTime> {
 
 #[derive(Clone)]
 struct CodexDiskCache {
+    dir: PathBuf,
     auth_mtime: Option<SystemTime>,
     config_mtime: Option<SystemTime>,
     envelope: CodexProfileEnvelope,
@@ -81,7 +85,7 @@ pub fn read_codex_profile_envelope() -> CodexProfileEnvelope {
 
     if let Ok(guard) = CODEX_DISK_CACHE.lock() {
         if let Some(cache) = guard.as_ref() {
-            if cache.auth_mtime == auth_mtime && cache.config_mtime == config_mtime {
+            if cache.dir == dir && cache.auth_mtime == auth_mtime && cache.config_mtime == config_mtime {
                 return cache.envelope.clone();
             }
         }
@@ -91,6 +95,7 @@ pub fn read_codex_profile_envelope() -> CodexProfileEnvelope {
     let pretty = codex_profile_envelope_to_json(&envelope).unwrap_or_else(|_| "{}".to_string());
     if let Ok(mut guard) = CODEX_DISK_CACHE.lock() {
         *guard = Some(CodexDiskCache {
+            dir,
             auth_mtime,
             config_mtime,
             envelope: envelope.clone(),
@@ -423,7 +428,7 @@ pub(crate) fn apply_codex_openai_catalog_envelope(
     {
         strip_top_level_model_provider(&current.config)
     } else {
-        preserve_projects_tables(&overlay.config, &current.config)
+        merge_codex_runtime_config(&overlay.config, &current.config)?
     };
     config = strip_top_level_model_provider(&config);
     config = strip_custom_model_provider_tables(&config);
@@ -431,7 +436,9 @@ pub(crate) fn apply_codex_openai_catalog_envelope(
         config = patch_codex_config_model(&config, model.trim());
     }
     let auth = merge_auth_for_openai_default(&current.auth, &overlay.auth);
-    write_config_toml(&config)?;
+    if config != current.config {
+        write_config_toml(&config)?;
+    }
     if !auth_maps_equal(&current.auth, &auth) {
         write_auth_json(&auth)?;
     }
@@ -562,47 +569,59 @@ fn merge_auth_for_openai_default(
     out
 }
 
-fn is_projects_table_header(trimmed: &str) -> bool {
-    let name = trimmed
-        .trim()
-        .trim_start_matches('[')
-        .trim_end_matches(']')
-        .trim();
-    name == "projects" || name.starts_with("projects.")
-}
-
-fn extract_projects_tables(config: &str) -> String {
-    let mut out = String::new();
-    let mut capturing = false;
-    for line in config.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') {
-            capturing = is_projects_table_header(trimmed);
-        }
-        if capturing {
-            out.push_str(line);
-            out.push('\n');
+/// A provider profile overlays native settings; omission must not uninstall tools.
+/// Explicit values (including false / empty arrays) win. Provider definitions are
+/// replaced as a unit so stale env_key/base_url/auth settings cannot cross routes.
+fn merge_codex_runtime_config(incoming: &str, current: &str) -> Result<String, String> {
+    use toml_edit::{DocumentMut, TableLike};
+    fn inherit_missing(target: &mut dyn TableLike, source: &dyn TableLike) {
+        for (key, value) in source.iter() {
+            if let Some(existing) = target.get_mut(key) {
+                if let (Some(dst), Some(src)) = (existing.as_table_like_mut(), value.as_table_like()) {
+                    inherit_missing(dst, src);
+                }
+            } else {
+                target.insert(key, value.clone());
+            }
         }
     }
-    out
-}
-
-/// 完整替换 provider 档案时保留 `[projects.*]`，否则每次切档案都会丢掉 trust_level。
-fn preserve_projects_tables(new_config: &str, current_config: &str) -> String {
-    if new_config.lines().any(|line| is_projects_table_header(line.trim())) {
-        return new_config.to_string();
+    // Positions from two different documents collide. Let insertion order decide
+    // section layout so applying the same profile again is byte-for-byte stable.
+    fn reset_positions(table: &mut toml_edit::Table) {
+        table.set_position(None);
+        for (_, item) in table.iter_mut() {
+            match item {
+                toml_edit::Item::Table(child) => reset_positions(child),
+                toml_edit::Item::ArrayOfTables(children) => {
+                    for child in children.iter_mut() { reset_positions(child); }
+                }
+                _ => {}
+            }
+        }
     }
-    let projects = extract_projects_tables(current_config);
-    if projects.trim().is_empty() {
-        return new_config.to_string();
+    let mut next = incoming.parse::<DocumentMut>()
+        .map_err(|e| format!("Codex 档案 TOML 无效: {e}"))?;
+    let mut previous = current.parse::<DocumentMut>()
+        .map_err(|e| format!("Codex 当前配置 TOML 无效，未覆盖原文件: {e}"))?;
+    for key in ["model", "model_provider", "chatgpt_base_url", "experimental_bearer_token"] {
+        previous.remove(key);
     }
-    let mut out = new_config.trim_end().to_string();
-    if !out.is_empty() {
-        out.push_str("\n\n");
+    if let Some(providers) = previous.remove("model_providers") {
+        if let Some(existing) = next.get_mut("model_providers") {
+            if let (Some(dst), Some(src)) = (existing.as_table_like_mut(), providers.as_table_like()) {
+                for (key, value) in src.iter() {
+                    if !dst.contains_key(key) {
+                        dst.insert(key, value.clone());
+                    }
+                }
+            }
+        } else {
+            next.insert("model_providers", providers);
+        }
     }
-    out.push_str(projects.trim_end());
-    out.push('\n');
-    out
+    inherit_missing(next.as_table_mut(), previous.as_table());
+    reset_positions(next.as_table_mut());
+    Ok(next.to_string())
 }
 
 fn normalize_codex_project_trust_path(path: &str) -> String {
@@ -701,11 +720,12 @@ fn apply_codex_profile_envelope_inner(envelope: &CodexProfileEnvelope) -> Result
     }
 
     // 档案 config 包含 `model_provider` 或 `[...]` 段落（典型 provider 档案）：
-    // 整体替换 config.toml，使新档案的 base_url / env_key 等真正生效；
-    // 同时合并 auth.json，保留 current 中档案未提供的自定 key。
+    // 替换供应商定义并保留原生运行能力；同时合并 auth.json。
     if !is_model_only_codex_config(&envelope.config) {
-        let merged_config = preserve_projects_tables(&envelope.config, &current.config);
-        write_config_toml(&merged_config)?;
+        let merged_config = merge_codex_runtime_config(&envelope.config, &current.config)?;
+        if merged_config != current.config {
+            write_config_toml(&merged_config)?;
+        }
         let merged_auth = if codex_config_uses_custom_provider(&merged_config) {
             merge_auth_maps(&current.auth, &envelope.auth)
         } else {
@@ -769,6 +789,7 @@ fn warm_codex_disk_cache(envelope: &CodexProfileEnvelope) -> Result<(), String> 
     let pretty = codex_profile_envelope_to_json(envelope)?;
     if let Ok(mut guard) = CODEX_DISK_CACHE.lock() {
         *guard = Some(CodexDiskCache {
+            dir,
             auth_mtime,
             config_mtime,
             envelope: envelope.clone(),
@@ -805,7 +826,7 @@ pub fn read_codex_user_settings_pretty() -> String {
     let config_mtime = file_mtime(&config_path);
     if let Ok(guard) = CODEX_DISK_CACHE.lock() {
         if let Some(cache) = guard.as_ref() {
-            if cache.auth_mtime == auth_mtime && cache.config_mtime == config_mtime {
+            if cache.dir == dir && cache.auth_mtime == auth_mtime && cache.config_mtime == config_mtime {
                 if cache.pretty.ends_with('\n') {
                     return cache.pretty.clone();
                 }
@@ -828,6 +849,81 @@ pub fn read_codex_user_settings_pretty() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codex_home_matches_native_environment_without_mutating_process_env() {
+        use std::ffi::OsStr;
+        let home = Path::new("/users/example");
+        assert_eq!(resolve_codex_dir(Some(OsStr::new("/runtime/codex")), Some(home)), PathBuf::from("/runtime/codex"));
+        assert_eq!(resolve_codex_dir(Some(OsStr::new("")), Some(home)), home.join(".codex"));
+        assert_eq!(resolve_codex_dir(None, Some(home)), home.join(".codex"));
+    }
+
+    #[test]
+    fn provider_switch_preserves_native_tools_and_explicit_overrides() {
+        let current = r#"
+model = "old-model"
+model_provider = "old"
+chatgpt_base_url = "https://old.example"
+approval_policy = "on-request"
+developer_instructions = "Use native tools"
+[features]
+code_mode = true
+shell_snapshot = true
+[mcp_servers.docs]
+url = "https://docs.example/mcp"
+[plugins."local@market"]
+enabled = true
+[projects."/old/repo"]
+trust_level = "trusted"
+[model_providers.next]
+base_url = "https://old.example/v1"
+env_key = "OLD_KEY"
+[model_providers.other]
+base_url = "https://other.example/v1"
+"#;
+        let incoming = r#"
+model = "new-model"
+model_provider = "next"
+[features]
+shell_snapshot = false
+[projects."/new/repo"]
+trust_level = "trusted"
+[model_providers.next]
+base_url = "https://new.example/v1"
+"#;
+        let merged = merge_codex_runtime_config(incoming, current).unwrap();
+        let parsed = merged.parse::<toml_edit::DocumentMut>().unwrap();
+        assert_eq!(parsed["model"].as_str(), Some("new-model"));
+        assert_eq!(parsed["model_provider"].as_str(), Some("next"));
+        assert_eq!(parsed["features"]["code_mode"].as_bool(), Some(true));
+        assert_eq!(parsed["features"]["shell_snapshot"].as_bool(), Some(false));
+        assert_eq!(parsed["mcp_servers"]["docs"]["url"].as_str(), Some("https://docs.example/mcp"));
+        assert_eq!(parsed["plugins"]["local@market"]["enabled"].as_bool(), Some(true));
+        assert_eq!(parsed["approval_policy"].as_str(), Some("on-request"));
+        assert_eq!(parsed["developer_instructions"].as_str(), Some("Use native tools"));
+        assert!(parsed["projects"].get("/old/repo").is_some());
+        assert!(parsed["projects"].get("/new/repo").is_some());
+        assert_eq!(parsed["model_providers"]["next"]["base_url"].as_str(), Some("https://new.example/v1"));
+        assert!(parsed["model_providers"]["next"].get("env_key").is_none());
+        assert!(parsed["model_providers"].get("other").is_some());
+        assert!(parsed.get("chatgpt_base_url").is_none());
+        assert_eq!(merge_codex_runtime_config(incoming, &merged).unwrap(), merged);
+    }
+
+    #[test]
+    fn native_config_merge_handles_inline_tables_and_rejects_invalid_toml() {
+        let merged = merge_codex_runtime_config(
+            "features = { shell_snapshot = false }\n",
+            "features = { shell_snapshot = true, code_mode = true }\n",
+        ).unwrap().parse::<toml_edit::DocumentMut>().unwrap();
+        assert_eq!(merged["features"]["shell_snapshot"].as_bool(), Some(false));
+        assert_eq!(merged["features"]["code_mode"].as_bool(), Some(true));
+        assert!(merge_codex_runtime_config("[broken", "model = 'old'").is_err());
+        assert!(merge_codex_runtime_config("model = 'new'", "[broken").is_err());
+        let official = merge_codex_runtime_config("model = 'gpt-new'", "model_provider = 'old'").unwrap();
+        assert!(!official.contains("model_provider"));
+    }
 
     #[test]
     fn parses_model_from_config_toml() {
@@ -1028,13 +1124,13 @@ base_url = "https://api.deepseek.com/v1"
     }
 
     #[test]
-    fn preserve_projects_tables_keeps_trust_when_replacing_provider() {
+    fn profile_merge_keeps_trust_when_replacing_provider() {
         let current = r#"model = "old"
 [projects."/Users/sjl/repo"]
 trust_level = "trusted"
 "#;
         let incoming = "model = \"new\"\nmodel_provider = \"volc\"\n";
-        let merged = preserve_projects_tables(incoming, current);
+        let merged = merge_codex_runtime_config(incoming, current).unwrap();
         assert!(merged.contains("model = \"new\""));
         assert!(merged.contains("[projects.\"/Users/sjl/repo\"]"));
         assert!(merged.contains("trust_level = \"trusted\""));
@@ -1163,9 +1259,9 @@ foo = "bar"
     }
 
     #[test]
-    fn apply_envelope_full_profile_replaces_config_and_merges_auth() {
+    fn apply_envelope_full_profile_preserves_runtime_and_merges_auth() {
         // 完整 provider 档案（典型 CC Switch / 火山 minimax 形态）：
-        // apply 后 config.toml 必须是档案内容（provider / base_url 真正生效），
+        // apply 后 provider / base_url 真正生效，原生运行能力保留，
         // auth.json 仍按白名单合并，current 中档案未提供的自定 key 必须保留。
         let envelope = CodexProfileEnvelope {
             auth: serde_json::from_value(serde_json::json!({
@@ -1186,8 +1282,7 @@ wire_api = "responses"
             .to_string(),
         };
         // 文档化「切换前」用户磁盘上的 config：含自定义 [custom] 段。
-        // 整体替换路径会丢掉它 —— 这就是「provider 档案」应有的语义。
-        let _current_config = r#"# user kept
+        let current_config = r#"# user kept
 model = "gpt-5"
 [custom]
 foo = "bar"
@@ -1198,17 +1293,16 @@ foo = "bar"
         }))
         .expect("current auth");
 
-        // 模拟非首次安装路径：current.config 非空，档案非 model-only → 整体替换。
-        // 这里直接调用 `write_config_toml` / `write_auth_json` 不安全（会落盘），
-        // 改为断言「应进入整体替换分支」所需的关键状态：档案非 model-only + 合并结果正确。
+        // 验证实际配置合并函数，不改动开发机配置或凭据。
         assert!(!is_model_only_codex_config(&envelope.config));
         let merged_auth = merge_auth_maps(&current_auth, &envelope.auth);
         assert_eq!(merged_auth["OPENAI_API_KEY"].as_str(), Some("new-key"));
         assert_eq!(merged_auth["auth_mode"].as_str(), Some("apikey"));
         assert_eq!(merged_auth["MY_TOKEN"].as_str(), Some("keep-me"));
-        // 整体替换后 disk 上的 config 必须是档案的 config（用户原有 [custom] 不保留）。
-        assert!(envelope.config.contains("model_provider = \"minimax\""));
-        assert!(envelope.config.contains("[model_providers.minimax]"));
-        assert!(envelope.config.contains("base_url = \"https://api.example.com/v1\""));
+        let merged = merge_codex_runtime_config(&envelope.config, current_config).unwrap();
+        assert!(merged.contains("model_provider = \"minimax\""));
+        assert!(merged.contains("[model_providers.minimax]"));
+        assert!(merged.contains("base_url = \"https://api.example.com/v1\""));
+        assert!(merged.contains("[custom]"));
     }
 }

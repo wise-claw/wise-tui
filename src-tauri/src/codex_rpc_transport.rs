@@ -134,9 +134,13 @@ impl CodexRpcTransport {
         binary_path: &str,
         args: &[&str],
         spawn_env_overrides: Option<&(String, String)>,
+        cwd: Option<&str>,
     ) -> Result<Self> {
         let mut cmd = Command::new(binary_path);
         cmd.arg("app-server").args(args);
+        if let Some(cwd) = cwd.map(str::trim).filter(|cwd| !cwd.is_empty()) {
+            cmd.current_dir(cwd);
+        }
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());

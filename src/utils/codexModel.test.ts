@@ -55,6 +55,38 @@ describe("resolveCodexProfileModelFromStore", () => {
 });
 
 describe("resolveCodexExecModelId", () => {
+  test("RPC inherits native project model instead of overriding with user disk model", () => {
+    expect(resolveCodexExecModelId({
+      contextExecutionEngine: "codex-rpc",
+      store: store({ effectiveCodexModel: "user-default", activeCodexProfileId: null }),
+      inheritNativeDefault: true,
+    })).toBeUndefined();
+    expect(resolveCodexExecModelId({
+      sessionModel: "chosen-model",
+      contextExecutionEngine: "codex-rpc",
+      store: store({ effectiveCodexModel: "user-default" }),
+      inheritNativeDefault: true,
+    })).toBe("chosen-model");
+    expect(resolveCodexExecModelId({
+      sessionModel: "claude-model",
+      contextExecutionEngine: "claude",
+      store: store({ effectiveCodexModel: "user-default", activeCodexProfileId: null }),
+      inheritNativeDefault: true,
+    })).toBeUndefined();
+    expect(resolveCodexExecModelId({
+      contextExecutionEngine: "codex-rpc",
+      store: store({
+        effectiveCodexModel: "old-disk-model",
+        profiles: [{
+          id: "codex-1", engine: "codex", modelId: "selected-profile-model",
+          company: "OpenAI", name: "Selected", settingsJson: "{}",
+          createdAtMs: 0, updatedAtMs: 0,
+        }],
+      }),
+      inheritNativeDefault: true,
+    })).toBe("selected-profile-model");
+  });
+
   test("uses codex profile when context is claude", () => {
     expect(
       resolveCodexExecModelId({

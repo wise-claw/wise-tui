@@ -428,6 +428,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       sessionModel: modelArg,
       contextExecutionEngine,
       store: getCachedModelProfileStore(),
+      inheritNativeDefault: true,
     });
     const effort = normalizeCodexReasoningEffort(
       sessionsRef.current.find((s) => s.id === tabSessionId)?.codexReasoningEffort ??

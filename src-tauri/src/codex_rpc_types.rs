@@ -90,6 +90,9 @@ pub struct ThreadStartParams {
 #[serde(rename_all = "camelCase")]
 pub struct ThreadStartResponse {
     pub thread: ThreadInfo,
+    /// Effective model after native user/project configuration resolution.
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 /// Parameters for the `thread/resume` request.
@@ -113,6 +116,8 @@ pub struct ThreadResumeParams {
 #[serde(rename_all = "camelCase")]
 pub struct ThreadResumeResponse {
     pub thread: ThreadInfo,
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -2161,8 +2166,14 @@ mod tests {
             "model": "gpt-5.4",
             "cwd": "/tmp/demo"
         });
-        let parsed: ThreadStartResponse = serde_json::from_value(raw).expect("parse");
+        let parsed: ThreadStartResponse = serde_json::from_value(raw.clone()).expect("parse");
         assert_eq!(parsed.thread.id, "thr_123");
+        assert_eq!(parsed.model.as_deref(), Some("gpt-5.4"));
+        let resumed: ThreadResumeResponse = serde_json::from_value(raw).expect("parse resume");
+        assert_eq!(resumed.model.as_deref(), Some("gpt-5.4"));
+        let legacy = json!({"thread": {"id": "old-server"}});
+        assert!(serde_json::from_value::<ThreadStartResponse>(legacy.clone()).unwrap().model.is_none());
+        assert!(serde_json::from_value::<ThreadResumeResponse>(legacy).unwrap().model.is_none());
     }
 
     #[test]

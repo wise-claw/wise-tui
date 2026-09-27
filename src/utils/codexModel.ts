@@ -20,6 +20,8 @@ export interface ResolveCodexExecModelInput {
   /** 派发/发送上下文会话的默认执行引擎（主会话或当前 worker）。 */
   contextExecutionEngine: SessionExecutionEngine;
   store?: ClaudeModelProfileStoreView | null;
+  /** RPC 默认交给原生项目配置解析，不能把磁盘有效模型升级成显式覆盖。 */
+  inheritNativeDefault?: boolean;
 }
 
 /**
@@ -30,7 +32,12 @@ export interface ResolveCodexExecModelInput {
  * - Claude/Cursor 上下文下绝不使用 session.model（避免误用 Qwen/glm 等 Claude 档案）。
  */
 export function resolveCodexExecModelId(input: ResolveCodexExecModelInput): string | undefined {
-  const codexProfileModel = resolveCodexProfileModelFromStore(input.store);
+  const activeProfile = input.store?.profiles.find(
+    (profile) => profile.id === input.store?.activeCodexProfileId && profile.engine === "codex",
+  );
+  const codexProfileModel = input.inheritNativeDefault
+    ? activeProfile?.modelId?.trim() || undefined
+    : resolveCodexProfileModelFromStore(input.store);
   const session = input.sessionModel?.trim();
   const isCodexContext =
     input.contextExecutionEngine === "codex" || input.contextExecutionEngine === "codex-rpc";
