@@ -2489,6 +2489,7 @@ pub(crate) async fn cancel_claude_execution(
         // 无论是否已在 store 中，都登记取消标记：bootstrap 竞态窗口内
         // `execute_codex_rpc` 尚未入 store，靠该标记在 turn 启动后自检中止。
         store_state.cancelled.lock().await.insert(sid.to_string());
+        store_state.shutdown_idle(sid).await;
         let codex_session_arc = {
             let sessions = store_state.sessions.lock().await;
             sessions.get(sid).cloned()

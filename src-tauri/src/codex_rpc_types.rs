@@ -818,7 +818,8 @@ pub fn parse_notification(method: &str, params: Option<Value>) -> ServerNotifica
         }
         "turn/started" => {
             let turn_id = p
-                .get("turnId")
+                .get("turn").and_then(|turn| turn.get("id"))
+                .or_else(|| p.get("turnId"))
                 .or_else(|| p.get("turn_id"))
                 .and_then(Value::as_str)
                 .unwrap_or("")
@@ -832,8 +833,10 @@ pub fn parse_notification(method: &str, params: Option<Value>) -> ServerNotifica
             ServerNotification::TurnStarted { turn_id, thread_id }
         }
         "turn/completed" | "turn/finished" => {
+            let turn = p.get("turn").filter(|turn| turn.is_object()).unwrap_or(&p);
             let turn_id = p
-                .get("turnId")
+                .get("turn").and_then(|turn| turn.get("id"))
+                .or_else(|| p.get("turnId"))
                 .or_else(|| p.get("turn_id"))
                 .and_then(Value::as_str)
                 .unwrap_or("")
@@ -844,13 +847,14 @@ pub fn parse_notification(method: &str, params: Option<Value>) -> ServerNotifica
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string();
-            let status = p
+            let status = turn
                 .get("status")
                 .and_then(Value::as_str)
                 .unwrap_or("completed")
                 .to_string();
-            let error_message = p
+            let error_message = turn
                 .get("error")
+                .filter(|error| !error.is_null())
                 .map(extract_error_notification_message)
                 .filter(|s| !s.is_empty() && s != "Unknown error");
             ServerNotification::TurnCompleted {
@@ -2174,6 +2178,27 @@ mod tests {
         let legacy = json!({"thread": {"id": "old-server"}});
         assert!(serde_json::from_value::<ThreadStartResponse>(legacy.clone()).unwrap().model.is_none());
         assert!(serde_json::from_value::<ThreadResumeResponse>(legacy).unwrap().model.is_none());
+    }
+
+    #[test]
+    fn native_turn_lifecycle_reads_nested_id_status_and_errors() {
+        for status in ["completed", "failed", "interrupted"] {
+            let error = if status == "failed" { json!({"message": "native failure"}) } else { Value::Null };
+            let notification = parse_notification("turn/completed", Some(json!({
+                "threadId": "thread", "turn": {"id": "turn-2", "status": status, "error": error}
+            })));
+            let ServerNotification::TurnCompleted { thread_id, turn_id, status: actual, error_message } = notification else { panic!("wrong event") };
+            assert_eq!(thread_id, "thread");
+            assert_eq!(turn_id, "turn-2");
+            assert_eq!(actual, status);
+            assert_eq!(error_message.as_deref(), if status == "failed" { Some("native failure") } else { None });
+        }
+        assert!(matches!(parse_notification("turn/started", Some(json!({
+            "threadId": "thread", "turn": {"id": "turn-2", "status": "inProgress"}
+        }))), ServerNotification::TurnStarted { turn_id, .. } if turn_id == "turn-2"));
+        assert!(matches!(parse_notification("turn/finished", Some(json!({
+            "threadId": "thread", "turnId": "legacy", "status": "failed"
+        }))), ServerNotification::TurnCompleted { turn_id, status, .. } if turn_id == "legacy" && status == "failed"));
     }
 
     #[test]

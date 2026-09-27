@@ -470,6 +470,17 @@ impl CodexRpcSession {
         }
     }
 
+    /// Return the event receivers to an idle runtime before handing it to another turn.
+    pub(crate) fn restore_events(&mut self, events: CodexRpcEvents) {
+        self.notification_rx = events.notifications;
+        self.server_request_rx = events.requests;
+        self.current_turn_id = None;
+    }
+
+    pub(crate) fn is_connected(&self) -> bool {
+        self.initialized && !self.notification_rx.is_closed() && !*self.event_stop.borrow()
+    }
+
     /// Blocking wait for the next server notification.
     ///
     /// Returns `None` when the notification channel is closed (e.g. the
@@ -1338,6 +1349,7 @@ mod lifecycle_tests {
         let binary = dir.path().join("fake-codex");
         std::fs::write(&binary, r#"#!/bin/sh
 pwd > spawn-cwd
+turn_count=0
 while IFS= read -r line; do
   printf '%s\n' "$line" >> requests.jsonl
   case "$line" in
@@ -1348,10 +1360,15 @@ while IFS= read -r line; do
     *'"method":"initialize"'*) result='{}' ;;
     *'"method":"thread/start"'*) result='{"thread":{"id":"native-thread"},"model":"deepseek-v4-flash"}' ;;
     *'"method":"thread/resume"'*) result='{"thread":{"id":"native-thread"},"model":"gpt-5.4"}' ;;
-    *'"method":"turn/start"'*) result='{"turn":{"id":"native-turn"}}' ;;
+    *'"method":"turn/start"'*)
+      turn_count=$((turn_count + 1))
+      result="{\"turn\":{\"id\":\"native-turn-$turn_count\"}}" ;;
     *) result='{}' ;;
   esac
   printf '{"id":%s,"result":%s}\n' "$id" "$result"
+  case "$line" in
+    *'"method":"turn/start"'*) printf '{"method":"turn/completed","params":{"threadId":"native-thread","turn":{"id":"native-turn-%s","status":"completed","error":null}}}\n' "$turn_count" ;;
+  esac
 done
 "#).unwrap();
         std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -1360,13 +1377,36 @@ done
         session.start_thread(Some(cwd), None, None).await.unwrap();
         assert_eq!(session.active_model(), Some("deepseek-v4-flash"));
         session.start_turn("查看\n附图：@/tmp/example.png", None, false).await.unwrap();
+        let mut events = session.take_events();
+        let completion = tokio::time::timeout(std::time::Duration::from_secs(2), events.next()).await.unwrap();
+        assert!(matches!(completion, CodexRpcSessionEvent::Notification(ServerNotification::TurnCompleted { turn_id, status, .. }) if turn_id == "native-turn-1" && status == "completed"));
+        session.restore_events(events);
+        assert!(session.current_turn_id().is_none());
+        let mut pool = crate::codex_rpc_reuse::IdleSessionPool::default();
+        let now = std::time::Instant::now();
+        assert!(pool.park("tab".into(), "native-thread".into(), 1, session, now).is_empty());
+        let (cached, retired) = pool.take("tab", Some("native-thread"), 1, now);
+        assert!(retired.is_empty());
+        let mut session = cached.unwrap();
+        assert!(session.is_connected());
+        session.start_turn("继续", Some("low"), false).await.unwrap();
+        let mut events = session.take_events();
+        let completion = tokio::time::timeout(std::time::Duration::from_secs(2), events.next()).await.unwrap();
+        assert!(matches!(completion, CodexRpcSessionEvent::Notification(ServerNotification::TurnCompleted { turn_id, .. }) if turn_id == "native-turn-2"));
+        session.restore_events(events);
         session.resume_thread("native-thread", Some(cwd), None, None).await.unwrap();
         assert_eq!(session.active_model(), Some("gpt-5.4"));
         session.shutdown().await.unwrap();
+        assert!(!session.is_connected());
         let actual_cwd = std::fs::read_to_string(dir.path().join("spawn-cwd")).unwrap();
         assert_eq!(std::path::Path::new(actual_cwd.trim()).canonicalize().unwrap(), dir.path().canonicalize().unwrap());
         let requests = std::fs::read_to_string(dir.path().join("requests.jsonl")).unwrap();
         let requests: Vec<serde_json::Value> = requests.lines().map(|line| serde_json::from_str(line).unwrap()).collect();
+        assert_eq!(requests.iter().filter(|r| r["method"] == "initialize").count(), 1);
+        assert_eq!(requests.iter().filter(|r| r["method"] == "thread/start").count(), 1);
+        let turns: Vec<_> = requests.iter().filter(|r| r["method"] == "turn/start").collect();
+        assert_eq!(turns.len(), 2);
+        assert_eq!(turns[1]["params"]["effort"], "low");
         for request in requests.iter().filter(|r| r["method"] == "thread/start" || r["method"] == "thread/resume") {
             assert!(request["params"].get("model").is_none(), "native model precedence must be preserved");
         }

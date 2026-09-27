@@ -27,6 +27,7 @@ mod codex_models;
 mod codex_rpc_commands;
 mod codex_rpc_disk;
 mod codex_rpc_session;
+mod codex_rpc_reuse;
 mod codex_rollout_adapter;
 mod codex_rpc_stream_adapter;
 mod codex_rpc_transport;

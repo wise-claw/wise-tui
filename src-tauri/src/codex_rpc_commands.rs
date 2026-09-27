@@ -5,6 +5,8 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 use serde::Deserialize;
 use serde_json::json;
@@ -25,6 +27,7 @@ use crate::codex_config_dir::{
     codex_provider_switched, ensure_codex_project_trusted, read_codex_profile_envelope,
 };
 use crate::codex_rpc_session::CodexRpcSession;
+use crate::codex_rpc_reuse::{IdleSessionPool, IDLE_TTL, runtime_fingerprint};
 use crate::codex_rpc_stream_adapter::{
     adapt_notification_to_stream_lines, emit_approval_request, emit_dynamic_tool_request,
     emit_mcp_elicitation_request, emit_rpc_complete, CodexRpcStreamAdaptState,
@@ -98,19 +101,35 @@ pub(crate) struct CodexRpcSessionStore {
     /// 尚未写入 `sessions`，点「结束」时 cancel 只能登记此标记，待 turn 启动后自检中止。
     pub(crate) cancelled: Arc<TokioMutex<HashSet<String>>>,
     guidance: Arc<TokioMutex<ExecutionGuidanceSchedule>>,
+    idle: Arc<TokioMutex<IdleSessionPool<CodexRpcSession>>>,
+    closing: Arc<AtomicBool>,
 }
 
 impl CodexRpcSessionStore {
     /// 应用退出时关闭全部 app-server 子进程；返回关闭的会话数。
     pub(crate) async fn shutdown_all(&self) -> usize {
+        self.closing.store(true, Ordering::Release);
         let sessions: Vec<_> = self.sessions.lock().await.drain().map(|(_, s)| s).collect();
+        let idle = self.idle.lock().await.drain();
         self.cancelled.lock().await.clear();
-        let count = sessions.len();
+        let count = sessions.len() + idle.len();
         for session in sessions {
             let _ = session.lock().await.shutdown().await;
         }
+        shutdown_idle_runtimes(idle).await;
         count
     }
+
+    pub(crate) async fn shutdown_idle(&self, tab: &str) -> bool {
+        let idle = self.idle.lock().await.remove(tab);
+        let found = idle.is_some();
+        shutdown_idle_runtimes(idle.into_iter().collect()).await;
+        found
+    }
+}
+
+async fn shutdown_idle_runtimes(runtimes: Vec<CodexRpcSession>) {
+    for mut session in runtimes { let _ = session.shutdown().await; }
 }
 
 // ---------------------------------------------------------------------------
@@ -302,9 +321,13 @@ pub(crate) async fn execute_codex_rpc(
     db: tauri::State<'_, WiseDb>,
     params: ExecuteCodexRpcParams,
 ) -> Result<(), String> {
+    let dispatch_started = Instant::now();
     let trimmed_prompt = params.prompt.trim();
     if trimmed_prompt.is_empty() {
         return Err("Codex RPC 执行需要非空提示词".to_string());
+    }
+    if app.state::<CodexRpcSessionStore>().closing.load(Ordering::Acquire) {
+        return Err("Codex 执行环境正在关闭".to_string());
     }
 
     let proxy_model = crate::opencode_go_proxy::apply_codex_bridge_for_spawn(&db)?;
@@ -365,10 +388,39 @@ pub(crate) async fn execute_codex_rpc(
     let user_line = crate::cursor_disk::build_cursor_user_turn_line(trimmed_prompt, None);
     persist_codex_rpc_transcript_line(&params.project_path, &session_id, &user_line);
 
-    // Bootstrap the session (spawn subprocess + initialize handshake).
-    let mut session = match CodexRpcSession::bootstrap(
-        &codex_path, spawn_env_overrides.as_ref(), Some(&params.project_path),
-    ).await {
+    let resume_id = params.codex_resume_session_id.as_deref()
+        .map(str::trim).filter(|id| is_codex_rpc_thread_id(id));
+    let default_settings = if params.read_only {
+        Some(codex_read_only_settings())
+    } else {
+        load_codex_default_settings(&db)
+    };
+    let thread_config = build_codex_rpc_thread_config(default_settings.as_ref());
+    let fingerprint = {
+        let binary = codex_path.clone();
+        let cwd = params.project_path.clone();
+        let home = crate::codex_config_dir::user_codex_dir();
+        let settings = json!({
+            "model": &params.model, "permissions": &thread_config,
+            "profile": read_codex_profile_envelope(), "env": &spawn_env_overrides,
+        });
+        tokio::task::spawn_blocking(move || runtime_fingerprint(&binary, &cwd, &settings, &home))
+            .await.map_err(|e| format!("Codex runtime fingerprint: {e}"))?
+    };
+    let (mut cached, retired) = app.state::<CodexRpcSessionStore>().idle.lock().await.take(
+        &session_id, resume_id.filter(|_| !provider_switched && !params.read_only), fingerprint, Instant::now(),
+    );
+    shutdown_idle_runtimes(retired).await;
+    if cached.as_ref().is_some_and(|session| !session.is_connected()) {
+        shutdown_idle_runtimes(cached.take().into_iter().collect()).await;
+    }
+    let reused_runtime = cached.is_some();
+    let startup = if let Some(session) = cached {
+        Ok(session)
+    } else {
+        CodexRpcSession::bootstrap(&codex_path, spawn_env_overrides.as_ref(), Some(&params.project_path)).await
+    };
+    let mut session = match startup {
         Ok(s) => s,
         Err(e) => {
             let msg = format!("Codex app-server 启动失败: {e}");
@@ -390,22 +442,6 @@ pub(crate) async fn execute_codex_rpc(
         }
     };
 
-    // Start or resume a thread.
-    // Wise 标签 id（`session_…`）不能传给 thread/resume，Codex 只接受 UUID。
-    let resume_id = params
-        .codex_resume_session_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .filter(|s| is_codex_rpc_thread_id(s));
-
-    let default_settings = if params.read_only {
-        Some(codex_read_only_settings())
-    } else {
-        load_codex_default_settings(&db)
-    };
-    let thread_config = build_codex_rpc_thread_config(default_settings.as_ref());
-
     // Only an explicit selection overrides native config precedence. The server
     // resolves project/profile defaults and returns the actual model for images.
     // 模型白名单护栏：未知模型（如 Claude 侧泄漏的 MiniMax-M3）不下发，
@@ -416,7 +452,7 @@ pub(crate) async fn execute_codex_rpc(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
-    if let Some(m) = effective_model.as_deref() {
+    if let Some(m) = effective_model.as_deref().filter(|_| !reused_runtime) {
         if !crate::codex_models::codex_model_is_known(m).await {
             effective_model = None;
         }
@@ -424,7 +460,9 @@ pub(crate) async fn execute_codex_rpc(
 
     let mut started_new_thread = false;
     let had_resume_id = resume_id.is_some();
-    let thread_result = if let Some(thread_id) = resume_id.as_deref().filter(|_| !provider_switched) {
+    let thread_result = if reused_runtime {
+        Ok(())
+    } else if let Some(thread_id) = resume_id.as_deref().filter(|_| !provider_switched) {
         match session
             .resume_thread(
                 thread_id,
@@ -562,9 +600,13 @@ pub(crate) async fn execute_codex_rpc(
     if let Some(thread_id) = guidance_thread.as_deref() {
         app.state::<CodexRpcSessionStore>().guidance.lock().await.record_accepted(thread_id);
     }
+    eprintln!("[codex_rpc] runtime={} turn_dispatched_in_ms={}",
+        if reused_runtime { "reused" } else { "cold" }, dispatch_started.elapsed().as_millis());
 
     // Consume events without taking the control mutex or polling on a timer.
     let mut events = session.take_events();
+    let active_thread_id = session.current_thread_id().unwrap_or_default().to_string();
+    let active_turn_id = session.current_turn_id().unwrap_or_default().to_string();
     // Store the session for potential interrupt/shutdown.
     let session_arc = Arc::new(TokioMutex::new(session));
     {
@@ -578,7 +620,7 @@ pub(crate) async fn execute_codex_rpc(
     {
         let session_store = app.state::<CodexRpcSessionStore>();
         let was_cancelled = session_store.cancelled.lock().await.contains(&session_id);
-        if was_cancelled {
+        if was_cancelled || session_store.closing.load(Ordering::Acquire) {
             let _ = session_arc.lock().await.shutdown().await;
             session_store.sessions.lock().await.remove(&session_id);
             session_store.cancelled.lock().await.remove(&session_id);
@@ -605,9 +647,11 @@ pub(crate) async fn execute_codex_rpc(
     let session_id_loop = session_id.clone();
     let invocation_key_loop = invocation_key.clone();
     let project_path_loop = params.project_path.clone();
+    let allow_reuse = !params.read_only;
 
     tokio::spawn(async move {
         let mut success = true;
+        let mut completed_cleanly = false;
         let mut stream_adapt_state = CodexRpcStreamAdaptState::default();
         let mut transcript_writer = None;
 
@@ -617,10 +661,19 @@ pub(crate) async fn execute_codex_rpc(
 
             match result {
                 CodexRpcSessionEvent::Notification(ServerNotification::TurnCompleted {
+                    thread_id,
+                    turn_id,
                     status,
                     error_message,
                     ..
                 }) => {
+                    if (!thread_id.is_empty() && thread_id != active_thread_id)
+                        || (!turn_id.is_empty() && turn_id != active_turn_id) {
+                        continue;
+                    }
+                    completed_cleanly = status.eq_ignore_ascii_case("completed")
+                        && thread_id == active_thread_id && turn_id == active_turn_id;
+                    if !status.eq_ignore_ascii_case("completed") { success = false; }
                     let failed = status.eq_ignore_ascii_case("failed")
                         || status.eq_ignore_ascii_case("errored")
                         || status.eq_ignore_ascii_case("error");
@@ -712,18 +765,51 @@ pub(crate) async fn execute_codex_rpc(
         }
 
         // A late exit from an old process must not remove a replacement session.
+        let mut shutdown_shared = Some(session_arc);
+        let mut retired = Vec::new();
+        let mut parked = false;
         let owned_session = {
             let session_store = app_loop.state::<CodexRpcSessionStore>();
             let mut store = session_store.sessions.lock().await;
             let owned = store.get(&session_id_loop)
-                .is_some_and(|current| Arc::ptr_eq(current, &session_arc));
+                .is_some_and(|current| Arc::ptr_eq(current, shutdown_shared.as_ref().unwrap()));
             if owned {
                 store.remove(&session_id_loop);
-                session_store.cancelled.lock().await.remove(&session_id_loop);
+                // Hold cancellation through parking: a concurrent cancel then either
+                // prevents caching or removes the parked runtime via shutdown_idle.
+                let mut cancelled = session_store.cancelled.lock().await;
+                let was_cancelled = cancelled.remove(&session_id_loop);
+                if was_cancelled { success = false; }
+                if allow_reuse && completed_cleanly && success && !was_cancelled
+                    && !session_store.closing.load(Ordering::Acquire) {
+                    match Arc::try_unwrap(shutdown_shared.take().unwrap()) {
+                        Ok(mutex) => {
+                            let mut runtime = mutex.into_inner();
+                            runtime.restore_events(events);
+                            if runtime.is_connected() {
+                                retired = session_store.idle.lock().await.park(
+                                    session_id_loop.clone(), active_thread_id, fingerprint, runtime, Instant::now(),
+                                );
+                                parked = true;
+                            } else { retired.push(runtime); }
+                        }
+                        // A control request still owns the runtime: close it normally.
+                        Err(shared) => shutdown_shared = Some(shared),
+                    }
+                }
             }
             owned
         };
-        let _ = session_arc.lock().await.shutdown().await;
+        if let Some(shared) = shutdown_shared { let _ = shared.lock().await.shutdown().await; }
+        shutdown_idle_runtimes(retired).await;
+        if parked {
+            let idle = app_loop.state::<CodexRpcSessionStore>().idle.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(IDLE_TTL).await;
+                let expired = idle.lock().await.expire(Instant::now());
+                shutdown_idle_runtimes(expired).await;
+            });
+        }
         if let Some(inv) = invocation_key_loop.as_deref() {
             app_loop.state::<ClaudeProcessState>()
                 .invocation_tab_session_by_key.lock().await.remove(inv);
@@ -806,13 +892,16 @@ pub(crate) async fn shutdown_codex_rpc(
 ) -> Result<(), String> {
     let session_store = app.state::<CodexRpcSessionStore>();
 
+    session_store.cancelled.lock().await.insert(params.session_id.clone());
+    let had_idle = session_store.shutdown_idle(&params.session_id).await;
+
     let session_arc = {
         let mut store = session_store.sessions.lock().await;
-        store
-            .remove(&params.session_id)
-            .ok_or_else(|| format!("No active RPC session: {}", params.session_id))?
+        store.remove(&params.session_id)
     };
-    session_store.cancelled.lock().await.remove(&params.session_id);
+    let Some(session_arc) = session_arc else {
+        return if had_idle { Ok(()) } else { Err(format!("No active RPC session: {}", params.session_id)) };
+    };
 
     let mut session = session_arc.lock().await;
     session

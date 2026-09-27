@@ -144,6 +144,7 @@ impl CodexRpcTransport {
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
+        cmd.kill_on_drop(true);
 
         // Apply the same env enrichment used by the existing codex integration.
         let path_env = tokio::task::spawn_blocking(crate::codex_binary::codex_merged_path_env)
