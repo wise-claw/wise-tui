@@ -58,7 +58,7 @@ export type { GitPanelOpenFileOptions } from "./types";
 interface Props {
   repositoryPath: string | undefined;
   repositoryName: string | undefined;
-  /** 多仓库模式：一次展示工作区内全部 Git 仓库（≥2 时启用）。 */
+  /** 多仓库模式：一次展示工作区内全部 Git 仓库（≥2 个仓库时启用）。 */
   repositoryEntries?: GitPanelRepositoryEntry[];
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
   /** 左栏整合头部：Tab 切换等 */
@@ -79,7 +79,18 @@ export function GitPanel(props: Props) {
       />
     );
   }
-  return <GitSingleRepoPanel {...props} />;
+  const onlyRepository = props.repositoryEntries?.length === 1 ? props.repositoryEntries[0] : null;
+  if (onlyRepository) {
+    return (
+      <GitSingleRepoPanel
+        key={onlyRepository.path}
+        {...props}
+        repositoryPath={onlyRepository.path}
+        repositoryName={onlyRepository.name}
+      />
+    );
+  }
+  return <GitSingleRepoPanel key={props.repositoryPath?.trim() || "no-repository"} {...props} />;
 }
 
 function GitSingleRepoPanel({

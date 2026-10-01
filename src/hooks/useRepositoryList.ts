@@ -3,6 +3,7 @@ import { runWhenIdle } from "../utils/deferIdle";
 import type { AddRepositoryOptions, ProjectItem, Repository, RepositoryAcquireParams } from "../types";
 import {
   createRepositoryFromPathWithType,
+  reconcileRepositoryChildren,
   loadRepositories,
   removeRepository,
   resolveRepositoryAcquirePath,
@@ -103,6 +104,8 @@ interface LegacyProjectsPayload {
 
 export function useRepositoryList() {
   const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [repositoryChildrenByParentPath, setRepositoryChildrenByParentPath] =
+    useState<Record<string, number[]>>({});
   const [activeRepositoryId, setActiveRepositoryId] = useState<number | null>(null);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [pinnedProjectIds, setPinnedProjectIds] = useState<string[]>([]);
@@ -889,8 +892,21 @@ export function useRepositoryList() {
     [pinnedProjectIds],
   );
 
+  const handleReconcileRepositoryChildren = useCallback(async (parentPath: string) => {
+    const children = await reconcileRepositoryChildren(parentPath);
+    if (children.length >= 2) {
+      setRepositories(await loadRepositories());
+    }
+    setRepositoryChildrenByParentPath((previous) => ({
+      ...previous,
+      [normalizeRepositoryPathKey(parentPath)]: children.map((child) => child.id),
+    }));
+    return children;
+  }, []);
+
   return {
     repositories,
+    repositoryChildrenByParentPath,
     projects,
     pinnedProjectIds,
     workspaceRepositoryOrder,
@@ -926,6 +942,7 @@ export function useRepositoryList() {
     handleShowAllWorkspaceRepositories,
     handleMoveRepositoryToProject,
     handleReconcileProjectWorkspace,
+    handleReconcileRepositoryChildren,
     handleUpdateRepositoryMainOwnerAgent,
     handleUpdateRepositoryExecutionEngine,
     handleUpdateRepositoryOpenAppId,

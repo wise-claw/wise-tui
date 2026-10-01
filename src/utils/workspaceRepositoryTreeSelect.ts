@@ -92,6 +92,7 @@ export interface GitPanelRepositoryEntry {
   repositoryId: number;
   path: string;
   name: string;
+  openAppId?: string | null;
   /** 仓库默认执行引擎；Git 面板 AI 润色提交信息时使用。 */
   executionEngine?: SessionExecutionEngine;
 }
@@ -130,6 +131,7 @@ export function resolveGitPanelRepositoryEntries(input: {
         path: repo.path.trim(),
         name: repositoryDisplayName(repo),
         executionEngine: normalizeSessionExecutionEngine(repo.executionEngine),
+        openAppId: repo.openAppId,
       }));
   }
 
@@ -142,6 +144,7 @@ export function resolveGitPanelRepositoryEntries(input: {
           path: repo.path.trim(),
           name: repositoryDisplayName(repo),
           executionEngine: normalizeSessionExecutionEngine(repo.executionEngine),
+          openAppId: repo.openAppId,
         },
       ];
     }
@@ -156,10 +159,11 @@ export function resolveGitPanelRepositoryEntries(input: {
         : repositories.find((item) => item.path.trim() === trimmedFallback);
     return [
       {
-        repositoryId: fallbackRepositoryId ?? -1,
+        repositoryId: fallbackRepo?.id ?? fallbackRepositoryId ?? -1,
         path: trimmedFallback,
         name: fallbackName.trim() || repositoryFolderBasename({ path: trimmedFallback, name: "" }),
         executionEngine: normalizeSessionExecutionEngine(fallbackRepo?.executionEngine),
+        openAppId: fallbackRepo?.openAppId,
       },
     ];
   }

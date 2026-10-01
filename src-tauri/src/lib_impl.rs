@@ -442,6 +442,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_state_commands::greet,
             app_state_commands::list_repositories,
+            app_state_commands::reconcile_repository_children,
             app_state_commands::create_repository_from_path,
             app_state_commands::update_repository_icon_display,
             app_state_commands::update_repository_icon_badge,

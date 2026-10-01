@@ -64,6 +64,8 @@ describe("gitStatusSnapshotEqual", () => {
 describe("gitStatusHeaderSnapshotEqual", () => {
   it("detects identical git status header snapshots", () => {
     const snapshot = {
+      additions: 12,
+      deletions: 3,
       branch: "master",
       ahead: 0,
       behind: 0,
@@ -72,6 +74,8 @@ describe("gitStatusHeaderSnapshotEqual", () => {
       upstream: null as string | null,
     };
     expect(gitStatusHeaderSnapshotEqual(snapshot, { ...snapshot })).toBe(true);
+    expect(gitStatusHeaderSnapshotEqual(snapshot, { ...snapshot, additions: 13 })).toBe(false);
+    expect(gitStatusHeaderSnapshotEqual(snapshot, { ...snapshot, deletions: 4 })).toBe(false);
     expect(
       gitStatusHeaderSnapshotEqual(snapshot, {
         ...snapshot,

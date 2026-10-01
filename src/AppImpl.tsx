@@ -172,6 +172,8 @@ import {
   planAtMentionDispatch,
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
+import { normalizeSessionRepositoryPath } from "./utils/sessionHistoryScope";
+import { WISE_WORKSPACE_REPOSITORY_SYNC_REQUESTED } from "./constants/workspaceRepositoryEvents";
 import { resolveChatTopbarContext, resolveProjectExplorerOpenPath, resolveScheduledTasksRepository } from "./utils/workspaceSelectionState";
 import { resolveWorkspaceRootPath } from "./utils/projectSessionAnchor";
 import {
@@ -707,6 +709,7 @@ export default function App() {
 
   const {
     repositories,
+    repositoryChildrenByParentPath,
     projects,
     activeProjectId,
     activeRepositoryId,
@@ -731,6 +734,7 @@ export default function App() {
     handleSetWorkspaceRepositoryHidden,
     handleShowAllWorkspaceRepositories,
     handleReconcileProjectWorkspace,
+    handleReconcileRepositoryChildren,
     handleUpdateRepositoryMainOwnerAgent,
     handleUpdateRepositoryExecutionEngine,
     handleUpdateRepositoryOpenAppId,
@@ -742,6 +746,45 @@ export default function App() {
     hiddenWorkspaceRepositoryIds,
     standaloneRepos,
   } = useRepositoryList();
+
+  const workspaceRepositorySyncInFlightRef = useRef(new Map<string, Promise<unknown>>());
+  const workspaceRepositorySyncedAtRef = useRef(new Map<string, number>());
+  const reconcileWorkspaceRepositories = useCallback((projectId: string) => {
+    const inFlight = workspaceRepositorySyncInFlightRef.current.get(projectId);
+    if (inFlight) return inFlight;
+    const lastSyncedAt = workspaceRepositorySyncedAtRef.current.get(projectId) ?? 0;
+    if (Date.now() - lastSyncedAt < 15_000) return Promise.resolve();
+    const sync = handleReconcileProjectWorkspace(projectId, "repos_only")
+      .then((result) => {
+        workspaceRepositorySyncedAtRef.current.set(projectId, Date.now());
+        return result;
+      })
+      .finally(() => workspaceRepositorySyncInFlightRef.current.delete(projectId));
+    workspaceRepositorySyncInFlightRef.current.set(projectId, sync);
+    return sync;
+  }, [handleReconcileProjectWorkspace]);
+
+  useEffect(() => {
+    const onWorkspaceRepositorySyncRequested = (event: Event) => {
+      const projectId = (event as CustomEvent<{ projectId?: string }>).detail?.projectId;
+      if (!projectId || !projects.some((item) => item.id === projectId && item.rootPath?.trim())) return;
+      void reconcileWorkspaceRepositories(projectId).catch((error: unknown) => {
+        console.warn("reconcile workspace repositories requested by Git panel", error);
+      });
+    };
+    window.addEventListener(WISE_WORKSPACE_REPOSITORY_SYNC_REQUESTED, onWorkspaceRepositorySyncRequested);
+    return () => window.removeEventListener(WISE_WORKSPACE_REPOSITORY_SYNC_REQUESTED, onWorkspaceRepositorySyncRequested);
+  }, [projects, reconcileWorkspaceRepositories]);
+
+  useEffect(() => {
+    if (repositoryListLoading || !activeProjectId) return;
+    const project = projects.find((item) => item.id === activeProjectId);
+    const rootPath = project?.rootPath?.trim();
+    if (!rootPath) return;
+    void reconcileWorkspaceRepositories(activeProjectId).catch((error: unknown) => {
+      console.warn("reconcile workspace repositories", error);
+    });
+  }, [activeProjectId, projects, reconcileWorkspaceRepositories, repositoryListLoading]);
 
   useEffect(() => {
     const onNavigate = (event: Event) => {
@@ -2453,6 +2496,32 @@ export default function App() {
     suppressProjectSelectToChatRef,
     onRestoreHistorySessionAsMainComplete: () => setInspectorHistorySessionId(null),
   });
+  const handleProjectSelectAndSyncWorkspace = useCallback((projectId: string) => {
+    handleProjectSelectLeavingMcpHub(projectId);
+    if (projects.some((project) => project.id === projectId && project.rootPath?.trim())) {
+      void reconcileWorkspaceRepositories(projectId).catch((error: unknown) => {
+        console.warn("reconcile workspace repositories", error);
+      });
+    }
+  }, [handleProjectSelectLeavingMcpHub, projects, reconcileWorkspaceRepositories]);
+
+  const handleRepositorySelectAndSyncWorkspace = useCallback((repositoryId: number | null) => {
+    const repository = repositoryId == null
+      ? null
+      : repositories.find((item) => item.id === repositoryId) ?? null;
+    handleSidebarRepositorySelectLeavingMcpHub(repositoryId);
+    if (!repository) return;
+    const repositoryPath = normalizeSessionRepositoryPath(repository.path);
+    const project = projects.find((item) => item.rootPath?.trim() && (
+      item.repositoryIds.includes(repository.id) ||
+      normalizeSessionRepositoryPath(item.rootPath) === repositoryPath
+    ));
+    if (project) {
+      void reconcileWorkspaceRepositories(project.id).catch((error: unknown) => {
+        console.warn("reconcile workspace repositories", error);
+      });
+    }
+  }, [handleSidebarRepositorySelectLeavingMcpHub, projects, repositories, reconcileWorkspaceRepositories]);
   ensureRepositoryMainSessionRef.current = ensureRepositoryMainSession;
   hudSelectRepositoryRef.current = handleSidebarRepositorySelectLeavingMcpHub;
   hudCreateNewSessionRef.current = handleManualNewRepositorySession;
@@ -3136,7 +3205,7 @@ export default function App() {
         onOpenClaudePluginsHub: openClaudePluginsFromSidebar,
         workspaceCreateRequest,
         standaloneRepoAddRequest,
-        onProjectSelect: handleProjectSelectLeavingMcpHub,
+        onProjectSelect: handleProjectSelectAndSyncWorkspace,
         onCreateProject: handleCreateProject,
         onUpdateProject: handleUpdateProject,
         onDeleteProject: handleDeleteProject,
@@ -3151,6 +3220,8 @@ export default function App() {
             message.error(e instanceof Error ? e.message : String(e));
           }
         },
+        onReconcileRepositoryChildren: handleReconcileRepositoryChildren,
+        repositoryChildrenByParentPath,
         onPromoteFloatingRepositoryToProject: handlePromoteFloatingRepositoryToProject,
         floatingRepositories,
         workspaceRepositoryOrder,
@@ -3178,7 +3249,7 @@ export default function App() {
         },
         onReorderRepositoriesInProject: handleReorderRepositoriesInProject,
         onReorderWorkspaceRepositories: handleReorderWorkspaceRepositories,
-        onRepositorySelect: handleSidebarRepositorySelectLeavingMcpHub,
+        onRepositorySelect: handleRepositorySelectAndSyncWorkspace,
         onOpenInFinder: handleOpenInFinder,
         onOpenProjectInFinder: handleOpenProjectInFinder,
         onOpenInTerminal: handleOpenInTerminal,
@@ -3304,8 +3375,8 @@ export default function App() {
           onAddStandaloneRepo: () => {
             setStandaloneRepoAddRequest((value) => value + 1);
           },
-          onSelectWorkspace: handleProjectSelectLeavingMcpHub,
-          onSelectStandaloneRepo: (repositoryId) => handleSidebarRepositorySelectLeavingMcpHub(repositoryId),
+          onSelectWorkspace: handleProjectSelectAndSyncWorkspace,
+          onSelectStandaloneRepo: (repositoryId) => handleRepositorySelectAndSyncWorkspace(repositoryId),
         },
         employeeConfigProps: {
           open: true,
@@ -3526,6 +3597,7 @@ export default function App() {
         projects,
         activeWorkspaceFocus,
         onSelectRepository: handlePickedActiveRepositoryForCurrentPane,
+        onReturnToParentRepository: handleRepositorySelectAndSyncWorkspace,
         onUpdateSessionModel: updateSessionModel,
         onUpdateSessionConnectionKind: updateSessionConnectionKind,
         onUpdateSessionUltracode: updateSessionUltracodeOverride,

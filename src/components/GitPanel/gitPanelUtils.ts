@@ -111,6 +111,8 @@ export function gitStatusSnapshotEqual(
 }
 
 export interface GitStatusHeaderSnapshot {
+  additions: number;
+  deletions: number;
   branch: string | null;
   ahead: number;
   behind: number;
@@ -143,6 +145,8 @@ export function gitStatusHeaderSnapshotEqual(
 ): boolean {
   if (!prev) return false;
   return (
+    prev.additions === next.additions &&
+    prev.deletions === next.deletions &&
     prev.branch === next.branch &&
     prev.ahead === next.ahead &&
     prev.behind === next.behind &&

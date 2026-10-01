@@ -1,3 +1,4 @@
+import { RepositoryCardActions } from "./RepositoryCardActions";
 import { memo, startTransition, useCallback, useEffect, useRef, useState, type Ref } from "react";
 import { useInView, useInViewActive } from "../../hooks/useInView";
 import { listen } from "@tauri-apps/api/event";
@@ -60,6 +61,7 @@ export interface GitRepoSectionEntry {
   path: string;
   name: string;
   executionEngine?: SessionExecutionEngine;
+  openAppId?: string | null;
 }
 
 interface Props {
@@ -86,9 +88,6 @@ function formatBranchLabel(
 ): string {
   const branch = status?.branch?.trim() ?? header?.branch?.trim();
   if (!branch) return "Git";
-  const stagedLen = status?.staged.length ?? header?.stagedCount ?? 0;
-  const unstagedLen = status?.unstaged.length ?? header?.unstagedCount ?? 0;
-  const dirty = stagedLen > 0 || unstagedLen > 0;
   const ahead = status?.ahead ?? header?.ahead ?? 0;
   const behind = status?.behind ?? header?.behind ?? 0;
   const publishNeeded = needsPublishBranch({
@@ -96,7 +95,6 @@ function formatBranchLabel(
     upstream: status?.upstream ?? header?.upstream ?? null,
   });
   let suffix = "";
-  if (dirty) suffix += "*";
   if (ahead > 0 || behind > 0 || publishNeeded) suffix += "+";
   return `${branch}${suffix}`;
 }
@@ -256,6 +254,8 @@ function GitRepoSectionInner({
       const result = await gitStatusSummary(repositoryPath);
       if (requestId !== loadRequestIdRef.current || !mountedRef.current) return;
       const snapshot: GitStatusHeaderSnapshot = {
+        additions: result.additions,
+        deletions: result.deletions,
         branch: result.branch,
         ahead: result.ahead,
         behind: result.behind,
@@ -403,6 +403,8 @@ function GitRepoSectionInner({
     if (!statusRef.current) return;
     const current = statusRef.current;
     const snapshot: GitStatusHeaderSnapshot = {
+      additions: current.additions,
+      deletions: current.deletions,
       branch: current.branch,
       ahead: current.ahead,
       behind: current.behind,
@@ -738,6 +740,7 @@ function GitRepoSectionInner({
         </div>
       </div>
 
+      <RepositoryCardActions entry={entry} />
       {expanded ? (
         <div className="git-repo-section__body">
           {loading.status && !status && !isMissingRepo ? (

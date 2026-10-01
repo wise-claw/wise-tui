@@ -503,6 +503,84 @@ pub(crate) fn list_repositories(app: tauri::AppHandle) -> Vec<StoredRepository> 
     enrich_repositories_with_branch(repositories)
 }
 
+/// Scan the immediate children of a standalone directory used as a workspace.
+/// Registering the discovered repositories gives every Git card a stable id for
+/// sessions and per-repository editor preferences.
+#[tauri::command]
+pub(crate) async fn reconcile_repository_children(
+    app: tauri::AppHandle,
+    parent_path: String,
+) -> Result<Vec<StoredRepository>, String> {
+    crate::blocking_ipc::run_blocking("reconcile_repository_children", move || {
+        let parent = canonicalize_existing_dir(&parent_path)?;
+        if parent.join(".git").exists() {
+            return Ok(Vec::new());
+        }
+        let mut child_dirs = Vec::new();
+        for entry in fs::read_dir(&parent).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            if !entry.file_type().map_err(|e| e.to_string())?.is_dir() {
+                continue;
+            }
+            let child = entry.path();
+            if child.join(".git").exists() {
+                child_dirs.push(child);
+            }
+        }
+        child_dirs.sort();
+        if child_dirs.len() < 2 {
+            return Ok(Vec::new());
+        }
+
+        let mut repositories = load_repositories(&app);
+        let mut discovered = Vec::with_capacity(child_dirs.len());
+        let mut changed = false;
+        for child in child_dirs {
+            let child = canonicalize_existing_dir(&child.to_string_lossy())?;
+            assert_repo_dir_under_project_root(&parent, &child)?;
+            if let Some(existing) = repositories.iter().find(|repo| {
+                canonicalize_existing_dir(&repo.path)
+                    .map(|path| path == child)
+                    .unwrap_or(false)
+            }) {
+                discovered.push(existing.clone());
+                continue;
+            }
+
+            let path = child.to_string_lossy().to_string();
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| e.to_string())?
+                .as_millis() as i64;
+            let repository = StoredRepository {
+                id: allocate_repository_id(&repositories),
+                name: repository_folder_label_from_path(&path),
+                path: path.clone(),
+                role_tags: vec!["frontend".to_string()],
+                repository_type: "frontend".to_string(),
+                icon_color: None,
+                icon_display_name: None,
+                icon_hidden_in_workspace_list: false,
+                main_owner_agent_name: None,
+                execution_engine: default_execution_engine(),
+                branch: git_commands::get_git_branch(&path),
+                created_at: now.to_string(),
+                updated_at: now.to_string(),
+                sdd_mode: None,
+                open_app_id: None,
+            };
+            repositories.push(repository.clone());
+            discovered.push(repository);
+            changed = true;
+        }
+        if changed {
+            save_repositories(&app, &repositories)?;
+        }
+        Ok(discovered)
+    })
+    .await
+}
+
 #[tauri::command]
 pub(crate) fn create_repository_from_path(
     app: tauri::AppHandle,

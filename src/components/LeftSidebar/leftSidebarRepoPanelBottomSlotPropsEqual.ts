@@ -17,7 +17,7 @@ function repositoryEntriesFingerprint(entries: GitPanelRepositoryEntry[]): strin
   return entries
     .map(
       (entry) =>
-        `${entry.repositoryId}:${entry.path}:${entry.name}:${entry.executionEngine ?? ""}`,
+        `${entry.repositoryId}:${entry.path}:${entry.name}:${entry.executionEngine ?? ""}:${entry.openAppId ?? ""}`,
     )
     .join("|");
 }

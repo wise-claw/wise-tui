@@ -130,6 +130,7 @@ export function areLeftSidebarContentPropsEqual(
   if (prev.repositoryMemberMonitorItems !== next.repositoryMemberMonitorItems) return false;
   if (prev.projects !== next.projects) return false;
   if (prev.repositories !== next.repositories) return false;
+  if (prev.repositoryChildrenByParentPath !== next.repositoryChildrenByParentPath) return false;
   if (prev.floatingRepositories !== next.floatingRepositories) return false;
   if (prev.workspaceRepositoryOrder !== next.workspaceRepositoryOrder) {
     const a = prev.workspaceRepositoryOrder ?? [];

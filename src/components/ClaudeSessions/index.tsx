@@ -86,6 +86,7 @@ export interface ClaudeSessionsProps {
   /** 侧栏选中粒度：Workspace 项目 vs 具体仓库。 */
   activeWorkspaceFocus?: WorkspaceFocus;
   onSelectRepository?: (id: number) => void;
+  onReturnToParentRepository?: (id: number) => void;
   onUpdateSessionModel: (sessionId: string, model: string) => void;
   onUpdateSessionConnectionKind: (
     sessionId: string,
@@ -299,6 +300,7 @@ function ClaudeSessionsShell({
   projects = [],
   activeWorkspaceFocus = "repository",
   onSelectRepository,
+  onReturnToParentRepository,
   onUpdateSessionModel,
   onUpdateSessionConnectionKind,
   onUpdateSessionUltracode,
@@ -870,6 +872,7 @@ function ClaudeSessionsShell({
           activeWorkspaceFocus={activeWorkspaceFocus}
           activeRepository={activeRepository}
           repositories={repositories ?? []}
+          onReturnToParentRepository={onReturnToParentRepository}
           activeSessionRepositoryPath={
             activeSession?.repositoryPath?.trim() || chatContextRepository?.path
           }

@@ -1,3 +1,5 @@
+import { repositoryCardFileTreeContext } from "./WorkspaceFileTreeRail/repositoryCardContext";
+import { WISE_REPOSITORY_CARD_ACTION, type RepositoryCardActionDetail } from "../constants/repositoryCardEvents";
 import {
   Suspense,
   createContext,
@@ -904,6 +906,20 @@ export function AppWorkspaceLayout({
   const [workspaceFileTreeRailContext, setWorkspaceFileTreeRailContext] =
     useState<WorkspaceFileTreeRailContext | null>(null  );
 
+  const [repositoryCardDirectory, setRepositoryCardDirectory] = useState<RepositoryCardActionDetail["entry"] | null>(null);
+  useEffect(() => {
+    const handleCardDirectory = (event: Event) => {
+      const detail = (event as CustomEvent<RepositoryCardActionDetail>).detail;
+      if (detail?.action !== "files" || !detail.entry.path.trim()) return;
+      setRepositoryCardDirectory(detail.entry);
+      setFileTreeRailOpen(true);
+    };
+    window.addEventListener(WISE_REPOSITORY_CARD_ACTION, handleCardDirectory);
+    return () => window.removeEventListener(WISE_REPOSITORY_CARD_ACTION, handleCardDirectory);
+  }, [setFileTreeRailOpen]);
+  // 切换工作区后，文件树恢复跟随新工作区。
+  useEffect(() => { setRepositoryCardDirectory(null); }, [workspaceFileTreeRailContext?.repositoryPath]);
+
   const getClaudeSessionsForTopbar = useCallback(() => claudeSessionsRef.current, []);
 
   const onSessionInsightsAiAnalysis = useMemo(
@@ -980,9 +996,11 @@ export function AppWorkspaceLayout({
       activeProject: claudeSessionsProps.activeProject,
       activeWorkspaceFocus: claudeSessionsProps.activeWorkspaceFocus,
       activeRepository: claudeSessionsProps.activeRepository,
+      repositories: claudeSessionsProps.repositories ?? [],
       onToggleSidebar: claudeSessionsPropsRef.current.onToggleSidebar,
       onToggleTerminal: claudeSessionsPropsRef.current.onToggleTerminal,
       onSearch: claudeSessionsPropsRef.current.onSearch,
+      onReturnToParentRepository: claudeSessionsPropsRef.current.onReturnToParentRepository,
       collapsed: claudeSessionsProps.collapsed,
       fileTreeRailOpen: showWorkspaceFileTreeRail,
       terminalCollapsed: claudeSessionsProps.terminalCollapsed,
@@ -1000,12 +1018,14 @@ export function AppWorkspaceLayout({
       claudeSessionsProps.activeProject,
       claudeSessionsProps.activeWorkspaceFocus,
       claudeSessionsProps.activeRepository,
+      claudeSessionsProps.repositories,
       claudeSessionsProps.collapsed,
       showWorkspaceFileTreeRail,
       claudeSessionsProps.terminalCollapsed,
       claudeSessionsProps.terminalPanelMounted,
       claudeSessionsProps.paneCount,
       claudeSessionsProps.paneChangeInFlight,
+      claudeSessionsProps.onReturnToParentRepository,
       onOpenRemoteChannels,
       onAutoFixRunError,
       onSessionInsightsAiAnalysis,
@@ -1031,6 +1051,7 @@ export function AppWorkspaceLayout({
       onToggleTerminal: claudeSessionsPropsRef.current.onToggleTerminal,
       onSearch: claudeSessionsPropsRef.current.onSearch,
       onSearchForRepository: claudeSessionsPropsRef.current.onSearchForRepository,
+      onReturnToParentRepository: claudeSessionsPropsRef.current.onReturnToParentRepository,
       collapsed: claudeSessionsProps.collapsed,
       fileTreeRailOpen: showWorkspaceFileTreeRail,
       terminalCollapsed: claudeSessionsProps.terminalCollapsed,
@@ -1046,6 +1067,7 @@ export function AppWorkspaceLayout({
       showWorkspaceFileTreeRail,
       claudeSessionsProps.terminalCollapsed,
       claudeSessionsProps.terminalPanelMounted,
+      claudeSessionsProps.onReturnToParentRepository,
       onOpenRemoteChannels,
       getClaudeSessionsForTopbar,
     ],
@@ -1813,7 +1835,8 @@ export function AppWorkspaceLayout({
                     <ConnectedWorkspaceFileTreeRail
                       widthPx={fileTreeRailWidthPx}
                       macTitlebarInset={collapsed}
-                      context={workspaceFileTreeRailContext}
+                      key={repositoryCardDirectory?.path ?? "workspace"}
+                      context={repositoryCardFileTreeContext(workspaceFileTreeRailContext, repositoryCardDirectory)}
                       onClose={() => setFileTreeRailOpen(false)}
                     />
                     <MainLayoutResizeHandle

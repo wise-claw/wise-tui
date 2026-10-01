@@ -681,6 +681,26 @@
   white-space: nowrap;
 }
 
+.app-topbar-parent-repository {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.app-topbar-parent-repository:hover {
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text);
+}
+
 .app-topbar-repository-new {
   display: flex;
   align-items: center;

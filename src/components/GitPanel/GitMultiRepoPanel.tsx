@@ -243,7 +243,7 @@ export function GitMultiRepoPanel({
         {repositoryEntries.map((entry, index) => {
           const sectionProps = {
             entry,
-            defaultExpanded: !lazyMount,
+            defaultExpanded: repositoryEntries.length === 1 || !lazyMount,
             loadDelayMs: lazyMount ? index * GIT_MULTI_REPO_LOAD_STAGGER_MS : 0,
             registerRefresh,
             onWatchScopeChange: handleWatchScopeChange,

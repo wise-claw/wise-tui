@@ -4173,3 +4173,41 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
     transform: rotate(360deg);
   }
 }
+
+/* Each repository is a workspace action surface, including when Git is collapsed. */
+.app-git-panel--multi .git-repo-section {
+  margin: 8px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 10px;
+  background: var(--ant-color-bg-container);
+  overflow: hidden;
+  contain-intrinsic-size: auto 100px;
+}
+.repository-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 3px 5px 6px;
+  gap: 1px;
+}
+.repository-card-actions .ant-btn {
+  font-size: 11px;
+  padding-inline: 5px;
+}
+
+.repository-card-actions .repository-card-actions__editor {
+  margin-right: -7px;
+}
+
+.repository-card-actions img.repository-card-app-icon {
+  width: 12px;
+  height: 12px;
+  display: block;
+  flex-shrink: 0;
+  border-radius: 2px;
+}
+
+.app-git-panel--multi .git-repo-section__change-count {
+  color: var(--ant-color-error, #ff4d4f);
+  font-weight: 600;
+}

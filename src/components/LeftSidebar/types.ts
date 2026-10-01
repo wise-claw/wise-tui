@@ -86,6 +86,8 @@ export interface LeftSidebarProps {
   pinnedProjectIds: string[];
   onTogglePinProject: (projectId: string) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
+  onReconcileRepositoryChildren?: (parentPath: string) => Promise<Repository[]>;
+  repositoryChildrenByParentPath?: Record<string, number[]>;
   onAddFloatingRepository?: (
     repositoryType: Repository["repositoryType"],
     options?: AddRepositoryOptions,

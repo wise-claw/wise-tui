@@ -98,3 +98,14 @@ html.app-host-macos-chrome .app-workspace-file-tree-rail--mac-titlebar-inset .gi
   font-size: 12px;
   text-align: center;
 }
+
+.app-workspace-file-tree-rail__repository {
+  padding: 6px 10px;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}

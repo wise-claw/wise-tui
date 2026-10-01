@@ -1,3 +1,4 @@
+import { WISE_REPOSITORY_CARD_ACTION, type RepositoryCardActionDetail } from "../constants/repositoryCardEvents";
 import { App as AntdApp, Layout } from "antd";
 import {
   startTransition,
@@ -17,9 +18,10 @@ import {
   type WorkspaceRepositoryTreeSelection,
 } from "../utils/workspaceRepositoryTreeSelect";
 import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
+import { requestWorkspaceRepositorySync } from "../constants/workspaceRepositoryEvents";
 import { resolveWorkspaceRootPath } from "../utils/projectSessionAnchor";
 import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBinding";
-import { isMultiRepoProject, shouldRevealWorkspaceListOnRestore } from "../utils/workspaceMode";
+import { shouldRevealWorkspaceListOnRestore } from "../utils/workspaceMode";
 import {
   resolveClaudeProjectSkillsScopePath,
 } from "../utils/workspaceSelectionState";
@@ -149,6 +151,8 @@ export function LeftSidebar({
   pinnedProjectIds,
   onTogglePinProject,
   onReconcileProject,
+  onReconcileRepositoryChildren,
+  repositoryChildrenByParentPath = {},
   onAddFloatingRepository,
   onAddRepositoryToProject,
   onPromoteFloatingRepositoryToProject,
@@ -351,6 +355,26 @@ export function LeftSidebar({
     },
     [message, onUpdateRepositoryOpenAppId],
   );
+
+  useEffect(() => {
+    const handleCardAction = (event: Event) => {
+      const detail = (event as CustomEvent<RepositoryCardActionDetail>).detail;
+      if (!detail || detail.action === "files") return;
+      const repository = repositories.find(repo => repo.id === detail.entry.repositoryId && repo.path === detail.entry.path);
+      if (!repository) {
+        message.warning("仓库已不可用，请刷新工作区");
+        return;
+      }
+      switch (detail.action) {
+        case "terminal": onOpenInTerminal?.(repository); break;
+        case "editor": openRepositoryInPreferredEditor(repository); break;
+        case "session": onNewPaneSessionForRepository?.(repository); break;
+        case "configure-editor": handleConfigureRepositoryOpenApp(repository, detail.openAppId); break;
+      }
+    };
+    window.addEventListener(WISE_REPOSITORY_CARD_ACTION, handleCardAction);
+    return () => window.removeEventListener(WISE_REPOSITORY_CARD_ACTION, handleCardAction);
+  }, [repositories, message, onOpenInTerminal, openRepositoryInPreferredEditor, onNewPaneSessionForRepository, handleConfigureRepositoryOpenApp]);
 
   const handleConfigureProjectOpenApp = useCallback(
     (project: ProjectItem, openAppId: string | null) => {
@@ -680,17 +704,35 @@ export function LeftSidebar({
   const repoPanelTreeSelectionSource = useMemo((): WorkspaceRepositoryTreeSelection | null => {
     // 侧栏选中具体仓库时，Git/文件树默认对齐该仓库（含多仓工作区成员仓）。
     if (activeWorkspaceFocus === "repository" && activeRepositoryId != null) {
+      const selectedRepository = repositories.find((item) => item.id === activeRepositoryId);
+      const rootProject = selectedRepository
+        ? projects.find((item) => {
+            const rootPath = item.rootPath?.trim();
+            return rootPath && normalizeSessionRepositoryPath(rootPath) ===
+              normalizeSessionRepositoryPath(selectedRepository.path);
+          })
+        : null;
+      // Workspace 根目录有时也作为一个未初始化仓库被选中；此时 Git 应展示其子仓库。
+      if (rootProject) return { kind: "project", projectId: rootProject.id };
       return { kind: "repository", repositoryId: activeRepositoryId };
     }
-    // 多仓工作区 + 工作区焦点：Git 面板保持工作区级多仓视图。
+    // A session rooted at the workspace directory must retain workspace scope;
+    // resolving it as a repository hides sibling Git repositories.
+    if (repoPanelRenderState.showGitOnLeft || repoPanelRenderState.showGitOnRight) {
+      const sessionProject = activeSessionRepositoryPath
+        ? projects.find((item) => item.rootPath?.trim() &&
+            normalizeSessionRepositoryPath(item.rootPath) === activeSessionRepositoryPath)
+        : null;
+      if (sessionProject) return { kind: "project", projectId: sessionProject.id };
+    }
+    // 只有明确聚焦项目时才展示项目成员仓库；点击成员仓库应回到单仓 Git 面板。
     if (
       (repoPanelRenderState.showGitOnLeft || repoPanelRenderState.showGitOnRight) &&
+      activeWorkspaceFocus === "project" &&
       activeProjectId
     ) {
       const project = projects.find((item) => item.id === activeProjectId) ?? null;
-      if (project && isMultiRepoProject(project, projects)) {
-        return { kind: "project", projectId: project.id };
-      }
+      if (project) return { kind: "project", projectId: project.id };
     }
     return globalWorkspaceTreeSelection ?? sessionDerivedTreeSelection ?? null;
   }, [
@@ -699,10 +741,20 @@ export function LeftSidebar({
     activeProjectId,
     activeRepositoryId,
     activeWorkspaceFocus,
+    activeSessionRepositoryPath,
     projects,
+    repositories,
     globalWorkspaceTreeSelection,
     sessionDerivedTreeSelection,
   ]);
+
+  useEffect(() => {
+    const selection = repoPanelTreeSelectionSource;
+    if (!selection || selection.kind !== "project") return;
+    if (!repoPanelRenderState.showGitOnLeft && !repoPanelRenderState.showGitOnRight) return;
+    if (!projects.find((item) => item.id === selection.projectId)?.rootPath?.trim()) return;
+    requestWorkspaceRepositorySync(selection.projectId);
+  }, [projects, repoPanelRenderState.showGitOnLeft, repoPanelRenderState.showGitOnRight, repoPanelTreeSelectionSource]);
 
   const globalSelectionSyncKey = useMemo(() => {
     const selection = repoPanelTreeSelectionSource;
@@ -827,6 +879,29 @@ export function LeftSidebar({
   ]);
 
   const effectiveRepoPanelPath = accessibleRepoPanelPath.trim() || repoPanelRepositoryPath.trim();
+  const repoPanelSelectedRepository = repositories.find((item) =>
+    normalizeSessionRepositoryPath(item.path) === normalizeSessionRepositoryPath(effectiveRepoPanelPath),
+  );
+  const standaloneRepoPanelPath =
+    repoPanelSelectedRepository &&
+    !projects.some((item) =>
+      item.repositoryIds.includes(repoPanelSelectedRepository.id) ||
+      (item.rootPath?.trim() &&
+        normalizeSessionRepositoryPath(item.rootPath) === normalizeSessionRepositoryPath(effectiveRepoPanelPath)),
+    )
+      ? effectiveRepoPanelPath.trim()
+      : "";
+
+  useEffect(() => {
+    if (!onReconcileRepositoryChildren) return;
+    if (!repoPanelRenderState.showGitOnLeft && !repoPanelRenderState.showGitOnRight) return;
+    const path = standaloneRepoPanelPath;
+    if (!path) return;
+    void onReconcileRepositoryChildren(path).catch((error: unknown) => {
+      console.warn("reconcile standalone repository children", error);
+    });
+  }, [onReconcileRepositoryChildren, standaloneRepoPanelPath,
+    repoPanelRenderState.showGitOnLeft, repoPanelRenderState.showGitOnRight]);
 
   const claudeToolsScopePath = useMemo(() => {
     const project = activeProjectId
@@ -879,16 +954,35 @@ export function LeftSidebar({
   );
 
   const gitPanelRepositoryEntries = useMemo(
-    () =>
-      resolveGitPanelRepositoryEntries({
+    () => {
+      const childIds = repositoryChildrenByParentPath[
+        normalizeSessionRepositoryPath(effectiveRepoPanelPath)
+      ] ?? [];
+      if (childIds.length >= 2) {
+        const childEntries = childIds.flatMap((id) => {
+          const repository = repositories.find((item) => item.id === id);
+          if (!repository) return [];
+          return {
+            repositoryId: repository.id,
+            path: repository.path,
+            name: repository.name,
+            executionEngine: repository.executionEngine,
+            openAppId: repository.openAppId,
+          };
+        });
+        if (childEntries.length >= 2) return childEntries;
+      }
+      return resolveGitPanelRepositoryEntries({
         treeSelection: repoPanelTreeSelection,
         projects,
         repositories,
         fallbackPath: effectiveRepoPanelPath,
         fallbackName: repoPanelRepositoryName,
         fallbackRepositoryId: repoPanelTreeView?.activeRepositoryId ?? activeRepositoryId,
-      }),
+      });
+    },
     [
+      repositoryChildrenByParentPath,
       repoPanelTreeSelection,
       projects,
       repositories,

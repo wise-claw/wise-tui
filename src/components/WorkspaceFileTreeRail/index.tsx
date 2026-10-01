@@ -1,3 +1,4 @@
+import { WISE_REPOSITORY_CARD_ACTION, type RepositoryCardActionDetail } from "../../constants/repositoryCardEvents";
 import { CloseOutlined } from "@ant-design/icons";
 import { Spin } from "antd";
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -34,6 +35,17 @@ export const WorkspaceFileTreeRail = memo(function WorkspaceFileTreeRail({
   useEffect(() => {
     setSearch("");
   }, [trimmedRepositoryPath]);
+
+  useEffect(() => {
+    const focusFiles = (event: Event) => {
+      if ((event as CustomEvent<RepositoryCardActionDetail>).detail?.action === "files") {
+        setActiveTab("files");
+        setSearch("");
+      }
+    };
+    window.addEventListener(WISE_REPOSITORY_CARD_ACTION, focusFiles);
+    return () => window.removeEventListener(WISE_REPOSITORY_CARD_ACTION, focusFiles);
+  }, []);
 
   const handleOpenFile = useCallback(
     (path: string, options?: Parameters<typeof onOpenFile>[1]) => {
@@ -110,6 +122,7 @@ export const WorkspaceFileTreeRail = memo(function WorkspaceFileTreeRail({
       style={{ width: widthPx, flexBasis: widthPx, maxWidth: widthPx }}
       aria-label="文件树"
     >
+      <div className="app-workspace-file-tree-rail__repository" title={trimmedRepositoryPath}>{repositoryName || trimmedRepositoryPath}</div>
       {trimmedRepositoryPath ? (
         <div className="app-workspace-file-tree-rail__tabs">
           <LeftSidebarBottomTabPanes

@@ -105,6 +105,10 @@ export async function createRepositoryFromPath(folderPath: string): Promise<Repo
   });
 }
 
+export async function reconcileRepositoryChildren(parentPath: string): Promise<Repository[]> {
+  return invoke<Repository[]>("reconcile_repository_children", { parentPath });
+}
+
 export async function createRepositoryFromPathWithType(
   folderPath: string,
   repositoryType: Repository["repositoryType"],

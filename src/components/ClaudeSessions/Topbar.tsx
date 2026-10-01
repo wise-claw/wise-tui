@@ -17,7 +17,8 @@ import {
   tryOpenWorkspaceInDefaultTerminalWithCommand,
 } from "../../services/openWorkspaceWithTerminalPreference";
 import { openInFinder } from "../../services/repository";
-import { FolderOpenOutlined } from "@ant-design/icons";
+import { ArrowUpOutlined, FolderOpenOutlined } from "@ant-design/icons";
+import { normalizeRepositoryPathKey } from "../../utils/repositoryMainSessionBinding";
 import { FccTopbarTrigger } from "./FccTopbarTrigger";
 import { OpencodeGoProxyTopbarTrigger } from "./OpencodeGoProxyTopbarTrigger";
 import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
@@ -166,6 +167,7 @@ export interface TopbarProps {
   activeWorkspaceFocus?: WorkspaceFocus;
   activeRepository?: Repository;
   repositories?: Repository[];
+  onReturnToParentRepository?: (id: number) => void;
   activeSessionRepositoryPath?: string;
   /** 当前项目/仓库主会话；全链路分析固定分析此会话，非活动标签 */
   mainSessionForDataLink?: ClaudeSession | null;
@@ -244,6 +246,7 @@ export const Topbar = memo(function Topbar({
   activeWorkspaceFocus = "repository",
   activeRepository,
   repositories = [],
+  onReturnToParentRepository,
   activeSessionRepositoryPath,
   mainSessionForDataLink = null,
   onSessionInsightsAiAnalysis,
@@ -325,6 +328,16 @@ export const Topbar = memo(function Topbar({
     ? (activeProject.rootPath?.trim() || activeRepository?.path?.trim() || "")
     : (activeRepository?.path?.trim() || "");
   const showRepoTitle = Boolean(topbarLabel) && topbarChrome.showTopbarRepositoryName;
+  const parentRepository = useMemo(() => {
+    if (!activeRepository || topbarShowsProject) return null;
+    const path = normalizeRepositoryPathKey(activeRepository.path);
+    const slash = path.lastIndexOf("/");
+    if (slash <= 0) return null;
+    const parentPath = path.slice(0, slash);
+    return repositories.find((item) =>
+      item.id !== activeRepository.id && normalizeRepositoryPathKey(item.path) === parentPath,
+    ) ?? null;
+  }, [activeRepository, repositories, topbarShowsProject]);
   const topbarLeftClassName = [
     "app-chat-topbar-left",
     collapsed ? "app-chat-topbar-left--collapsed" : "",
@@ -384,6 +397,18 @@ export const Topbar = memo(function Topbar({
                     <span className="app-topbar-repository-trigger-label">{topbarLabel}</span>
                   </button>
                 </HoverHint>
+                {parentRepository && onReturnToParentRepository ? (
+                  <HoverHint title={`返回 ${parentRepository.name}`}>
+                    <button
+                      type="button"
+                      className="app-topbar-parent-repository"
+                      aria-label={`返回父仓 ${parentRepository.name}`}
+                      onClick={() => onReturnToParentRepository(parentRepository.id)}
+                    >
+                      <ArrowUpOutlined />
+                    </button>
+                  </HoverHint>
+                ) : null}
               </>
             ) : null}
             {topbarLabel && topbarChrome.showRemoteEntryTopbar ? (

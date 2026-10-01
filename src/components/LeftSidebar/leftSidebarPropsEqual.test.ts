@@ -65,4 +65,14 @@ describe("areLeftSidebarPropsEqual", () => {
     const next = { ...shared, activeSessionId: "session-b" };
     expect(areLeftSidebarPropsEqual(prev, next)).toBe(true);
   });
+
+  test("re-renders when standalone directory discovers child Git repositories", () => {
+    const shared = baseProps({
+      activeRepositoryId: 7,
+      repositories: [{ id: 7, path: "/work/parent", name: "parent" } as LeftSidebarProps["repositories"][number]],
+    });
+    const prev = { ...shared, repositoryChildrenByParentPath: {} };
+    const next = { ...shared, repositoryChildrenByParentPath: { "/work/parent": [8, 9] } };
+    expect(areLeftSidebarPropsEqual(prev, next)).toBe(false);
+  });
 });

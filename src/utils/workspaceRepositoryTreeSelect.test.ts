@@ -232,3 +232,30 @@ describe("workspaceRepositoryTreeSelect", () => {
     ]);
   });
 });
+
+describe("repository cards", () => {
+  test("keeps each workspace member's IDE preference isolated", () => {
+    const repositories = [{ ...repo, openAppId: "cursor" }, { ...repo2, openAppId: "intellij" }];
+    const entries = resolveGitPanelRepositoryEntries({
+      treeSelection: { kind: "project", projectId: multiRepoProject.id },
+      projects: [multiRepoProject], repositories,
+    });
+    expect(entries.map(entry => [entry.repositoryId, entry.path, entry.openAppId])).toEqual([
+      [1, repo.path, "cursor"], [2, repo2.path, "intellij"],
+    ]);
+    const updated = resolveGitPanelRepositoryEntries({
+      treeSelection: { kind: "project", projectId: multiRepoProject.id },
+      projects: [multiRepoProject], repositories: [repositories[0], { ...repositories[1], openAppId: null }],
+    });
+    expect(updated[0].openAppId).toBe("cursor");
+    expect(updated[1].openAppId).toBeNull();
+  });
+
+  test("fallback path resolves the real repository id for session actions", () => {
+    const entries = resolveGitPanelRepositoryEntries({
+      treeSelection: null, projects: [], repositories: [{ ...repo, openAppId: "cursor" }], fallbackPath: repo.path,
+    });
+    expect(entries[0].repositoryId).toBe(repo.id);
+    expect(entries[0].openAppId).toBe("cursor");
+  });
+});
