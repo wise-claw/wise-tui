@@ -2,7 +2,11 @@ import { beforeEach, expect, mock, test } from "bun:test";
 import type { ClaudeEngineHandlersDeps } from "./useClaudeSessions.engines";
 import type { ClaudeSession } from "../types";
 
-const invoke = mock(async () => undefined);
+const invoke = mock(async (command: string) =>
+  command === "codex_auth_status"
+    ? { ready: true, mode: "chatgpt", detail: "Logged in using ChatGPT" }
+    : undefined,
+);
 let releaseListener: (() => void) | undefined;
 let delayListeners = false;
 const detached = mock(() => {});

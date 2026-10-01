@@ -4562,6 +4562,23 @@
   color: var(--ant-color-error);
 }
 
+.app-system-message__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-system-message__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.app-system-message__actions > span {
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
+}
+
 .app-system-message-md.app-markdown {
   font-size: 12px;
   line-height: 1.55;

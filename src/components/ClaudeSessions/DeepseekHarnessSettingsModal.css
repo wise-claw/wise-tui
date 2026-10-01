@@ -1,0 +1,169 @@
+.app-deepseek-settings-modal .ant-modal-body {
+  padding-top: 2px;
+}
+
+.app-deepseek-settings,
+.app-deepseek-settings__section,
+.app-deepseek-settings__field {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-deepseek-settings {
+  max-height: min(64vh, 560px);
+  gap: 14px;
+  overflow-y: auto;
+  padding: 2px 2px 0;
+}
+
+.app-deepseek-settings__loading {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+}
+
+.app-deepseek-settings__hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid var(--ant-color-primary-border, #91caff);
+  border-radius: 6px;
+  background: var(--ant-color-primary-bg, #e6f4ff);
+  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.65));
+  font-size: 12px;
+}
+
+.app-deepseek-settings__hint .anticon {
+  color: var(--ant-color-primary, #1677ff);
+  font-size: 14px;
+}
+
+.app-deepseek-settings__section {
+  gap: 8px;
+}
+
+.app-deepseek-settings__connection {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(210px, 0.85fr);
+  gap: 12px;
+}
+
+.app-deepseek-settings__field {
+  min-width: 0;
+  gap: 6px;
+}
+
+.app-deepseek-settings__label-row,
+.app-deepseek-settings__key-row,
+.app-deepseek-settings__models-title,
+.app-deepseek-settings__model-main,
+.app-deepseek-settings__model-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-deepseek-settings__key-row .ant-input-affix-wrapper,
+.app-deepseek-settings__models-title > div,
+.app-deepseek-settings__model-main .ant-input {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-deepseek-settings__models-title {
+  justify-content: space-between;
+}
+
+.app-deepseek-settings__models-title > div {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.app-deepseek-settings__models-title span {
+  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.45));
+  font-size: 12px;
+}
+
+.app-deepseek-settings__models {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-deepseek-settings__model {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06));
+  border-radius: 6px;
+  background: var(--ant-color-fill-quaternary, rgba(0, 0, 0, 0.02));
+}
+
+.app-deepseek-settings__model-main .ant-btn {
+  flex: none;
+}
+
+.app-deepseek-settings__advanced {
+  border-top: 1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06));
+  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.65));
+  font-size: 12px;
+}
+
+.app-deepseek-settings__advanced summary {
+  width: fit-content;
+  padding-top: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.app-deepseek-settings__advanced summary::marker {
+  color: var(--ant-color-text-tertiary, rgba(0, 0, 0, 0.45));
+}
+
+.app-deepseek-settings__advanced summary span {
+  margin-left: 6px;
+  color: var(--ant-color-success, #52c41a);
+}
+
+.app-deepseek-settings__model-details {
+  align-items: stretch;
+  padding-top: 6px;
+}
+
+.app-deepseek-settings__model-details .ant-input {
+  min-width: 0;
+  flex: 1.5;
+}
+
+.app-deepseek-settings__model-details .ant-input-number {
+  width: 150px;
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .app-deepseek-settings__connection {
+    grid-template-columns: 1fr;
+  }
+
+  .app-deepseek-settings__models-title > div {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .app-deepseek-settings__model-details {
+    flex-wrap: wrap;
+  }
+
+  .app-deepseek-settings__model-details .ant-input {
+    flex-basis: 100%;
+  }
+
+  .app-deepseek-settings__model-details .ant-input-number {
+    flex: 1;
+  }
+}

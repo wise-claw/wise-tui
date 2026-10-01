@@ -1,6 +1,35 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ClaudeProjectSkill } from "../types";
 
+export interface CodexAuthStatus {
+  ready: boolean;
+  mode: "missing" | "chatgpt" | "api_key" | "authenticated" | string;
+  detail: string;
+}
+
+let cachedAuthStatus: { value: CodexAuthStatus; expiresAt: number } | null = null;
+
+export async function getCodexAuthStatus(force = false): Promise<CodexAuthStatus> {
+  if (!force && cachedAuthStatus && cachedAuthStatus.expiresAt > Date.now()) {
+    return cachedAuthStatus.value;
+  }
+  const value = await invoke<CodexAuthStatus>("codex_auth_status");
+  cachedAuthStatus = { value, expiresAt: Date.now() + 30_000 };
+  return value;
+}
+
+export async function loginCodexWithChatGpt(): Promise<CodexAuthStatus> {
+  const value = await invoke<CodexAuthStatus>("codex_login_chatgpt");
+  cachedAuthStatus = { value, expiresAt: Date.now() + 30_000 };
+  return value;
+}
+
+export async function loginCodexWithApiKey(apiKey: string): Promise<CodexAuthStatus> {
+  const value = await invoke<CodexAuthStatus>("codex_login_api_key", { apiKey });
+  cachedAuthStatus = { value, expiresAt: Date.now() + 30_000 };
+  return value;
+}
+
 export async function executeCodexCode(
   repositoryPath: string,
   prompt: string,

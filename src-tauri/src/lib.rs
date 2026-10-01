@@ -35,6 +35,7 @@ mod codex_rpc_transport;
 mod codex_rpc_types;
 mod codex_stream_adapter;
 mod dsh_binary;
+mod deepseek_config;
 mod dsh_session_adapter;
 mod opencode_binary;
 mod opencode_commands;

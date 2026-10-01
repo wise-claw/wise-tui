@@ -429,7 +429,16 @@ fn map_notification_to_stream_lines(
         ServerNotification::Warning { message, .. } => {
             // 模型元数据回退等一次性噪音警告（codex 未识别自定义模型元数据）不展示，
             // 与 exec 链路的 benign-noise 过滤保持一致。
-            if message.trim().is_empty() || codex_line_is_benign_noise(&message) {
+            // WebSocket 回退后的真正错误会紧接着通过 Error 通知到达；即使 warning
+            // 自身拼进了 401，也不要先展示一次，避免同一认证错误重复两遍。
+            let websocket_fallback = message
+                .trim()
+                .to_lowercase()
+                .starts_with("falling back from websockets to https");
+            if message.trim().is_empty()
+                || websocket_fallback
+                || codex_line_is_benign_noise(&message)
+            {
                 CodexRpcAdaptOutput::default()
             } else {
                 CodexRpcAdaptOutput::both(vec![assistant_text_line(&format!(
@@ -2627,6 +2636,15 @@ mod tests {
             thread_id: None,
         };
         let out = adapt(&websocket, &mut state);
+        assert!(out.emit.is_empty());
+        assert!(out.persist.is_empty());
+
+        let websocket_with_auth_error = ServerNotification::Warning {
+            message: "Falling back from WebSockets to HTTPS transport. unexpected status 401 Unauthorized: Missing bearer authentication"
+                .to_string(),
+            thread_id: None,
+        };
+        let out = adapt(&websocket_with_auth_error, &mut state);
         assert!(out.emit.is_empty());
         assert!(out.persist.is_empty());
 

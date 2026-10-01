@@ -9,6 +9,7 @@ import {
   closeStreamingSession,
 } from "../services/claude";
 import { executeCodexCode, executeCodexRpcCode } from "../services/codex";
+import { ensureCodexAuthenticated } from "../services/codexAuthGuide";
 import { executeOpencodeCode } from "../services/opencode";
 import { executeDeepseekCode } from "../services/deepseek";
 import { executeQoderCode } from "../services/qoder";
@@ -357,6 +358,8 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     );
     try {
       assertCanSpawn(tabSessionId, signal);
+      await ensureCodexAuthenticated();
+      assertCanSpawn(tabSessionId, signal);
       await executeCodexCode(
         repositoryPath,
         prompt,
@@ -446,6 +449,8 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       ),
     );
     try {
+      assertCanSpawn(tabSessionId, signal);
+      await ensureCodexAuthenticated();
       assertCanSpawn(tabSessionId, signal);
       await executeCodexRpcCode(
         repositoryPath,

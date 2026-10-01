@@ -15,10 +15,195 @@ use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CodexAuthStatus {
+    ready: bool,
+    mode: String,
+    detail: String,
+}
+
+fn parse_codex_login_status(success: bool, output: &str) -> CodexAuthStatus {
+    let detail = output.trim();
+    if !success {
+        return CodexAuthStatus {
+            ready: false,
+            mode: "missing".to_string(),
+            detail: if detail.is_empty() {
+                "Codex 尚未登录".to_string()
+            } else {
+                detail.to_string()
+            },
+        };
+    }
+    let lower = detail.to_lowercase();
+    let mode = if lower.contains("chatgpt") {
+        "chatgpt"
+    } else if lower.contains("api key") || lower.contains("apikey") {
+        "api_key"
+    } else {
+        "authenticated"
+    };
+    CodexAuthStatus {
+        ready: true,
+        mode: mode.to_string(),
+        detail: if detail.is_empty() {
+            "Codex 已认证".to_string()
+        } else {
+            detail.to_string()
+        },
+    }
+}
+
+fn auth_map_has_api_key(auth: &serde_json::Map<String, serde_json::Value>) -> bool {
+    auth.get("OPENAI_API_KEY")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .is_some()
+}
+
+fn api_key_is_configured() -> bool {
+    let envelope = crate::codex_config_dir::read_codex_profile_envelope();
+    auth_map_has_api_key(&envelope.auth)
+        || std::env::var("OPENAI_API_KEY")
+            .map(|key| !key.trim().is_empty())
+            .unwrap_or(false)
+}
+
+async fn query_codex_auth_status() -> Result<CodexAuthStatus, String> {
+    let codex_path = find_codex_binary()?;
+    let path_env = codex_merged_path_env();
+    let mut cmd = Command::new(codex_path);
+    cmd.arg("login").arg("status");
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    apply_codex_child_env(&mut cmd, &path_env);
+    let output = cmd
+        .output()
+        .await
+        .map_err(|e| format!("读取 Codex 登录状态失败: {e}"))?;
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let status = parse_codex_login_status(output.status.success(), &text);
+    if status.ready || !api_key_is_configured() {
+        return Ok(status);
+    }
+
+    // `codex login status` only reports the CLI's stored login session. An API
+    // key can also be supplied by auth.json or the process environment, and is
+    // a valid Codex credential even when the CLI reports "Not logged in".
+    Ok(CodexAuthStatus {
+        ready: true,
+        mode: "api_key".to_string(),
+        detail: "已配置 OpenAI Platform API Key".to_string(),
+    })
+}
+
+/// Wise 内的 Codex 认证预检。只返回状态与可展示说明，不返回任何凭据。
+#[tauri::command]
+pub(crate) async fn codex_auth_status() -> Result<CodexAuthStatus, String> {
+    query_codex_auth_status().await
+}
+
+/// 从 Wise 启动 Codex 官方 ChatGPT 登录；CLI 会在系统浏览器完成 OAuth。
+#[tauri::command]
+pub(crate) async fn codex_login_chatgpt() -> Result<CodexAuthStatus, String> {
+    let codex_path = find_codex_binary()?;
+    let path_env = codex_merged_path_env();
+    let mut cmd = Command::new(codex_path);
+    cmd.arg("login");
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    apply_codex_child_env(&mut cmd, &path_env);
+    let output = cmd
+        .output()
+        .await
+        .map_err(|e| format!("启动 Codex 登录失败: {e}"))?;
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    if !output.status.success() {
+        let detail = text.trim();
+        return Err(if detail.is_empty() {
+            "Codex 登录未完成，请重试".to_string()
+        } else {
+            format!("Codex 登录未完成：{detail}")
+        });
+    }
+    crate::codex_config_dir::invalidate_codex_disk_cache();
+    query_codex_auth_status().await
+}
+
+/// 从 Wise 启动 Codex 官方 API key 登录；Key 通过 stdin 传给 CLI，不出现在命令行参数中。
+#[tauri::command]
+pub(crate) async fn codex_login_api_key(
+    db: tauri::State<'_, WiseDb>,
+    api_key: String,
+) -> Result<CodexAuthStatus, String> {
+    let key = api_key.trim();
+    if key.is_empty() {
+        return Err("OpenAI Platform API Key 不能为空".to_string());
+    }
+
+    let codex_path = find_codex_binary()?;
+    let path_env = codex_merged_path_env();
+    let mut cmd = Command::new(codex_path);
+    cmd.arg("login").arg("--with-api-key");
+    cmd.stdin(Stdio::piped());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    apply_codex_child_env(&mut cmd, &path_env);
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("启动 Codex API Key 登录失败: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(key.as_bytes())
+            .await
+            .map_err(|e| format!("传递 Codex API Key 失败: {e}"))?;
+        stdin
+            .write_all(b"\n")
+            .await
+            .map_err(|e| format!("提交 Codex API Key 失败: {e}"))?;
+        drop(stdin);
+    }
+
+    let output = child
+        .wait_with_output()
+        .await
+        .map_err(|e| format!("读取 Codex API Key 登录结果失败: {e}"))?;
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    if !output.status.success() {
+        let detail = text.trim().replace(key, "[已隐藏]");
+        return Err(if detail.is_empty() {
+            "Codex API Key 登录未完成，请检查 Key 后重试".to_string()
+        } else {
+            format!("Codex API Key 登录未完成：{detail}")
+        });
+    }
+
+    crate::codex_config_dir::invalidate_codex_disk_cache();
+    crate::claude_model_profiles::persist_codex_api_key_to_active_openai_profile(&db, key)?;
+    query_codex_auth_status().await
+}
 
 /// Codex `exec` defaults to read-only; Wise main/member chat needs repo edits in the session workdir.
 const WISE_CODEX_EXEC_SANDBOX: &str = "workspace-write";
@@ -350,6 +535,9 @@ fn codex_payment_error_display(message: &str) -> Option<String> {
 
 fn codex_auth_error_display(message: &str) -> Option<String> {
     let lower = message.to_lowercase();
+    let missing_credentials = lower.contains("missing bearer")
+        || lower.contains("missing authentication")
+        || lower.contains("no api key");
     let invalid_key = lower.contains("invalid_api_key")
         || lower.contains("incorrect api key")
         || (lower.contains("401")
@@ -359,8 +547,13 @@ fn codex_auth_error_display(message: &str) -> Option<String> {
     if !invalid_key {
         return None;
     }
+    if missing_credentials {
+        return Some(format!(
+            "Codex 尚未连接。请在终端运行 codex 并按提示登录，完成后重试。\n{message}"
+        ));
+    }
     Some(format!(
-        "OpenAI API Key 无效。请在「openAI default」档案填入平台 Key，或重新登录 ChatGPT 后再试。\n{message}"
+        "OpenAI API Key 无效。请检查「openAI default」档案中的 Platform Key 后再试。\n{message}"
     ))
 }
 
@@ -832,6 +1025,38 @@ async fn capture_codex_stdout_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn login_status_distinguishes_missing_chatgpt_and_api_key() {
+        let missing = parse_codex_login_status(false, "Not logged in");
+        assert!(!missing.ready);
+        assert_eq!(missing.mode, "missing");
+
+        let chatgpt = parse_codex_login_status(true, "Logged in using ChatGPT");
+        assert!(chatgpt.ready);
+        assert_eq!(chatgpt.mode, "chatgpt");
+
+        let api_key = parse_codex_login_status(true, "Logged in using an API key");
+        assert!(api_key.ready);
+        assert_eq!(api_key.mode, "api_key");
+    }
+
+    #[test]
+    fn auth_map_detects_non_empty_openai_api_key_without_exposing_it() {
+        let empty = serde_json::json!({ "OPENAI_API_KEY": "  " });
+        assert!(!auth_map_has_api_key(empty.as_object().unwrap()));
+
+        let configured = serde_json::json!({ "OPENAI_API_KEY": "sk-test" });
+        assert!(auth_map_has_api_key(configured.as_object().unwrap()));
+    }
+
+    #[test]
+    fn missing_bearer_is_reported_as_not_connected() {
+        let message = "unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses";
+        let display = codex_auth_error_display(message).expect("auth error");
+        assert!(display.contains("Codex 尚未连接"));
+        assert!(!display.contains("API Key 无效"));
+    }
 
     #[test]
     fn fresh_exec_argv_order() {

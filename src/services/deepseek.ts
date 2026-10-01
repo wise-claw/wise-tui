@@ -7,6 +7,37 @@ export interface DeepSeekModelListItem {
   description?: string | null;
 }
 
+export interface DeepseekHarnessModelConfig {
+  id: string;
+  name?: string | null;
+  description?: string | null;
+  contextWindow?: number | null;
+  maxTokens?: number | null;
+}
+
+export interface DeepseekHarnessConfig {
+  apiKeyConfigured: boolean;
+  baseUrl: string;
+  models: DeepseekHarnessModelConfig[];
+}
+
+export interface SaveDeepseekHarnessConfigInput {
+  apiKey?: string | null;
+  clearApiKey?: boolean;
+  baseUrl: string;
+  models: DeepseekHarnessModelConfig[];
+}
+
+export function getDeepseekHarnessConfig(): Promise<DeepseekHarnessConfig> {
+  return invoke<DeepseekHarnessConfig>("get_deepseek_harness_config");
+}
+
+export function saveDeepseekHarnessConfig(
+  input: SaveDeepseekHarnessConfigInput,
+): Promise<DeepseekHarnessConfig> {
+  return invoke<DeepseekHarnessConfig>("save_deepseek_harness_config", { input });
+}
+
 export async function listDeepSeekModels(): Promise<DeepSeekModelListItem[]> {
   try {
     return await invoke<DeepSeekModelListItem[]>("deepseek_list_models");

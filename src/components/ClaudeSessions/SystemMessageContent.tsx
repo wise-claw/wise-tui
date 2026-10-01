@@ -1,9 +1,22 @@
-import { useMemo } from "react";
+import { Button, message } from "antd";
+import { useMemo, useState } from "react";
 import { Markdown } from "./Markdown";
+import { useChatRepositoryPath } from "./chatRepositoryContext";
+import { isMacPlatform } from "../../services/macosTerminal";
+import { tryOpenWorkspaceInDefaultTerminalWithCommand } from "../../services/openWorkspaceWithTerminalPreference";
+
+function isCodexAuth401(text: string): boolean {
+  const lower = text.toLowerCase();
+  const hasCodexSignal =
+    lower.includes("codex") ||
+    lower.includes("openai default") ||
+    lower.includes("api.openai.com/v1/responses");
+  return /\b401\b/.test(lower) && hasCodexSignal;
+}
 
 function isErrorNotice(text: string): boolean {
   const head = text.trimStart().slice(0, 32);
-  return /^错误[:：]|^发送失败[:：]|^启动失败[:：]/.test(head);
+  return /^错误[:：]|^发送失败[:：]|^启动失败[:：]/.test(head) || isCodexAuth401(text);
 }
 
 /** 去掉 BOM、统一换行，减少解析与展示异常 */
@@ -46,6 +59,53 @@ function SystemErrorIcon() {
   );
 }
 
+function CodexLoginAction() {
+  const repositoryPath = useChatRepositoryPath();
+  const [opening, setOpening] = useState(false);
+
+  async function openTerminalAndLogin() {
+    if (!repositoryPath) {
+      message.error("当前会话没有可用的工作区路径");
+      return;
+    }
+    setOpening(true);
+    try {
+      const result = await tryOpenWorkspaceInDefaultTerminalWithCommand(
+        repositoryPath,
+        "codex",
+      );
+      if (result.ok) {
+        if (isMacPlatform()) {
+          message.success("已在终端启动 Codex，请按提示完成登录");
+        } else {
+          message.info("终端已打开，请运行 codex 完成登录");
+        }
+      } else {
+        message.error(`打开终端失败：${result.message}`);
+      }
+    } catch (error) {
+      message.error(`打开终端失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setOpening(false);
+    }
+  }
+
+  return (
+    <div className="app-system-message__actions">
+      <Button
+        type="primary"
+        size="small"
+        loading={opening}
+        disabled={!repositoryPath}
+        onClick={() => void openTerminalAndLogin()}
+      >
+        打开终端运行 Codex
+      </Button>
+      {!repositoryPath ? <span>当前会话没有工作区路径</span> : null}
+    </div>
+  );
+}
+
 /**
  * 系统消息裸展示：不再套用外层卡片 / 工具栏，仅保留一个轻量状态 className，
  * 用于在消息气泡上做错误着色。复制 / 展开 / 格式徽标等装饰交给消息行操作菜单。
@@ -53,6 +113,7 @@ function SystemErrorIcon() {
 export function SystemMessageContent({ text }: { text: string }) {
   const normalizedText = useMemo(() => normalizeSystemText(text), [text]);
   const error = isErrorNotice(normalizedText);
+  const codexAuth401 = isCodexAuth401(normalizedText);
   const trimmed = normalizedText.trim();
   if (!trimmed) return null;
 
@@ -63,12 +124,15 @@ export function SystemMessageContent({ text }: { text: string }) {
           <SystemErrorIcon />
         </span>
       ) : null}
-      <Markdown
-        text={hardenMarkdownOutsideCodeFences(normalizedText)}
-        streaming={false}
-        showPendingHint={false}
-        className="app-system-message-md"
-      />
+      <div className="app-system-message__body">
+        <Markdown
+          text={hardenMarkdownOutsideCodeFences(normalizedText)}
+          streaming={false}
+          showPendingHint={false}
+          className="app-system-message-md"
+        />
+        {codexAuth401 ? <CodexLoginAction /> : null}
+      </div>
     </div>
   );
 }

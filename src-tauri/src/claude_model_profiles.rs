@@ -655,6 +655,43 @@ fn apply_active_codex_profile(store: &ClaudeModelProfileStore) -> Result<(), Str
     apply_profile_to_disk(profile)
 }
 
+/// Persist an API key entered through the Codex login guide in the active
+/// OpenAI profile. Without this, the next model/profile application could
+/// correctly remove the key as stale credentials from another provider.
+pub(crate) fn persist_codex_api_key_to_active_openai_profile(
+    db: &WiseDb,
+    api_key: &str,
+) -> Result<(), String> {
+    let key = api_key.trim();
+    if key.is_empty() {
+        return Ok(());
+    }
+
+    let _guard = profile_apply_guard();
+    let mut store = load_store(db);
+    let Some(active_id) = store.active_codex_profile_id.clone() else {
+        return Ok(());
+    };
+    let Some(profile) = store.profiles.iter_mut().find(|profile| {
+        profile.id == active_id && codex_profile_is_openai_default(profile)
+    }) else {
+        return Ok(());
+    };
+
+    let mut envelope = parse_codex_profile_envelope(&profile.settings_json)?;
+    envelope.auth.insert(
+        "OPENAI_API_KEY".to_string(),
+        serde_json::Value::String(key.to_string()),
+    );
+    envelope.auth.insert(
+        "auth_mode".to_string(),
+        serde_json::Value::String("apikey".to_string()),
+    );
+    profile.settings_json = codex_profile_envelope_to_json(&envelope)?;
+    profile.updated_at_ms = now_ms();
+    save_store(db, &store)
+}
+
 #[derive(Debug)]
 enum CodexRuntimeProfileChoice<'a> {
     DiskProfile(&'a ClaudeModelProfile),

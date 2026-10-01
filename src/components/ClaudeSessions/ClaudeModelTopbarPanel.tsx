@@ -1,6 +1,6 @@
 import { CheckOutlined, CloudSyncOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button, Collapse, Empty, Input, Modal, Space, Switch, Typography, message } from "antd";
-import { useCallback, useMemo, useState } from "react";
+import { Alert, Button, Collapse, Empty, Input, Modal, Space, Switch, Typography, message } from "antd";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   applyClaudeModelProfile,
   clearCodexUserSettings,
@@ -65,6 +65,11 @@ import {
   findOpencodeProfileTemplate,
 } from "../../utils/opencodeProfileTemplates";
 import { extractOpencodeModelOptionsFromSettingsJson } from "../../utils/opencodeModel";
+import {
+  getCodexAuthStatus,
+  type CodexAuthStatus,
+} from "../../services/codex";
+import { promptCodexApiKeyLogin } from "../../services/codexAuthGuide";
 import "./ClaudeModelTopbarTrigger.css";
 
 /** 高于模型切换 Popover/Dropdown（1200），保证编辑/新增 Modal 叠在其上 */
@@ -153,6 +158,35 @@ export function ClaudeModelTopbarPanel({
   const [applyingProfileId, setApplyingProfileId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   const [autoFailoverSaving, setAutoFailoverSaving] = useState(false);
+  const [codexAuthStatus, setCodexAuthStatus] = useState<CodexAuthStatus | null>(null);
+
+  useEffect(() => {
+    if (panelEngine !== "codex") {
+      setCodexAuthStatus(null);
+      return;
+    }
+    let cancelled = false;
+    void getCodexAuthStatus(true)
+      .then((status) => {
+        if (!cancelled) setCodexAuthStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setCodexAuthStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [panelEngine]);
+
+  const handleCodexApiKeyLogin = useCallback(async () => {
+    try {
+      await promptCodexApiKeyLogin();
+      const status = await getCodexAuthStatus(true);
+      setCodexAuthStatus(status);
+    } catch {
+      // promptCodexApiKeyLogin 已展示具体错误或取消状态。
+    }
+  }, []);
 
   const addQuickConfigSource = useMemo((): ModelProfileQuickConfig => {
     if (panelEngine === "codex") {
@@ -345,6 +379,9 @@ export function ClaudeModelTopbarPanel({
           effectiveModel: effective,
           sessionReconnect: appliedEngine === "claude" || appliedEngine === "opencode",
         });
+        if (appliedEngine === "codex") {
+          void getCodexAuthStatus(true).then(setCodexAuthStatus).catch(() => undefined);
+        }
         onApplied?.();
       } catch (e) {
         setStore(previous);
@@ -691,6 +728,21 @@ export function ClaudeModelTopbarPanel({
           </Typography.Text>
         ) : null}
       </header>
+
+      {panelEngine === "codex" && codexAuthStatus && !codexAuthStatus.ready ? (
+        <Alert
+          type="warning"
+          showIcon
+          className="app-claude-model-topbar-panel__codex-auth"
+          message="Codex 尚未配置认证"
+          description="当前环境已禁用 ChatGPT 登录，请使用 OpenAI Platform API Key。"
+          action={
+            <Button size="small" type="primary" onClick={() => void handleCodexApiKeyLogin()}>
+              使用 API Key
+            </Button>
+          }
+        />
+      ) : null}
 
       {profiles.length === 0 ? (
         <Empty

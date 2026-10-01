@@ -9,7 +9,11 @@ import { listCodexModels, type CodexModelListItem } from "../../services/codex";
 import { listCursorModels, type CursorModelListItem } from "../../services/cursorAgent";
 import { listOpencodeModels, type OpencodeModelListItem } from "../../services/opencode";
 import { listQoderModels, type QoderModelListItem } from "../../services/qoder";
-import { listDeepSeekModels, type DeepSeekModelListItem } from "../../services/deepseek";
+import {
+  listDeepSeekModels,
+  type DeepseekHarnessConfig,
+  type DeepSeekModelListItem,
+} from "../../services/deepseek";
 import {
   applyClaudeModelProfile,
   applyClaudeRuntimeModel,
@@ -113,6 +117,7 @@ import {
   saveCachedQoderModels,
 } from "../../services/executionEngineModelListCache";
 import { ClaudeModelTopbarPanelLazy } from "../ClaudeSessions/ClaudeModelTopbarPanel.lazy";
+import { DeepseekHarnessSettingsModal } from "../ClaudeSessions/DeepseekHarnessSettingsModal";
 import "../ClaudeSessions/ClaudeModelTopbarTrigger.css";
 import "./ComposerModelPicker.css";
 
@@ -303,6 +308,7 @@ function ComposerModelPickerImpl({
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMounted, setPanelMounted] = useState(false);
   const [selectOnlyMenuOpen, setSelectOnlyMenuOpen] = useState(false);
+  const [deepseekSettingsOpen, setDeepseekSettingsOpen] = useState(false);
   const [selectOnlyFilter, setSelectOnlyFilter] = useState("");
   const [modelDefaultsRevision, setModelDefaultsRevision] = useState(0);
   const refreshSequence = useRef(0);
@@ -1132,6 +1138,27 @@ function ComposerModelPickerImpl({
     void claudeModelTopbarPanelChunk;
   }, []);
 
+  const openDeepseekSettings = useCallback(() => {
+    setSelectOnlyMenuOpen(false);
+    setSelectOnlyFilter("");
+    setDeepseekSettingsOpen(true);
+  }, []);
+
+  const handleDeepseekSettingsSaved = useCallback(
+    async (config: DeepseekHarnessConfig) => {
+      const discovered = await listDeepSeekModels();
+      const models = discovered.length > 0
+        ? discovered
+        : config.models.map((item) => ({
+            id: JSON.stringify(["deepseek-official", item.id]),
+            displayName: item.name?.trim() || item.id,
+            description: item.description,
+          }));
+      await saveCachedDeepseekModels(models);
+      setDeepseekModels(models);
+    },
+    [],
+  );
 
   const confirmClearCodexSettings = useCallback(() => {
     setSelectOnlyMenuOpen(false);
@@ -1395,19 +1422,29 @@ function ComposerModelPickerImpl({
                   />
                 </div>
                 <div className="app-composer-model-picker-dropdown-menu-scroll">{menu}</div>
-                {isCodexEngine || isClaudeEngine ? (
+                {isCodexEngine || isClaudeEngine || isDeepseekEngine ? (
                   <div
                     className="app-composer-model-picker-dropdown-footer"
                     onMouseDown={stopSemiComposerPointerBubble}
                     onClick={stopSemiComposerPointerBubble}
                   >
-                    <button
-                      type="button"
-                      className="app-composer-model-picker-dropdown-footer__btn"
-                      onClick={openManageProfilesPanel}
-                    >
-                      {isCodexEngine ? "管理 Codex 档案…" : "管理 Claude 档案…"}
-                    </button>
+                    {isDeepseekEngine ? (
+                      <button
+                        type="button"
+                        className="app-composer-model-picker-dropdown-footer__btn"
+                        onClick={openDeepseekSettings}
+                      >
+                        管理模型与 API Key…
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="app-composer-model-picker-dropdown-footer__btn"
+                        onClick={openManageProfilesPanel}
+                      >
+                        {isCodexEngine ? "管理 Codex 档案…" : "管理 Claude 档案…"}
+                      </button>
+                    )}
                     {isCodexEngine ? (
                       <button
                         type="button"
@@ -1468,6 +1505,13 @@ function ComposerModelPickerImpl({
             </Dropdown>
           ) : null}
         </div>
+        {isDeepseekEngine ? (
+          <DeepseekHarnessSettingsModal
+            open={deepseekSettingsOpen}
+            onClose={() => setDeepseekSettingsOpen(false)}
+            onSaved={handleDeepseekSettingsSaved}
+          />
+        ) : null}
       </div>
     );
   }

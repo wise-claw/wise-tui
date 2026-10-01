@@ -126,6 +126,20 @@
   line-height: 1.3;
 }
 
+.app-claude-model-topbar-panel__codex-auth {
+  margin: 6px;
+  padding: 6px 8px;
+}
+
+.app-claude-model-topbar-panel__codex-auth .ant-alert-message {
+  font-size: 11px;
+}
+
+.app-claude-model-topbar-panel__codex-auth .ant-alert-description {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 .app-claude-model-topbar-panel__list-wrap {
   flex: 1 1 auto;
   min-height: 0;
