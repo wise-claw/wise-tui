@@ -26,8 +26,8 @@ const OPTIONS: Array<{
 }));
 
 /**
- * Codex RPC Composer 底栏「推理强度」选择器（对齐 ChatGPT 推理强度六档）。
- * 写入会话（tabs.json）+ 内存镜像；经 `turn/start.effort` 下发。
+ * Codex RPC Composer 底栏「推理强度」选择器。
+ * 默认跟随原生线程/配置；显式选择写入会话并经 `turn/start.effort` 下发。
  */
 export function ComposerCodexReasoningEffortBadge({
   sessionId,

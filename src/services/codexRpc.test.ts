@@ -13,6 +13,31 @@ describe("codexRpc service", () => {
     invoke.mockClear();
   });
 
+  test("native defaults omit effort and preserve the original user prompt", async () => {
+    const { executeCodexRpcCode } = await import("./codex");
+    const prompt = "分析这个问题\n附图：@/tmp/example.png";
+    for (const effort of [undefined, "default"]) {
+      await executeCodexRpcCode("/repo", prompt, undefined, undefined, "tab-1", undefined, effort);
+      expect(invoke).toHaveBeenLastCalledWith("execute_codex_rpc", {
+        params: {
+          projectPath: "/repo", prompt, model: undefined, invocationKey: undefined,
+          tabSessionId: "tab-1", codexResumeSessionId: null, readOnly: false,
+        },
+      });
+    }
+  });
+
+  test("explicit model and reasoning selections reach Codex unchanged", async () => {
+    const { executeCodexRpcCode } = await import("./codex");
+    await executeCodexRpcCode("/repo", "继续", "private-model", "inv", "tab-1", "thread-1", " high ");
+    expect(invoke).toHaveBeenCalledWith("execute_codex_rpc", {
+      params: {
+        projectPath: "/repo", prompt: "继续", model: "private-model", effort: "high",
+        invocationKey: "inv", tabSessionId: "tab-1", codexResumeSessionId: "thread-1", readOnly: false,
+      },
+    });
+  });
+
   test("steering resolves the active turn on the backend and propagates rejection", async () => {
     const { steerCodexTurn } = await import("./codexRpc");
     await steerCodexTurn("tab-1", undefined, "补充要求");

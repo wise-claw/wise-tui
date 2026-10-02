@@ -359,9 +359,11 @@ impl CodexRpcSession {
         &mut self,
         input: &str,
         effort: Option<&str>,
-        optimize_execution: bool,
     ) -> Result<String> {
-        let items = build_wise_turn_input(input, self.active_model.as_deref(), optimize_execution);
+        // Preserve user input; Codex owns its instructions and execution strategy.
+        let items = crate::codex_rpc_types::build_turn_input_items_from_composer_prompt_for_model(
+            input, self.active_model.as_deref(),
+        );
         self.start_turn_with_items(items, effort).await
     }
 
@@ -1339,23 +1341,6 @@ impl CodexRpcSession {
     }
 }
 
-/// Add host guidance as a separate input item, after attachment extraction.
-/// This preserves the original prompt, config instructions and attachment paths.
-/// It applies to resumed turns too; short read-only jobs and native commands opt out.
-fn build_wise_turn_input(input: &str, model: Option<&str>, optimize: bool) -> Vec<TurnInputItem> {
-    let mut items = crate::codex_rpc_types::build_turn_input_items_from_composer_prompt_for_model(
-        input,
-        model,
-    );
-    if optimize && !items.is_empty() && !input.trim_start().starts_with('/') {
-        items.insert(
-            0,
-            TurnInputItem::text(include_str!("prompts/efficient_execution.md").trim()),
-        );
-    }
-    items
-}
-
 fn truncate_json_for_error(value: &serde_json::Value) -> String {
     let raw = value.to_string();
     const MAX: usize = 400;
@@ -1405,7 +1390,7 @@ done
         let mut session = CodexRpcSession::bootstrap(binary.to_str().unwrap(), None, Some(cwd)).await.unwrap();
         session.start_thread(Some(cwd), None, None).await.unwrap();
         assert_eq!(session.active_model(), Some("deepseek-v4-flash"));
-        session.start_turn("查看\n附图：@/tmp/example.png", None, false).await.unwrap();
+        session.start_turn("查看\n附图：@/tmp/example.png", None).await.unwrap();
         let mut events = session.take_events();
         let completion = tokio::time::timeout(std::time::Duration::from_secs(2), events.next()).await.unwrap();
         assert!(matches!(completion, CodexRpcSessionEvent::Notification(ServerNotification::TurnCompleted { turn_id, status, .. }) if turn_id == "native-turn-1" && status == "completed"));
@@ -1418,13 +1403,14 @@ done
         assert!(retired.is_empty());
         let mut session = cached.unwrap();
         assert!(session.is_connected());
-        session.start_turn("继续", Some("low"), false).await.unwrap();
+        session.start_turn("继续", Some("low")).await.unwrap();
         let mut events = session.take_events();
         let completion = tokio::time::timeout(std::time::Duration::from_secs(2), events.next()).await.unwrap();
         assert!(matches!(completion, CodexRpcSessionEvent::Notification(ServerNotification::TurnCompleted { turn_id, .. }) if turn_id == "native-turn-2"));
         session.restore_events(events);
         session.resume_thread("native-thread", Some(cwd), None, None).await.unwrap();
         assert_eq!(session.active_model(), Some("gpt-5.4"));
+        session.resume_thread("native-thread", Some(cwd), Some("private-model"), None).await.unwrap();
         session.shutdown().await.unwrap();
         assert!(!session.is_connected());
         let actual_cwd = std::fs::read_to_string(dir.path().join("spawn-cwd")).unwrap();
@@ -1435,13 +1421,20 @@ done
         assert_eq!(requests.iter().filter(|r| r["method"] == "thread/start").count(), 1);
         let turns: Vec<_> = requests.iter().filter(|r| r["method"] == "turn/start").collect();
         assert_eq!(turns.len(), 2);
+        assert!(turns[0]["params"].get("effort").is_none());
         assert_eq!(turns[1]["params"]["effort"], "low");
-        for request in requests.iter().filter(|r| r["method"] == "thread/start" || r["method"] == "thread/resume") {
+        assert_eq!(turns[1]["params"]["input"], serde_json::json!([
+            { "type": "text", "text": "继续" }
+        ]));
+        let thread_requests: Vec<_> = requests.iter().filter(|r| r["method"] == "thread/start" || r["method"] == "thread/resume").collect();
+        for request in &thread_requests[..2] {
             assert!(request["params"].get("model").is_none(), "native model precedence must be preserved");
         }
+        assert_eq!(thread_requests[2]["params"]["model"], "private-model");
         let turn = requests.iter().find(|r| r["method"] == "turn/start").unwrap();
         assert!(turn["params"]["input"].as_array().unwrap().iter().all(|item| item["type"] == "text"));
         assert!(turn["params"]["input"].to_string().contains("/tmp/example.png"));
+        assert_eq!(turn["params"]["input"].as_array().unwrap().len(), 1);
     }
 
     #[tokio::test]
@@ -1480,33 +1473,6 @@ done
         let mut events = CodexRpcEvents { notifications, requests, stopped };
         request_tx.send(QueuedRpcEvent::for_test(parse_server_request(42, "test/approval".into(), None))).await.unwrap();
         assert!(matches!(events.next().await, CodexRpcSessionEvent::ServerRequest(_)));
-    }
-
-    #[test]
-    fn execution_guidance_preserves_user_input_and_nonvision_attachments() {
-        let prompt = "只分析，不修改。\n\n附图：@/tmp/wise-example.png";
-        let original = build_wise_turn_input(prompt, Some("deepseek-flash"), false);
-        let optimized = build_wise_turn_input(prompt, Some("deepseek-flash"), true);
-        assert_eq!(&optimized[1..], original.as_slice());
-        assert!(matches!(&optimized[0], TurnInputItem::Text { text }
-            if text.starts_with("<system_reminder>")));
-        // Each turn is shaped from its own input, never from accumulated history.
-        let follow_up = build_wise_turn_input("继续", None, true);
-        assert_eq!(follow_up.len(), 2);
-        assert_eq!(follow_up[1], TurnInputItem::text("继续"));
-    }
-
-    #[test]
-    fn execution_guidance_does_not_turn_empty_input_into_a_task() {
-        assert!(build_wise_turn_input("  ", None, true).is_empty());
-        for (prompt, optimize) in [("/review", true), ("  /compact", true), ("生成一条提交信息", false)] {
-            assert_eq!(
-                build_wise_turn_input(prompt, None, optimize),
-                crate::codex_rpc_types::build_turn_input_items_from_composer_prompt_for_model(
-                    prompt, None,
-                ),
-            );
-        }
     }
 
     #[test]

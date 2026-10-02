@@ -71,13 +71,15 @@ export async function executeCodexRpcCode(
   readOnly?: boolean,
 ): Promise<void> {
   const normalizedResumeId = codexResumeSessionId?.trim() || null;
-  const normalizedEffort = effort?.trim() || undefined;
+  const trimmedEffort = effort?.trim();
+  // "default" is a UI preference, never an app-server reasoning effort.
+  const normalizedEffort = trimmedEffort && trimmedEffort !== "default" ? trimmedEffort : undefined;
   return invoke("execute_codex_rpc", {
     params: {
       projectPath: repositoryPath,
       prompt,
       model,
-      effort: normalizedEffort,
+      ...(normalizedEffort ? { effort: normalizedEffort } : {}),
       invocationKey,
       tabSessionId,
       codexResumeSessionId: normalizedResumeId,

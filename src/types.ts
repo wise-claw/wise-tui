@@ -847,7 +847,7 @@ export interface ClaudeSession {
    */
   ultracodeEnabled?: boolean;
   /**
-   * Codex RPC 推理强度（`turn/start.effort`）：minimal/low/medium/high/xhigh/ultra。
+   * Codex RPC 推理强度：default 跟随原生配置；其余档位作为 `turn/start.effort`。
    * 仅 `executionEngine === "codex-rpc"` 时有意义；落盘到 tabs.json，并作为该执行环境新建会话默认值。
    */
   codexReasoningEffort?: string;

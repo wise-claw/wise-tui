@@ -123,6 +123,16 @@ describe("resolveNewSessionComposerDefaults", () => {
     getCachedDefaultExecutionEngine.mockImplementation(() => "claude");
   });
 
+  test("new Codex sessions inherit native model and reasoning defaults", async () => {
+    expect(resolveNewSessionComposerDefaults({ repoEngine: "codex-rpc" })).toEqual({
+      executionEngine: "codex-rpc", model: "", codexReasoningEffort: "default",
+    });
+    await saveExecutionEngineDefaultReasoning("codex-rpc", "default");
+    expect(resolveNewSessionComposerDefaults({
+      repoEngine: "codex-rpc", prior: { codexReasoningEffort: "high" },
+    }).codexReasoningEffort).toBe("default");
+  });
+
   test("reuses the current session engine, model, and reasoning", async () => {
     await saveExecutionEngineDefaultModel("codex-rpc", "gpt-5.6-luna");
     await saveExecutionEngineDefaultReasoning("codex-rpc", "high");

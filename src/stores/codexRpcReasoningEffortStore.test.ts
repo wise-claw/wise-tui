@@ -12,11 +12,11 @@ afterEach(() => {
 });
 
 describe("codexRpcReasoningEffortStore", () => {
-  test("按 session 记忆，默认 medium", () => {
-    expect(getCodexRpcReasoningEffort("tab-a")).toBe("medium");
+  test("按 session 记忆，默认跟随 Codex", () => {
+    expect(getCodexRpcReasoningEffort("tab-a")).toBe("default");
     setCodexRpcReasoningEffort("tab-a", "xhigh");
     expect(getCodexRpcReasoningEffort("tab-a")).toBe("xhigh");
-    expect(getCodexRpcReasoningEffort("tab-b")).toBe("medium");
+    expect(getCodexRpcReasoningEffort("tab-b")).toBe("default");
   });
 
   test("subscribe 在变更时通知", () => {
@@ -37,7 +37,7 @@ describe("codexRpcReasoningEffortStore", () => {
     setCodexRpcReasoningEffort("live", "xhigh");
 
     expect(pruneCodexRpcReasoningEffortSessions(new Set(["live"]))).toBe(true);
-    expect(getCodexRpcReasoningEffort("closed")).toBe("medium");
+    expect(getCodexRpcReasoningEffort("closed")).toBe("default");
     expect(getCodexRpcReasoningEffort("live")).toBe("xhigh");
     expect(pruneCodexRpcReasoningEffortSessions(new Set(["live"]))).toBe(false);
   });

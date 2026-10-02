@@ -9,8 +9,9 @@ import {
 } from "./codexReasoningEffort";
 
 describe("codexReasoningEffort", () => {
-  test("六档与中文标签对齐 ChatGPT 推理强度", () => {
+  test("默认继承原生推理强度，同时保留显式档位", () => {
     expect([...CODEX_REASONING_EFFORTS]).toEqual([
+      "default",
       "minimal",
       "low",
       "medium",
@@ -18,6 +19,8 @@ describe("codexReasoningEffort", () => {
       "xhigh",
       "ultra",
     ]);
+    expect(CODEX_REASONING_EFFORT_DEFAULT).toBe("default");
+    expect(CODEX_REASONING_EFFORT_LABELS.default).toBe("跟随 Codex");
     expect(CODEX_REASONING_EFFORT_LABELS.minimal).toBe("极低");
     expect(CODEX_REASONING_EFFORT_LABELS.low).toBe("轻度");
     expect(CODEX_REASONING_EFFORT_LABELS.medium).toBe("中");

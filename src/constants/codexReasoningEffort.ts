@@ -1,9 +1,10 @@
 /**
- * Codex app-server `turn/start.effort` 档位（对齐 ChatGPT「推理强度」）。
- * 档位名与协议 `supportedReasoningEfforts[].reasoningEffort` 一致；UI 用中文标签。
+ * Codex 推理强度偏好。default 只用于 Wise UI/存储，RPC 省略 effort，
+ * 由原生线程及配置解析；其它值为显式 `turn/start.effort` 覆盖。
  */
 
 export const CODEX_REASONING_EFFORTS = [
+  "default",
   "minimal",
   "low",
   "medium",
@@ -14,9 +15,10 @@ export const CODEX_REASONING_EFFORTS = [
 
 export type CodexReasoningEffort = (typeof CODEX_REASONING_EFFORTS)[number];
 
-export const CODEX_REASONING_EFFORT_DEFAULT: CodexReasoningEffort = "medium";
+export const CODEX_REASONING_EFFORT_DEFAULT: CodexReasoningEffort = "default";
 
 export const CODEX_REASONING_EFFORT_LABELS: Record<CodexReasoningEffort, string> = {
+  default: "跟随 Codex",
   minimal: "极低",
   low: "轻度",
   medium: "中",
@@ -26,9 +28,10 @@ export const CODEX_REASONING_EFFORT_LABELS: Record<CodexReasoningEffort, string>
 };
 
 export const CODEX_REASONING_EFFORT_HINTS: Record<CodexReasoningEffort, string> = {
+  default: "沿用当前 Codex 线程或原生配置的推理强度",
   minimal: "最快响应，推理最少",
   low: "较低延迟",
-  medium: "默认平衡",
+  medium: "平衡推理与速度",
   high: "更深入推理",
   xhigh: "高强度推理",
   ultra: "最强推理（含多代理编排）",

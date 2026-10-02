@@ -71,29 +71,6 @@ fn build_codex_rpc_thread_config(
 // Shared state for active RPC sessions
 // ---------------------------------------------------------------------------
 
-/// Refresh guidance periodically instead of growing every turn's history with
-/// identical host text. Re-app startup/eviction safely starts a new interval.
-#[derive(Default)]
-struct ExecutionGuidanceSchedule {
-    turns: VecDeque<(String, u8)>,
-}
-
-impl ExecutionGuidanceSchedule {
-    fn should_inject(&self, thread_id: &str) -> bool {
-        self.turns.iter().find(|(id, _)| id == thread_id)
-            .is_none_or(|(_, count)| *count == 0)
-    }
-
-    // Call only after turn/start succeeds; failed dispatches must not consume a slot.
-    fn record_accepted(&mut self, thread_id: &str) {
-        let count = self.turns.iter().position(|(id, _)| id == thread_id)
-            .and_then(|index| self.turns.remove(index))
-            .map(|(_, count)| count).unwrap_or(0);
-        self.turns.push_back((thread_id.to_string(), (count + 1) % 8));
-        if self.turns.len() > 256 { self.turns.pop_front(); }
-    }
-}
-
 /// 宿主级提示（Codex 配置警告 / 弃用提醒）按会话去重：app-server 会在每轮
 /// turn 回放同样的提示，重复写入对话流只会污染转录，同一会话内相同提示只保留一次。
 #[derive(Default)]
@@ -123,7 +100,6 @@ pub(crate) struct CodexRpcSessionStore {
     /// 已发起取消的 session id：`execute_codex_rpc` 在 bootstrap/start_turn 完成前
     /// 尚未写入 `sessions`，点「结束」时 cancel 只能登记此标记，待 turn 启动后自检中止。
     pub(crate) cancelled: Arc<TokioMutex<HashSet<String>>>,
-    guidance: Arc<TokioMutex<ExecutionGuidanceSchedule>>,
     notice_dedupe: Arc<TokioMutex<HostNoticeDedupe>>,
     idle: Arc<TokioMutex<IdleSessionPool<CodexRpcSession>>>,
     closing: Arc<AtomicBool>,
@@ -544,19 +520,14 @@ pub(crate) async fn execute_codex_rpc(
 
     // Only an explicit selection overrides native config precedence. The server
     // resolves project/profile defaults and returns the actual model for images.
-    // 模型白名单护栏：未知模型（如 Claude 侧泄漏的 MiniMax-M3）不下发，
-    // 交给原生配置解析默认模型，避免 provider 以 invalid_request_error 拒绝。
-    let mut effective_model = params
+    // Let app-server validate explicit selections, including custom provider models.
+    // A stale client catalog must not silently replace the selected model.
+    let effective_model = params
         .model
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
-    if let Some(m) = effective_model.as_deref().filter(|_| !reused_runtime) {
-        if !crate::codex_models::codex_model_is_known(m).await {
-            effective_model = None;
-        }
-    }
 
     let mut started_new_thread = false;
     let had_resume_id = resume_id.is_some();
@@ -668,14 +639,8 @@ pub(crate) async fn execute_codex_rpc(
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty());
-    let guidance_thread = session.current_thread_id()
-        .filter(|_| !params.read_only && !trimmed_prompt.starts_with('/'))
-        .map(str::to_string);
-    let inject_guidance = if let Some(thread_id) = guidance_thread.as_deref() {
-        app.state::<CodexRpcSessionStore>().guidance.lock().await.should_inject(thread_id)
-    } else { false };
     let turn_result = session
-        .start_turn(trimmed_prompt, effort, inject_guidance)
+        .start_turn(trimmed_prompt, effort)
         .await;
     if let Err(e) = turn_result {
         let msg = format!("Codex turn 启动失败: {e}");
@@ -697,9 +662,6 @@ pub(crate) async fn execute_codex_rpc(
         return Err(msg);
     }
 
-    if let Some(thread_id) = guidance_thread.as_deref() {
-        app.state::<CodexRpcSessionStore>().guidance.lock().await.record_accepted(thread_id);
-    }
     eprintln!("[codex_rpc] runtime={} turn_dispatched_in_ms={}",
         if reused_runtime { "reused" } else { "cold" }, dispatch_started.elapsed().as_millis());
 
@@ -1914,29 +1876,6 @@ pub(crate) async fn respond_codex_rpc_dynamic_tool(
 mod tests {
     use super::{codex_rpc_resume_should_start_fresh, is_codex_rpc_thread_id};
     use crate::codex_config_dir::codex_provider_switched;
-
-    #[test]
-    fn guidance_refreshes_every_eight_accepted_turns_per_thread() {
-        let mut schedule = super::ExecutionGuidanceSchedule::default();
-        for turn in 0..24 {
-            assert_eq!(schedule.should_inject("thread"), turn % 8 == 0);
-            // Reading the decision (or failing turn/start) doesn't advance it.
-            assert_eq!(schedule.should_inject("thread"), turn % 8 == 0);
-            assert!(schedule.should_inject("other-thread"));
-            schedule.record_accepted("thread");
-        }
-    }
-
-    #[test]
-    fn guidance_history_is_bounded_and_evicted_threads_get_fresh_guidance() {
-        let mut schedule = super::ExecutionGuidanceSchedule::default();
-        for thread in 0..256 { schedule.record_accepted(&thread.to_string()); }
-        schedule.record_accepted("0"); // Keep this recently used thread.
-        schedule.record_accepted("new-thread");
-        assert_eq!(schedule.turns.len(), 256);
-        assert!(!schedule.should_inject("0"));
-        assert!(schedule.should_inject("1"));
-    }
 
     #[test]
     fn gpt_to_deepseek_skips_resume() {
