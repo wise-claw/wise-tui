@@ -280,11 +280,8 @@ export function useAppSessionRouting({
           (target.id === currentActive || target.claudeSessionId?.trim() === currentActive));
       // 侧栏显式点选：即使已是当前会话也打标，挡住随后 auto-ensure 抢焦。
       markExplicitSidebarSessionSelect(canonicalId);
-      if (alreadyActive) {
-        return;
-      }
       if (!target?.repositoryPath) {
-        switchSession(canonicalId);
+        if (!alreadyActive) switchSession(canonicalId);
         return;
       }
       const repo = resolveRepositoryForSession({
@@ -304,10 +301,11 @@ export function useAppSessionRouting({
         repositories,
         workspaceMode: resolveWorkspaceMode({ activeProjectId, projects }),
       });
-      if (repo && !keepProjectFocus && repo.id !== activeRepositoryId) {
+      // 会话已选中时也要校正仓库上下文：用户可能单独切过工作区/仓库。
+      if (repo && !keepProjectFocus && (repo.id !== activeRepositoryId || activeWorkspaceFocus !== "repository")) {
         setActiveRepositoryWithOwner(repo.id);
       }
-      switchSession(canonicalId);
+      if (!alreadyActive) switchSession(canonicalId);
     },
     [
       activeProjectId,

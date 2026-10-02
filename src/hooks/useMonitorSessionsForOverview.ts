@@ -1,4 +1,4 @@
-import { startTransition, useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type { ClaudeSession } from "../types";
 import { indexOfLastRenderableUserMessage, isAssistantDisplayNoiseText } from "../utils/claudeChatMessageDisplay";
 import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
@@ -114,6 +114,7 @@ export function useMonitorSessionsFingerprint(
 ): string {
   const latestRef = useRef(sessions);
   latestRef.current = sessions;
+  const cheapStatusKey = monitorSessionsCheapStatusKey(sessions);
   const [fingerprint, setFingerprint] = useState(() =>
     monitorSessionsTerminalStatusFingerprint(sessions),
   );
@@ -132,7 +133,7 @@ export function useMonitorSessionsFingerprint(
   useEffect(() => {
     if (!enabled) return;
     commitIfChanged();
-  }, [commitIfChanged, enabled, sessions.length]);
+  }, [commitIfChanged, enabled, cheapStatusKey]);
 
   return fingerprint;
 }
@@ -146,6 +147,10 @@ export function useMonitorSidebarFingerprints(
   const transcriptLatestRef = useRef(transcriptSessions);
   monitorLatestRef.current = monitorSessions;
   transcriptLatestRef.current = transcriptSessions;
+  const monitorStatusKey = monitorSessionsCheapStatusKey(monitorSessions);
+  const transcriptStatusKey = monitorSessions === transcriptSessions
+    ? monitorStatusKey
+    : monitorSessionsCheapStatusKey(transcriptSessions);
 
   const [fingerprints, setFingerprints] = useState(() => {
     const transcript = monitorSessionsTerminalStatusFingerprint(transcriptSessions);
@@ -183,7 +188,7 @@ export function useMonitorSidebarFingerprints(
   useEffect(() => {
     if (!enabled) return;
     commitIfChanged();
-  }, [commitIfChanged, enabled, monitorSessions.length, transcriptSessions.length]);
+  }, [commitIfChanged, enabled, monitorStatusKey, transcriptStatusKey]);
 
   return fingerprints;
 }
@@ -222,24 +227,8 @@ export function useMonitorSessionsForOverview(
         return;
       }
       cheapStatusKeyRef.current = cheapKey;
-      commitMonitorSessionsFingerprint(latestRef.current, fingerprintRef, (next) => {
-        startTransition(() => {
-          setSynced(next);
-        });
-      });
-    };
-
-    let liveCommitRaf: number | null = null;
-    const scheduleCommitIfChanged = () => {
-      if (liveCommitRaf !== null) return;
-      if (typeof window === "undefined") {
-        commitIfChanged();
-        return;
-      }
-      liveCommitRaf = window.requestAnimationFrame(() => {
-        liveCommitRaf = null;
-        commitIfChanged();
-      });
+      // 执行状态必须与聊天区同步；transition 在持续流式更新下可能被推迟到本轮结束。
+      commitMonitorSessionsFingerprint(latestRef.current, fingerprintRef, setSynced);
     };
 
     commitIfChanged();
@@ -248,15 +237,12 @@ export function useMonitorSessionsForOverview(
 
     const usesLiveRef = typeof sessions === "object" && sessions !== null && "current" in sessions;
     const unsubscribeStructure = usesLiveRef
-      ? subscribeClaudeSessionsStructure(scheduleCommitIfChanged)
+      // store 已按帧合并结构通知，不再额外排一帧或等待监控轮询。
+      ? subscribeClaudeSessionsStructure(commitIfChanged)
       : undefined;
 
     return () => {
       disposePolling();
-      if (liveCommitRaf !== null) {
-        window.cancelAnimationFrame(liveCommitRaf);
-        liveCommitRaf = null;
-      }
       unsubscribeStructure?.();
     };
   }, [enabled, resolveLatest, sessions]);

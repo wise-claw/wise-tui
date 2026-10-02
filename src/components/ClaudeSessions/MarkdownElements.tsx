@@ -76,6 +76,30 @@ const MarkdownCopyButton = memo(function MarkdownCopyButton({
   );
 });
 
+const MarkdownImage = memo(function MarkdownImage({
+  src,
+  alt = "",
+  ...props
+}: ComponentPropsWithoutRef<"img">) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const sourceKey = src ?? "";
+
+  if (failedSrc === sourceKey) {
+    return (
+      <span
+        className="app-markdown-image-unavailable"
+        role="img"
+        aria-label={alt || "图片无法显示"}
+        title={alt ? `图片无法显示：${alt}` : "图片无法显示"}
+      >
+        图片无法显示
+      </span>
+    );
+  }
+
+  return <img {...props} src={src} alt={alt} onError={() => setFailedSrc(sourceKey)} />;
+});
+
 const MarkdownFencedCodeBlock = memo(function MarkdownFencedCodeBlock({
   text,
   lang,
@@ -241,6 +265,7 @@ export function createMarkdownComponents(opts: {
   const { streaming, depth } = opts;
 
   return {
+    img: (props) => <MarkdownImage {...props} />,
     a: ({ href, children, ...props }) => (
       <a
         {...props}

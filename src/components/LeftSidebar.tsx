@@ -21,9 +21,11 @@ import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
 import { requestWorkspaceRepositorySync } from "../constants/workspaceRepositoryEvents";
 import { resolveWorkspaceRootPath } from "../utils/projectSessionAnchor";
 import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBinding";
-import { shouldRevealWorkspaceListOnRestore } from "../utils/workspaceMode";
+import { resolveWorkspaceMode, shouldRevealWorkspaceListOnRestore } from "../utils/workspaceMode";
+import { findSessionByTabOrClaudeId } from "../utils/claudeSessionSelection";
 import {
   resolveClaudeProjectSkillsScopePath,
+  shouldKeepProjectFocusWhenSwitchingSession,
 } from "../utils/workspaceSelectionState";
 import { runWhenIdle } from "../utils/deferIdle";
 import { prefetchRepositoryWorkspace, prefetchNeighborRepositoryWorkspaces } from "../services/repositoryWorkspacePrefetch";
@@ -671,17 +673,15 @@ export function LeftSidebar({
 
   const activeSessionRepositoryPath = useMemo(() => {
     if (!activeSessionId) return "";
-    const raw = sessionsLatestRef.current
-      .find((s) => s.id === activeSessionId)
-      ?.repositoryPath?.trim();
+    const raw = findSessionByTabOrClaudeId(sessionsLatestRef.current, activeSessionId)?.repositoryPath?.trim();
     if (!raw) return "";
     return normalizeSessionRepositoryPath(raw);
-  }, [activeSessionId]);
+  }, [activeSessionId, sessionsStructureKey, sessionsLatestRef]);
 
   const sessionDerivedTreeSelection = useMemo((): WorkspaceRepositoryTreeSelection | null => {
     if (!activeSessionRepositoryPath) return null;
     const liveSession = activeSessionId
-      ? (sessionsLatestRef.current.find((s) => s.id === activeSessionId) ?? null)
+      ? (findSessionByTabOrClaudeId(sessionsLatestRef.current, activeSessionId) ?? null)
       : null;
     if (!liveSession?.repositoryPath?.trim()) return null;
     const repo = resolveRepositoryForSession({
@@ -804,8 +804,8 @@ export function LeftSidebar({
     (activeRepositoryPath?.trim() ? normalizeSessionRepositoryPath(activeRepositoryPath) : "");
   const activeSessionRepositoryName = useMemo(() => {
     if (!activeSessionId) return "";
-    return sessionsLatestRef.current.find((s) => s.id === activeSessionId)?.repositoryName?.trim() ?? "";
-  }, [activeSessionId]);
+    return findSessionByTabOrClaudeId(sessionsLatestRef.current, activeSessionId)?.repositoryName?.trim() ?? "";
+  }, [activeSessionId, sessionsStructureKey, sessionsLatestRef]);
 
   const repoPanelRepositoryName =
     repoPanelTreeView?.label.trim() ||
@@ -1021,6 +1021,37 @@ export function LeftSidebar({
       onRepositorySelect(repositoryId);
     },
     [onRepositorySelect, repositories],
+  );
+
+  const handleSessionSelectAndSyncRepoPanel = useCallback(
+    (sessionId: string) => {
+      const target = findSessionByTabOrClaudeId(sessionsLatestRef.current, sessionId);
+      if (target?.repositoryPath?.trim()) {
+        const activeProject = projects.find((item) => item.id === activeProjectId) ?? null;
+        const keepProjectFocus = shouldKeepProjectFocusWhenSwitchingSession({
+          session: target,
+          activeWorkspaceFocus,
+          activeProject,
+          repositories,
+          workspaceMode: resolveWorkspaceMode({ activeProjectId, projects }),
+        });
+        const repository = resolveRepositoryForSession({
+          session: target,
+          repositories,
+          bindings: repositoryMainSessionBindings,
+          sessions: sessionsLatestRef.current,
+          preferredRepositoryId: activeRepositoryId,
+        });
+        // 原生 CLI 会话也走显式同步；同仓库/同会话点击不能等全局 key 改变。
+        // 未注册仓库时清除旧选择，由当前会话路径驱动文件面板。
+        setRepoPanelTreeSelection(keepProjectFocus && activeProject
+          ? { kind: "project", projectId: activeProject.id }
+          : repository ? { kind: "repository", repositoryId: repository.id } : null);
+      }
+      _onSelectSession(sessionId);
+    },
+    [_onSelectSession, sessionsLatestRef, projects, activeProjectId, activeWorkspaceFocus,
+      repositories, repositoryMainSessionBindings, activeRepositoryId],
   );
 
   const workspacePrefetchPathsKey = repositories
@@ -1339,7 +1370,7 @@ export function LeftSidebar({
               employeeMonitorItems={employeeMonitorItems}
               sessionConversationTaskItems={sessionConversationTaskItems}
               teamMonitorItems={teamMonitorItems}
-              onSelectSession={_onSelectSession}
+              onSelectSession={handleSessionSelectAndSyncRepoPanel}
               onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
               onArchiveSession={onArchiveWorkspaceSession}
               onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
