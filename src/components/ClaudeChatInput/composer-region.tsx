@@ -3371,9 +3371,9 @@ function ComposerInner({
           <Button
             type="text"
             size="small"
+            className="app-claude-composer-attach-btn"
             onClick={handleFileAttach}
             title="上传图片或文件（⌘I / Ctrl+I）"
-            style={{ color: "var(--ant-color-text-secondary)" }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" />

@@ -2,7 +2,7 @@
 .app-claude-semi-chat-input-mount-placeholder {
   width: 100%;
   min-height: calc(
-    var(--app-semi-ai-chat-editor-min-lines, 1) * var(--app-semi-ai-chat-editor-line-px, 20px) + 12px
+    var(--app-semi-ai-chat-editor-min-lines, 1) * var(--app-semi-ai-chat-editor-line-px, 22px) + 18px
   );
   box-sizing: border-box;
 }
@@ -37,7 +37,7 @@
   --semi-color-info: var(--ant-color-info);
   --semi-color-shadow: color-mix(in srgb, var(--ant-color-text) 12%, transparent);
   /* 与下方 `.tiptap` 行高一致，供编辑区 min/max-height 计算 */
-  --app-semi-ai-chat-editor-line-px: 20px;
+  --app-semi-ai-chat-editor-line-px: 22px;
   --app-semi-ai-chat-editor-min-lines: 1;
   --app-semi-ai-chat-editor-max-lines: 3;
   min-width: 0;
@@ -113,27 +113,30 @@
   font-weight: 500;
 }
 
+/* 会话输入卡片：大圆角 + 柔和投影，作为整个会话页的视觉焦点（参考 AI 工作台样式） */
 .app-claude-semi-chat-input-wrap .semi-aiChatInput {
-  padding: 6px 8px;
-  border-radius: var(--wise-radius-lg);
+  padding: 10px 12px 8px;
+  border-radius: 18px;
   background: var(--ant-color-bg-container);
   /* 原先无边框无聚焦态：输入区和消息区背景同色，看不出「焦点在不在输入框」。 */
   border: 1px solid var(--ant-color-border-secondary);
+  box-shadow: var(--wise-elevation-1);
   transition:
     border-color var(--wise-motion-base) var(--wise-ease-out),
     box-shadow var(--wise-motion-base) var(--wise-ease-out);
   min-height: calc(
-    var(--app-semi-ai-chat-editor-min-lines) * var(--app-semi-ai-chat-editor-line-px) + 12px
+    var(--app-semi-ai-chat-editor-min-lines) * var(--app-semi-ai-chat-editor-line-px) + 18px
   );
 }
 
 .app-claude-semi-chat-input-wrap .semi-aiChatInput:hover {
   border-color: var(--ant-color-border);
+  box-shadow: var(--wise-elevation-2);
 }
 
 .app-claude-semi-chat-input-wrap:focus-within .semi-aiChatInput {
   border-color: var(--ant-color-primary);
-  box-shadow: var(--wise-focus-ring);
+  box-shadow: var(--wise-focus-ring), var(--wise-elevation-2);
 }
 
 /* 编辑区至少 1 行、最多约 3 行（超出由 Semi 自带的 overflow:auto 滚动） */
@@ -158,11 +161,12 @@
   font-weight: 400;
 }
 
-/* 底栏单行：收紧 Semi 默认大间距，缩小发送按钮 */
+/* 底栏单行：与上方编辑区拉开一点，操作按钮改为圆形（参考 AI 工作台样式） */
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-footer {
-  margin-top: 4px;
+  margin-top: 8px;
   column-gap: 6px;
   align-items: center;
+  min-height: 32px;
 }
 
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-footer-configure {
@@ -196,10 +200,15 @@
 }
 
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-footer-action-button {
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  min-height: 20px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  border-radius: 50%;
+  transition:
+    background-color var(--wise-motion-base) var(--wise-ease-out),
+    color var(--wise-motion-base) var(--wise-ease-out),
+    box-shadow var(--wise-motion-base) var(--wise-ease-out);
 }
 
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-footer-action-button svg {
@@ -207,10 +216,53 @@
   height: 12px;
 }
 
+/* 发送按钮：圆形主色实体按钮 + 轻投影，在底栏保持主操作识别度但不压过相邻图标 */
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-footer-action-send:not(.semi-aiChatInput-footer-action-send-disabled) {
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--ant-color-primary) 26%, transparent);
+}
+
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-footer-action-send:hover:not(.semi-aiChatInput-footer-action-send-disabled) {
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--ant-color-primary) 36%, transparent);
+}
+
+/* 禁用态保留品牌色浅底，仍看得出「发送」这一主操作 */
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-footer-action-send-disabled {
+  background: color-mix(in srgb, var(--ant-color-primary) 30%, var(--ant-color-bg-container));
+  color: var(--ant-color-text-light-solid, #fff);
+  opacity: 1;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* 左侧「+」上传入口：浅底圆形按钮，与参考稿一致 */
+.app-claude-semi-footer-toolbar-left .ant-btn.app-claude-composer-attach-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text-secondary);
+}
+
+.app-claude-semi-footer-toolbar-left .ant-btn.app-claude-composer-attach-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.app-claude-semi-footer-toolbar-left .ant-btn.app-claude-composer-attach-btn:hover,
+.app-claude-semi-footer-toolbar-left .ant-btn.app-claude-composer-attach-btn:focus-visible {
+  background: var(--ant-color-fill-secondary);
+  color: var(--ant-color-text);
+}
+
 .app-claude-semi-footer-toolbar-left {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   flex-wrap: nowrap;
   min-width: 0;
 }

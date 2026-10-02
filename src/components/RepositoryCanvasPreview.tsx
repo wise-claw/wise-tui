@@ -69,7 +69,7 @@ export function RepositoryCanvasPreview({ content, path, root, children }: { con
           <ul>{prepared.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
         </details>
       ) : null}
-      <div className="app-canvas__hint">{path} · {width === "auto" ? "自适应" : `${width}px`} · {zoom}% · {isDocument ? "产品方案 · 支持 Markdown、表格与 Mermaid 流程图" : "支持仓库内 CSS、脚本、图片与字体；模块 import 需先打包。"}</div>
+      <div className="app-canvas__hint">{path} · {width === "auto" ? "自适应" : `${width}px`} · {zoom}% · {isDocument ? "产品方案 · 支持 Markdown、内联 HTML、表格与 Mermaid 流程图" : "支持仓库内 CSS、脚本、图片与字体；模块 import 需先打包。"}</div>
     </section>
   );
 }

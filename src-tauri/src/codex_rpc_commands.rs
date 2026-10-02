@@ -94,6 +94,28 @@ impl ExecutionGuidanceSchedule {
     }
 }
 
+/// 宿主级提示（Codex 配置警告 / 弃用提醒）按会话去重：app-server 会在每轮
+/// turn 回放同样的提示，重复写入对话流只会污染转录，同一会话内相同提示只保留一次。
+#[derive(Default)]
+struct HostNoticeDedupe {
+    seen: VecDeque<String>,
+}
+
+impl HostNoticeDedupe {
+    /// `true` 表示该会话首次出现此提示（应展示并记录）；`false` 表示可以丢弃。
+    fn first_seen(&mut self, session_id: &str, notice_key: &str) -> bool {
+        let key = format!("{session_id}\u{1}{notice_key}");
+        if self.seen.iter().any(|existing| existing == &key) {
+            return false;
+        }
+        self.seen.push_back(key);
+        if self.seen.len() > 1024 {
+            self.seen.pop_front();
+        }
+        true
+    }
+}
+
 /// Tauri-managed state holding active [`CodexRpcSession`] instances keyed by session id.
 #[derive(Default, Clone)]
 pub(crate) struct CodexRpcSessionStore {
@@ -102,6 +124,7 @@ pub(crate) struct CodexRpcSessionStore {
     /// 尚未写入 `sessions`，点「结束」时 cancel 只能登记此标记，待 turn 启动后自检中止。
     pub(crate) cancelled: Arc<TokioMutex<HashSet<String>>>,
     guidance: Arc<TokioMutex<ExecutionGuidanceSchedule>>,
+    notice_dedupe: Arc<TokioMutex<HostNoticeDedupe>>,
     idle: Arc<TokioMutex<IdleSessionPool<CodexRpcSession>>>,
     closing: Arc<AtomicBool>,
     idle_changed: Arc<Notify>,
@@ -109,6 +132,14 @@ pub(crate) struct CodexRpcSessionStore {
 }
 
 impl CodexRpcSessionStore {
+    /// 该会话是否应展示这条宿主提示（相同提示只展示一次，避免每轮重复回放）。
+    async fn should_show_host_notice(&self, session_id: &str, notice_key: &str) -> bool {
+        self.notice_dedupe
+            .lock()
+            .await
+            .first_seen(session_id, notice_key)
+    }
+
     /// 应用退出时关闭全部 app-server 子进程；返回关闭的会话数。
     pub(crate) async fn shutdown_all(&self) -> usize {
         self.closing.store(true, Ordering::Release);
@@ -116,6 +147,7 @@ impl CodexRpcSessionStore {
         let sessions: Vec<_> = self.sessions.lock().await.drain().map(|(_, s)| s).collect();
         let idle = self.idle.lock().await.drain();
         self.cancelled.lock().await.clear();
+        self.notice_dedupe.lock().await.seen.clear();
         let count = sessions.len() + idle.len();
         for session in sessions {
             let _ = session.lock().await.shutdown().await;
@@ -260,6 +292,35 @@ fn codex_rpc_init_stream_line() -> String {
         "subtype": "init",
     })
     .to_string()
+}
+
+/// 需要按会话去重的宿主提示指纹；`None` 表示该通知不属于去重范围。
+/// 指纹包含完整正文，只有逐字相同的提示才会被折叠，配置变化后的新提示仍会展示。
+fn host_notice_dedupe_key(notification: &ServerNotification) -> Option<String> {
+    match notification {
+        ServerNotification::ConfigWarning { summary, details, path } => {
+            let summary = summary.trim();
+            if summary.is_empty() {
+                return None;
+            }
+            Some(format!(
+                "config\u{1}{summary}\u{1}{}\u{1}{}",
+                path.as_deref().unwrap_or("").trim(),
+                details.as_deref().unwrap_or("").trim()
+            ))
+        }
+        ServerNotification::DeprecationNotice { summary, details } => {
+            let summary = summary.trim();
+            if summary.is_empty() {
+                return None;
+            }
+            Some(format!(
+                "deprecation\u{1}{summary}\u{1}{}",
+                details.as_deref().unwrap_or("").trim()
+            ))
+        }
+        _ => None,
+    }
 }
 
 fn emit_rpc_output_line(
@@ -758,6 +819,16 @@ pub(crate) async fn execute_codex_rpc(
                             "session_id": &session_id_loop,
                             "request_id": request_id,
                         }));
+                    }
+                    // app-server 每轮都会回放同一份配置警告；同一会话只写入一次。
+                    if let Some(notice_key) = host_notice_dedupe_key(&notification) {
+                        let store = app_loop.state::<CodexRpcSessionStore>();
+                        if !store
+                            .should_show_host_notice(&session_id_loop, &notice_key)
+                            .await
+                        {
+                            continue;
+                        }
                     }
                     // Persist durable lines, then emit (deltas emit-only to avoid JSONL bloat).
                     let output = adapt_notification_to_stream_lines(
@@ -1917,5 +1988,43 @@ base_url = "https://api.deepseek.com/v1"
         assert!(!codex_rpc_resume_should_start_fresh(
             "unexpected status 402 Payment Required: Insufficient Balance"
         ));
+    }
+
+    #[test]
+    fn host_notice_key_covers_config_and_deprecation_only() {
+        use crate::codex_rpc_types::ServerNotification;
+        let warning = ServerNotification::ConfigWarning {
+            summary: "unknown key".to_string(),
+            details: Some("check typos".to_string()),
+            path: Some("/Users/x/.codex/config.toml".to_string()),
+        };
+        let key = super::host_notice_dedupe_key(&warning).expect("config warning is deduped");
+        assert!(key.starts_with("config\u{1}unknown key"));
+        assert!(key.contains("config.toml"));
+        assert!(key.contains("check typos"));
+
+        let empty = ServerNotification::ConfigWarning {
+            summary: "   ".to_string(),
+            details: None,
+            path: None,
+        };
+        assert!(super::host_notice_dedupe_key(&empty).is_none());
+        assert!(super::host_notice_dedupe_key(&ServerNotification::Error {
+            code: -32000,
+            message: "boom".to_string(),
+            data: None,
+        })
+        .is_none());
+    }
+
+    #[test]
+    fn host_notice_dedupe_only_collapses_identical_text_per_session() {
+        let mut dedupe = super::HostNoticeDedupe::default();
+        assert!(dedupe.first_seen("s1", "config\u{1}a"));
+        assert!(!dedupe.first_seen("s1", "config\u{1}a"));
+        // 会话隔离：新会话仍会展示一次。
+        assert!(dedupe.first_seen("s2", "config\u{1}a"));
+        // 正文变化（配置改动后产生的新提示）不会被旧记录吞掉。
+        assert!(dedupe.first_seen("s1", "config\u{1}b"));
     }
 }

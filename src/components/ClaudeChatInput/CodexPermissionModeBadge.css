@@ -58,6 +58,13 @@
   border-color: var(--ant-color-border-secondary);
 }
 
+/* 危险档（完全访问）悬停保持警告色，避免被上面的通用 :hover 覆盖成近黑色文本 */
+.app-codex-permission-mode-pill--danger:hover:not(:disabled) {
+  color: var(--ant-color-warning-text);
+  border-color: color-mix(in srgb, var(--ant-color-warning) 70%, transparent);
+  background: color-mix(in srgb, var(--ant-color-warning-bg) 100%, transparent);
+}
+
 .app-codex-permission-mode-pill:disabled {
   opacity: 0.6;
   cursor: not-allowed;

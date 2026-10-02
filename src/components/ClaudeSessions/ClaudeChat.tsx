@@ -2165,7 +2165,7 @@ export function ClaudeChatInner({
             <ClaudeChatComposerTrayLazy
               composerTrayRef={composerTrayRef}
               backgroundInvocationDockEnabled={backgroundInvocationDockEnabled}
-              compactFooterChrome={filesPaneVisible || requirementsPaneVisible}
+              compactFooterChrome={requirementsPaneVisible}
               session={session}
               gitRepositoryPath={gitRepositoryPath}
               repositoryId={sessionRepository?.id ?? null}

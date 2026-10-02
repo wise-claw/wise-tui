@@ -38,9 +38,10 @@ import { useMonacoGitModifiedLineDecorations } from "../hooks/useMonacoGitModifi
 import { MarkdownBody } from "./ClaudeSessions/MarkdownElements";
 import { isCanvasDocumentPath } from "../utils/canvasArtifacts";
 import { DocumentCanvasPreview } from "./DocumentCanvasPreview";
-import rehypeRaw from "rehype-raw";
+import { MARKDOWN_HTML_REHYPE_PLUGINS } from "../utils/rehypeMarkdownHtml";
 import { isRepositoryCanvasPath } from "../utils/repositoryCanvas";
 import { RepositoryCanvasPreview } from "./RepositoryCanvasPreview";
+import { createRepositoryMarkdownLinkComponent } from "./RepositoryMarkdownLink";
 
 const MonacoEditor = lazy(() =>
   import("../utils/preloadMonacoEditor").then((m) => m.loadMonacoEditorReact()),
@@ -207,6 +208,14 @@ function RepositoryFileEditorTabSurface({
   // 大文件全量 Markdown + rehypeRaw 会卡死主线程，禁止预览。
   const mdPreviewBlocked = isMdFile && contentLength >= MONACO_LARGE_FILE_CHAR_THRESHOLD;
   const mdPreview = !isCanvasFile && isMdFile && mdPreviewRequested && !mdPreviewBlocked;
+  // Markdown 预览内的相对链接按当前文件所在目录解析，点开仓库内文件。
+  const repositoryMarkdownComponents = useMemo(
+    () =>
+      onNavigateToFile
+        ? { a: createRepositoryMarkdownLinkComponent(tab.relativePath, onNavigateToFile) }
+        : undefined,
+    [tab.relativePath, onNavigateToFile],
+  );
 
   // 预览态无 Monaco textarea：把焦点留在预览容器内，否则 ⌘W 的 panel.contains(target) 会失败。
   useEffect(() => {
@@ -635,7 +644,7 @@ function RepositoryFileEditorTabSurface({
         ) : null}
         {canvasPreview ? (
           isActive ? (isCanvasDocumentPath(tab.relativePath)
-            ? <DocumentCanvasPreview content={tab.content} path={tab.relativePath} />
+            ? <DocumentCanvasPreview content={tab.content} path={tab.relativePath} onNavigateToFile={onNavigateToFile} />
             : <RepositoryCanvasPreview content={tab.content} path={tab.relativePath} root={tab.rootPath || repositoryPath || undefined} />) : null
         ) : mdPreview && isActive ? (
           <div
@@ -647,7 +656,11 @@ function RepositoryFileEditorTabSurface({
             onMouseDown={handleMdPreviewMouseDown}
           >
             <div className="app-markdown app-markdown--file-doc">
-              <MarkdownBody source={tab.content} rehypePlugins={[rehypeRaw]} />
+              <MarkdownBody
+                source={tab.content}
+                rehypePlugins={MARKDOWN_HTML_REHYPE_PLUGINS}
+                components={repositoryMarkdownComponents}
+              />
             </div>
           </div>
         ) : everActivated ? (
