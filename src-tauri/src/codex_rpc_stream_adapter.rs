@@ -2901,7 +2901,7 @@ mod tests {
     }
 
     #[test]
-    fn mcp_tool_call_carries_app_context_and_plugin_id() {
+    fn mcp_tool_call_preserves_app_context_and_plugin_id() {
         let mut state = CodexRpcStreamAdaptState::default();
         let call = ServerNotification::ItemCompleted {
             item_id: "itm_m2".to_string(),
@@ -2914,7 +2914,7 @@ mod tests {
                     "tool": "search",
                     "status": "completed",
                     "arguments": { "query": "wise" },
-                    "appContext": { "appName": "Wise 文档", "connectorId": "wise-docs" },
+                    "appContext": { "appName": "Example Docs", "connectorId": "example-docs" },
                     "pluginId": "openai-docs",
                     "result": { "content": [{ "type": "text", "text": "ok" }] },
                 }),
@@ -2922,9 +2922,9 @@ mod tests {
         };
         let out = adapt(&call, &mut state);
         assert_eq!(out.emit.len(), 1);
-        assert!(out.emit[0].contains(r#""description":"Wise 文档""#));
+        assert!(out.emit[0].contains(r#""description":"Example Docs""#));
         assert!(out.emit[0].contains(r#""plugin_id":"openai-docs""#));
-        assert!(out.emit[0].contains(r#""connectorId":"wise-docs""#));
+        assert!(out.emit[0].contains(r#""connectorId":"example-docs""#));
     }
 
     #[test]
