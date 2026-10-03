@@ -3,6 +3,7 @@ import type { ClaudeMessage } from "../../types";
 import { userMessagePlainTextForDisplay } from "../../utils/claudeChatMessageDisplay";
 import { stripAppliedDefaultInstructionFromDisplayText } from "../../utils/composerDefaultInstruction";
 import { extractImportantUserInputForDisplay } from "../../utils/userMessageImportantInput";
+import { splitUserMessageAtRefs } from "../../utils/userMessageAtRefs";
 import { UserMessageCollapsibleBody } from "./UserMessageCollapsibleBody";
 
 interface Props {
@@ -22,10 +23,33 @@ function userMessageDisplayKey(msg: ClaudeMessage): string {
   return msg.content ?? "";
 }
 
-/** 用户消息正文：按原文纯文本展示，避免 lint 日志等被 Markdown 误解析。 */
+/**
+ * 用户消息正文：按原文纯文本展示，避免 lint 日志等被 Markdown 误解析。
+ * `@文件/目录` 引用按 Composer 语义加高亮，对照 Codex 桌面端把引用从正文里凸显出来。
+ */
 function UserMessagePlainText({ text }: { text: string }) {
+  const tokens = useMemo(() => splitUserMessageAtRefs(text), [text]);
   if (!text) return null;
-  return <div className="app-claude-user-message-plain">{text}</div>;
+  if (tokens.length === 1 && tokens[0]!.type === "text") {
+    return <div className="app-claude-user-message-plain">{text}</div>;
+  }
+  return (
+    <div className="app-claude-user-message-plain">
+      {tokens.map((token, index) =>
+        token.type === "at" ? (
+          <span
+            key={index}
+            className="app-claude-user-message-at-ref"
+            title={token.value}
+          >
+            {token.value}
+          </span>
+        ) : (
+          <span key={index}>{token.value}</span>
+        ),
+      )}
+    </div>
+  );
 }
 
 /** 用户消息列表展示：默认仅重要输入（Cursor 风格），可展开完整原文。 */

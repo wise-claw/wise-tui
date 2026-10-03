@@ -4222,6 +4222,11 @@
   padding-right: 12px;
 }
 
+/* 文件变更卡片属于上一轮回复，沿用左右对齐，但不叠加新消息组的顶部留白。 */
+.app-claude-messages-virtual-row--files-changed.app-claude-messages-virtual-row--group-start {
+  padding-top: 0;
+}
+
 .app-claude-messages-end-thinking {
   /* 消息行已无头像列（旧 grid 22px 头像 + 8px 间距 = 30px），
      提示行与消息正文同从容器 padding 起左对齐。 */
@@ -5026,6 +5031,17 @@
   color: var(--ant-color-text);
   min-width: 0;
   max-width: 100%;
+}
+
+/* 用户消息内的 @ 引用：与 Composer 的 @ token 同色，让引用从正文里凸显出来。 */
+.app-claude-user-message-at-ref {
+  color: var(--ant-purple-5, #9254de);
+  font-weight: 500;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ant-purple-5, #9254de) 10%, transparent);
+  padding: 0 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .app-claude-user-message-inline-row {
@@ -6752,6 +6768,19 @@ button.app-message-part-header:disabled:hover {
 .app-tool-edit-card__icon .explorer-tree-material-icon {
   width: 14px;
   height: 14px;
+}
+
+.app-tool-edit-card__action {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-tool-edit-card__action-sep {
+  flex-shrink: 0;
+  color: var(--ant-color-text-quaternary);
+  font-size: 12px;
 }
 
 .app-tool-edit-card__filename {
@@ -10334,7 +10363,7 @@ button.app-message-part-header:disabled:hover {
 
 /* Cursor-style turn files-changed summary card */
 .app-turn-files-changed {
-  margin: 8px 0 4px;
+  margin: 4px 0 4px;
   border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 82%, transparent);
   border-radius: 10px;
   background: var(--ant-color-bg-container);

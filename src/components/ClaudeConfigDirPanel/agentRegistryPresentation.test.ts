@@ -14,6 +14,7 @@ import {
   getBuiltinUninstallCommand,
   getBuiltinUpdateCommand,
   getEmptyDescription,
+  isDispatchableAgent,
 } from "./agentRegistryPresentation";
 
 const agents = [
@@ -55,6 +56,8 @@ describe("agent registry presentation helpers", () => {
     expect(deriveAgentRegistryStats(agents)).toEqual({
       total: 3,
       available: 2,
+      dispatchable: 1,
+      detectedReserved: 1,
       custom: 1,
       builtin: 2,
       unavailable: 1,
@@ -62,7 +65,7 @@ describe("agent registry presentation helpers", () => {
   });
 
   test("filters by availability, custom source, errors, and search text", () => {
-    expect(filterAgents(agents, "available", "").map((agent) => agent.id)).toEqual(["claude", "custom:local"]);
+    expect(filterAgents(agents, "available", "").map((agent) => agent.id)).toEqual(["claude"]);
     expect(filterAgents(agents, "custom", "").map((agent) => agent.id)).toEqual(["custom:local"]);
     expect(filterAgents(agents, "errors", "").map((agent) => agent.id)).toEqual(["codex"]);
     expect(filterAgents(agents, "all", "WISE_PROFILE").map((agent) => agent.id)).toEqual(["custom:local"]);
@@ -71,13 +74,15 @@ describe("agent registry presentation helpers", () => {
 
   test("returns Chinese empty-state descriptions for every filter", () => {
     expect(getEmptyDescription("all", "")).toBe("暂未探测到 Claude Code 运行入口");
-    expect(getEmptyDescription("available", "")).toBe("当前没有可用运行入口，请重新探测或新增预留命令");
+    expect(getEmptyDescription("available", "")).toBe("当前没有可派发的执行环境，请重新探测或安装本机 Agent");
     expect(getEmptyDescription("custom", "")).toBe("还没有自定义预留入口");
     expect(getEmptyDescription("errors", "")).toBe("没有异常运行入口");
     expect(getEmptyDescription("all", "claude")).toBe("没有匹配的运行入口");
   });
 
   test("formats labels, runtime descriptions, paths, and invalid dates", () => {
+    expect(isDispatchableAgent(agents[0])).toBe(true);
+    expect(isDispatchableAgent(agents[2])).toBe(false);
     expect(canInstallBuiltinAgent(agents[0])).toBe(false);
     expect(canUpdateBuiltinAgent(agents[0])).toBe(true);
     expect(canUpdateBuiltinAgent(agents[1])).toBe(false);
@@ -114,7 +119,7 @@ describe("agent registry presentation helpers", () => {
     expect(describeAgentRuntime(agents[0])).toContain("当前主运行时");
     expect(describeAgentRuntime(agents[0])).not.toContain("配置目录");
     expect(describeAgentRuntime(agents[1])).toContain("等待本机命令就绪");
-    expect(describeAgentRuntime(agents[2])).toBe("预留命令 · 3 个默认参数 · 1 个环境变量");
+    expect(describeAgentRuntime(agents[2])).toBe("本机预留命令（暂不可派发） · 3 个默认参数 · 1 个环境变量");
     expect(formatDetectedAt("not-a-date")).toBe("未记录");
     expect(
       canUninstallBuiltinAgent({

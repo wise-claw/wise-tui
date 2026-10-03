@@ -5,12 +5,19 @@ export type BuiltinUninstallableKind = Exclude<DetectedAgentKind, "custom">;
 
 export type AgentRegistryFilter = "all" | "available" | "custom" | "errors";
 
+/** 自定义入口当前只探测命令；会话派发只支持已接入的内置执行环境。 */
+export function isDispatchableAgent(agent: DetectedAgent): boolean {
+  return agent.available && agent.kind !== "custom";
+}
+
 export function deriveAgentRegistryStats(agents: DetectedAgent[]) {
   const available = agents.filter((agent) => agent.available).length;
   const custom = agents.filter((agent) => agent.kind === "custom").length;
   return {
     total: agents.length,
     available,
+    dispatchable: agents.filter(isDispatchableAgent).length,
+    detectedReserved: agents.filter((agent) => agent.kind === "custom" && agent.available).length,
     custom,
     builtin: agents.length - custom,
     unavailable: agents.length - available,
@@ -24,7 +31,7 @@ export function filterAgents(
 ): DetectedAgent[] {
   const normalizedQuery = query.trim().toLowerCase();
   return agents.filter((agent) => {
-    if (filter === "available" && !agent.available) return false;
+    if (filter === "available" && !isDispatchableAgent(agent)) return false;
     if (filter === "custom" && agent.kind !== "custom") return false;
     if (filter === "errors" && agent.available) return false;
     if (!normalizedQuery) return true;
@@ -34,7 +41,7 @@ export function filterAgents(
 
 export function getEmptyDescription(filter: AgentRegistryFilter, query: string): string {
   if (query.trim()) return "没有匹配的运行入口";
-  if (filter === "available") return "当前没有可用运行入口，请重新探测或新增预留命令";
+  if (filter === "available") return "当前没有可派发的执行环境，请重新探测或安装本机 Agent";
   if (filter === "custom") return "还没有自定义预留入口";
   if (filter === "errors") return "没有异常运行入口";
   return "暂未探测到 Claude Code 运行入口";
@@ -123,7 +130,7 @@ export function describeAgentRuntime(agent: DetectedAgent): string {
   if (isAgentKind(agent, "custom")) {
     const args = agent.args.length === 0 ? "无默认参数" : `${agent.args.length} 个默认参数`;
     const env = Object.keys(agent.env).length;
-    return `预留命令 · ${args} · ${env} 个环境变量`;
+    return `本机预留命令（暂不可派发） · ${args} · ${env} 个环境变量`;
   }
   const runtimeScope =
     agent.kind === "claude"

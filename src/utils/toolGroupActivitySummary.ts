@@ -134,14 +134,12 @@ export function buildToolGroupActivitySummary(
   }
 
   if (explore > 0) {
+    // 对照 Codex 桌面端：即使同组里有编辑，也保留首个被探索文件名（「探索了 a.ts 等 3 个文件」），
+    // 而不是退化成「探索了 3 个文件」，让读者能立刻定位到这一轮读的是什么。
     if (explore === 1 && firstExploreName) {
       segments.push(`探索了 ${firstExploreName}`);
-    } else if (edit > 0) {
-      segments.push(`探索了 ${explore} 个文件`);
-    } else if (firstExploreName && explore > 1) {
+    } else if (explore > 1 && firstExploreName) {
       segments.push(`探索了 ${firstExploreName} 等 ${explore} 个文件`);
-    } else if (firstExploreName) {
-      segments.push(`探索了 ${firstExploreName}`);
     } else {
       segments.push(`探索了 ${explore} 个文件`);
     }

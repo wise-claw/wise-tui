@@ -37,6 +37,7 @@ import {
 } from "../../services/assistantPromptLayers";
 import {
   buildAgentEngineIndex,
+  buildAssistantEngineOptions,
   resolveAssistantEngineBinding,
 } from "./engineBinding";
 import { AssistantTemplateBundleFields } from "./AssistantTemplateBundleFields";
@@ -301,20 +302,13 @@ export function AssistantsPanel({
   );
 
   const engineOptions = useMemo(() => {
-    const builtins = ["claude", "codex", "deepseek", "gemini", "opencode", "qoder", "cursor"];
-    const customAgents = agents.filter((a) => a.kind === "custom");
-    const opts = builtins.map((id) => {
-      const detectedHit = agentEngineIndex.get(id);
-      return {
-        value: id,
-        label: detectedHit ? `${id} · ${detectedHit.available ? "可用" : "不可用"}` : `${id} · 未检测到`,
-      };
-    });
-    for (const c of customAgents) {
-      opts.push({ value: c.backend, label: `${c.name} · 自定义 · ${c.available ? "可用" : "不可用"}` });
+    const options = buildAssistantEngineOptions(agents);
+    const savedEngineId = editor.row?.engineId?.trim();
+    if (savedEngineId && !options.some((option) => option.value === savedEngineId)) {
+      options.push({ value: savedEngineId, label: `${savedEngineId} · 原有配置，需重新选择` });
     }
-    return opts;
-  }, [agentEngineIndex, agents]);
+    return options;
+  }, [agents, editor.row?.engineId]);
 
   const filterTabs = (
     <AuthorPanelHubTabs aria-label="助手筛选">
@@ -465,7 +459,7 @@ export function AssistantsPanel({
                 name="engineId"
                 label="运行环境"
                 rules={[{ required: true, message: "需要选择运行环境" }]}
-                help="当前主运行环境是 Claude Code；其它入口作为未来连接器预留，使用前会提示。"
+                help="选择已接入的执行环境；自定义命令属于预留入口，当前不能直接派发。"
               >
                 <Select options={engineOptions} placeholder="优先选择 Claude Code" />
               </Form.Item>

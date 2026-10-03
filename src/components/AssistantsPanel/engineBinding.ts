@@ -1,12 +1,13 @@
 import type { AssistantEntry } from "../../types/assistant";
 import type { DetectedAgent } from "../../types/detectedAgent";
+import { SESSION_EXECUTION_ENGINE_LABELS } from "../../constants/sessionExecutionEngine";
 
 export type AssistantEngineBindingTone = "success" | "warning" | "danger";
 export type AssistantEngineBindingDot = "on" | "warn" | "off";
 
 export interface AssistantEngineBindingStatus {
   engineId: string;
-  label: "Claude Code 就绪" | "Codex CLI 就绪" | "预留入口未检测" | "运行入口不可用";
+  label: string;
   tone: AssistantEngineBindingTone;
   dotTone: AssistantEngineBindingDot;
   detail: string;
@@ -21,7 +22,11 @@ export interface AssistantEngineBindingSummary {
 export function buildAgentEngineIndex(agents: DetectedAgent[]): Map<string, DetectedAgent> {
   const index = new Map<string, DetectedAgent>();
   for (const agent of agents) {
-    for (const key of [agent.backend, agent.id, agent.command]) {
+    // Codex RPC 使用同一个本机 codex 二进制；模板中的 codex-rpc 应映射到注册表的 codex 供给。
+    const aliases = agent.kind === "codex" ? ["codex-rpc"] : [];
+    // 旧模板可能存了通用的 custom；不能把它误认成列表中第一个自定义入口。
+    const keys = agent.kind === "custom" ? [agent.id] : [agent.backend, agent.id, agent.command, ...aliases];
+    for (const key of keys) {
       const normalized = normalizeEngineKey(key);
       if (normalized && !index.has(normalized)) {
         index.set(normalized, agent);
@@ -29,6 +34,25 @@ export function buildAgentEngineIndex(agents: DetectedAgent[]): Map<string, Dete
     }
   }
   return index;
+}
+
+export function buildAssistantEngineOptions(agents: DetectedAgent[]): { value: string; label: string }[] {
+  const index = buildAgentEngineIndex(agents);
+  const builtins = ["claude", "codex-rpc", "cursor", "deepseek", "gemini", "opencode", "qoder", "codex"] as const;
+  const options: { value: string; label: string }[] = builtins.map((id) => {
+    const agent = index.get(id);
+    const state = agent ? (agent.available ? "命令已探测" : "命令不可用") : "未检测到";
+    const legacy = id === "codex" ? " · 旧模板兼容" : "";
+    return { value: id, label: `${SESSION_EXECUTION_ENGINE_LABELS[id].title} · ${state}${legacy}` };
+  });
+  for (const agent of agents) {
+    if (agent.kind !== "custom") continue;
+    options.push({
+      value: agent.id,
+      label: `${agent.name} · 预留入口 · ${agent.available ? "已探测，暂不可派发" : "命令不可用"}`,
+    });
+  }
+  return options;
 }
 
 export function resolveAssistantEngineBinding(
@@ -58,16 +82,21 @@ export function resolveAssistantEngineBinding(
     };
   }
 
+  if (agent.kind === "custom") {
+    return {
+      engineId,
+      label: "预留命令已探测",
+      tone: "warning",
+      dotTone: "warn",
+      detail: "命令存在，但尚未接入会话派发",
+    };
+  }
+
   return {
     engineId,
-    label:
-      agent.kind === "claude"
-        ? "Claude Code 就绪"
-        : agent.kind === "codex"
-          ? "Codex CLI 就绪"
-          : "预留入口未检测",
-    tone: agent.kind === "claude" || agent.kind === "codex" ? "success" : "warning",
-    dotTone: agent.kind === "claude" || agent.kind === "codex" ? "on" : "warn",
+    label: `${agent.name} 就绪`,
+    tone: "success",
+    dotTone: "on",
     detail: agent.name,
   };
 }
@@ -79,9 +108,9 @@ export function summarizeAssistantEngineBindings(
   return assistants.reduce<AssistantEngineBindingSummary>(
     (summary, assistant) => {
       const status = resolveAssistantEngineBinding(assistant, agentIndex);
-      if (status.label === "Claude Code 就绪" || status.label === "Codex CLI 就绪") {
+      if (status.tone === "success") {
         summary.available += 1;
-      } else if (status.label === "运行入口不可用") {
+      } else if (status.tone === "danger") {
         summary.unavailable += 1;
       } else {
         summary.undetected += 1;

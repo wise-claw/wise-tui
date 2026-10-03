@@ -18,15 +18,37 @@
 .app-canvas__source { flex: 1; min-height: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; }
 @media (max-width: 600px) { .app-canvas__document { padding: 4px; } .app-canvas__paper { padding: 12px; } }
 
-.app-canvas__paper { line-height: 1.75; }
+.app-canvas__paper { font-size: 14px; font-weight: 500; line-height: 1.75; }
 .app-canvas__paper > :first-child { margin-top: 0; }
 .app-canvas__paper > :last-child { margin-bottom: 0; }
+.app-canvas__paper.app-markdown code { font-weight: 400; }
+.app-canvas__paper.app-markdown h1,
+.app-canvas__paper.app-markdown h2,
+.app-canvas__paper.app-markdown h3,
+.app-canvas__paper.app-markdown h4,
+.app-canvas__paper.app-markdown h5,
+.app-canvas__paper.app-markdown h6 {
+  color: var(--ant-color-text-heading, var(--ant-color-text));
+}
+.app-canvas__paper.app-markdown h1 { font-size: 1.48em; }
+.app-canvas__paper.app-markdown h2 { font-size: 1.18em; }
+.app-canvas__paper.app-markdown h3 { font-size: 1.1em; }
+.app-canvas__paper.app-markdown h4,
+.app-canvas__paper.app-markdown h5,
+.app-canvas__paper.app-markdown h6 { font-size: 1em; }
+.app-canvas__paper.app-markdown li::marker {
+  color: var(--ant-color-text-secondary);
+}
+.app-canvas__paper .app-markdown-code__lang {
+  color: var(--ant-color-text-secondary);
+}
 .app-canvas__paper th, .app-canvas__paper td { padding: 8px 14px; border: 1px solid var(--ant-color-border-secondary, #e5e7eb); text-align: left; }
 .app-canvas__paper table { border-collapse: collapse; }
 .app-canvas__paper th { background: var(--ant-color-fill-quaternary, #f8fafc); }
 .app-canvas__toolbar select { margin-left: 8px; padding: 4px 8px; border: 1px solid var(--ant-color-border, #d9d9d9); border-radius: 6px; color: inherit; background: var(--ant-color-bg-container, white); }
-.app-canvas__paper blockquote {
+.app-canvas__paper.app-markdown blockquote {
   margin-left: 0;
   padding-left: 16px;
   border-left: 0;
+  color: color-mix(in srgb, var(--ant-color-text) 75%, var(--ant-color-text-secondary));
 }

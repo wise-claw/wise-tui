@@ -30,6 +30,8 @@ describe("AgentRegistrySection", () => {
 
     expect(html).toContain("新增预留入口");
     expect(html).toContain("重新探测");
+    expect(html).toContain("可派发");
+    expect(html).toContain("远程 Agent 需要接入执行协议");
     expect(html).toContain("暂未探测到 Claude Code 运行入口");
   });
 });

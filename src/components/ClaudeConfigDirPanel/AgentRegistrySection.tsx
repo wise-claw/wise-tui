@@ -45,6 +45,7 @@ import {
   isBuiltinInstallableAgent,
   isBuiltinUninstallableAgent,
   isUpToDateBuiltinAgent,
+  isDispatchableAgent,
   getEmptyDescription,
   type AgentRegistryFilter,
   type BuiltinInstallableKind,
@@ -307,7 +308,7 @@ export function AgentRegistrySection() {
       className="app-agent-registry-section"
       icon={<ThunderboltOutlined />}
       title="执行环境"
-      subtitle="本机 CLI（含 Cursor Agent）探测"
+      subtitle="本机 Agent 供给、能力探测与预留入口管理"
       actions={
         <Space size={8} wrap>
           <Input
@@ -348,8 +349,8 @@ export function AgentRegistrySection() {
           />
           <AuthorPanelHubTab
             active={filter === "available"}
-            label="可用"
-            count={stats.available}
+            label="可派发"
+            count={stats.dispatchable}
             onClick={() => setFilter("available")}
           />
           <AuthorPanelHubTab
@@ -383,8 +384,8 @@ export function AgentRegistrySection() {
             <span className="app-agent-registry-metric-card__dot-pulsing" />
           </div>
           <div className="app-agent-registry-metric-card__content">
-            <strong>{stats.available}</strong>
-            <small>就绪可用</small>
+            <strong>{stats.dispatchable}</strong>
+            <small>就绪可派发</small>
           </div>
         </div>
         <div className="app-agent-registry-metric-card app-agent-registry-metric-card--custom">
@@ -392,8 +393,8 @@ export function AgentRegistrySection() {
             <PlusOutlined />
           </div>
           <div className="app-agent-registry-metric-card__content">
-            <strong>{stats.custom}</strong>
-            <small>自定义入口</small>
+            <strong>{stats.detectedReserved}</strong>
+            <small>已探测预留</small>
           </div>
         </div>
         <div className="app-agent-registry-metric-card app-agent-registry-metric-card--errors">
@@ -406,6 +407,12 @@ export function AgentRegistrySection() {
           </div>
         </div>
       </div>
+
+      <Alert
+        type="info"
+        showIcon
+        title="自定义入口目前仅探测本机命令，尚不能派发会话或自动化任务；远程 Agent 需要接入执行协议。"
+      />
 
       <AuthorPanelListShell className="app-agent-registry-section__list" aria-busy={loading}>
         {filteredAgents.length === 0 && !loading ? (
@@ -563,11 +570,15 @@ function AgentRegistryRow({
         </div>
 
         <div className="app-agent-registry-card__status">
-          {agent.available ? (
+          {isDispatchableAgent(agent) ? (
             <Tag color="success" className="app-agent-registry-card__status-tag">
               <span className="app-agent-registry-card__status-indicator app-agent-registry-card__status-indicator--ok" />
-              就绪可用
+              可派发
             </Tag>
+          ) : agent.available ? (
+            <HoverHint title="命令已探测，但当前没有对应的会话派发适配器">
+              <Tag color="warning" className="app-agent-registry-card__status-tag">已探测 · 暂不可派发</Tag>
+            </HoverHint>
           ) : (
             <HoverHint title={agent.failureReason ?? "当前环境尚未配置就绪"}>
               <Tag color="error" className="app-agent-registry-card__status-tag">

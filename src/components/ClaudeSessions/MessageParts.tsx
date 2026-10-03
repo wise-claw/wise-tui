@@ -892,7 +892,14 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({
         ) : null}
       </div>
       )}
-      {editPreview ? <ToolFileEditCard preview={editPreview} streaming={outputStreaming} /> : null}
+      {editPreview ? (
+        <ToolFileEditCard
+          preview={editPreview}
+          streaming={outputStreaming}
+          // 独立成卡时补动作文案（对照 Codex「写入文件 · en.md」）；外层标题行已在则不重复。
+          actionLabel={showCompactEditCard ? info.label : undefined}
+        />
+      ) : null}
       {expanded && hasExpandableBody ? (
         <div className="app-message-part-content">
           {isBashOrExec && info.subtitle ? (

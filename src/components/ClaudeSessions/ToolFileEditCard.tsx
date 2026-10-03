@@ -110,9 +110,16 @@ export const ToolFileEditCard = memo(
   function ToolFileEditCard({
     preview,
     streaming = false,
+    actionLabel,
   }: {
     preview: ToolFileEditPreview;
     streaming?: boolean;
+    /**
+     * 动作文案（写入文件 / 编辑文件 / 应用补丁 / 删除文件）。
+     * 独立成卡（卡片自身就是标题行）时传入，对照 Codex 桌面端的「写入文件 · en.md」；
+     * 外层已有工具标题行时不传，避免文件名重复出现。
+     */
+    actionLabel?: string;
   }) {
     const repositoryPath = useChatRepositoryPath();
     const canOpenFile = useMemo(() => {
@@ -199,6 +206,14 @@ export const ToolFileEditCard = memo(
       >
         <div className="app-tool-edit-card__head">
           <ExplorerTreeFileIcon fileName={preview.fileName} className="app-tool-edit-card__icon" />
+          {actionLabel ? (
+            <span className="app-tool-edit-card__action">{actionLabel}</span>
+          ) : null}
+          {actionLabel ? (
+            <span className="app-tool-edit-card__action-sep" aria-hidden>
+              ·
+            </span>
+          ) : null}
           {canOpenFile ? (
             <button
               type="button"
@@ -268,6 +283,7 @@ export const ToolFileEditCard = memo(
   },
   (prev, next) =>
     prev.streaming === next.streaming &&
+    prev.actionLabel === next.actionLabel &&
     toolFileEditPreviewFingerprint(prev.preview, prev.streaming) ===
       toolFileEditPreviewFingerprint(next.preview, next.streaming),
 );

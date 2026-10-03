@@ -49,7 +49,8 @@ describe("buildToolGroupActivitySummary", () => {
       tool("Read", { file_path: "/repo/d.ts" }),
     ]);
     expect(summary.label).toContain("编辑了 2 个文件");
-    expect(summary.label).toContain("探索了 2 个文件");
+    // 对照 Codex 桌面端：有编辑时仍保留首个被探索文件名。
+    expect(summary.label).toContain("探索了 c.ts 等 2 个文件");
     expect(summary.addedLines).toBeGreaterThan(0);
     expect(summary.removedLines).toBeGreaterThan(0);
   });

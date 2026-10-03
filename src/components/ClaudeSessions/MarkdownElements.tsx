@@ -363,11 +363,21 @@ export function createMarkdownComponents(opts: {
         />
       );
     },
-    code: ({ className, children, node: _node, ...props }) => (
-      <code className={className} {...props}>
-        {children}
-      </code>
-    ),
+    code: ({ className, children, node, ...props }) => {
+      // 某些助手把文档元数据写成 `**Type:** Build`。会话的行内代码按正文
+      // 排版，这里只解析完整的「加粗标签：值」；普通代码和围栏仍显示原文。
+      const inlineLabel =
+        !className
+        && node?.position?.start.line === node?.position?.end.line
+        && typeof children === "string"
+          ? /^\*\*([^*\n]+?:)\*\*(\s+\S[^\n]*)$/u.exec(children)
+          : null;
+      return (
+        <code className={className} {...props}>
+          {inlineLabel ? <><strong>{inlineLabel[1]}</strong>{inlineLabel[2]}</> : children}
+        </code>
+      );
+    },
     table: ({ children, ...props }) => (
       <div className="app-markdown-table-wrap">
         <table {...props}>{children}</table>
