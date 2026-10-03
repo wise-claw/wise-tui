@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildFileTree,
   buildExplorerEntryIndex,
   buildRepositoryFileTree,
   sliceExplorerEntriesForSearch,
@@ -9,6 +10,19 @@ import type { RepositoryExplorerEntry } from "../../services/repositoryFiles";
 function entries(paths: Array<[string, boolean]>): RepositoryExplorerEntry[] {
   return paths.map(([path, isDir]) => ({ path, isDir }));
 }
+
+test("Git change tree shows the number of files in each directory", () => {
+  const tree = buildFileTree([
+    { path: "src/App.tsx", status: "M", additions: 3, deletions: 1 },
+    { path: "src/components/Tree.tsx", status: "A", additions: 8, deletions: 0 },
+    { path: "README.md", status: "M", additions: 1, deletions: 1 },
+  ]);
+  const src = tree.find((node) => node.path === "src");
+  const components = src?.children?.find((node) => node.path === "src/components");
+  expect(src?.fileCount).toBe(2);
+  expect(components?.fileCount).toBe(1);
+  expect(src?.additions).toBe(11);
+});
 
 describe("buildExplorerEntryIndex", () => {
   test("indexes paths for lookup", () => {

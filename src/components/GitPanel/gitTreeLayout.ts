@@ -1,5 +1,5 @@
 /** 每层目录深度仅增加一次缩进（与仓库文件树一致，不叠加 `.git-tree-children` 边距）。 */
-export const GIT_TREE_DEPTH_INDENT_PX = 8;
+export const GIT_TREE_DEPTH_INDENT_PX = 14;
 
 /** 与 `.git-tree-node-arrow { width: 16px }` 一致。 */
 export const GIT_TREE_ARROW_COLUMN_PX = 16;

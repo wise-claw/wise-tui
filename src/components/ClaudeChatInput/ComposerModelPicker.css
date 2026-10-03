@@ -14,25 +14,29 @@
 .app-composer-model-picker__select {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--wise-chip-gap);
   max-width: min(200px, 36vw);
-  padding: 0 3px 0 1px;
+  height: var(--wise-chip-height);
+  padding: 0 var(--wise-chip-padding-inline);
   margin: 0;
-  border: none;
+  /* 与底栏「常用语 / 引擎」触发器同一套安静胶囊几何 */
+  border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
   font-family: inherit;
   line-height: 1.15;
-  color: var(--ant-color-text-secondary);
-  border-radius: var(--ant-border-radius-sm);
+  color: var(--wise-chip-color);
+  border-radius: var(--wise-chip-radius);
 }
 
 .app-composer-model-picker__select:hover:not(:disabled) {
-  color: var(--ant-color-text);
+  color: var(--wise-chip-color-hover);
+  border-color: var(--wise-chip-border);
+  background: var(--wise-chip-bg);
 }
 
 .app-composer-model-picker__select:hover:not(:disabled) .app-composer-model-picker-bar-label__model {
-  color: var(--ant-color-text);
+  color: var(--wise-chip-color-hover);
 }
 
 .app-composer-model-picker__select:focus-visible {

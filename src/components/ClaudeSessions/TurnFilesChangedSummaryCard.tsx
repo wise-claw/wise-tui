@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { DiffOutlined } from "@ant-design/icons";
 import { dispatchOpenRepositoryFile } from "../../constants/workflowUiEvents";
 import {
   getClaudeChatMessageScrollBridge,
@@ -119,6 +120,9 @@ export const TurnFilesChangedSummaryCard = memo(
     return (
       <div className={`app-turn-files-changed${hasMore ? " app-turn-files-changed--has-more" : ""}`}>
         <div className="app-turn-files-changed__head">
+          <span className="app-turn-files-changed__head-icon" aria-hidden>
+            <DiffOutlined />
+          </span>
           <span className="app-turn-files-changed__title">{title}</span>
         </div>
         <ul className="app-turn-files-changed__list">

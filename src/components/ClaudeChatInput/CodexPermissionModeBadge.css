@@ -1,15 +1,16 @@
 .app-codex-permission-mode-pill {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--wise-chip-gap);
   margin-left: 2px;
-  padding: 0 6px;
-  height: 20px;
-  border-radius: 999px;
-  border: 1px solid var(--ant-color-border);
-  background: var(--ant-color-bg-container);
-  color: var(--ant-color-text-secondary);
-  font-size: 11px;
+  padding: 0 var(--wise-chip-padding-inline);
+  height: var(--wise-chip-height);
+  border-radius: var(--wise-chip-radius);
+  border: 1px solid var(--wise-chip-border);
+  background: var(--wise-chip-bg);
+  color: var(--wise-chip-color);
+  font-size: var(--wise-chip-font-size);
+  font-weight: var(--wise-chip-font-weight);
   line-height: 1;
   cursor: pointer;
 }
@@ -54,8 +55,9 @@
 }
 
 .app-codex-permission-mode-pill:hover:not(:disabled) {
-  color: var(--ant-color-text);
-  border-color: var(--ant-color-border-secondary);
+  color: var(--wise-chip-color-hover);
+  border-color: var(--ant-color-border);
+  background: var(--wise-chip-bg-hover);
 }
 
 /* 危险档（完全访问）悬停保持警告色，避免被上面的通用 :hover 覆盖成近黑色文本 */

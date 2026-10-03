@@ -2200,19 +2200,13 @@
   min-width: 0;
   position: relative;
   background: var(--ant-color-bg-container);
+  /* 顶部分隔线交给阴影：一条柔和投影比 1px 硬线更贴合整体纵深 */
+  box-shadow: 0 -1px 0 var(--ant-color-border-secondary), 0 -14px 28px -22px color-mix(in srgb, var(--ant-color-text) 42%, transparent);
   contain: layout style;
 }
 
 .app-claude-chat-bottom::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: var(--ant-color-split);
-  pointer-events: none;
-  z-index: 2;
+  content: none;
 }
 
 .app-claude-composer-tray {
@@ -4105,6 +4099,7 @@
   margin-top: 12px;
   /* 滚动容器用块级流式布局：避免 column flex 把视口剩余高度算进 scrollHeight，贴底时顶栏被顶出、底部留白 */
   display: block;
+  /* 消息画布保持容器白：底色差只出现在左栏，卡片层级由描边 + 阴影承担 */
   background: var(--ant-color-bg-container);
   /* 多屏窗格父级可能设 content-visibility:auto，消息区必须始终绘制 */
   content-visibility: visible;
@@ -4326,6 +4321,9 @@
 }
 
 .app-claude-messages-virtual-row--user-sticky {
+  /* 首条用户消息没有 group-start，也要与后续用户消息使用相同的左右留白。 */
+  padding-left: 12px;
+  padding-right: 12px;
   z-index: 5;
 }
 
@@ -4337,11 +4335,18 @@
 }
 
 .app-claude-message--user-sticky {
-  padding: 9px 12px;
-  border: 1px solid color-mix(in srgb, var(--ant-color-primary) 26%, var(--ant-color-border));
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--ant-color-primary-bg) 72%, var(--ant-color-bg-container));
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--ant-color-primary) 10%, transparent);
+  padding: 10px 13px;
+  border: 1px solid color-mix(in srgb, var(--ant-color-primary) 20%, var(--ant-color-border-secondary));
+  border-radius: 12px;
+  /* 上浅下深的极弱渐变，让气泡有一点体积感，而不是一块平铺的浅蓝 */
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--ant-color-primary-bg) 58%, var(--ant-color-bg-container)) 0%,
+    color-mix(in srgb, var(--ant-color-primary-bg) 92%, var(--ant-color-bg-container)) 100%
+  );
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--ant-color-text) 4%, transparent),
+    0 10px 24px -18px color-mix(in srgb, var(--ant-color-primary) 55%, transparent);
   transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -5540,19 +5545,25 @@
   max-width: 100%;
   width: 100%;
   box-sizing: border-box;
-  min-height: 22px;
+  min-height: 24px;
   margin: 0;
-  padding: 1px 0;
+  padding: 2px 8px;
   border: none;
+  border-radius: 8px;
   background: transparent;
   text-align: left;
   cursor: pointer;
   font: inherit;
-  color: var(--ant-color-text-tertiary);
+  /* 之前用 tertiary，中文小字几乎看不清；提到 secondary，hover 再到正文色 */
+  color: var(--ant-color-text-secondary);
+  transition:
+    background-color var(--wise-motion-fast) var(--wise-ease-out),
+    color var(--wise-motion-fast) var(--wise-ease-out);
 }
 
 .app-message-parts__tool-group-summary:hover {
-  color: var(--ant-color-text-secondary);
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-quaternary);
 }
 
 .app-message-parts__tool-group-summary__text {
@@ -5645,7 +5656,8 @@
 }
 
 .app-message-parts__tool-group-summary--edits-only:hover {
-  color: var(--ant-color-text-tertiary);
+  color: var(--ant-color-text-secondary);
+  background: transparent;
 }
 
 .app-message-parts__tool-group-edits {
@@ -6503,18 +6515,29 @@ button.app-message-part-header:disabled:hover {
 
 .app-message-part--tool {
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
   background: var(--ant-color-bg-container);
-  box-shadow: var(--wise-elevation-3);
+  box-shadow: var(--wise-card-shadow);
+  transition:
+    border-color var(--wise-motion-base) var(--wise-ease-out),
+    box-shadow var(--wise-motion-base) var(--wise-ease-out);
+}
+
+/* 悬浮时轻微“抬起”：只动描边与阴影，不位移，避免长列表里上百张卡片的抖动 */
+.app-message-part--tool:hover {
+  border-color: color-mix(in srgb, var(--ant-color-primary) 20%, var(--ant-color-border-secondary));
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--ant-color-text) 5%, transparent),
+    0 12px 28px -16px color-mix(in srgb, var(--ant-color-text) 24%, transparent);
 }
 .app-message-part--tool .app-message-part-header {
   border: none;
   border-radius: 0;
   border-bottom: 1px solid var(--ant-color-border-secondary);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--ant-color-fill-quaternary) 70%, var(--ant-color-bg-container)), var(--ant-color-bg-container));
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 55%, var(--ant-color-bg-container));
   align-items: center;
-  padding: 4px 8px;
+  padding: 7px 10px;
 }
 
 .app-message-part--tool .app-message-part-header:hover:not(:disabled) {
@@ -6731,11 +6754,11 @@ button.app-message-part-header:disabled:hover {
 /* Cursor-style file edit preview card */
 .app-tool-edit-card {
   margin: 4px 0 0;
-  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 82%, transparent);
-  border-radius: 8px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 12px;
   background: var(--ant-color-bg-container);
   overflow: hidden;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--ant-color-text) 4%, transparent);
+  box-shadow: var(--wise-card-shadow);
 }
 
 .app-claude-messages .app-message-parts__tool-group .app-tool-edit-card {
@@ -6746,9 +6769,10 @@ button.app-message-part-header:disabled:hover {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 68%, transparent);
-  min-height: 28px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: color-mix(in srgb, var(--ant-color-bg-layout) 52%, var(--ant-color-bg-container));
+  min-height: 30px;
 }
 
 .app-tool-edit-card__icon {
@@ -6773,8 +6797,8 @@ button.app-message-part-header:disabled:hover {
 .app-tool-edit-card__action {
   flex-shrink: 0;
   font-size: 12px;
-  font-weight: 500;
-  color: var(--ant-color-text-secondary);
+  font-weight: 600;
+  color: var(--ant-color-text);
 }
 
 .app-tool-edit-card__action-sep {
@@ -6823,11 +6847,11 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-tool-edit-card__stats--add {
-  color: #16a34a;
+  color: var(--ant-color-success);
 }
 
 .app-tool-edit-card__stats--remove {
-  color: #dc2626;
+  color: var(--ant-color-error);
 }
 
 .app-tool-edit-card__body {
@@ -6910,7 +6934,7 @@ button.app-message-part-header:disabled:hover {
   flex: 0 0 46px;
   padding: 0 10px 0 4px;
   text-align: right;
-  color: var(--ant-color-text-quaternary);
+  color: var(--ant-color-text-tertiary);
   user-select: none;
   font-variant-numeric: tabular-nums;
 }
@@ -7851,24 +7875,23 @@ button.app-message-part-header:disabled:hover {
 .app-claude-connection-kind-chip-btn:focus-visible {
   outline: 2px solid var(--ant-color-primary);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--wise-chip-radius);
 }
 
 .app-claude-connection-kind-chip {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   flex-shrink: 0;
-  padding: 0 5px;
-  height: 18px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
+  padding: 0 var(--wise-chip-padding-inline);
+  height: var(--wise-chip-height);
+  border-radius: var(--wise-chip-radius);
+  font-size: var(--wise-chip-font-size);
+  font-weight: var(--wise-chip-font-weight);
   line-height: 1;
-  letter-spacing: 0.02em;
-  color: var(--ant-color-text-secondary);
-  background: var(--ant-color-fill-quaternary);
-  border: 1px solid var(--ant-color-border-secondary);
+  color: var(--wise-chip-color);
+  background: var(--wise-chip-bg);
+  border: 1px solid var(--wise-chip-border);
   cursor: default;
   user-select: none;
 }
@@ -7878,8 +7901,9 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-claude-connection-kind-chip--interactive:hover {
-  color: var(--ant-color-text);
+  color: var(--wise-chip-color-hover);
   border-color: var(--ant-color-border);
+  background: var(--wise-chip-bg-hover);
 }
 
 .app-claude-connection-kind-chip--override {
@@ -7921,20 +7945,19 @@ button.app-message-part-header:disabled:hover {
 .app-ultracode-chip-btn:focus-visible {
   outline: 2px solid var(--ant-color-purple, #722ed1);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--wise-chip-radius);
 }
 
 .app-ultracode-chip {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  padding: 0 6px;
-  height: 18px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
+  padding: 0 var(--wise-chip-padding-inline);
+  height: var(--wise-chip-height);
+  border-radius: var(--wise-chip-radius);
+  font-size: var(--wise-chip-font-size);
+  font-weight: var(--wise-chip-font-weight);
   line-height: 1;
-  letter-spacing: 0.02em;
   color: var(--ant-color-purple, #722ed1);
   background: var(--ant-color-purple-bg, color-mix(in srgb, #722ed1 8%, transparent));
   border: 1px solid color-mix(in srgb, #722ed1 35%, var(--ant-color-border-secondary));
@@ -8765,14 +8788,14 @@ button.app-message-part-header:disabled:hover {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 0 7px;
-  min-height: 20px;
-  border: 1px solid var(--ant-color-border);
-  border-radius: 999px;
+  gap: var(--wise-chip-gap);
+  padding: 0 var(--wise-chip-padding-inline);
+  min-height: var(--wise-chip-height);
+  border: 1px solid var(--wise-chip-border);
+  border-radius: var(--wise-chip-radius);
   background: transparent;
   color: var(--ant-color-text);
-  font-size: 11px;
+  font-size: var(--wise-chip-font-size);
   line-height: 1.2;
   cursor: pointer;
   white-space: nowrap;
@@ -8845,7 +8868,7 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-session-quick-pill--more {
-  padding: 0 6px;
+  padding: 0 var(--wise-chip-padding-inline);
 }
 
 .app-session-quick-pill__icon {
@@ -8872,8 +8895,8 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-session-quick-pill__label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--wise-chip-font-size);
+  font-weight: var(--wise-chip-font-weight);
   color: inherit;
 }
 
@@ -10364,20 +10387,35 @@ button.app-message-part-header:disabled:hover {
 /* Cursor-style turn files-changed summary card */
 .app-turn-files-changed {
   margin: 4px 0 4px;
-  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 82%, transparent);
-  border-radius: 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 12px;
   background: var(--ant-color-bg-container);
   overflow: hidden;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--ant-color-text) 4%, transparent);
+  box-shadow: var(--wise-card-shadow);
 }
 
 .app-turn-files-changed__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  min-height: 36px;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 9px 12px;
+  min-height: 38px;
+  background: color-mix(in srgb, var(--ant-color-bg-layout) 52%, var(--ant-color-bg-container));
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-turn-files-changed__head-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent);
+  color: var(--ant-color-primary);
+  font-size: 12px;
 }
 
 .app-turn-files-changed__title {
@@ -10390,8 +10428,8 @@ button.app-message-part-header:disabled:hover {
 .app-turn-files-changed__list {
   list-style: none;
   margin: 0;
-  padding: 0 0 8px;
-  border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 68%, transparent);
+  padding: 6px 6px 8px;
+  border-top: none;
 }
 
 /* 存在折叠 footer 时，列表底部留白交给 footer，避免与分隔线之间出现空档 */
@@ -10403,8 +10441,14 @@ button.app-message-part-header:disabled:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 6px 6px;
   min-height: 28px;
+  border-radius: 8px;
+  transition: background var(--wise-motion-fast) var(--wise-ease-out);
+}
+
+.app-turn-files-changed__row:hover {
+  background: var(--ant-color-fill-quaternary);
 }
 
 .app-turn-files-changed__icon {
@@ -10474,8 +10518,8 @@ button.app-message-part-header:disabled:hover {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 4px 12px 8px;
-  border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 68%, transparent);
+  padding: 6px 12px 8px;
+  border-top: 1px solid var(--ant-color-border-secondary);
 }
 
 .app-turn-files-changed__toggle {

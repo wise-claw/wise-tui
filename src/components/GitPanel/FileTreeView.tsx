@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, type CSSProperties } from "react";
 import { Button, Space } from "antd";
 import { MinusOutlined, PlusOutlined, VerticalAlignBottomOutlined, VerticalAlignTopOutlined } from "@ant-design/icons";
 import type { GitFileStatus } from "../../types";
@@ -57,22 +57,26 @@ function FileTreeNodeComponent({
         <div
           className="git-tree-node git-tree-node--dir"
           style={{ paddingLeft: gitTreeDirPaddingLeftPx(depth) }}
+          title={`${node.path} · ${node.fileCount} 个变更文件`}
         >
-          <span
-            className={`git-tree-node-arrow ${isExpanded ? "git-tree-node-arrow--expanded" : ""}`}
+          <button
+            type="button"
+            className="git-tree-node__toggle"
             onClick={() => onToggleDir(node.path)}
+            aria-expanded={isExpanded}
+            aria-label={`${isExpanded ? "收起" : "展开"}目录 ${node.path}，${node.fileCount} 个变更文件`}
           >
-            <ExplorerTreeChevron />
-          </span>
-          <ExplorerTreeFolderIcon
-            name={node.name}
-            expanded={isExpanded}
-            className="git-tree-node-icon git-tree-node-icon--dir"
-          />
-          <span
-            className="git-tree-node-name"
-            onClick={() => onToggleDir(node.path)}
-          >{node.name}</span>
+            <span className={`git-tree-node-arrow ${isExpanded ? "git-tree-node-arrow--expanded" : ""}`}>
+              <ExplorerTreeChevron />
+            </span>
+            <ExplorerTreeFolderIcon
+              name={node.name}
+              expanded={isExpanded}
+              className="git-tree-node-icon git-tree-node-icon--dir"
+            />
+            <span className="git-tree-node-name">{node.name}</span>
+            <span className="git-tree-node-file-count" aria-hidden>{node.fileCount}</span>
+          </button>
           <span className="git-tree-node-meta">
             <Space size={0} className="git-tree-node-actions">
               <Button
@@ -144,7 +148,10 @@ function FileTreeNodeComponent({
           </span>
         </div>
         {isExpanded && node.children && (
-          <div className="git-tree-children">
+          <div
+            className="git-tree-children"
+            style={{ "--git-tree-guide-left": `${gitTreeDirPaddingLeftPx(depth) + 7}px` } as CSSProperties}
+          >
             {node.children.map((child) => (
               <MemoFileTreeNode
                 key={child.path}

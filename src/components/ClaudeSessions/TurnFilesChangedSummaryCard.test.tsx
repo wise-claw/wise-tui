@@ -107,6 +107,14 @@ describe("TurnFilesChangedSummaryCard 折叠展示", () => {
     expect(host.textContent).not.toContain("未展示");
   });
 
+  test("头部渲染变更图标徽标与标题", () => {
+    const host = renderCard(makeFiles(3));
+    expect(host.querySelector(".app-turn-files-changed__head-icon")).not.toBeNull();
+    expect(host.querySelector(".app-turn-files-changed__title")?.textContent).toContain(
+      "3 个文件已修改",
+    );
+  });
+
   test("空列表不渲染卡片", () => {
     const host = renderCard([]);
     expect(host.querySelector(".app-turn-files-changed")).toBeNull();

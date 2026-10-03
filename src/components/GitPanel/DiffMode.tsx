@@ -558,16 +558,12 @@ function DiffModeInner({
           </div>
 
           <div className="git-push-section">
-            <Space size={2}>
-              <Text style={{ fontSize: 11, color: "#8b8b8b" }}>合计:</Text>
-              <Text style={{ fontSize: 11, color: "#52c41a" }}>
-                +{status.additions}
-              </Text>
-              <Text style={{ fontSize: 11, color: "#8b8b8b" }}>/</Text>
-              <Text style={{ fontSize: 11, color: "#ff4d4f" }}>
-                -{status.deletions}
-              </Text>
-            </Space>
+            <div className="git-change-summary" aria-label={`变更合计，新增 ${status.additions} 行，删除 ${status.deletions} 行`}>
+              <span className="git-change-summary__label">变更</span>
+              <span className="git-file-add">+{status.additions}</span>
+              <span className="git-change-summary__divider" aria-hidden />
+              <span className="git-file-del">-{status.deletions}</span>
+            </div>
             <div className="git-push-section__actions">
               <GitBranchSwitcher
                 repositoryPath={repositoryPath}
@@ -628,11 +624,21 @@ function DiffModeInner({
       {hasChanges ? (
         <div className="git-diff-mode-scroll" ref={diffScrollRef}>
       {hasStaged && (
-        <div className={`git-section${stagedCollapsed ? " git-section--collapsed" : ""}`}>
+        <div className={`git-section git-section--staged${stagedCollapsed ? " git-section--collapsed" : ""}`}>
           <div className="git-section-header">
-            <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase" }}>
-              已暂存 ({status.staged.length})
-            </Text>
+            <button
+              type="button"
+              className="git-section-header__title"
+              onClick={() => setStagedCollapsed((prev) => !prev)}
+              aria-expanded={!stagedCollapsed}
+              aria-label={stagedCollapsed ? "展开已暂存" : "收起已暂存"}
+            >
+              <span>已暂存</span>
+              <span className="git-section-header__count">{status.staged.length}</span>
+              <span className={`git-section-header__chevron${stagedCollapsed ? "" : " git-section-header__chevron--expanded"}`} aria-hidden>
+                <span className="codicon codicon-chevron-right" />
+              </span>
+            </button>
             <Space size={4} className="git-section-header-actions-space">
               {useTreeView && (
                 <HoverHint title={stagedExpand.isTreeAllExpanded ? "收起目录树" : "展开目录树"} placement="top">
@@ -645,17 +651,6 @@ function DiffModeInner({
                   />
                 </HoverHint>
               )}
-              <HoverHint title={stagedCollapsed ? "展开已暂存" : "收起已暂存"} placement="top">
-                <Button
-                  type="text"
-                  size="small"
-                  className="git-section-action-btn"
-                  icon={stagedCollapsed ? <VerticalAlignTopOutlined /> : <VerticalAlignBottomOutlined />}
-                  onClick={() => setStagedCollapsed((prev) => !prev)}
-                  aria-expanded={!stagedCollapsed}
-                  aria-label={stagedCollapsed ? "展开已暂存" : "收起已暂存"}
-                />
-              </HoverHint>
               <HoverHint title="全部取消暂存" placement="topRight">
                 <Button
                   type="text"
@@ -687,11 +682,12 @@ function DiffModeInner({
       )}
 
       {hasUnstaged && (
-        <div className="git-section">
+        <div className="git-section git-section--unstaged">
           <div className="git-section-header">
-            <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase" }}>
-              更改 ({status.unstaged.length})
-            </Text>
+            <div className="git-section-header__title">
+              <span>更改</span>
+              <span className="git-section-header__count">{status.unstaged.length}</span>
+            </div>
             <Space size={4} className="git-section-header-actions-space">
               {useTreeView && (
                 <HoverHint title={unstagedExpand.isTreeAllExpanded ? "收起目录树" : "展开目录树"} placement="top">

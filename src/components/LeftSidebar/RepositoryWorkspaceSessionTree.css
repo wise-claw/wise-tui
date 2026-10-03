@@ -70,11 +70,14 @@
 
 .app-workspace-session-tree__kind {
   flex: 0 0 auto;
-  padding: 0 4px;
-  border-radius: 3px;
-  background: var(--ant-color-fill-quaternary);
+  padding: 0 6px;
+  /* 与卡片体系统一的胶囊标签：底色跟随各自的语义色，弱化但不再是一块灰底 */
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 13%, transparent);
   font-size: 10px;
-  line-height: 14px;
+  font-weight: 600;
+  line-height: 15px;
+  letter-spacing: 0.01em;
   color: var(--ant-color-text-tertiary);
 }
 

@@ -22,6 +22,7 @@ export function buildFileTree(files: GitFileStatus[]): FileTreeNode[] {
           children: [],
           additions: 0,
           deletions: 0,
+          fileCount: 0,
           status: "M",
         };
         dirMap.set(currentPath, node);
@@ -43,6 +44,7 @@ export function buildFileTree(files: GitFileStatus[]): FileTreeNode[] {
       file,
       additions: file.additions,
       deletions: file.deletions,
+      fileCount: 1,
       status: file.status,
     };
 
@@ -61,6 +63,7 @@ export function buildFileTree(files: GitFileStatus[]): FileTreeNode[] {
       aggregate(child);
       node.additions += child.additions;
       node.deletions += child.deletions;
+      node.fileCount += child.fileCount;
     }
   }
   for (const node of root) {

@@ -5,6 +5,7 @@ import type { GitFileStatus } from "../../types";
 import { setWiseRepositoryFileDragData } from "../../utils/repositoryFileDrag";
 import { DiscardFilePopconfirm } from "./DiscardFilePopconfirm";
 import { getStatusColor, getStatusSymbol, splitNameAndExt, splitPath } from "./gitPanelUtils";
+import { ExplorerTreeFileIcon } from "./explorerTreeChrome";
 import { OpenFileIcon } from "./OpenFileIcon";
 import { RevertIcon } from "./RevertIcon";
 import type { GitPanelOpenFileOptions } from "./types";
@@ -26,7 +27,7 @@ export const FileRow = memo(function FileRow({
   onDiscard,
   onOpenFile,
 }: FileRowProps) {
-  const { name } = splitPath(file.path);
+  const { name, dir } = splitPath(file.path);
   const { base, ext } = splitNameAndExt(name);
 
   return (
@@ -47,6 +48,7 @@ export const FileRow = memo(function FileRow({
         onOpenFile(file.path, { fromGitChanges: section });
       }}
       role={onOpenFile ? "button" : undefined}
+      title={file.path}
       tabIndex={onOpenFile ? 0 : -1}
       onKeyDown={(event) => {
         if (!onOpenFile) {
@@ -61,14 +63,17 @@ export const FileRow = memo(function FileRow({
       <span
         className="git-file-status-badge"
         style={{ color: getStatusColor(file.status) }}
+        aria-label={`Git 状态 ${getStatusSymbol(file.status)}`}
       >
         {getStatusSymbol(file.status)}
       </span>
+      <ExplorerTreeFileIcon fileName={name} className="git-file-type-icon" />
       <div className="git-file-info">
         <span className="git-file-name">
           {base}
           {ext && <span className="git-file-ext">.{ext}</span>}
         </span>
+        {dir ? <span className="git-file-parent">{dir}</span> : null}
       </div>
       <div className="git-file-meta">
         <Space

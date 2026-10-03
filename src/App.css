@@ -1,7 +1,12 @@
 /* ═══════════════════════════════════════════════
    Global Mission / SDD design tokens
    ═══════════════════════════════════════════════ */
-:root {
+/* ⚠️ 作用域：AntD v6 的 cssVar 令牌（--ant-*）挂在 `.ant-app`（cssVar 作用域根）上，不在 :root。
+   因此凡是引用 var(--ant-*) 的应用令牌必须同时声明到 `.ant-app`，否则在 :root 求值时
+   --ant-* 取空 → 整条声明在计算值阶段失效 → 阴影 / 描边 / 玻璃底色被静默丢弃。
+   字面量令牌（字号 / 间距 / 圆角 / 动效）留在 :root 即可。 */
+:root,
+.ant-app {
   --mission-bg: var(--ant-color-bg-layout);
   --mission-surface: var(--ant-color-bg-container);
   --mission-surface-elevated: var(--ant-color-bg-elevated);
@@ -44,20 +49,27 @@
   --wise-font-size-xl: 17px;    /* 标题 */
   --wise-line-height-base: 1.55;
   --wise-line-height-tight: 1.35;
-  /* 三栏：中栏通栏实心 + 左右弱半透明毛玻璃 */
+  /* 主内容（中栏 + 右栏）保持容器白：卡片/气泡的层级交给描边与阴影，不靠底色压深 */
   --app-workspace-stage-bg: color-mix(in srgb, var(--ant-color-bg-container) 99%, transparent);
+  /* 卡片/浮层与画布之间的发丝描边：比 AntD 默认更清晰一点，轮廓不发虚 */
+  --wise-hairline: var(--ant-color-border-secondary);
+  --wise-card-shadow: 0 1px 2px color-mix(in srgb, var(--ant-color-text) 4%, transparent),
+    0 8px 20px -12px color-mix(in srgb, var(--ant-color-text) 14%, transparent);
   --app-workspace-glass-blur: blur(18px) saturate(120%);
   --app-workspace-glass-base: color-mix(in srgb, var(--ant-color-bg-container) 95%, transparent);
   --app-workspace-glass-border: color-mix(in srgb, var(--ant-color-border-secondary) 45%, transparent);
   --app-workspace-glass-inset-glow: inset 0 1px 1px 0 var(--wise-glass-highlight-soft), inset 0 -1px 0px 0 var(--wise-glass-highlight-faint);
   --app-workspace-glass-shadow: 0 8px 32px 0 color-mix(in srgb, var(--ant-color-text) 5%, transparent);
   --app-workspace-active-glow: 0 0 12px 0 color-mix(in srgb, var(--ant-color-primary) 22%, transparent), inset 0 1px 1px 0 var(--wise-glass-highlight-strong);
-  --app-workspace-rail-left-tint: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--ant-color-primary-bg) 10%, transparent) 0%,
-    transparent 48%
-  );
-  --app-workspace-rail-right-tint: linear-gradient(
+ --app-workspace-rail-left-tint: linear-gradient(
+   180deg,
+   color-mix(in srgb, var(--ant-color-primary-bg) 10%, transparent) 0%,
+   transparent 48%
+ );
+  /* 左栏铺底：比画布白低一档的冷灰。三栏的「底色」只落在左栏，中栏/右栏保持纯白，
+     卡片与代码块才有稳定对比。 */
+  --app-workspace-rail-left-bg: color-mix(in srgb, var(--ant-color-bg-layout) 55%, var(--ant-color-bg-container) 45%);
+ --app-workspace-rail-right-tint: linear-gradient(
     180deg,
     color-mix(in srgb, var(--ant-color-fill-tertiary) 12%, transparent) 0%,
     transparent 45%
@@ -97,6 +109,21 @@
   --wise-radius-lg: 10px;
   --wise-radius-xl: 14px;
   --wise-radius-pill: 999px;
+
+  /* ═══ 控件胶囊（chip）：底栏 / 快捷条统一几何 ═══
+     此前 permission 20px、connection 18px、quick 20px 并存，方角与胶囊混排；
+     收敛到同一高度 / 圆角 / 字号，底栏一行才像同一个系统。 */
+  --wise-chip-height: 22px;
+  --wise-chip-radius: var(--wise-radius-pill);
+  --wise-chip-padding-inline: 8px;
+  --wise-chip-gap: 4px;
+  --wise-chip-font-size: var(--wise-font-size-xs);
+  --wise-chip-font-weight: 600;
+  --wise-chip-border: var(--ant-color-border-secondary);
+  --wise-chip-bg: var(--ant-color-fill-quaternary);
+  --wise-chip-bg-hover: var(--ant-color-fill-tertiary);
+  --wise-chip-color: var(--ant-color-text-secondary);
+  --wise-chip-color-hover: var(--ant-color-text);
 
   /* ═══ 层级（elevation）：1 贴地卡片 → 4 浮层 ═══ */
   --wise-elevation-1: 0 1px 2px color-mix(in srgb, var(--ant-color-text) 5%, transparent);
@@ -517,7 +544,7 @@ body {
   flex-direction: column;
   background:
     var(--app-workspace-rail-left-tint),
-    var(--app-workspace-glass-base) !important;
+    var(--app-workspace-rail-left-bg) !important;
   -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
   backdrop-filter: var(--app-workspace-glass-blur) !important;
   border-right: 1px solid var(--app-workspace-glass-border) !important;

@@ -418,7 +418,7 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
 
       {hasMoreRows ? (
         <button type="button" className="app-workspace-session-tree__more" onClick={handleMore}>
-          More
+          更多会话
         </button>
       ) : null}
     </div>

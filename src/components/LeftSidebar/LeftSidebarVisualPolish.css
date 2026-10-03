@@ -1,0 +1,167 @@
+/* 左栏统一视觉层级：保留紧凑行高，靠表面、字重与轻量选中态区分功能区。 */
+.app-left-sidebar {
+  --sidebar-header-surface: color-mix(in srgb, var(--ant-color-bg-container) 88%, var(--ant-color-bg-layout));
+  --sidebar-hairline: color-mix(in srgb, var(--ant-color-border-secondary) 78%, transparent);
+  --sidebar-hover: color-mix(in srgb, var(--ant-color-primary) 7%, var(--ant-color-bg-container));
+  --sidebar-selected: color-mix(in srgb, var(--ant-color-primary) 12%, var(--ant-color-bg-container));
+}
+
+/* 顶部操作区与下方 Git 工具条使用同一套安静的图标反馈。 */
+.app-left-sidebar .app-left-sidebar-topbar {
+  background: var(--sidebar-header-surface);
+  border-bottom-color: var(--sidebar-hairline);
+}
+
+.app-left-sidebar .app-left-sidebar-topbar-btn,
+.app-left-sidebar .app-left-sidebar-compact-btn {
+  color: var(--ant-color-text-secondary);
+  border-radius: 5px;
+}
+
+.app-left-sidebar .app-left-sidebar-topbar-btn:hover:not(:disabled),
+.app-left-sidebar .app-left-sidebar-compact-btn:hover:not(:disabled) {
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-left-sidebar .app-left-sidebar-topbar-btn--active,
+.app-left-sidebar .app-left-sidebar-compact-btn--active {
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-left-sidebar .git-panel-header,
+.app-left-sidebar .git-files-explorer-bar {
+  border-bottom-color: var(--sidebar-hairline);
+}
+
+.app-left-sidebar .git-panel-header-right .ant-btn.ant-btn-text:hover:not(:disabled),
+.app-left-sidebar .git-files-explorer-actions .ant-btn:hover:not(:disabled) {
+  border-radius: 5px !important;
+  background: var(--ant-color-fill-tertiary) !important;
+}
+
+.app-left-sidebar .git-view-toggle {
+  border-color: var(--sidebar-hairline);
+  border-radius: 6px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-left-sidebar .git-view-toggle .ant-btn-primary {
+  color: var(--ant-color-primary) !important;
+  background: var(--ant-color-primary-bg) !important;
+  box-shadow: none !important;
+}
+
+.app-left-sidebar .git-branch-switcher-trigger.ant-btn {
+  color: var(--ant-color-text-secondary);
+  border-radius: 5px;
+}
+
+.app-left-sidebar .git-branch-switcher-trigger.ant-btn:hover {
+  background: var(--ant-color-fill-quaternary);
+}
+
+/* 所有可拖拽分区沿用相同的表头材质与标题字重。 */
+.app-left-sidebar .app-left-sidebar-project-and-files .app-left-sidebar-section--workspace > .app-repository-header,
+.app-left-sidebar .app-left-sidebar-requirements-panel .app-repository-header,
+.app-left-sidebar .app-left-sidebar-monitor-panel .app-monitor-panel__head,
+.app-left-sidebar .app-left-sidebar-repo-panel-header,
+.app-left-sidebar .app-left-sidebar-bottom-tab-content .git-files-explorer-bar {
+  background: var(--sidebar-header-surface) !important;
+  border-bottom-color: var(--sidebar-hairline) !important;
+}
+
+.app-left-sidebar .app-left-sidebar-monitor-panel,
+.app-left-sidebar .app-left-sidebar-requirements-panel,
+.app-left-sidebar .app-left-sidebar-monitor-panel .app-monitor-panel {
+  border-top-color: var(--sidebar-hairline);
+}
+
+.app-left-sidebar .app-left-sidebar-project-and-files .app-left-sidebar-section--workspace > .app-repository-header .app-repository-header-title,
+.app-left-sidebar .app-left-sidebar-requirements-panel .app-repository-header-title,
+.app-left-sidebar .app-left-sidebar-monitor-panel .app-monitor-panel__title,
+.app-left-sidebar .git-files-explorer-title {
+  color: var(--ant-color-text-secondary) !important;
+  font-size: 11.5px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0.01em !important;
+  text-transform: none !important;
+}
+
+/* 列表项只内收 3px，让选中态像定位面，而非整栏的色块。 */
+.app-left-sidebar .app-left-sidebar-project-and-files .app-repository-list .app-repository-item {
+  width: calc(100% - 6px);
+  margin-inline: 3px;
+  border-radius: 5px;
+}
+
+.app-left-sidebar .app-left-sidebar-project-and-files .app-repository-list .app-repository-item:hover {
+  background: var(--sidebar-hover);
+}
+
+.app-left-sidebar .app-repository-item--project.app-repository-item--project-active,
+.app-left-sidebar .app-repository-item--repo.app-repository-item--repo-active {
+  background: var(--sidebar-selected) !important;
+}
+
+.app-left-sidebar .app-repository-item--project.app-repository-item--project-active:hover,
+.app-left-sidebar .app-repository-item--repo.app-repository-item--repo-active:hover {
+  background: var(--sidebar-selected) !important;
+}
+
+.app-left-sidebar .app-repository-row:has(.app-workspace-session-tree__row--active)
+  .app-repository-item--repo.app-repository-item--repo-active,
+.app-left-sidebar .app-repository-row:has(.app-repository-item--repo-active)
+  .app-repository-item--project.app-repository-item--project-active {
+  background: transparent !important;
+}
+
+.app-left-sidebar .app-workspace-session-tree__row {
+  width: calc(100% - 6px);
+  margin-inline: 3px;
+  border-radius: 5px;
+}
+
+.app-left-sidebar .app-workspace-session-tree__row--active,
+.app-left-sidebar .app-workspace-session-tree__row--active:hover {
+  background: var(--sidebar-selected);
+}
+
+.app-left-sidebar .app-workspace-session-tree__more {
+  width: calc(100% - 6px);
+  margin-inline: 3px;
+  border-radius: 5px;
+}
+
+.app-left-sidebar .app-workspace-session-tree__more:hover {
+  background: var(--sidebar-hover);
+}
+
+.app-left-sidebar .app-left-sidebar-requirements-panel__row,
+.app-left-sidebar .app-left-sidebar-monitor-panel .app-monitor-panel__item {
+  width: calc(100% - 6px);
+  margin-inline: 3px;
+  border-radius: 5px;
+}
+
+.app-left-sidebar .app-left-sidebar-requirements-panel__row:hover,
+.app-left-sidebar .app-left-sidebar-monitor-panel .app-monitor-panel__item:hover {
+  background: var(--sidebar-hover) !important;
+}
+
+.app-left-sidebar .app-left-sidebar-monitor-panel .app-monitor-panel__item--active {
+  background: var(--sidebar-selected) !important;
+  border-left-color: transparent !important;
+}
+
+.app-left-sidebar .app-left-sidebar-monitor-panel .app-monitor-panel__item--active:hover {
+  background: var(--sidebar-selected) !important;
+}
+
+.app-left-sidebar .app-repository-header-btn:focus-visible,
+.app-left-sidebar .app-left-sidebar-topbar-btn:focus-visible,
+.app-left-sidebar .app-workspace-session-tree__row:focus-visible,
+.app-left-sidebar .app-left-sidebar-requirements-panel__row:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: -2px;
+}

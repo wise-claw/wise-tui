@@ -111,6 +111,7 @@ import { useRepositoryActionShortcuts } from "../hooks/useRepositoryActionShortc
 import { useMonitorSidebarFingerprints } from "../hooks/useMonitorSessionsForOverview";
 import "./GitPanel/index.css";
 import "./LeftSidebar/leftSidebarListPerformance.css";
+import "./LeftSidebar/LeftSidebarVisualPolish.css";
 
 const gitPanelChunk = import("./GitPanel");
 

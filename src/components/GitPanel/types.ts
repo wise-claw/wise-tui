@@ -20,6 +20,7 @@ export interface FileTreeNode {
   file?: GitFileStatus;
   additions: number;
   deletions: number;
+  fileCount: number;
   status: string;
 }
 

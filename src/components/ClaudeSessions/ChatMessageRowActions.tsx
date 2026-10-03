@@ -1,4 +1,3 @@
-import { ConversationCanvasButton } from "../ConversationCanvasButton";
 import { PlayCircleOutlined } from "@ant-design/icons";
 import { memo, useCallback, useMemo } from "react";
 import type { ClaudeMessage } from "../../types";
@@ -45,13 +44,10 @@ function ChatMessageRowActionsInner({
     [insertPayload, onReplayUserMessage],
   );
 
-  const showCanvas = msg.role === "assistant" && Boolean(copyText.trim());
-
-  if (!showCanvas && !showInsert && !showReplay && !showCopy) return null;
+  if (!showInsert && !showReplay && !showCopy) return null;
 
   const actions = (
     <>
-      {showCanvas ? <ConversationCanvasButton source={copyText} /> : null}
       {showInsert ? (
         <ChatMessageInsertComposerButton sessionId={sessionId!} insert={insertPayload!} />
       ) : null}
