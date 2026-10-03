@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Button, Segmented, Select, Spin } from "antd";
+import { Button, Select, Spin } from "antd";
 import { ReloadOutlined, ExpandOutlined, CompressOutlined } from "@ant-design/icons";
 import { buildRepositoryCanvasDocument } from "../utils/repositoryCanvas";
 import { loadRepositoryCanvasAssets } from "../services/repositoryCanvasAssets";
 import "./RepositoryCanvasPreview.css";
 
-export function RepositoryCanvasPreview({ content, path, root, children }: { content: string; path: string; root?: string; children?: ReactNode }) {
+export function RepositoryCanvasPreview({ content, path, root, children, toolbarStart }: { content: string; path: string; root?: string; children?: ReactNode; toolbarStart?: ReactNode }) {
   const isDocument = children != null;
   const [revision, setRevision] = useState(0);
-  const [width, setWidth] = useState("auto");
   const [zoom, setZoom] = useState(100);
   const [expanded, setExpanded] = useState(false);
   const [prepared, setPrepared] = useState<{ content: string; warnings: string[] } | null>(null);
@@ -42,12 +41,7 @@ export function RepositoryCanvasPreview({ content, path, root, children }: { con
   return (
     <section className={`app-canvas${expanded ? " app-canvas--expanded" : ""}`} aria-label={`${path} 画布`}>
       <div className="app-canvas__toolbar">
-        <Segmented size="small" aria-label="画布宽度" value={width} onChange={setWidth}
-          options={[
-            { label: "自适应", value: "auto" }, { label: "桌面", value: "1280" },
-            { label: "平板", value: "768" }, { label: "手机", value: "390" },
-          ]}
-        />
+        {toolbarStart}
         <div className="app-canvas__actions">
           <Select size="small" aria-label="画布缩放" value={zoom} onChange={setZoom}
             options={[50, 75, 100, 125, 150, 200].map((value) => ({ value, label: `${value}%` }))} />
@@ -57,10 +51,10 @@ export function RepositoryCanvasPreview({ content, path, root, children }: { con
         </div>
       </div>
       <div className="app-canvas__viewport" aria-busy={loading}>
-        {isDocument ? <div key={revision} className="app-canvas__document" style={{ width: width === "auto" ? `${10000 / zoom}%` : `${width}px`, zoom: zoom / 100 }}>{children}</div> : loading ? <div className="app-canvas__loading"><Spin size="small" /> 正在加载画布资源…</div> : (
+        {isDocument ? <div key={revision} className="app-canvas__document" style={{ width: `${10000 / zoom}%`, zoom: zoom / 100 }}>{children}</div> : loading ? <div className="app-canvas__loading"><Spin size="small" /> 正在加载画布资源…</div> : (
           <iframe key={revision} title={`${path} Canvas`} sandbox="allow-scripts" referrerPolicy="no-referrer"
             srcDoc={document}
-            style={{ width: width === "auto" ? `${10000 / zoom}%` : `${width}px`, height: `${10000 / zoom}%`, zoom: zoom / 100 }} />
+            style={{ width: `${10000 / zoom}%`, height: `${10000 / zoom}%`, zoom: zoom / 100 }} />
         )}
       </div>
       {prepared?.warnings.length ? (
@@ -69,7 +63,6 @@ export function RepositoryCanvasPreview({ content, path, root, children }: { con
           <ul>{prepared.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
         </details>
       ) : null}
-      <div className="app-canvas__hint">{path} · {width === "auto" ? "自适应" : `${width}px`} · {zoom}% · {isDocument ? "产品方案 · 支持 Markdown、内联 HTML、表格与 Mermaid 流程图" : "支持仓库内 CSS、脚本、图片与字体；模块 import 需先打包。"}</div>
     </section>
   );
 }

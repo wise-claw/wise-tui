@@ -559,6 +559,16 @@ function RepositoryFileEditorTabSurface({
     );
   }
 
+  const canvasModeToggle = (
+    <div className="app-file-editor-md-toggle">
+      <Button size="small" type={canvasPreview ? "primary" : "default"} icon={<EyeOutlined />}
+        disabled={canvasBlocked} title={canvasBlocked ? "文件较大，请查看源码" : undefined}
+        onClick={() => setCanvasRequested(true)}>画布</Button>
+      <Button size="small" type={canvasPreview ? "default" : "primary"} icon={<EditOutlined />}
+        onClick={() => setCanvasRequested(false)}>源码</Button>
+    </div>
+  );
+
   return (
     <div
       className={`app-file-editor-tab-surface${isActive ? " app-file-editor-tab-surface--active" : ""}`}
@@ -600,15 +610,7 @@ function RepositoryFileEditorTabSurface({
             sessionId={activeSessionId}
           />
         ) : null}
-        {isCanvasFile && isActive ? (
-          <div className="app-file-editor-md-toggle">
-            <Button size="small" type={canvasPreview ? "primary" : "default"} icon={<EyeOutlined />}
-              disabled={canvasBlocked} title={canvasBlocked ? "文件较大，请查看源码" : undefined}
-              onClick={() => setCanvasRequested(true)}>画布</Button>
-            <Button size="small" type={canvasPreview ? "default" : "primary"} icon={<EditOutlined />}
-              onClick={() => setCanvasRequested(false)}>源码</Button>
-          </div>
-        ) : null}
+        {isCanvasFile && isActive && !canvasPreview ? canvasModeToggle : null}
         {isMdFile && !isCanvasFile && isActive ? (
           <div className="app-file-editor-md-toggle">
             <Button
@@ -644,8 +646,8 @@ function RepositoryFileEditorTabSurface({
         ) : null}
         {canvasPreview ? (
           isActive ? (isCanvasDocumentPath(tab.relativePath)
-            ? <DocumentCanvasPreview content={tab.content} path={tab.relativePath} onNavigateToFile={onNavigateToFile} />
-            : <RepositoryCanvasPreview content={tab.content} path={tab.relativePath} root={tab.rootPath || repositoryPath || undefined} />) : null
+            ? <DocumentCanvasPreview toolbarStart={canvasModeToggle} content={tab.content} path={tab.relativePath} onNavigateToFile={onNavigateToFile} />
+            : <RepositoryCanvasPreview toolbarStart={canvasModeToggle} content={tab.content} path={tab.relativePath} root={tab.rootPath || repositoryPath || undefined} />) : null
         ) : mdPreview && isActive ? (
           <div
             ref={mdPreviewRef}

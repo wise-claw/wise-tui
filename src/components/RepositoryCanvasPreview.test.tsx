@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act, create } from "react-test-renderer";
-import { Button, Segmented, Select } from "antd";
+import { Button, Select } from "antd";
 import { RepositoryCanvasPreview } from "./RepositoryCanvasPreview";
 
 const dom = new Window();
@@ -21,7 +21,7 @@ afterAll(() => {
   dom.happyDOM.abort();
 });
 
-test("Canvas isolates scripts, changes viewport, refreshes and reflects updated content", () => {
+test("Canvas isolates scripts, fits viewport, refreshes and reflects updated content", () => {
   let renderer: ReturnType<typeof create>;
   act(() => { renderer = create(<RepositoryCanvasPreview path="demo.html" content="<button>First</button>" />); });
   const root = renderer!.root;
@@ -29,13 +29,12 @@ test("Canvas isolates scripts, changes viewport, refreshes and reflects updated 
   expect(initialFrame.props.sandbox).toBe("allow-scripts");
   expect(initialFrame.props.referrerPolicy).toBe("no-referrer");
   expect(initialFrame.props.srcDoc).toContain("First");
-  act(() => root.findByType(Segmented).props.onChange("390"));
-  expect(root.findByType("iframe").props.style.width).toBe("390px");
+  expect(root.findByType("iframe").props.style.width).toBe("100%");
   act(() => root.findAllByType(Button)[0].props.onClick());
   expect(root.findByType("iframe")).not.toBe(initialFrame);
   act(() => renderer!.update(<RepositoryCanvasPreview path="demo.html" content="<h1>Updated</h1>" />));
   expect(root.findByType("iframe").props.srcDoc).toContain("Updated");
-  expect(root.findByType("iframe").props.style.width).toBe("390px");
+  expect(root.findByType("iframe").props.style.width).toBe("100%");
   act(() => root.findByType(Select).props.onChange(75));
   expect(root.findByType("iframe").props.style.zoom).toBe(0.75);
   act(() => root.findAllByType(Button)[1].props.onClick());
