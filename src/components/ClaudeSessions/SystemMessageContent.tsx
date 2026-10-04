@@ -14,9 +14,16 @@ function isCodexAuth401(text: string): boolean {
   return /\b401\b/.test(lower) && hasCodexSignal;
 }
 
+function isCodexChatGptPlanTypeError(text: string): boolean {
+  const lower = text.toLowerCase();
+  return lower.includes("plan type is required for chatgpt authentication");
+}
+
 function isErrorNotice(text: string): boolean {
   const head = text.trimStart().slice(0, 32);
-  return /^错误[:：]|^发送失败[:：]|^启动失败[:：]/.test(head) || isCodexAuth401(text);
+  return /^错误[:：]|^发送失败[:：]|^启动失败[:：]/.test(head)
+    || isCodexAuth401(text)
+    || isCodexChatGptPlanTypeError(text);
 }
 
 /** 去掉 BOM、统一换行，减少解析与展示异常 */
@@ -70,15 +77,12 @@ function CodexLoginAction() {
     }
     setOpening(true);
     try {
-      const result = await tryOpenWorkspaceInDefaultTerminalWithCommand(
-        repositoryPath,
-        "codex",
-      );
+      const result = await tryOpenWorkspaceInDefaultTerminalWithCommand(repositoryPath, "codex login");
       if (result.ok) {
         if (isMacPlatform()) {
-          message.success("已在终端启动 Codex，请按提示完成登录");
+        message.success("已在终端运行 codex login，请按提示完成登录");
         } else {
-          message.info("终端已打开，请运行 codex 完成登录");
+          message.info("终端已打开，请运行 codex login 完成登录");
         }
       } else {
         message.error(`打开终端失败：${result.message}`);
@@ -113,7 +117,7 @@ function CodexLoginAction() {
 export function SystemMessageContent({ text }: { text: string }) {
   const normalizedText = useMemo(() => normalizeSystemText(text), [text]);
   const error = isErrorNotice(normalizedText);
-  const codexAuth401 = isCodexAuth401(normalizedText);
+  const codexAuth401 = isCodexAuth401(normalizedText) || isCodexChatGptPlanTypeError(normalizedText);
   const trimmed = normalizedText.trim();
   if (!trimmed) return null;
 

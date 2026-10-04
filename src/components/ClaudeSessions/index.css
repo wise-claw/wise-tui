@@ -10389,7 +10389,7 @@ button.app-message-part-header:disabled:hover {
 
 /* Cursor-style turn files-changed summary card */
 .app-turn-files-changed {
-  margin: 2px 0;
+  margin: 8px 0 2px;
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 8px;
   background: var(--ant-color-bg-container);
@@ -10422,10 +10422,55 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-turn-files-changed__title {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 13px;
   font-weight: 600;
   color: var(--ant-color-text);
   line-height: 1.3;
+}
+
+.app-turn-files-changed__card-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  cursor: pointer;
+}
+
+.app-turn-files-changed__undo {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ant-color-error);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.app-turn-files-changed__undo:hover {
+  color: var(--ant-color-error-hover);
+}
+
+.app-turn-files-changed__card-toggle:hover {
+  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-text);
+}
+
+.app-turn-files-changed__card-toggle:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 1px;
 }
 
 .app-turn-files-changed__list {

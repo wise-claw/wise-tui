@@ -28,10 +28,14 @@ function userMessageDisplayKey(msg: ClaudeMessage): string {
  * `@文件/目录` 引用按 Composer 语义加高亮，对照 Codex 桌面端把引用从正文里凸显出来。
  */
 function UserMessagePlainText({ text }: { text: string }) {
-  const tokens = useMemo(() => splitUserMessageAtRefs(text), [text]);
+  const compactText = useMemo(
+    () => text.replace(/\r\n?/g, "\n").replace(/\n[\t ]*(?:\n[\t ]*)+/g, "\n"),
+    [text],
+  );
+  const tokens = useMemo(() => splitUserMessageAtRefs(compactText), [compactText]);
   if (!text) return null;
   if (tokens.length === 1 && tokens[0]!.type === "text") {
-    return <div className="app-claude-user-message-plain">{text}</div>;
+    return <div className="app-claude-user-message-plain">{compactText}</div>;
   }
   return (
     <div className="app-claude-user-message-plain">

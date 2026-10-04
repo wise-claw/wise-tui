@@ -38,7 +38,7 @@ function ChatMessageListRowContentInner({
     );
   }
   if (row.kind === "files-changed-summary") {
-    return <TurnFilesChangedSummaryCard files={row.files} />;
+    return <TurnFilesChangedSummaryCard files={row.files} onUndo={onReplayUserMessage ? () => onReplayUserMessage("/undo") : undefined} />;
   }
   if (listVariant === "monitor") {
     return (

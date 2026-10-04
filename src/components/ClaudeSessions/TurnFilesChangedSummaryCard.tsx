@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
-import { DiffOutlined } from "@ant-design/icons";
+import { DiffOutlined, DownOutlined, UndoOutlined, UpOutlined } from "@ant-design/icons";
 import { dispatchOpenRepositoryFile } from "../../constants/workflowUiEvents";
 import {
   getClaudeChatMessageScrollBridge,
@@ -78,10 +78,11 @@ function filesFingerprint(files: readonly TurnFileChangeEntry[]): string {
 }
 
 export const TurnFilesChangedSummaryCard = memo(
-  function TurnFilesChangedSummaryCard({ files }: { files: readonly TurnFileChangeEntry[] }) {
+  function TurnFilesChangedSummaryCard({ files, onUndo }: { files: readonly TurnFileChangeEntry[]; onUndo?: () => void }) {
     const repositoryPath = useChatRepositoryPath();
     const recoveredCounts = useRecoveredLineCounts(files, repositoryPath);
     const [expanded, setExpanded] = useState(false);
+    const [cardExpanded, setCardExpanded] = useState(true);
 
     const hasMore = files.length > FILES_CHANGED_COLLAPSED_LIMIT;
     const visibleFiles =
@@ -90,6 +91,9 @@ export const TurnFilesChangedSummaryCard = memo(
 
     const toggleExpanded = useCallback(() => {
       setExpanded((prev) => !prev);
+    }, []);
+    const toggleCardExpanded = useCallback(() => {
+      setCardExpanded((prev) => !prev);
     }, []);
 
     const handleOpenFile = useCallback(
@@ -118,14 +122,40 @@ export const TurnFilesChangedSummaryCard = memo(
     if (files.length === 0) return null;
 
     return (
-      <div className={`app-turn-files-changed${hasMore ? " app-turn-files-changed--has-more" : ""}`}>
+      <div
+        className={`app-turn-files-changed${hasMore ? " app-turn-files-changed--has-more" : ""}${cardExpanded ? "" : " app-turn-files-changed--collapsed"}`}
+      >
         <div className="app-turn-files-changed__head">
           <span className="app-turn-files-changed__head-icon" aria-hidden>
             <DiffOutlined />
           </span>
           <span className="app-turn-files-changed__title">{title}</span>
+          {onUndo ? (
+            <button
+              type="button"
+              className="app-turn-files-changed__undo"
+              onClick={onUndo}
+              aria-label="撤销上一轮并回滚文件"
+              title="撤销上一轮并回滚文件"
+            >
+              <UndoOutlined />
+              <span>撤销</span>
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="app-turn-files-changed__card-toggle"
+            onClick={toggleCardExpanded}
+            aria-expanded={cardExpanded}
+            aria-label={cardExpanded ? "收起文件变更详情" : "展开文件变更详情"}
+            title={cardExpanded ? "收起" : "展开"}
+          >
+            {cardExpanded ? <UpOutlined /> : <DownOutlined />}
+          </button>
         </div>
-        <ul className="app-turn-files-changed__list">
+        {cardExpanded ? (
+          <>
+            <ul className="app-turn-files-changed__list">
           {visibleFiles.map((file) => {
             const canOpen =
               Boolean(repositoryPath) &&
@@ -168,29 +198,31 @@ export const TurnFilesChangedSummaryCard = memo(
               </li>
             );
           })}
-        </ul>
-        {hasMore ? (
-          <div className="app-turn-files-changed__footer">
-            <button
-              type="button"
-              className="app-turn-files-changed__toggle"
-              onClick={toggleExpanded}
-              aria-expanded={expanded}
-            >
-              <span>{expanded ? "收起" : `展开全部（共 ${files.length} 个文件）`}</span>
-              <span className="app-turn-files-changed__chevron" aria-hidden>
-                {expanded ? "▴" : "▾"}
-              </span>
-            </button>
-            {!expanded && hiddenCount > 0 ? (
-              <span className="app-turn-files-changed__hidden-count">
-                另有 {hiddenCount} 个文件未展示
-              </span>
+            </ul>
+            {hasMore ? (
+              <div className="app-turn-files-changed__footer">
+                <button
+                  type="button"
+                  className="app-turn-files-changed__toggle"
+                  onClick={toggleExpanded}
+                  aria-expanded={expanded}
+                >
+                  <span>{expanded ? "收起" : `展开全部（共 ${files.length} 个文件）`}</span>
+                  <span className="app-turn-files-changed__chevron" aria-hidden>
+                    {expanded ? "▴" : "▾"}
+                  </span>
+                </button>
+                {!expanded && hiddenCount > 0 ? (
+                  <span className="app-turn-files-changed__hidden-count">
+                    另有 {hiddenCount} 个文件未展示
+                  </span>
+                ) : null}
+              </div>
             ) : null}
-          </div>
+          </>
         ) : null}
       </div>
     );
   },
-  (prev, next) => filesFingerprint(prev.files) === filesFingerprint(next.files),
+  (prev, next) => prev.onUndo === next.onUndo && filesFingerprint(prev.files) === filesFingerprint(next.files),
 );
