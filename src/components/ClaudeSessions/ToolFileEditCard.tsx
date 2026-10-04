@@ -165,22 +165,6 @@ export const ToolFileEditCard = memo(
         ? preview.removedLineCount
         : displayLines.filter((line) => line.kind === "remove").length;
 
-    const statsLabel = useMemo(() => {
-      if (addedLineCount > 0 && removedLineCount > 0) {
-        return `+${addedLineCount} -${removedLineCount}`;
-      }
-      if (addedLineCount > 0) return `+${addedLineCount}`;
-      if (removedLineCount > 0) return `-${removedLineCount}`;
-      return "";
-    }, [addedLineCount, removedLineCount]);
-
-    const statsClass =
-      addedLineCount > 0 && removedLineCount === 0
-        ? "app-tool-edit-card__stats app-tool-edit-card__stats--add"
-        : removedLineCount > 0 && addedLineCount === 0
-          ? "app-tool-edit-card__stats app-tool-edit-card__stats--remove"
-          : "app-tool-edit-card__stats";
-
     const diffRows = useMemo(() => groupFileEditDiffRows(displayLines), [displayLines]);
     const shownDiffRows =
       diffRows.length > VISIBLE_DIFF_ROW_CAP ? diffRows.slice(0, VISIBLE_DIFF_ROW_CAP) : diffRows;
@@ -228,7 +212,17 @@ export const ToolFileEditCard = memo(
               {preview.fileName}
             </span>
           )}
-          {statsLabel ? <span className={statsClass}>{statsLabel}</span> : null}
+          {addedLineCount > 0 || removedLineCount > 0 ? (
+            <span className="app-tool-edit-card__stats">
+              {addedLineCount > 0 ? (
+                <span className="app-tool-edit-card__stats--add">+{addedLineCount}</span>
+              ) : null}
+              {addedLineCount > 0 && removedLineCount > 0 ? " " : null}
+              {removedLineCount > 0 ? (
+                <span className="app-tool-edit-card__stats--remove">-{removedLineCount}</span>
+              ) : null}
+            </span>
+          ) : null}
         </div>
         {diffRows.length > 0 ? (
           <div className="app-tool-edit-card__body">

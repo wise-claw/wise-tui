@@ -13,8 +13,8 @@ const MAIN_LAYOUT_LEFT_SIDER_PRIOR_DEFAULT_WIDTHS_PX: readonly number[] = [300, 
 /** 与 `CockpitInspector` 中 `Layout.Sider` 的 `width` 一致。 */
 export const MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX = 300;
 
-/** 主三栏之间拖动手柄占位宽度（与中栏之间的间隔）。 */
-export const MAIN_LAYOUT_RESIZE_HANDLE_PX = 5;
+/** 主三栏之间分隔线的占位宽度；拖动命中区覆盖相邻边缘，不额外占位。 */
+export const MAIN_LAYOUT_RESIZE_HANDLE_PX = 1;
 
 /** 左栏可拖动宽度范围。 */
 export const MAIN_LAYOUT_LEFT_SIDER_MIN_WIDTH_PX = 160;

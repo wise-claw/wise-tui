@@ -151,7 +151,10 @@
   gap: 6px;
   min-height: 22px;
   padding: 0 8px 0 4px;
-  border-radius: 0;
+  width: calc(100% - 6px);
+  margin-inline: 3px;
+  box-sizing: border-box;
+  border-radius: 5px;
   cursor: default;
   min-width: 0;
 }
@@ -161,19 +164,16 @@
 }
 
 .repo-search-result-row:hover {
-  background: var(--wise-row-hover-bg);
+  background: var(--wise-navigation-hover-bg);
 }
 
 .repo-search-result-row:active:not(.repo-search-result-row--selected) {
   background: var(--wise-row-active-bg);
 }
 
-.repo-search-result-row--selected {
-  background: var(--wise-row-selected-bg);
-}
-
+.repo-search-result-row--selected,
 .repo-search-result-row--selected:hover {
-  background: color-mix(in srgb, var(--ant-color-primary) 24%, transparent);
+  background: var(--wise-navigation-selected-bg);
 }
 
 .repo-search-result-row-text {
@@ -1449,20 +1449,18 @@
   font-weight: 500 !important;
 }
 
-/* ── Sections (Staged / Unstaged) ── */
+/* ── 变更分区：仅以标题和数量的文字色区分状态 ── */
 .git-section {
+  --git-section-accent: var(--ant-color-primary-text);
   overflow-x: hidden;
-  margin: 4px 4px 0;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 7px;
-  background: var(--ant-color-bg-container);
-  --git-section-accent: var(--ant-color-primary);
-  --git-section-accent-bg: var(--ant-color-primary-bg);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .git-section--unstaged {
-  --git-section-accent: var(--ant-color-warning);
-  --git-section-accent-bg: var(--ant-color-warning-bg);
+  --git-section-accent: var(--ant-color-warning-text);
 }
 
 .git-section-header {
@@ -1470,14 +1468,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 2px;
-  min-height: 28px;
-  padding: 0 4px 0 6px;
-  background: color-mix(in srgb, var(--git-section-accent-bg) 43%, var(--ant-color-bg-container));
-  border-bottom: 1px solid var(--ant-color-border-secondary);
-}
-
-.git-section--collapsed .git-section-header {
-  border-bottom: 0;
+  min-height: 22px;
+  padding: 0 8px;
+  background: transparent;
+  border: 0;
 }
 
 .git-section-header__title {
@@ -1485,14 +1479,14 @@
   align-items: center;
   gap: 5px;
   min-width: 0;
-  min-height: 24px;
+  min-height: 20px;
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--ant-color-text);
+  color: var(--git-section-accent);
   font: inherit;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 11.5px;
+  font-weight: 600;
   text-align: left;
 }
 
@@ -1510,14 +1504,11 @@ button.git-section-header__title:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  color: var(--git-section-accent);
-  background: color-mix(in srgb, var(--git-section-accent) 12%, transparent);
-  font-size: 10px;
-  font-weight: 700;
+  min-width: 0;
+  padding: 0;
+  color: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1590,7 +1581,7 @@ button.git-section-header__title:focus-visible {
 }
 
 .git-file-list {
-  padding: 2px 2px 3px;
+  padding: 0 2px 1px;
   overflow-x: hidden;
 }
 
@@ -1826,6 +1817,7 @@ button.git-section-header__title:focus-visible {
 }
 
 .git-tree-node--dir {
+  min-height: 23px;
   font-weight: 600;
   color: var(--ant-color-text);
 }
@@ -1886,6 +1878,20 @@ button.git-section-header__title:focus-visible {
 }
 
 .git-tree-node--file--clickable:hover {
+  background: transparent;
+}
+
+/* 当前编辑文件与侧栏导航共用选中面，悬停时保留定位。 */
+.git-file-row--selected,
+.git-file-row--selected:hover,
+.git-tree-node--file--clickable:hover .git-file-row--selected,
+.git-tree-node--file.git-tree-node--selected,
+.git-tree-node--file.git-tree-node--selected:hover {
+  background: var(--wise-navigation-selected-bg);
+}
+
+.git-tree-node--selected .git-file-row--selected,
+.git-tree-node--selected:hover .git-file-row--selected {
   background: transparent;
 }
 
@@ -2649,6 +2655,15 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   touch-action: manipulation;
 }
 
+/* 与会话列表统一：轻微内收、圆角底色，不靠亮色竖条标记选中。 */
+.repo-tree-node,
+.repo-tree-virtual-list__row > .repo-tree-node {
+  width: calc(100% - 6px);
+  margin-inline: 3px;
+  box-sizing: border-box;
+  border-radius: 5px;
+}
+
 .repo-tree-node-indent {
   flex: 0 0 auto;
   align-self: stretch;
@@ -2690,15 +2705,14 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 }
 
 .repo-tree-node-body--file.repo-tree-node-body--clickable:focus-visible {
-  background: var(--ant-color-primary-bg);
+  background: var(--wise-navigation-selected-bg);
 }
 
 .repo-tree-node:hover,
 .repo-tree-node--pointer-hover,
 .repo-tree-virtual-list__row:hover > .repo-tree-node,
 .repo-tree-virtual-list__row--pointer-hover > .repo-tree-node {
-  background: var(--ant-color-fill-secondary);
-  background: color-mix(in srgb, var(--ant-color-primary) 16%, transparent);
+  background: var(--wise-navigation-hover-bg);
 }
 
 .repo-tree-node:active:not(.repo-tree-node--selected) {
@@ -2710,8 +2724,8 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 .repo-tree-node--selected.repo-tree-node--pointer-hover,
 .repo-tree-virtual-list__row--selected > .repo-tree-node,
 .repo-tree-virtual-list__row--selected:hover > .repo-tree-node {
-  background: var(--ant-color-primary-bg);
-  box-shadow: inset 3px 0 0 var(--ant-color-primary);
+  background: var(--wise-navigation-selected-bg);
+  box-shadow: none;
   font-weight: 600;
 }
 
@@ -2902,7 +2916,7 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 .repo-tree-node--file--clickable:focus-visible {
   outline: 1px solid var(--ant-color-primary);
   outline-offset: -1px;
-  background: var(--ant-color-primary-bg);
+  background: var(--wise-navigation-selected-bg);
   color: var(--ant-color-text);
 }
 

@@ -2012,11 +2012,13 @@
 }
 
 /*
- * 根节点带 tabIndex={-1}，点击空白处会 focus 以便 Esc 取消 Claude Code（见 ClaudeChat onChatPointerDownCapture）。
- * 去掉浏览器默认焦点环，避免被误认为「顶栏蓝线 / 进度条」；该容器不在 Tab 顺序内，不依赖可见 focus 指示。
+ * 对话根节点和消息列表带 tabIndex={-1}，点击时聚焦以支持 Esc 和消息导航。
+ * 这两个容器不在 Tab 顺序内，聚焦时不显示边框或亮色阴影。
  */
-.app-claude-chat:focus {
+.app-claude-chat:focus,
+.app-claude-messages:focus {
   outline: none;
+  box-shadow: none;
 }
 
 .app-claude-chat-body {

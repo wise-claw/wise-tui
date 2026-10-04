@@ -2,8 +2,8 @@
 .app-left-sidebar {
   --sidebar-header-surface: color-mix(in srgb, var(--ant-color-bg-container) 88%, var(--ant-color-bg-layout));
   --sidebar-hairline: color-mix(in srgb, var(--ant-color-border-secondary) 78%, transparent);
-  --sidebar-hover: color-mix(in srgb, var(--ant-color-primary) 7%, var(--ant-color-bg-container));
-  --sidebar-selected: color-mix(in srgb, var(--ant-color-primary) 12%, var(--ant-color-bg-container));
+  --sidebar-hover: var(--wise-navigation-hover-bg);
+  --sidebar-selected: var(--wise-navigation-selected-bg);
 }
 
 /* 顶部操作区与下方 Git 工具条使用同一套安静的图标反馈。 */

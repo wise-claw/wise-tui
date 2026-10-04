@@ -3,6 +3,7 @@ import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine
 import { listNativeCliDiskSessions } from "../services/nativeCliSessions";
 import { pathIsAccessibleDirectoryCached } from "./pathAccessibilityCache";
 import { normalizeRepositoryPathKey, repositoryPathsMatch } from "./repositoryMainSessionBinding";
+import { dedupeNativeCliSessionTabs } from "./nativeCliSessionIdentity";
 import {
   collectRepositoryPathListingCandidates,
   normalizeSessionRepositoryPath,
@@ -70,24 +71,31 @@ export function mergeNativeCliDiskSessions(
   const liveIds = new Set(disk.map((item) => item.sessionId));
   const copy: ClaudeSession[] = [];
 
-  for (const session of prev) {
-    if (!repositoryPathsMatch(session.repositoryPath, canonicalPath)) {
+  for (const session of dedupeNativeCliSessionTabs(prev)) {
+    const sessionPath = normalizeRepositoryPathKey(session.repositoryPath);
+    const sameScope = repositoryPathsMatch(sessionPath, canonicalPath);
+    const relatedScope = sameScope || sessionPath.startsWith(`${canonicalPath}/`) ||
+      canonicalPath.startsWith(`${sessionPath}/`);
+    const claimsNativeSource =
+      session.nativeCliSource === engine || session.executionEngine === expectedEngine;
+    const item = disk.find((entry) => sessionMatchesNativeId(session, entry.sessionId));
+    if (!sameScope && !(item && claimsNativeSource && relatedScope)) {
       copy.push(session);
       continue;
     }
-    const item = disk.find((entry) => sessionMatchesNativeId(session, entry.sessionId));
     if (!item) {
       if (!isDroppableNativeCliPlaceholder(session, engine, liveIds)) {
         copy.push(session);
       }
       continue;
     }
-    const claimsNativeSource =
-      session.nativeCliSource === engine || session.executionEngine === expectedEngine;
+    // 广域扫描只能补索引，不能把成员仓会话降级到非 Git 的父目录。
+    const refineRepository = sessionPath && canonicalPath.startsWith(`${sessionPath}/`);
     copy.push({
       ...session,
       claudeSessionId: item.sessionId,
-      repositoryPath: canonicalPath,
+      repositoryPath: sameScope || refineRepository ? canonicalPath : session.repositoryPath,
+      repositoryName: refineRepository ? repositoryName : session.repositoryName,
       diskUpdatedAtMs: item.updatedAtMs,
       model: item.modelHint?.trim() || session.model,
       diskPreview: item.preview.trim() || item.title?.trim() || session.diskPreview,
@@ -105,7 +113,6 @@ export function mergeNativeCliDiskSessions(
       (entry) =>
         !copy.some(
           (session) =>
-            repositoryPathsMatch(session.repositoryPath, canonicalPath) &&
             sessionMatchesNativeId(session, entry.sessionId),
         ),
     )

@@ -154,6 +154,16 @@
   /* 11% 在浅色侧栏几乎看不见；提到 18% 才能和 hover/透明底立刻区分 */
   --wise-row-selected-bg: color-mix(in srgb, var(--ant-color-primary) 18%, transparent);
   --wise-row-selected-border: color-mix(in srgb, var(--ant-color-primary) 42%, transparent);
+
+  /* 工作区会话与文件树共用的低饱和导航底色。 */
+  --wise-navigation-accent: #7c8fab;
+  --wise-navigation-hover-bg: color-mix(in srgb, var(--wise-navigation-accent) 9%, var(--app-workspace-rail-left-bg));
+  --wise-navigation-selected-bg: color-mix(in srgb, var(--wise-navigation-accent) 22%, var(--app-workspace-rail-left-bg));
+}
+
+:root[data-wise-theme="dark"],
+:root[data-wise-theme="dark"] .ant-app {
+  --wise-navigation-accent: #9baec8;
 }
 
 /* ═══════════════════════════════════════════════
@@ -199,8 +209,9 @@ body {
 body {
   background: var(--ant-color-bg-layout, #f4f6f8);
   color: var(--ant-color-text, inherit);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* 使用系统默认渲染，避免强制灰度平滑让小字号笔画偏细。 */
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
   text-rendering: optimizeLegibility;
 }
 
@@ -215,7 +226,7 @@ body {
  */
 .ant-app button:not([class*="ant-"]):focus-visible,
 .ant-app a:not([class*="ant-"]):focus-visible,
-.ant-app [tabindex]:not([class*="ant-"]):focus-visible {
+.ant-app [tabindex]:not([class*="ant-"]):not([contenteditable]):not(.app-claude-chat):not(.app-claude-messages):focus-visible {
   outline: none;
   box-shadow: var(--wise-focus-ring);
   border-radius: var(--wise-radius-sm);
@@ -324,10 +335,15 @@ body {
 
 .app-main-layout.ant-layout > .ant-layout-sider,
 .app-main-layout.ant-layout > .app-workspace-file-tree-rail,
-.app-main-layout.ant-layout > .app-workspace-main,
-.app-main-layout.ant-layout > .app-main-layout-resize-handle {
+.app-main-layout.ant-layout > .app-workspace-main {
   position: relative;
   z-index: 1;
+}
+
+/* 分隔条命中区覆盖相邻面板边缘，保持在面板上方。 */
+.app-main-layout.ant-layout > .app-main-layout-resize-handle {
+  position: relative;
+  z-index: 2;
 }
 
 .app-main-layout.ant-layout > .app-left-sidebar.ant-layout-sider:not(.app-left-sidebar--parked) {

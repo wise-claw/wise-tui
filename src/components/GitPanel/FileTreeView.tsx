@@ -13,6 +13,7 @@ import type { FileTreeNode, GitPanelOpenFileOptions } from "./types";
 interface FileTreeNodeProps {
   node: FileTreeNode;
   section: "staged" | "unstaged";
+  selectedPath?: string | null;
   expandedDirs: Set<string>;
   onToggleDir: (path: string) => void;
   onToggleDirRecursive?: (path: string, subDirPaths: readonly string[]) => void;
@@ -26,6 +27,7 @@ interface FileTreeNodeProps {
 function FileTreeNodeComponent({
   node,
   section,
+  selectedPath,
   expandedDirs,
   onToggleDir,
   onToggleDirRecursive,
@@ -157,6 +159,7 @@ function FileTreeNodeComponent({
                 key={child.path}
                 node={child}
                 section={section}
+                selectedPath={selectedPath}
                 expandedDirs={expandedDirs}
                 onToggleDir={onToggleDir}
                 onToggleDirRecursive={onToggleDirRecursive}
@@ -175,13 +178,14 @@ function FileTreeNodeComponent({
 
   return (
     <div
-      className={`git-tree-node git-tree-node--file${onOpenFile ? " git-tree-node--file--clickable" : ""}`}
+      className={`git-tree-node git-tree-node--file${onOpenFile ? " git-tree-node--file--clickable" : ""}${selectedPath === node.path ? " git-tree-node--selected" : ""}`}
       style={{ paddingLeft: gitTreeFilePaddingLeftPx(depth) }}
     >
       {node.file ? (
         <FileRow
           file={node.file}
           section={section}
+          selected={selectedPath === node.path}
           onStage={onStage}
           onUnstage={onUnstage}
           onDiscard={onDiscard}
@@ -197,6 +201,7 @@ const MemoFileTreeNode = memo(FileTreeNodeComponent);
 interface FileTreeViewProps {
   files: GitFileStatus[];
   section: "staged" | "unstaged";
+  selectedPath?: string | null;
   expandedDirs: Set<string>;
   onToggleDir: (path: string) => void;
   onToggleDirRecursive?: (path: string, subDirPaths: readonly string[]) => void;
@@ -209,6 +214,7 @@ interface FileTreeViewProps {
 export function FileTreeView({
   files,
   section,
+  selectedPath,
   expandedDirs,
   onToggleDir,
   onToggleDirRecursive,
@@ -226,6 +232,7 @@ export function FileTreeView({
           key={node.path}
           node={node}
           section={section}
+          selectedPath={selectedPath}
           expandedDirs={expandedDirs}
           onToggleDir={onToggleDir}
           onToggleDirRecursive={onToggleDirRecursive}

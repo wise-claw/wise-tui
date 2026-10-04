@@ -106,6 +106,7 @@ import {
   listNativeCliDiskSessionsForRepositoryScope,
   mergeNativeCliDiskSessions,
 } from "../utils/nativeCliDiskSessions";
+import { dedupeNativeCliSessionTabs } from "../utils/nativeCliSessionIdentity";
 import {
   listCodexRpcDiskSessionsForRepositoryScope,
   mergeCodexRpcDiskSessions,
@@ -2087,7 +2088,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
           const stripLegacyOverrides = !(await stripSettingPromise)?.trim();
 
-          const normalized = data.sessions.map((s) => {
+          const normalized = dedupeNativeCliSessionTabs(data.sessions).map((s) => {
             const base = {
               ...s,
               repositoryPath: normalizeSessionRepositoryPath(s.repositoryPath),

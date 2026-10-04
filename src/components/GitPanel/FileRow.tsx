@@ -13,6 +13,7 @@ import type { GitPanelOpenFileOptions } from "./types";
 interface FileRowProps {
   file: GitFileStatus;
   section: "staged" | "unstaged";
+  selected?: boolean;
   onStage?: (path: string) => void;
   onUnstage?: (path: string) => void;
   onDiscard?: (path: string) => void | Promise<void>;
@@ -22,6 +23,7 @@ interface FileRowProps {
 export const FileRow = memo(function FileRow({
   file,
   section,
+  selected = false,
   onStage,
   onUnstage,
   onDiscard,
@@ -32,7 +34,8 @@ export const FileRow = memo(function FileRow({
 
   return (
     <div
-      className={`git-file-row ${onOpenFile ? "git-file-row--clickable" : ""}`}
+      className={`git-file-row ${onOpenFile ? "git-file-row--clickable" : ""}${selected ? " git-file-row--selected" : ""}`}
+      aria-current={selected ? "true" : undefined}
       draggable
       onDragStart={(e) => {
         e.stopPropagation();

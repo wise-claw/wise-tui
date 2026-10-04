@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeSession, NativeCliDiskSessionItem } from "../types";
+import { dedupeNativeCliSessionTabs } from "./nativeCliSessionIdentity";
+import { findSessionByTabOrClaudeId } from "./claudeSessionSelection";
 import {
   isDroppableNativeCliPlaceholder,
   mergeNativeCliDiskSessions,
@@ -33,6 +35,37 @@ function diskItem(overrides: Partial<NativeCliDiskSessionItem> = {}): NativeCliD
 }
 
 describe("mergeNativeCliDiskSessions", () => {
+  test("parent scan retains the repository of an existing Codex tab", () => {
+    const tab = session({ id: "019fba5c-thread", nativeCliSource: "codex", executionEngine: "codex-rpc",
+      repositoryPath: "/work/repo", repositoryName: "repo" });
+    const next = mergeNativeCliDiskSessions([tab], "/work", "work", "codex", [diskItem()], "sonnet");
+    expect(next).toHaveLength(1);
+    expect(next[0]!.repositoryPath).toBe("/work/repo");
+    expect(next[0]!.repositoryName).toBe("repo");
+    expect(next[0]!.diskPreview).toBe("帮我看看这个仓库");
+  });
+
+  test("repository scan refines the parent import without duplicating its tab id", () => {
+    const tab = session({ id: "019fba5c-thread", nativeCliSource: "codex", executionEngine: "codex-rpc",
+      repositoryPath: "/work", repositoryName: "work",
+      messages: [{ role: "user", content: "existing history", timestamp: 1 }] });
+    const next = mergeNativeCliDiskSessions([tab], "/work/repo", "repo", "codex", [diskItem()], "sonnet");
+    expect(next).toHaveLength(1);
+    expect(next[0]!.repositoryPath).toBe("/work/repo");
+    expect(next[0]!.repositoryName).toBe("repo");
+    expect(next[0]!.messages).toEqual(tab.messages);
+    const refreshed = mergeNativeCliDiskSessions(next, "/work", "work", "codex", [diskItem()], "sonnet");
+    expect(refreshed).toHaveLength(1);
+    expect(findSessionByTabOrClaudeId(refreshed, tab.id)?.repositoryPath).toBe("/work/repo");
+  });
+
+  test("does not move an existing native tab into an unrelated repository", () => {
+    const tab = session({ id: "019fba5c-thread", nativeCliSource: "codex", executionEngine: "codex-rpc" });
+    const next = mergeNativeCliDiskSessions([tab], "/repo-other", "other", "codex", [diskItem()], "sonnet");
+    expect(next).toHaveLength(1);
+    expect(next[0]).toBe(tab);
+  });
+
   test("adds a native row bound to its execution engine right after the same repository", () => {
     const prev = [session({ id: "repo-a-1" }), session({ id: "repo-b-1", repositoryPath: "/other" })];
     const next = mergeNativeCliDiskSessions(prev, "/repo", "demo", "codex", [diskItem()], "sonnet");
@@ -112,6 +145,41 @@ describe("mergeNativeCliDiskSessions", () => {
     ];
     const next = mergeNativeCliDiskSessions(prev, "/repo", "demo", "codex", [diskItem()], "sonnet");
     expect(next[0]!.nativeCliSource).toBeUndefined();
+  });
+});
+
+describe("dedupeNativeCliSessionTabs", () => {
+  test("restores duplicate Codex tabs with the repository path and richer history in either order", () => {
+    const parent = session({ id: "native-id", nativeCliSource: "codex", repositoryPath: "/work",
+      repositoryName: "work", messages: [{ role: "user", content: "history", timestamp: 1 }] });
+    const child = session({ id: parent.id, nativeCliSource: "codex", repositoryPath: "/work/repo",
+      repositoryName: "repo" });
+    for (const rows of [[parent, child], [child, parent]]) {
+      const next = dedupeNativeCliSessionTabs(rows);
+      expect(next).toHaveLength(1);
+      expect(next[0]!.repositoryPath).toBe(child.repositoryPath);
+      expect(next[0]!.repositoryName).toBe(child.repositoryName);
+      expect(next[0]!.messages).toEqual(parent.messages);
+      expect(findSessionByTabOrClaudeId(next, parent.id)).toBe(next[0]);
+    }
+  });
+
+  test("preserves the running instance while recovering its concrete repository", () => {
+    const live = session({ id: "native-id", nativeCliSource: "codex", repositoryPath: "/work",
+      status: "running", pendingPrompt: "in progress" });
+    const child = session({ id: live.id, nativeCliSource: "codex", repositoryPath: "/work/repo",
+      repositoryName: "repo", status: "completed" });
+    const next = dedupeNativeCliSessionTabs([live, child]);
+    expect(next).toHaveLength(1);
+    expect(next[0]!.status).toBe("running");
+    expect(next[0]!.pendingPrompt).toBe("in progress");
+    expect(next[0]!.repositoryPath).toBe("/work/repo");
+  });
+
+  test("keeps distinct Wise tabs that share a native resume id", () => {
+    const rows = [session({ id: "wise-a", claudeSessionId: "native-id", nativeCliSource: "codex" }),
+      session({ id: "wise-b", claudeSessionId: "native-id", nativeCliSource: "codex" })];
+    expect(dedupeNativeCliSessionTabs(rows)).toBe(rows);
   });
 });
 

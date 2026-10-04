@@ -799,6 +799,8 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({
         : "";
   const outputStreaming = part.status === "running";
   const showCompactEditCard = Boolean(editPreview && !hasExpandableBody && !isErrorState);
+  const editToolName = canonicalFileEditToolName(part.name);
+  const isPatchEdit = editToolName === "apply_patch" || editToolName === "applypatch";
   const { onPointerDown: onTogglePointerDown, consumeHadTextSelection } = useClickAfterSelectionGuard();
   const { copied, copy } = useCopyToClipboard();
   const copyText =
@@ -896,8 +898,8 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({
         <ToolFileEditCard
           preview={editPreview}
           streaming={outputStreaming}
-          // 独立成卡时补动作文案（对照 Codex「写入文件 · en.md」）；外层标题行已在则不重复。
-          actionLabel={showCompactEditCard ? info.label : undefined}
+          // 补丁卡片直接以文件名为标题；外层已有工具标题时也不重复动作。
+          actionLabel={showCompactEditCard && !isPatchEdit ? info.label : undefined}
         />
       ) : null}
       {expanded && hasExpandableBody ? (

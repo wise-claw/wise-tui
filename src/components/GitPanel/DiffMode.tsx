@@ -24,6 +24,7 @@ import {
   evaluatePrePushCodeReview,
 } from "../../services/codeReview";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
+import { useGitChangesSelection } from "../../hooks/useGitChangesSelection";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { buildFileTree } from "./fileTree";
 import { FileRow } from "./FileRow";
@@ -91,6 +92,7 @@ function DiffModeInner({
   onBranchChanged,
   onDismissError,
 }: DiffModeProps) {
+  const { stagedPath, unstagedPath } = useGitChangesSelection(repositoryPath);
   const [commitMsg, setCommitMsg] = useState("");
   const [unstagedViewMode, setUnstagedViewMode] = useState<UnstagedViewMode>("tree");
   const [stagedCollapsed, setStagedCollapsed] = useState(false);
@@ -141,9 +143,9 @@ function DiffModeInner({
 
   const renderStagedRow = useCallback(
     (file: GitFileStatus) => (
-      <FileRow file={file} section="staged" onUnstage={onUnstage} onOpenFile={onOpenFile} />
+      <FileRow file={file} section="staged" selected={stagedPath === file.path} onUnstage={onUnstage} onOpenFile={onOpenFile} />
     ),
-    [onUnstage, onOpenFile],
+    [onUnstage, onOpenFile, stagedPath],
   );
 
   const renderUnstagedRow = useCallback(
@@ -151,12 +153,13 @@ function DiffModeInner({
       <FileRow
         file={file}
         section="unstaged"
+        selected={unstagedPath === file.path}
         onStage={onStage}
         onDiscard={onDiscard}
         onOpenFile={onOpenFile}
       />
     ),
-    [onDiscard, onOpenFile, onStage],
+    [onDiscard, onOpenFile, onStage, unstagedPath],
   );
 
   const useTreeView = unstagedViewMode === "tree";
@@ -668,6 +671,7 @@ function DiffModeInner({
               <FileTreeView
                 files={status.staged}
                 section="staged"
+                selectedPath={stagedPath}
                 expandedDirs={stagedExpand.expandedDirs}
                 onToggleDir={stagedExpand.toggleDir}
                 onToggleDirRecursive={stagedExpand.toggleDirRecursive}
@@ -740,6 +744,7 @@ function DiffModeInner({
             <FileTreeView
               files={status.unstaged}
               section="unstaged"
+              selectedPath={unstagedPath}
               expandedDirs={unstagedExpand.expandedDirs}
               onToggleDir={unstagedExpand.toggleDir}
               onToggleDirRecursive={unstagedExpand.toggleDirRecursive}

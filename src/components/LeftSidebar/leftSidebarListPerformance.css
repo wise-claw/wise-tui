@@ -64,19 +64,32 @@
 .app-workspace-file-tree-rail .repo-tree-node--pointer-hover,
 .app-workspace-file-tree-rail .repo-tree-virtual-list__row:hover > .repo-tree-node,
 .app-workspace-file-tree-rail .repo-tree-virtual-list__row--pointer-hover > .repo-tree-node {
-  background: var(--ant-color-fill-secondary) !important;
-  background: color-mix(in srgb, var(--ant-color-primary) 16%, transparent) !important;
+  background: var(--wise-navigation-hover-bg) !important;
 }
 
 .app-left-sidebar .repo-tree-node--selected,
 .app-left-sidebar .repo-tree-node--selected:hover,
 .app-left-sidebar .repo-tree-node--selected.repo-tree-node--pointer-hover,
 .app-left-sidebar .repo-tree-virtual-list__row--selected > .repo-tree-node,
+.app-left-sidebar .repo-tree-virtual-list__row--selected:hover > .repo-tree-node,
+.app-left-sidebar .repo-tree-virtual-list__row--selected.repo-tree-virtual-list__row--pointer-hover > .repo-tree-node,
 .app-workspace-file-tree-rail .repo-tree-node--selected,
 .app-workspace-file-tree-rail .repo-tree-node--selected:hover,
-.app-workspace-file-tree-rail .repo-tree-virtual-list__row--selected > .repo-tree-node {
-  background: var(--ant-color-primary-bg) !important;
-  box-shadow: inset 3px 0 0 var(--ant-color-primary) !important;
+.app-workspace-file-tree-rail .repo-tree-node--selected.repo-tree-node--pointer-hover,
+.app-workspace-file-tree-rail .repo-tree-virtual-list__row--selected > .repo-tree-node,
+.app-workspace-file-tree-rail .repo-tree-virtual-list__row--selected:hover > .repo-tree-node,
+.app-workspace-file-tree-rail .repo-tree-virtual-list__row--selected.repo-tree-virtual-list__row--pointer-hover > .repo-tree-node {
+  background: var(--wise-navigation-selected-bg) !important;
+  box-shadow: none !important;
+}
+
+/* 拖放目标继续显示描边，覆盖常规选中态。 */
+.app-left-sidebar .repo-tree-node.repo-tree-node--drop-target,
+.app-workspace-file-tree-rail .repo-tree-node.repo-tree-node--drop-target,
+.app-left-sidebar .repo-tree-virtual-list__row > .repo-tree-node.repo-tree-node--drop-target,
+.app-workspace-file-tree-rail .repo-tree-virtual-list__row > .repo-tree-node.repo-tree-node--drop-target {
+  background: color-mix(in srgb, var(--ant-color-primary) 18%, transparent) !important;
+  box-shadow: inset 0 0 0 1px var(--ant-color-primary) !important;
 }
 
 /* ── 快速滑动：统一关 transition / hover 命中 / content-visibility 节流 ── */

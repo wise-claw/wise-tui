@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MAIN_LAYOUT_RESIZE_HANDLE_PX } from "../../constants/mainLayoutWidths";
 import { releasePointerCaptureSafe } from "../../utils/releasePointerCapture";
 import "./index.css";
 
@@ -181,6 +182,7 @@ export function MainLayoutResizeHandle({ variant, startWidthPx, onWidthChange }:
   return (
     <div
       ref={handleRef}
+      style={{ width: MAIN_LAYOUT_RESIZE_HANDLE_PX }}
       className={
         "app-main-layout-resize-handle" +
         (dragging ? " app-main-layout-resize-handle--dragging" : "")

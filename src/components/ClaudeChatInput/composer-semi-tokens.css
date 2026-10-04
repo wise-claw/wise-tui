@@ -135,8 +135,10 @@
 }
 
 .app-claude-semi-chat-input-wrap:focus-within .semi-aiChatInput {
-  border-color: var(--ant-color-primary);
-  box-shadow: var(--wise-focus-ring), var(--wise-elevation-2);
+  border-color: var(--ant-color-primary-border);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ant-color-primary) 18%, transparent),
+    var(--wise-elevation-1);
 }
 
 /* 编辑区至少 1 行、最多约 3 行（超出由 Semi 自带的 overflow:auto 滚动） */
