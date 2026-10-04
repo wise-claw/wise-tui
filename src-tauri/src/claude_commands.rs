@@ -18,6 +18,7 @@ pub(crate) mod quick;
 pub(crate) mod project_skills;
 pub(crate) mod shared;
 pub(crate) mod subagents;
+pub(crate) mod subagent_transcripts;
 pub(crate) mod memory;
 pub(crate) mod terminal;
 use self::hooks_discovery::{

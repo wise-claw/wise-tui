@@ -78,6 +78,7 @@ export function isSubagentToolPart(part: ToolUsePart): boolean {
     name === "agent" ||
     name.includes("subagent") ||
     name === "spawn_agent" ||
+    name.startsWith("collab_") ||
     name === "run_subagent"
   ) {
     return true;
@@ -97,6 +98,31 @@ export function isSubagentToolPart(part: ToolUsePart): boolean {
   }
   if (/\bexplorer\b/i.test(description) && prompt) return true;
   return false;
+}
+
+/** 引擎返回的子代理标识；不把 Task 的任务 id 误当成代理 id。 */
+export function subagentTranscriptIds(part: ToolUsePart): string[] {
+  const ids = new Set<string>();
+  const add = (value: unknown) => {
+    if (typeof value === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(value.trim())) ids.add(value.trim());
+  };
+  for (const key of ["agentId", "agent_id", "threadId", "thread_id"]) add(part.input[key]);
+  for (const key of ["receiverThreadIds", "receiver_thread_ids"]) {
+    const values = part.input[key];
+    if (Array.isArray(values)) values.forEach(add);
+  }
+  const states = part.input.agentsStates ?? part.input.agents_states;
+  if (states && typeof states === "object" && !Array.isArray(states)) Object.keys(states).forEach(add);
+  // Claude Task 的文本结果包含 agentId，Codex spawn_agent 的结果是 JSON。
+  const output = part.output ?? "";
+  try {
+    const parsed = JSON.parse(output);
+    if (parsed && typeof parsed === "object") {
+      add(parsed.agent_id ?? parsed.agentId ?? parsed.thread_id ?? parsed.threadId);
+    }
+  } catch { /* 普通工具结果不是 JSON。 */ }
+  for (const match of output.matchAll(/\bagentId\s*:\s*([a-zA-Z0-9_-]+)/g)) add(match[1]);
+  return [...ids];
 }
 
 export function isExplorerSubagentPart(part: ToolUsePart): boolean {

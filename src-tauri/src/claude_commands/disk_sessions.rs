@@ -35,7 +35,7 @@ pub(crate) fn encoded_claude_project_dir(project_path: &Path) -> Result<String, 
     Ok(format!("-{}", normalized))
 }
 
-fn is_safe_claude_session_filename(name: &str) -> bool {
+pub(super) fn is_safe_claude_session_filename(name: &str) -> bool {
     let len = name.len();
     if !(32..=48).contains(&len) {
         return false;

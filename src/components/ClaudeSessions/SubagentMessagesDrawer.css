@@ -1,0 +1,30 @@
+.app-subagent-card__view-messages {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ant-color-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.app-subagent-card__view-messages:hover,
+.app-subagent-card__view-messages:focus-visible {
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-subagent-messages-drawer__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.app-subagent-messages-drawer__toolbar { flex: 0 0 auto; }
+.app-subagent-messages-drawer__toolbar .ant-select { min-width: 220px; }
+.app-subagent-messages-drawer__body > .app-claude-session-messages-column {
+  flex: 1;
+  min-height: 0;
+}

@@ -36,6 +36,23 @@ export async function loadClaudeSessionJsonl(
   });
 }
 
+/** 按主会话工具调用定位子代理日志；运行中尚未写盘时返回空数组。 */
+export async function loadClaudeSubagentJsonl(
+  repositoryPath: string,
+  parentSessionId: string,
+  toolUseId: string,
+  agentId?: string,
+  options?: LoadClaudeSessionJsonlOptions,
+): Promise<string[]> {
+  return invoke<string[]>("load_claude_subagent_jsonl", {
+    projectPath: repositoryPath,
+    parentSessionId,
+    toolUseId,
+    agentId: agentId || null,
+    tailLines: options?.tailLines ?? null,
+  });
+}
+
 export async function loadCodexRpcSessionJsonl(
   repositoryPath: string,
   tabSessionId: string,

@@ -6,6 +6,7 @@ import {
   isExplorerSubagentPart,
   isSubagentToolPart,
   parseReadActivityLinesFromText,
+  subagentTranscriptIds,
 } from "./subagentToolDisplay";
 
 function tool(partial: Partial<ToolUsePart> & Pick<ToolUsePart, "name">): ToolUsePart {
@@ -26,6 +27,7 @@ describe("isSubagentToolPart", () => {
     expect(isSubagentToolPart(tool({ name: "Task" }))).toBe(true);
     expect(isSubagentToolPart(tool({ name: "Agent" }))).toBe(true);
     expect(isSubagentToolPart(tool({ name: "run_subagent" }))).toBe(true);
+    expect(isSubagentToolPart(tool({ name: "collab_spawnAgent" }))).toBe(true);
   });
 
   test("detects subagent_type in input", () => {
@@ -42,6 +44,27 @@ describe("isSubagentToolPart", () => {
         tool({ name: "Bash", input: { command: "sleep 1", run_in_background: true } }),
       ),
     ).toBe(false);
+  });
+});
+
+describe("subagentTranscriptIds", () => {
+  test("reads Claude result ids without confusing task ids with agents", () => {
+    expect(subagentTranscriptIds(tool({ name: "Task", input: { task_id: "task-1" },
+      output: "agentId: a123 (use this ID to resume)" }))).toEqual(["a123"]);
+    expect(subagentTranscriptIds(tool({ name: "Task", input: { task_id: "task-1" } }))).toEqual([]);
+  });
+
+  test("keeps multiple Codex recipients and deduplicates agent states", () => {
+    expect(subagentTranscriptIds(tool({ name: "collab_wait", input: {
+      receiverThreadIds: ["thread-1", "thread-2"],
+      agentsStates: { "thread-2": { status: "completed" }, "thread-3": { status: "running" } },
+    } }))).toEqual(["thread-1", "thread-2", "thread-3"]);
+  });
+
+  test("reads spawn_agent JSON output and rejects malformed path ids", () => {
+    expect(subagentTranscriptIds(tool({ name: "spawn_agent", output: '{"agent_id":"thread-1"}' }))).toEqual(["thread-1"]);
+    expect(subagentTranscriptIds(tool({ name: "Task", input: { agentId: "../escape" },
+      output: '{"agentId":"/tmp/escape"}' }))).toEqual([]);
   });
 });
 

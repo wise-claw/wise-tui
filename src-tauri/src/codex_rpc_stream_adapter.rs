@@ -1254,18 +1254,10 @@ fn map_item_started(item: &crate::codex_rpc_types::ThreadItem) -> Vec<String> {
                 .get("tool")
                 .and_then(Value::as_str)
                 .unwrap_or("collab_agent");
-            let prompt = item
-                .raw
-                .get("prompt")
-                .and_then(Value::as_str)
-                .unwrap_or("");
             vec![assistant_tool_use_line(
                 &item.id,
                 &format!("collab_{tool}"),
-                json!({
-                    "prompt": prompt,
-                    "description": format!("协作代理调用：{tool}"),
-                }),
+                collab_agent_tool_input(&item.raw, tool),
                 "running",
                 None,
                 None,
@@ -1529,11 +1521,6 @@ pub(crate) fn map_item_completed(item: &crate::codex_rpc_types::ThreadItem) -> V
                 .get("tool")
                 .and_then(Value::as_str)
                 .unwrap_or("collab_agent");
-            let prompt = item
-                .raw
-                .get("prompt")
-                .and_then(Value::as_str)
-                .unwrap_or("");
             let status = item
                 .raw
                 .get("status")
@@ -1544,10 +1531,7 @@ pub(crate) fn map_item_completed(item: &crate::codex_rpc_types::ThreadItem) -> V
             vec![assistant_tool_use_line(
                 &item.id,
                 &format!("collab_{tool}"),
-                json!({
-                    "prompt": prompt,
-                    "description": format!("协作代理调用：{tool}"),
-                }),
+                collab_agent_tool_input(&item.raw, tool),
                 if failed { "error" } else { "completed" },
                 None,
                 if failed {
@@ -1759,6 +1743,12 @@ fn assistant_thinking_line_with_stream_id(text: &str, stream_id: &str) -> String
         block["stream_id"] = json!(stream_id);
     }
     assistant_content_line(vec![block])
+}
+
+fn collab_agent_tool_input(raw: &Value, tool: &str) -> Value {
+    let mut input = raw.as_object().cloned().unwrap_or_default();
+    input.insert("description".to_string(), json!(format!("协作代理调用：{tool}")));
+    Value::Object(input)
 }
 
 fn assistant_tool_use_line(
@@ -2721,6 +2711,19 @@ mod tests {
             assert!(out.emit[0].contains(r#""status":"completed""#));
             assert!(out.emit[0].contains(needle), "{item_type}: {}", out.emit[0]);
         }
+    }
+
+    #[test]
+    fn collab_tool_input_keeps_agent_ids_and_results() {
+        let raw = json!({
+            "tool": "spawnAgent", "prompt": "查文档",
+            "receiverThreadIds": ["child-thread"],
+            "agentsStates": {"child-thread": {"status": "completed", "message": "找到了"}}
+        });
+        let input = collab_agent_tool_input(&raw, "spawnAgent");
+        assert_eq!(input["receiverThreadIds"], raw["receiverThreadIds"]);
+        assert_eq!(input["agentsStates"], raw["agentsStates"]);
+        assert_eq!(input["prompt"], raw["prompt"]);
     }
 
     #[test]

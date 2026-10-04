@@ -892,6 +892,7 @@ pub fn run() {
             native_cli_sessions::load_native_cli_session_transcript,
             claude_commands::disk_sessions::list_claude_disk_sessions,
             claude_commands::disk_sessions::load_claude_session_jsonl,
+            claude_commands::subagent_transcripts::load_claude_subagent_jsonl,
             claude_commands::disk_sessions::delete_claude_disk_session,
             claude_commands::attachments::save_composer_image,
             claude_commands::attachments::read_composer_image,

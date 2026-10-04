@@ -9,6 +9,7 @@ import { useChatMessageListRows } from "../../hooks/useChatMessageListRows";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { ChatMessageListVirtualBody } from "./ChatMessageListVirtualBody";
 import { ChatRepositoryProvider } from "./chatRepositoryContext";
+import { SubagentMessagesProvider } from "./SubagentMessagesProvider";
 import "./index.css";
 import type { SessionDispatchLookup } from "../../utils/claudeChatMessageDisplay";
 
@@ -85,17 +86,19 @@ export function ClaudeSessionMessagesColumn({
           </div>
         ) : (
           <ChatRepositoryProvider repositoryPath={session.repositoryPath}>
-            <ChatMessageListVirtualBody
-              rows={rows}
-              scrollContainerRef={scrollRef}
-              listResetKey={session.id}
-              listVariant={listVariant}
-              pinUserMessages={pinUserMessages}
-              onOpenTaskDetail={onOpenTaskDetail}
-              onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
-              sessionsForDispatchLookup={sessionsForDispatchLookup}
-              transcriptMemoryUnlimited={session.transcriptMemoryUnlimited}
-            />
+            <SubagentMessagesProvider session={session}>
+              <ChatMessageListVirtualBody
+                rows={rows}
+                scrollContainerRef={scrollRef}
+                listResetKey={session.id}
+                listVariant={listVariant}
+                pinUserMessages={pinUserMessages}
+                onOpenTaskDetail={onOpenTaskDetail}
+                onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+                sessionsForDispatchLookup={sessionsForDispatchLookup}
+                transcriptMemoryUnlimited={session.transcriptMemoryUnlimited}
+              />
+            </SubagentMessagesProvider>
           </ChatRepositoryProvider>
         )}
       </div>

@@ -25,6 +25,7 @@ import {
   isToolEditNoiseOutput,
 } from "../../utils/toolFileEditPreview";
 import { buildToolGroupActivitySummary } from "../../utils/toolGroupActivitySummary";
+import { useOpenSubagentMessages } from "./subagentMessageContext";
 import {
   buildSubagentCardModel,
   isExplorerNestableToolPart,
@@ -1128,6 +1129,7 @@ const SubagentToolCard = memo(function SubagentToolCard({
   shimmerActive?: boolean;
 }) {
   const model = useMemo(() => buildSubagentCardModel(part, childParts), [part, childParts]);
+  const openSubagentMessages = useOpenSubagentMessages();
   const [filesOpen, setFilesOpen] = useState(model.kind === "explorer" && model.fileRows.length > 0);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const info = useMemo(() => getToolDisplayInfo(part), [part]);
@@ -1168,6 +1170,19 @@ const SubagentToolCard = memo(function SubagentToolCard({
               </div>
             ) : null}
           </div>
+          {openSubagentMessages ? (
+            <button
+              type="button"
+              className="app-subagent-card__view-messages"
+              onPointerDown={onPointerDown}
+              onClick={() => {
+                if (consumeHadTextSelection()) return;
+                openSubagentMessages(part);
+              }}
+            >
+              查看子代理
+            </button>
+          ) : null}
           {hasExpandableBody ? (
             <button
               type="button"

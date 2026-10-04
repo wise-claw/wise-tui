@@ -29,7 +29,7 @@ export const FileRow = memo(function FileRow({
   onDiscard,
   onOpenFile,
 }: FileRowProps) {
-  const { name, dir } = splitPath(file.path);
+  const { name } = splitPath(file.path);
   const { base, ext } = splitNameAndExt(name);
 
   return (
@@ -76,7 +76,6 @@ export const FileRow = memo(function FileRow({
           {base}
           {ext && <span className="git-file-ext">.{ext}</span>}
         </span>
-        {dir ? <span className="git-file-parent">{dir}</span> : null}
       </div>
       <div className="git-file-meta">
         <Space

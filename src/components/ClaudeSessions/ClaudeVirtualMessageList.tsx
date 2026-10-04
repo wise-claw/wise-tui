@@ -7,6 +7,7 @@ import {
   type ChatMessageListNavigationHandle,
 } from "./ChatMessageListVirtualBody";
 import { ChatRepositoryProvider } from "./chatRepositoryContext";
+import { SubagentMessagesProvider } from "./SubagentMessagesProvider";
 
 interface Props {
   session: ClaudeSession;
@@ -59,26 +60,28 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
 
     return (
       <ChatRepositoryProvider repositoryPath={session.repositoryPath}>
-        <ChatMessageListVirtualBody
-          ref={ref}
-          rows={rows}
-          sessionId={session.id}
-          scrollContainerRef={scrollContainerRef}
-          listResetKey={session.id}
-          listVariant={listVariant}
-          resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
-          onOpenTaskDetail={onOpenTaskDetail}
-          onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
-          onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
-          sessionsForDispatchLookup={sessionsForDispatchLookup}
-          onReplayUserMessage={onReplayUserMessage}
-          onNavigate={onNavigate}
-          messageListProfile={messageListProfile}
-          companionMessageListWindow={companionMessageListWindow}
-          onWindowExhausted={onWindowExhausted}
-          transcriptMemoryUnlimited={session.transcriptMemoryUnlimited}
-          pinUserMessages={pinUserMessages}
-        />
+        <SubagentMessagesProvider session={session}>
+          <ChatMessageListVirtualBody
+            ref={ref}
+            rows={rows}
+            sessionId={session.id}
+            scrollContainerRef={scrollContainerRef}
+            listResetKey={session.id}
+            listVariant={listVariant}
+            resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
+            onOpenTaskDetail={onOpenTaskDetail}
+            onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+            onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
+            sessionsForDispatchLookup={sessionsForDispatchLookup}
+            onReplayUserMessage={onReplayUserMessage}
+            onNavigate={onNavigate}
+            messageListProfile={messageListProfile}
+            companionMessageListWindow={companionMessageListWindow}
+            onWindowExhausted={onWindowExhausted}
+            transcriptMemoryUnlimited={session.transcriptMemoryUnlimited}
+            pinUserMessages={pinUserMessages}
+          />
+        </SubagentMessagesProvider>
       </ChatRepositoryProvider>
     );
   },
