@@ -4,6 +4,7 @@ import type { GitGraphCommit } from "../../types";
 export interface GraphCommitMenuHandlers {
   onSelect: () => void;
   onCheckout: (revision: string) => void;
+  onMerge: () => void;
   onCherryPick: () => void;
   onRevert: () => void;
   onCreateBranch: () => void;
@@ -32,6 +33,7 @@ export function buildGraphCommitMenuItems(
   return [
     { key: "detail", label: "查看详情", onClick: handlers.onSelect },
     { key: "checkout-commit", label: "检出此提交", onClick: () => handlers.onCheckout(commit.sha) },
+    { key: "merge", label: "合并到当前分支", onClick: handlers.onMerge },
     { key: "cherry-pick", label: "Cherry-pick", onClick: handlers.onCherryPick },
     { key: "revert", label: "Revert", danger: true, onClick: handlers.onRevert },
     { key: "create-branch", label: "创建分支", onClick: handlers.onCreateBranch },

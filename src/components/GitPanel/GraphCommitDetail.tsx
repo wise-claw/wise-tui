@@ -17,6 +17,7 @@ interface GraphCommitDetailProps {
   onClose: () => void;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
   onCheckout?: (revision: string) => Promise<void>;
+  onMerge?: () => void;
   onCherryPick?: () => void;
   onRevert?: () => void;
   onCreateBranch?: () => void;
@@ -33,6 +34,7 @@ export function GraphCommitDetail({
   onClose,
   onOpenFile,
   onCheckout,
+  onMerge,
   onCherryPick,
   onRevert,
   onCreateBranch,
@@ -101,6 +103,9 @@ export function GraphCommitDetail({
     if (onSetCompareBase) {
       items.push({ key: "compare-base", label: "设为对比基准", onClick: onSetCompareBase });
     }
+    if (onMerge) {
+      items.push({ key: "merge", label: "合并到当前分支", onClick: onMerge });
+    }
     if (onCherryPick) {
       items.push({ key: "cherry-pick", label: "Cherry-pick", onClick: onCherryPick });
     }
@@ -111,7 +116,7 @@ export function GraphCommitDetail({
       items.push({ key: "reset", label: "Reset 到此提交", danger: true, onClick: onReset });
     }
     return items;
-  }, [onCherryPick, onCompareWithHead, onCreateBranch, onCreateTag, onReset, onRevert, onSetCompareBase]);
+  }, [onMerge, onCherryPick, onCompareWithHead, onCreateBranch, onCreateTag, onReset, onRevert, onSetCompareBase]);
 
   return (
     <div className="git-graph-detail">

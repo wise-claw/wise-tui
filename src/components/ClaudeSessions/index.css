@@ -4337,7 +4337,7 @@
 }
 
 .app-claude-message--user-sticky {
-  padding: 10px 13px;
+  padding: 6px 12px;
   border: 1px solid color-mix(in srgb, var(--ant-color-primary) 20%, var(--ant-color-border-secondary));
   border-radius: 12px;
   /* 上浅下深的极弱渐变，让气泡有一点体积感，而不是一块平铺的浅蓝 */
@@ -4441,8 +4441,8 @@
   padding: 0;
   gap: 0;
   border-radius: 3px;
-  background-color: var(--ant-color-bg-container);
-  border: 1px solid var(--ant-color-border-secondary);
+  background-color: transparent;
+  border: none;
   box-shadow: none;
   opacity: 0;
   pointer-events: none;
@@ -4461,7 +4461,7 @@
   height: 20px;
   min-width: 20px;
   border-radius: 2px;
-  background-color: var(--ant-color-bg-container);
+  background-color: transparent;
 }
 
 .app-claude-message-floating-actions .app-claude-message-action.ant-btn .ant-btn-icon {
@@ -4469,7 +4469,7 @@
 }
 
 .app-claude-message-floating-actions .app-claude-message-action.ant-btn:hover {
-  background-color: var(--ant-color-fill-secondary);
+  background-color: transparent;
 }
 
 /* 消息行 / 历史消息：复制、填入输入框等轻量操作（Ant text btn） */
@@ -6770,11 +6770,12 @@ button.app-message-part-header:disabled:hover {
 .app-tool-edit-card__head {
   display: flex;
   align-items: center;
+  box-sizing: border-box;
   gap: 6px;
-  padding: 7px 10px;
+  padding: 3px 10px;
   border-bottom: 1px solid var(--ant-color-border-secondary);
   background: color-mix(in srgb, var(--ant-color-bg-layout) 52%, var(--ant-color-bg-container));
-  min-height: 30px;
+  min-height: 28px;
 }
 
 .app-tool-edit-card__icon {
@@ -10388,9 +10389,9 @@ button.app-message-part-header:disabled:hover {
 
 /* Cursor-style turn files-changed summary card */
 .app-turn-files-changed {
-  margin: 4px 0 4px;
+  margin: 2px 0;
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--ant-color-bg-container);
   overflow: hidden;
   box-shadow: var(--wise-card-shadow);
@@ -10400,9 +10401,9 @@ button.app-message-part-header:disabled:hover {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
-  padding: 9px 12px;
-  min-height: 38px;
+  gap: 6px;
+  padding: 4px 10px;
+  min-height: 28px;
   background: color-mix(in srgb, var(--ant-color-bg-layout) 52%, var(--ant-color-bg-container));
   border-bottom: 1px solid var(--ant-color-border-secondary);
 }
@@ -10412,9 +10413,9 @@ button.app-message-part-header:disabled:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
   background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent);
   color: var(--ant-color-primary);
   font-size: 12px;
@@ -10430,7 +10431,7 @@ button.app-message-part-header:disabled:hover {
 .app-turn-files-changed__list {
   list-style: none;
   margin: 0;
-  padding: 6px 6px 8px;
+  padding: 2px 4px 4px;
   border-top: none;
 }
 
@@ -10442,10 +10443,10 @@ button.app-message-part-header:disabled:hover {
 .app-turn-files-changed__row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 6px;
-  min-height: 28px;
-  border-radius: 8px;
+  gap: 6px;
+  padding: 2px 6px;
+  min-height: 24px;
+  border-radius: 5px;
   transition: background var(--wise-motion-fast) var(--wise-ease-out);
 }
 
@@ -10520,7 +10521,7 @@ button.app-message-part-header:disabled:hover {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 12px 8px;
+  padding: 4px 10px;
   border-top: 1px solid var(--ant-color-border-secondary);
 }
 

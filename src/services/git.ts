@@ -240,6 +240,14 @@ export async function gitCherryPick(path: string, sha: string): Promise<void> {
   return invoke<void>("git_cherry_pick", { path, sha });
 }
 
+export async function gitMerge(path: string, revision: string): Promise<void> {
+  return trackAsyncOperation(
+    "合并",
+    invoke<void>("git_merge", { path, revision }),
+    GIT_COMMIT_TIMEOUT_MS,
+  );
+}
+
 export async function gitRevert(path: string, sha: string): Promise<void> {
   return invoke<void>("git_revert", { path, sha });
 }

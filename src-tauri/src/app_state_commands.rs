@@ -11,13 +11,18 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tauri::Manager;
 use uuid::Uuid;
 use walkdir::WalkDir;
 
 pub(crate) mod settings_commands;
+mod repository_discovery;
 pub(crate) mod workflow_graph_commands;
 pub(crate) mod workflow_run_commands;
+
+// 自动发现、手动添加与移除共享写入锁，避免旧扫描结果重新写回已移除仓库。
+static REPOSITORY_MUTATION_LOCK: Mutex<()> = Mutex::new(());
 
 // ── Repository (Wise sidebar workspace) Types ──
 
@@ -532,12 +537,18 @@ pub(crate) async fn reconcile_repository_children(
             return Ok(Vec::new());
         }
 
+        let _guard = REPOSITORY_MUTATION_LOCK.lock().map_err(|e| e.to_string())?;
+        let db = app.state::<wise_db::WiseDb>();
+        let excluded = repository_discovery::excluded_paths(&db)?;
         let mut repositories = load_repositories(&app);
         let mut discovered = Vec::with_capacity(child_dirs.len());
         let mut changed = false;
         for child in child_dirs {
             let child = canonicalize_existing_dir(&child.to_string_lossy())?;
             assert_repo_dir_under_project_root(&parent, &child)?;
+            if repository_discovery::is_excluded(&excluded, &child) {
+                continue;
+            }
             if let Some(existing) = repositories.iter().find(|repo| {
                 canonicalize_existing_dir(&repo.path)
                     .map(|path| path == child)
@@ -589,6 +600,8 @@ pub(crate) fn create_repository_from_path(
     icon_display_name: Option<String>,
     icon_color: Option<String>,
 ) -> Result<StoredRepository, String> {
+    let _guard = REPOSITORY_MUTATION_LOCK.lock().map_err(|e| e.to_string())?;
+    let db = app.state::<wise_db::WiseDb>();
     let folder_label = repository_folder_label_from_path(&folder_path);
     let icon_disp = icon_display_name
         .as_ref()
@@ -601,9 +614,11 @@ pub(crate) fn create_repository_from_path(
     for p in &existing {
         if let Ok(ep) = canonicalize_existing_dir(&p.path) {
             if ep == candidate {
+                repository_discovery::set_excluded(&db, &candidate, false)?;
                 return Ok(p.clone());
             }
         } else if p.path == folder_path {
+            repository_discovery::set_excluded(&db, &candidate, false)?;
             return Ok(p.clone());
         }
     }
@@ -641,6 +656,7 @@ pub(crate) fn create_repository_from_path(
     repositories.push(repository.clone());
     save_repositories(&app, &repositories)?;
 
+    repository_discovery::set_excluded(&db, &candidate, false)?;
     Ok(repository)
 }
 
@@ -864,13 +880,23 @@ pub(crate) fn update_repository_role_tags(
 
 #[tauri::command]
 pub(crate) fn remove_repository(app: tauri::AppHandle, id: i64) -> Result<(), String> {
+    let _guard = REPOSITORY_MUTATION_LOCK.lock().map_err(|e| e.to_string())?;
     let mut repositories = load_repositories(&app);
+    let path = repositories.iter().find(|repo| repo.id == id)
+        .map(|repo| PathBuf::from(&repo.path)).ok_or_else(|| "仓库未找到".to_string())?;
+    let db = app.state::<wise_db::WiseDb>();
+    let was_excluded = repository_discovery::is_excluded(&repository_discovery::excluded_paths(&db)?, &path);
+    repository_discovery::set_excluded(&db, &path, true)?;
     let len_before = repositories.len();
     repositories.retain(|p| p.id != id);
     if repositories.len() == len_before {
         return Err("仓库未找到".into());
     }
-    save_repositories(&app, &repositories)
+    if let Err(error) = save_repositories(&app, &repositories) {
+        if !was_excluded { repository_discovery::set_excluded(&db, &path, false)?; }
+        return Err(error);
+    }
+    Ok(())
 }
 
 fn remove_repository_global_impl(
@@ -1255,6 +1281,8 @@ fn reconcile_project_workspace_blocking(
         .map_err(|e| e.to_string())?
         .as_millis() as i64;
 
+    let _guard = REPOSITORY_MUTATION_LOCK.lock().map_err(|e| e.to_string())?;
+    let excluded = repository_discovery::excluded_paths(db)?;
     let mut added_paths: Vec<String> = Vec::new();
     let mut current_member_ids: std::collections::HashSet<i64> =
         project_row.repository_ids.iter().copied().collect();
@@ -1265,6 +1293,9 @@ fn reconcile_project_workspace_blocking(
             Err(_) => continue,
         };
         if assert_repo_dir_under_project_root(&root_canon, &repo_canon).is_err() {
+            continue;
+        }
+        if repository_discovery::is_excluded(&excluded, &repo_canon) {
             continue;
         }
         let repo_path_str = repo_canon.to_string_lossy().to_string();

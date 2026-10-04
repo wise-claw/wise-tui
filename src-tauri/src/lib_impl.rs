@@ -662,6 +662,7 @@ pub fn run() {
             git_commands::git_blame_file,
             git_commands::git_checkout_revision,
             git_commands::git_cherry_pick,
+            git_commands::git_merge,
             git_commands::git_revert,
             git_commands::git_reset,
             git_commands::git_init,

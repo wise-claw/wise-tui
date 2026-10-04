@@ -77,7 +77,6 @@ function FileTreeNodeComponent({
               className="git-tree-node-icon git-tree-node-icon--dir"
             />
             <span className="git-tree-node-name">{node.name}</span>
-            <span className="git-tree-node-file-count" aria-hidden>{node.fileCount}</span>
           </button>
           <span className="git-tree-node-meta">
             <Space size={0} className="git-tree-node-actions">

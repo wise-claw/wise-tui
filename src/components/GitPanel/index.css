@@ -1961,14 +1961,6 @@ button.git-section-header__title:focus-visible {
   min-width: 0;
 }
 
-.git-tree-node-file-count {
-  flex-shrink: 0;
-  color: var(--ant-color-text-quaternary);
-  font-size: 10px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
 .git-tree-node-meta {
   display: grid;
   grid-template-columns: 1fr;

@@ -21,6 +21,7 @@ export interface GraphCommitRowProps {
   canCompareWithHead: boolean;
   onSelectCommit: (sha: string) => void;
   onCheckout: (revision: string) => void;
+  onMerge: (sha: string) => void;
   onCherryPick: (sha: string) => void;
   onRevert: (sha: string) => void;
   onCreateBranch: (sha: string) => void;
@@ -55,6 +56,7 @@ function graphCommitRowEqual(left: GraphCommitRowProps, right: GraphCommitRowPro
     && refsSignature(left.commit.refs) === refsSignature(right.commit.refs)
     && left.onSelectCommit === right.onSelectCommit
     && left.onCheckout === right.onCheckout
+    && left.onMerge === right.onMerge
     && left.onCherryPick === right.onCherryPick
     && left.onRevert === right.onRevert
     && left.onCreateBranch === right.onCreateBranch
@@ -92,6 +94,7 @@ function GraphCommitRowInner({
   canCompareWithHead,
   onSelectCommit,
   onCheckout,
+  onMerge,
   onCherryPick,
   onRevert,
   onCreateBranch,
@@ -133,6 +136,7 @@ function GraphCommitRowInner({
         {
           onSelect: handleSelect,
           onCheckout,
+          onMerge: () => onMerge(commit.sha),
           onCherryPick: () => onCherryPick(commit.sha),
           onRevert: () => onRevert(commit.sha),
           onCreateBranch: () => onCreateBranch(commit.sha),
@@ -153,6 +157,7 @@ function GraphCommitRowInner({
       handleSelect,
       onCherryPick,
       onCheckout,
+      onMerge,
       onCompareWithBase,
       onCompareWithHead,
       onCopySha,

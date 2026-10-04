@@ -7,6 +7,7 @@ import {
   gitDeleteTag,
   gitGraph,
   gitListBranches,
+  gitMerge,
   gitRevert,
 } from "../../services/git";
 import type { GitBranchEntry, GitGraphCommit } from "../../types";
@@ -324,6 +325,31 @@ export function GraphMode({
       }
     },
     [refreshAfterGitMutation, repositoryPath],
+  );
+
+  const handleMerge = useCallback(
+    (sha: string) => {
+      const currentBranch = branches.find((branch) => branch.isCurrent && !branch.isRemote)?.name;
+      Modal.confirm({
+        title: "合并到当前分支？",
+        content: `将提交 ${sha.slice(0, 7)} 及其历史合并到${currentBranch ? `分支 ${currentBranch}` : "当前分支"}，保持当前分支不变。`,
+        okText: "合并",
+        cancelText: "取消",
+        onOk: async () => {
+          try {
+            await gitMerge(repositoryPath, sha);
+            message.success("合并完成");
+          } catch (e) {
+            const errMessage = e instanceof Error ? e.message : String(e);
+            message.error(`合并失败：${errMessage}`);
+          } finally {
+            // 合并失败也可能留下冲突文件，必须刷新工作区和历史。
+            refreshAfterGitMutation();
+          }
+        },
+      });
+    },
+    [branches, refreshAfterGitMutation, repositoryPath],
   );
 
   const handleCherryPick = useCallback(
@@ -720,6 +746,7 @@ export function GraphMode({
                   onSelectCommit={selectCommit}
                   onCheckout={(revision) => void handleCheckout(revision)}
                   onCherryPick={handleCherryPick}
+                  onMerge={handleMerge}
                   onRevert={handleRevert}
                   onCreateBranch={setCreateBranchSha}
                   onCreateTag={setCreateTagSha}
@@ -770,6 +797,7 @@ export function GraphMode({
           onOpenFile={onOpenFile}
           onCheckout={handleCheckout}
           onCherryPick={() => handleCherryPick(selectedSha)}
+          onMerge={() => handleMerge(selectedSha)}
           onRevert={() => handleRevert(selectedSha)}
           onCreateBranch={() => setCreateBranchSha(selectedSha)}
           onCreateTag={() => setCreateTagSha(selectedSha)}

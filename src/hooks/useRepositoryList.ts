@@ -720,6 +720,9 @@ export function useRepositoryList() {
   const removeRepositoryGloballyFromState = useCallback(async (repositoryId: number) => {
     await removeRepository(repositoryId);
     setRepositories((prev) => prev.filter((p) => p.id !== repositoryId));
+    setRepositoryChildrenByParentPath((prev) => Object.fromEntries(
+      Object.entries(prev).map(([path, ids]) => [path, ids.filter((id) => id !== repositoryId)]),
+    ));
     setProjects((prev) =>
       prev.map((project) => ({
         ...project,

@@ -390,7 +390,9 @@ pub(crate) fn get_git_branch(path: &str) -> Option<String> {
 }
 
 fn status_char_to_str(status: Status) -> String {
-    if status.is_index_new() {
+    if status.is_conflicted() {
+        "U".into()
+    } else if status.is_index_new() {
         "A".into()
     } else if status.is_index_modified() {
         "M".into()
@@ -517,7 +519,8 @@ pub(crate) async fn git_status(path: String) -> Result<GitStatusResponse, String
                 || status.is_wt_modified()
                 || status.is_wt_deleted()
                 || status.is_wt_renamed()
-                || status.is_wt_typechange();
+                || status.is_wt_typechange()
+                || status.is_conflicted();
 
             let file_status = GitFileStatus {
                 path: file_path.clone(),
@@ -625,7 +628,8 @@ pub(crate) async fn git_status_summary(path: String) -> Result<GitStatusSummaryR
                 || status.is_wt_modified()
                 || status.is_wt_deleted()
                 || status.is_wt_renamed()
-                || status.is_wt_typechange();
+                || status.is_wt_typechange()
+                || status.is_conflicted();
 
             if is_index {
                 staged_count += 1;
@@ -952,6 +956,15 @@ pub(crate) async fn git_commit(path: String, message: String) -> Result<String, 
 
 fn git_commit_blocking(path: String, message: String) -> Result<String, String> {
     let repo = open_repo(&path)?;
+    if repo.state() == git2::RepositoryState::Merge {
+        // Git CLI 保留 MERGE_HEAD 的所有父提交并清理合并状态；普通提交继续使用原实现。
+        run_git_command(&path, &["commit", "-m", &message], "合并提交")?;
+        return repo
+            .head()
+            .and_then(|head| head.peel_to_commit())
+            .map(|commit| commit.id().to_string())
+            .map_err(|e| e.to_string());
+    }
     let sig = repo
         .signature()
         .or_else(|_| git2::Signature::now("Wise User", "wise@local"))
@@ -1895,6 +1908,39 @@ pub(crate) async fn git_cherry_pick(path: String, sha: String) -> Result<(), Str
         run_git_command(&path, &["cherry-pick", sha], "Cherry-pick")
     })
     .await
+}
+
+fn git_merge_blocking(path: String, revision: String) -> Result<(), String> {
+    if revision.trim().is_empty() {
+        return Err("合并目标不能为空".to_string());
+    }
+    let repo = open_repo(&path)?;
+    let head = repo.head().map_err(|e| format!("无法读取当前分支：{e}"))?;
+    if !head.is_branch() {
+        return Err("当前处于分离 HEAD 状态，请先检出一个分支再合并".to_string());
+    }
+    if repo.state() != git2::RepositoryState::Clean {
+        return Err("存在尚未完成的 Git 操作，请完成或取消后再合并".to_string());
+    }
+    // 先解析为提交 SHA，避免把用户传入的 revision 当作 Git 命令选项。
+    let sha = find_peeled_commit(&repo, &revision)?.id().to_string();
+    let result = run_git_command(&path, &["merge", "--no-edit", &sha], "合并");
+    if let Err(error) = result {
+        let conflicted = repo
+            .index()
+            .map(|index| index.has_conflicts())
+            .unwrap_or(false);
+        if conflicted {
+            return Err(format!("合并产生冲突，请解决冲突并暂存后提交。\n{error}"));
+        }
+        return Err(error);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn git_merge(path: String, revision: String) -> Result<(), String> {
+    run_git_blocking("git_merge", move || git_merge_blocking(path, revision)).await
 }
 
 #[tauri::command]
@@ -3270,6 +3316,154 @@ mod git_status_line_totals_tests {
             status.additions, sum,
             "total additions ({}) must equal sum of per-file additions ({})",
             status.additions, sum
+        );
+    }
+}
+
+#[cfg(test)]
+mod git_merge_tests {
+    use super::*;
+    use tempfile::{tempdir, TempDir};
+
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            git_cli_combined_output(&output.stdout, &output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    fn setup() -> TempDir {
+        let dir = tempdir().unwrap();
+        let mut options = git2::RepositoryInitOptions::new();
+        options.initial_head("main");
+        Repository::init_opts(dir.path(), &options).unwrap();
+        git(dir.path(), &["config", "user.name", "Wise Test"]);
+        git(dir.path(), &["config", "user.email", "wise@test"]);
+        git(dir.path(), &["config", "commit.gpgsign", "false"]);
+        git(dir.path(), &["config", "core.hooksPath", ".no-hooks"]);
+        git(dir.path(), &["config", "merge.ff", "true"]);
+        commit_file(dir.path(), "shared.txt", "base\n");
+        dir
+    }
+
+    fn commit_file(dir: &Path, file: &str, content: &str) -> String {
+        fs::write(dir.join(file), content).unwrap();
+        git(dir, &["add", file]);
+        git(dir, &["commit", "-m", file]);
+        git(dir, &["rev-parse", "HEAD"])
+    }
+
+    #[test]
+    fn fast_forward_keeps_current_branch_and_unrelated_local_changes() {
+        let dir = setup();
+        let path = dir.path().to_string_lossy().to_string();
+        git(dir.path(), &["checkout", "-b", "feature"]);
+        let target = commit_file(dir.path(), "feature.txt", "feature\n");
+        git(dir.path(), &["checkout", "main"]);
+        fs::write(dir.path().join("shared.txt"), "local edit\n").unwrap();
+        git_merge_blocking(path.clone(), target.clone()).unwrap();
+        assert_eq!(git(dir.path(), &["branch", "--show-current"]), "main");
+        assert_eq!(git(dir.path(), &["rev-parse", "HEAD"]), target);
+        assert_eq!(
+            fs::read_to_string(dir.path().join("shared.txt")).unwrap(),
+            "local edit\n"
+        );
+        git_merge_blocking(path, target).unwrap(); // 重复合并已包含的历史是无操作。
+    }
+
+    #[test]
+    fn diverged_histories_create_a_merge_commit() {
+        let dir = setup();
+        let path = dir.path().to_string_lossy().to_string();
+        git(dir.path(), &["checkout", "-b", "feature"]);
+        let feature = commit_file(dir.path(), "feature.txt", "feature\n");
+        git(dir.path(), &["checkout", "main"]);
+        let main = commit_file(dir.path(), "main.txt", "main\n");
+        git_merge_blocking(path, feature.clone()).unwrap();
+        let repo = Repository::open(dir.path()).unwrap();
+        let merged = repo.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(merged.parent_count(), 2);
+        assert_eq!(merged.parent_id(0).unwrap().to_string(), main);
+        assert_eq!(merged.parent_id(1).unwrap().to_string(), feature);
+        assert_eq!(git(dir.path(), &["branch", "--show-current"]), "main");
+        assert!(dir.path().join("feature.txt").exists());
+    }
+
+    #[tokio::test]
+    async fn conflicts_are_visible_and_resolved_commit_preserves_both_parents() {
+        let dir = setup();
+        let path = dir.path().to_string_lossy().to_string();
+        git(dir.path(), &["checkout", "-b", "feature"]);
+        let feature = commit_file(dir.path(), "shared.txt", "feature version\n");
+        git(dir.path(), &["checkout", "main"]);
+        let main = commit_file(dir.path(), "shared.txt", "main version\n");
+        let error = git_merge_blocking(path.clone(), feature.clone()).unwrap_err();
+        assert!(error.contains("合并产生冲突"), "{error}");
+        let status = git_status(path.clone()).await.unwrap();
+        assert!(status
+            .unstaged
+            .iter()
+            .any(|file| file.path == "shared.txt" && file.status == "U"));
+        assert_eq!(
+            git_status_summary(path.clone())
+                .await
+                .unwrap()
+                .unstaged_count,
+            1
+        );
+        assert!(git_merge_blocking(path.clone(), feature.clone())
+            .unwrap_err()
+            .contains("尚未完成"));
+        assert!(git_commit_blocking(path.clone(), "unresolved".into()).is_err());
+        fs::write(dir.path().join("shared.txt"), "resolved\n").unwrap();
+        git_stage_paths_inner(&path, &["shared.txt"]).unwrap();
+        let merged_sha = git_commit_blocking(path, "resolve merge".into()).unwrap();
+        let repo = Repository::open(dir.path()).unwrap();
+        let merged = repo.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(merged.id().to_string(), merged_sha);
+        assert_eq!(merged.parent_count(), 2);
+        assert_eq!(merged.parent_id(0).unwrap().to_string(), main);
+        assert_eq!(merged.parent_id(1).unwrap().to_string(), feature);
+        assert_eq!(repo.state(), git2::RepositoryState::Clean);
+    }
+
+    #[test]
+    fn invalid_target_and_detached_head_are_rejected_without_mutation() {
+        let dir = setup();
+        let path = dir.path().to_string_lossy().to_string();
+        let before = git(dir.path(), &["rev-parse", "HEAD"]);
+        for target in ["", "missing-commit", "--abort"] {
+            assert!(git_merge_blocking(path.clone(), target.into()).is_err());
+        }
+        assert_eq!(git(dir.path(), &["rev-parse", "HEAD"]), before);
+        git(dir.path(), &["checkout", "--detach", "HEAD"]);
+        assert!(git_merge_blocking(path, before)
+            .unwrap_err()
+            .contains("分离 HEAD"));
+    }
+
+    #[test]
+    fn overlapping_local_changes_are_preserved_when_merge_is_refused() {
+        let dir = setup();
+        let path = dir.path().to_string_lossy().to_string();
+        let before = git(dir.path(), &["rev-parse", "HEAD"]);
+        git(dir.path(), &["checkout", "-b", "feature"]);
+        let target = commit_file(dir.path(), "shared.txt", "feature version\n");
+        git(dir.path(), &["checkout", "main"]);
+        fs::write(dir.path().join("shared.txt"), "local edit\n").unwrap();
+        assert!(git_merge_blocking(path, target).is_err());
+        assert_eq!(git(dir.path(), &["rev-parse", "HEAD"]), before);
+        assert_eq!(
+            fs::read_to_string(dir.path().join("shared.txt")).unwrap(),
+            "local edit\n"
         );
     }
 }

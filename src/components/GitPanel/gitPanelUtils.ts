@@ -61,6 +61,8 @@ export function getStatusSymbol(status: string): string {
       return "R";
     case "T":
       return "T";
+    case "U":
+      return "U";
     default:
       return "?";
   }
@@ -167,6 +169,7 @@ export function getStatusColor(status: string): string {
     case "M":
       return "#faad14";
     case "D":
+    case "U":
       return "#ff4d4f";
     default:
       return "var(--ant-color-text-tertiary)";
