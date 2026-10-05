@@ -15,7 +15,10 @@ import {
   formatWorkspaceSidebarRelativeTime,
   workspaceSidebarSessionUpdatedAt,
 } from "../../utils/repositoryWorkspaceTree";
-import { NATIVE_CLI_ENGINE_LABELS } from "../../utils/nativeCliDiskSessions";
+import {
+  NATIVE_CLI_ENGINE_LABELS,
+  NATIVE_CLI_ENGINE_SHORT_LABELS,
+} from "../../utils/nativeCliDiskSessions";
 import { WorkspaceSessionRowStatusSlot } from "./WorkspaceSessionRowStatus";
 import "./RepositoryWorkspaceSessionTree.css";
 
@@ -374,8 +377,13 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
           >
             <WorkspaceSessionRowStatusSlot liveStatus={session.status} />
             {nativeCliEngine && nativeCliBadgeLabel ? (
-              <span className="app-workspace-session-tree__kind" data-kind={nativeCliEngine}>
-                {nativeCliBadgeLabel}
+              <span
+                className="app-workspace-session-tree__kind"
+                data-kind={nativeCliEngine}
+                title={nativeCliBadgeLabel}
+                aria-label={nativeCliBadgeLabel}
+              >
+                {NATIVE_CLI_ENGINE_SHORT_LABELS[nativeCliEngine]}
               </span>
             ) : null}
             <span className="app-workspace-session-tree__title" title={title}>

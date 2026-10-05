@@ -22,6 +22,13 @@ export const NATIVE_CLI_ENGINE_LABELS: Record<NativeCliEngine, string> = {
   cursor: "Cursor",
 };
 
+/** 工作区侧栏窄徽标使用的紧凑名称；完整名称由 title 提示保留。 */
+export const NATIVE_CLI_ENGINE_SHORT_LABELS: Record<NativeCliEngine, string> = {
+  codex: "Cod",
+  deepseek: "DS",
+  cursor: "Cur",
+};
+
 export const NATIVE_CLI_ENGINES: readonly NativeCliEngine[] = ["codex", "deepseek", "cursor"];
 
 function sessionMatchesNativeId(

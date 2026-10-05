@@ -70,7 +70,7 @@
 
 .app-workspace-session-tree__kind {
   flex: 0 0 auto;
-  padding: 0 6px;
+  padding: 0 4px;
   /* 与卡片体系统一的胶囊标签：底色跟随各自的语义色，弱化但不再是一块灰底 */
   border-radius: 999px;
   background: color-mix(in srgb, currentColor 13%, transparent);

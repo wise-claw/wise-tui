@@ -727,19 +727,19 @@
 
 /* 与底栏 `.app-claude-ctx-tone--*` 色阶一致；圆环用更饱和色便于小尺寸辨认 */
 .app-claude-context-compact-ring.app-claude-ctx-tone--ok {
-  color: var(--ant-green-6, #52c41a);
+  color: var(--ant-green-7, #389e0d);
 }
 
 .app-claude-context-compact-ring.app-claude-ctx-tone--caution {
-  color: var(--ant-gold-6, #faad14);
+  color: var(--ant-gold-7, #d48806);
 }
 
 .app-claude-context-compact-ring.app-claude-ctx-tone--high {
-  color: var(--ant-orange-6, #fa8c16);
+  color: var(--ant-orange-7, #d46b08);
 }
 
 .app-claude-context-compact-ring.app-claude-ctx-tone--critical {
-  color: var(--ant-red-6, #f5222d);
+  color: var(--ant-red-7, #cf1322);
 }
 
 .app-claude-context-compact-ring__svg {
@@ -748,8 +748,9 @@
 }
 
 .app-claude-context-compact-ring__track {
-  stroke: var(--ant-color-fill-tertiary, rgba(0, 0, 0, 0.18));
-  opacity: 1;
+  /* Keep the full ring visible behind the progress arc, tinted to the active status. */
+  stroke: currentColor;
+  opacity: 0.28;
 }
 
 .app-claude-context-compact-ring__progress {
