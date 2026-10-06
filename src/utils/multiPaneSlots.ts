@@ -172,7 +172,8 @@ export function planNextPaneSlotPlacement(
 }
 
 /**
- * 多屏下「侧栏/顶栏选仓库/工作区」的目标 pane slot 解析。
+ * 多屏下屏内仓库选择器的目标 pane slot 解析。左侧工作区列表固定切换第一屏，
+ * 不使用此路由。
  *
  * 设计动机：开多个窗格后，每个窗格选中的工作区、仓库不要相互干扰。
  * - 单屏（paneCount === 1）：调用方应回退到 setActiveXxxId 全局写入，保持原行为。

@@ -36,6 +36,7 @@ import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import type { PaneCount } from "../../constants/mainLayoutWidths";
 import { topbarPropsEqual } from "./topbarPropsEqual";
 import type { CenterView } from "./ClaudeChat";
+import { IconFileTreeExplorer } from "../WorkspaceFileTreeRail/IconFileTreeExplorer";
 
 const RunCommandPanelLazy = lazy(() =>
   import("../RunCommand").then((module) => ({ default: module.RunCommandPanel })),
@@ -187,6 +188,9 @@ export interface TopbarProps {
   collapsed?: boolean;
   /** 文件树侧栏展开时，顶栏已不在窗口左缘，无需再为交通灯预留左边距。 */
   fileTreeRailOpen?: boolean;
+  paneFileTreeOpen?: boolean;
+  /** 展开 / 收起当前窗格仓库的文件树。 */
+  onToggleFileTree?: () => void;
   terminalCollapsed?: boolean;
   terminalPanelMounted?: boolean;
   onAutoFixRunError?: (prompt: string) => void | boolean | Promise<void | boolean>;
@@ -257,6 +261,8 @@ export const Topbar = memo(function Topbar({
   onSearch,
   collapsed,
   fileTreeRailOpen = false,
+  paneFileTreeOpen = false,
+  onToggleFileTree,
   terminalCollapsed,
   terminalPanelMounted = false,
   onAutoFixRunError,
@@ -341,14 +347,14 @@ export const Topbar = memo(function Topbar({
   const topbarLeftClassName = [
     "app-chat-topbar-left",
     collapsed ? "app-chat-topbar-left--collapsed" : "",
-    collapsed && fileTreeRailOpen ? "app-chat-topbar-left--file-tree-rail" : "",
+    collapsed && (fileTreeRailOpen || paneFileTreeOpen) ? "app-chat-topbar-left--file-tree-rail" : "",
     showRepoTitle ? "" : "app-chat-topbar-left--no-repo-title",
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <div className="app-chat-topbar">
+    <div className={`app-chat-topbar${onToggleFileTree ? " app-chat-topbar--pane-files" : ""}`}>
       <WindowChromeDragUnderlay className="app-chat-topbar-drag-underlay" />
       <div
         className={`app-chat-topbar-leading${collapsed ? " app-chat-topbar-leading--collapsed" : ""}`}
@@ -360,6 +366,15 @@ export const Topbar = memo(function Topbar({
                 icon={<IconCollapseSidebar collapsed={collapsed ?? false} />}
                 label={collapsed ? "展开侧边栏" : "收起侧边栏"}
                 onClick={onToggleSidebar}
+              />
+            ) : null}
+            {onToggleFileTree ? (
+              <TopbarBtn
+                icon={<IconFileTreeExplorer />}
+                label={paneFileTreeOpen ? "收起本屏文件树" : "打开本屏文件树"}
+                active={paneFileTreeOpen}
+                className="app-topbar-btn--pane-file-tree"
+                onClick={onToggleFileTree}
               />
             ) : null}
             {showCenterSwitcher ? (

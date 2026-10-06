@@ -1,4 +1,9 @@
 import { repositoryCardFileTreeContext } from "./WorkspaceFileTreeRail/repositoryCardContext";
+import {
+  RepositoryFileEditorOpenFileContext,
+  useRepositoryFileEditorOpenFile,
+  useRepositoryFileEditorOpenFileInPane,
+} from "./RepositoryFileEditorOpenFileContext";
 import { WISE_REPOSITORY_CARD_ACTION, type RepositoryCardActionDetail } from "../constants/repositoryCardEvents";
 import {
   Suspense,
@@ -172,8 +177,6 @@ type LeftSidebarProps = Omit<
   | "onOpenActiveRepositoryFile"
 >;
 
-type OpenRepositoryFileHandler = (path: string, options?: GitPanelOpenFileOptions) => void;
-
 /** 把指定文件在文件树中展开父目录链并滚动高亮定位。多 pane 下按文件所属仓库根路由。 */
 type RevealFileInExplorerHandler = (
   repositoryPath: string,
@@ -222,7 +225,6 @@ interface RepositoryFileEditorPanelContextValue {
   paneIndex?: number;
 }
 
-const RepositoryFileEditorOpenFileContext = createContext<OpenRepositoryFileHandler | null>(null);
 const RepositoryFileEditorVisibilityContext = createContext(false);
 const RepositoryFileEditorPanelContext = createContext<RepositoryFileEditorPanelContextValue | null>(null);
 const RepositoryFileEditorRevealInExplorerContext = createContext<RevealFileInExplorerHandler | null>(null);
@@ -243,14 +245,6 @@ interface PaneEditorApi {
   paneIndex: number;
   repositoryPath: string | null | undefined;
   openRepositoryFile: (relativePath: string, options?: GitPanelOpenFileOptions) => void;
-}
-
-function useRepositoryFileEditorOpenFile(): OpenRepositoryFileHandler {
-  const value = useContext(RepositoryFileEditorOpenFileContext);
-  if (!value) {
-    throw new Error("Repository file editor open file context is missing");
-  }
-  return value;
 }
 
 function useRepositoryFileEditorPanelContextValue(): RepositoryFileEditorPanelContextValue {
@@ -454,7 +448,8 @@ const ConnectedLeftSidebar = memo(function ConnectedLeftSidebar({
   parked,
   siderWidth,
 }: ConnectedLeftSidebarProps) {
-  const openRepositoryFile = useRepositoryFileEditorOpenFile();
+  // 左栏及由它提供上下文的全局文件树/Git 列表统一在第一屏打开。
+  const openRepositoryFile = useRepositoryFileEditorOpenFileInPane(0);
   return (
     <ErrorBoundary type="local" fallbackTitle="侧栏出错">
       <MemoLeftSidebar
@@ -1528,6 +1523,18 @@ export function AppWorkspaceLayout({
 
   const openRepositoryFileWithPreference = useCallback(
     async (relativePath: string, options?: GitPanelOpenFileOptions) => {
+      // 本屏文件树显式指定目标，优先于全局新屏偏好和最近聚焦的窗格。
+      const requestedPaneIndex = options?.targetPaneIndex;
+      if (
+        requestedPaneIndex != null &&
+        Number.isInteger(requestedPaneIndex) &&
+        requestedPaneIndex >= 0 &&
+        requestedPaneIndex < (claudeSessionsProps.paneCount ?? 1)
+      ) {
+        setFileEditorTargetPaneIndex(requestedPaneIndex);
+        openRepositoryFileInPaneByRootPath(relativePath, options, requestedPaneIndex);
+        return;
+      }
       const fromFileTree = options?.fromFileTree === true;
       const plainFile = isPlainRepositoryFileOpen(options);
       if (fromFileTree && fileTreeOpenInNewPane && plainFile) {

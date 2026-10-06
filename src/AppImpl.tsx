@@ -2492,7 +2492,6 @@ export default function App() {
     paneCountRef,
     extraPanes,
     handlePaneRepositorySelect,
-    handlePaneProjectNewSession,
     suppressProjectSelectToChatRef,
     onRestoreHistorySessionAsMainComplete: () => setInspectorHistorySessionId(null),
   });

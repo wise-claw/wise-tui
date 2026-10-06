@@ -10,6 +10,8 @@ export type GitPanelOpenFileOptions = {
   fileRootPath?: string;
   /** 来自侧栏文件树点击；配合默认配置决定是否新开一屏。 */
   fromFileTree?: boolean;
+  /** 入口指定编辑器宿主（左栏为第一屏，本屏文件树为所在屏），优先于新屏偏好。 */
+  targetPaneIndex?: number;
 };
 
 export interface FileTreeNode {

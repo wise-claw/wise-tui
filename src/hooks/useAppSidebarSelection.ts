@@ -37,7 +37,7 @@ import {
 } from "../utils/repositoryMainSessionBinding";
 import { loadSessionOwnerHints, WISE_SESSION_OWNER_HINTS_CHANGED_EVENT } from "../utils/sessionOwnerHints";
 import { resolveFocusedPaneTargetSlot } from "../utils/multiPaneSlots";
-import { getActivePaneIndex } from "../stores/activePaneIndexStore";
+import { getActivePaneIndex, markPaneActive } from "../stores/activePaneIndexStore";
 import type { UseViewModeApi } from "./useViewMode";
 import { requestPaneCenterView } from "../stores/paneCenterViewControlStore";
 import {
@@ -173,11 +173,6 @@ interface UseAppSidebarSelectionOptions {
   paneCountRef: RefObject<PaneCount>;
   extraPanes: PaneSlot[];
   handlePaneRepositorySelect: (slotIndex: number, repositoryId: number) => void | Promise<void>;
-  handlePaneProjectNewSession: (
-    slotIndex: number,
-    projectId: string,
-    projects: ProjectItem[],
-  ) => void | Promise<void>;
   suppressProjectSelectToChatRef: RefObject<boolean>;
   onRestoreHistorySessionAsMainComplete?: () => void;
 }
@@ -212,7 +207,6 @@ export function useAppSidebarSelection({
   paneCountRef,
   extraPanes,
   handlePaneRepositorySelect,
-  handlePaneProjectNewSession,
   suppressProjectSelectToChatRef,
   onRestoreHistorySessionAsMainComplete,
 }: UseAppSidebarSelectionOptions) {
@@ -690,35 +684,20 @@ export function useAppSidebarSelection({
   const startupFirstProjectRepoSessionAppliedRef = useRef(false);
   const sidebarSelectionEpochRef = useRef(0);
 
-  const tryRouteSidebarSelectionToFocusedPane = useCallback(
-    (kind: "repository" | "project", id: number | string): boolean => {
+  const handlePickedActiveRepositoryForCurrentPane = useCallback(
+    (repositoryId: number) => {
       const target = resolveFocusedPaneTargetSlot(
         paneCountRef.current ?? 1,
         getActivePaneIndex(),
         extraPanes,
       );
       if (target.kind === "extra") {
-        if (kind === "repository") {
-          void handlePaneRepositorySelect(target.slotIndex, Number(id));
-        } else {
-          void handlePaneProjectNewSession(target.slotIndex, String(id), projects);
-        }
-        return true;
-      }
-      return false;
-    },
-    [extraPanes, handlePaneProjectNewSession, handlePaneRepositorySelect, paneCountRef, projects],
-  );
-
-  const handlePickedActiveRepositoryForCurrentPane = useCallback(
-    (repositoryId: number) => {
-      if (paneCountRef.current === 1) {
-        setActiveRepositoryId(repositoryId);
+        void handlePaneRepositorySelect(target.slotIndex, repositoryId);
         return;
       }
-      tryRouteSidebarSelectionToFocusedPane("repository", repositoryId);
+      setActiveRepositoryId(repositoryId);
     },
-    [paneCountRef, setActiveRepositoryId, tryRouteSidebarSelectionToFocusedPane],
+    [extraPanes, handlePaneRepositorySelect, paneCountRef, setActiveRepositoryId],
   );
 
   const handleSidebarRepositorySelectLeavingMcpHub = useCallback(
@@ -736,11 +715,11 @@ export function useAppSidebarSelection({
       if (!repository) {
         return;
       }
+      // 左侧工作区只驱动第一屏，各分屏自己的仓库选择器仍按当前屏处理。
+      markPaneActive(0);
+      requestPaneCenterView(0, "messages");
       const leavingOverlay = viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect;
       prefetchRepositoryWorkspace(repository.path);
-      if (!leavingOverlay && tryRouteSidebarSelectionToFocusedPane("repository", repositoryId)) {
-        return;
-      }
       if (
         !leavingOverlay &&
         viewMode.isChat &&
@@ -775,7 +754,6 @@ export function useAppSidebarSelection({
       projects,
       repositories,
       setActiveRepositoryWithOwner,
-      tryRouteSidebarSelectionToFocusedPane,
       viewMode,
     ],
   );
@@ -843,13 +821,12 @@ export function useAppSidebarSelection({
         setActiveProjectId(projectId);
         return;
       }
+      markPaneActive(0);
+      requestPaneCenterView(0, "messages");
       const leavingOverlay = viewMode.isAuthor || viewMode.isInspect || viewMode.isCockpit;
       const anchor = resolveProjectMainSessionAnchor(project, repositories);
       if (anchor.path) {
         prefetchRepositoryWorkspace(anchor.path);
-      }
-      if (!leavingOverlay && tryRouteSidebarSelectionToFocusedPane("project", projectId)) {
-        return;
       }
       if (
         !leavingOverlay &&
@@ -880,7 +857,6 @@ export function useAppSidebarSelection({
       repositories,
       setActiveProjectId,
       suppressProjectSelectToChatRef,
-      tryRouteSidebarSelectionToFocusedPane,
       viewMode,
     ],
   );
@@ -888,6 +864,7 @@ export function useAppSidebarSelection({
   const jumpToSessionLeavingMcpHub = useCallback(
     (sessionId: string) => {
       viewMode.enter({ kind: "chat" });
+      markPaneActive(0);
       requestPaneCenterView(0, "messages");
       jumpToSessionWithRepository(sessionId);
     },

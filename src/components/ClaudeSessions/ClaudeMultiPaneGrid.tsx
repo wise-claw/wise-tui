@@ -66,6 +66,7 @@ import {
 } from "../../stores/terminalCenterPanelStore";
 import { WORKSPACE_MEMO_PANEL_NODE, WORKSPACE_QUICK_ACTIONS_PANEL_NODE } from "../workspaceAuxPanelNodes";
 import type { CenterView } from "./ClaudeChat";
+import { PaneWorkspace } from "./PaneWorkspace";
 
 const TerminalPanelLazy = lazy(() =>
   import("../TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
@@ -460,13 +461,17 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   }, [centerView]);
 
   return (
-    <div
-      className="app-claude-sessions__pane"
-      onMouseDownCapture={() => markPaneActive(0)}
+    <PaneWorkspace
+      paneIndex={0}
+      repositoryPath={session.repositoryPath?.trim() || activeRepository.path}
+      repositoryName={activeRepository.name}
     >
+      {({ fileTreeRailOpen, onToggleFileTree }) => <>
       {shared.paneTopbarShared ? (
         <Topbar
           {...shared.paneTopbarShared}
+          paneFileTreeOpen={fileTreeRailOpen}
+          onToggleFileTree={onToggleFileTree}
           activeRepository={activeRepository}
           activeSessionRepositoryPath={session.repositoryPath?.trim() || activeRepository.path}
           repositories={shared.repositories}
@@ -585,7 +590,8 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onUpdatePaneRuntimeOverride={shared.onUpdatePaneRuntimeOverride}
       />
       </CenterViewControlContext.Provider>
-    </div>
+      </>}
+    </PaneWorkspace>
   );
 }, (prev, next) =>
   prev.session === next.session &&
@@ -820,6 +826,34 @@ const MultiPaneExtraPaneCell = memo(
       };
     }, [onPaneProjectNewSession, onPaneRepositorySelect, paneIdx, paneSession, projects, resolvedRepo, shared.repositories]);
 
+    const renderPaneTopbar = (fileTreeRailOpen: boolean, onToggleFileTree: () => void) =>
+      shared.paneTopbarShared ? (
+        <Topbar
+          {...shared.paneTopbarShared}
+          paneFileTreeOpen={fileTreeRailOpen}
+          onToggleFileTree={onToggleFileTree}
+          onToggleSidebar={undefined}
+          collapsed={false}
+          onToggleTerminal={handleToggleTerminalOnPane}
+          terminalPanelMounted={terminalMounted}
+          terminalCollapsed={!terminalVisible}
+          onChangePaneCount={undefined}
+          onOpenRemoteChannels={undefined}
+          activeRepository={resolvedRepo}
+          activeSessionRepositoryPath={paneSession?.repositoryPath?.trim() || resolvedRepo.path}
+          repositories={shared.repositories}
+          activeProject={paneProject}
+          activeWorkspaceFocus="repository"
+          mainSessionForDataLink={paneSession}
+          onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(resolvedRepo.path)}
+          centerView={centerView}
+          onCenterViewChange={handleCenterViewChange}
+          centerSwitcherVisible={Boolean(paneSession) && centerSwitcherVisible}
+          centerSwitcherOptions={centerSwitcherOptions}
+          showWindowTopbarControls={false}
+        />
+      ) : null;
+
     if (paneSession) {
       const sessionId = paneSession.id;
       if (useOffscreenRunningShell) {
@@ -857,37 +891,15 @@ const MultiPaneExtraPaneCell = memo(
         );
       }
       return (
-        <div
-          ref={lazyEnabled ? setPaneDivRef : undefined}
-          className="app-claude-sessions__pane"
-          onMouseDownCapture={() => markPaneActive(paneIdx + 1)}
+        <PaneWorkspace
+          paneRef={lazyEnabled ? setPaneDivRef : undefined}
+          paneIndex={absolutePaneIndex}
+          repositoryPath={paneSession.repositoryPath?.trim() || resolvedRepo.path}
+          repositoryName={resolvedRepo.name}
+          cornerButton={paneCloseButton}
         >
-          {paneCloseButton}
-          {shared.paneTopbarShared ? (
-            <Topbar
-              {...shared.paneTopbarShared}
-              // extra pane 不渲染窗口级按钮（侧栏 / 多屏切换 / RemoteEntry），
-              // 但保留内置终端：挂到本屏中栏，cwd 跟随本屏仓库。
-              onToggleSidebar={undefined}
-              onToggleTerminal={handleToggleTerminalOnPane}
-              terminalPanelMounted={terminalMounted}
-              terminalCollapsed={!terminalVisible}
-              onChangePaneCount={undefined}
-              onOpenRemoteChannels={undefined}
-              activeRepository={resolvedRepo}
-              activeSessionRepositoryPath={paneSession.repositoryPath?.trim() || resolvedRepo?.path}
-              repositories={shared.repositories}
-              activeProject={paneProject}
-              activeWorkspaceFocus="repository"
-              mainSessionForDataLink={paneSession}
-              onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(resolvedRepo?.path ?? "")}
-              centerView={centerView}
-              onCenterViewChange={handleCenterViewChange}
-              centerSwitcherVisible={centerSwitcherVisible}
-              centerSwitcherOptions={centerSwitcherOptions}
-              showWindowTopbarControls={false}
-            />
-          ) : null}
+          {({ fileTreeRailOpen, onToggleFileTree }) => <>
+          {renderPaneTopbar(fileTreeRailOpen, onToggleFileTree)}
           <CenterViewControlContext.Provider value={requestCenterView}>
           <ClaudeSessionChatWithDock
             session={paneSession}
@@ -990,22 +1002,36 @@ const MultiPaneExtraPaneCell = memo(
             onUpdatePaneRuntimeOverride={shared.onUpdatePaneRuntimeOverride}
           />
           </CenterViewControlContext.Provider>
-        </div>
+          </>}
+        </PaneWorkspace>
       );
     }
 
     if (panelBelowMessages) {
       return (
-        <div className="app-claude-sessions__pane app-claude-sessions__pane--file-only">
-          {paneCloseButton}
-          {panelBelowMessages}
-        </div>
+        <PaneWorkspace
+          paneIndex={absolutePaneIndex}
+          repositoryPath={resolvedRepo.path}
+          repositoryName={resolvedRepo.name}
+          cornerButton={paneCloseButton}
+        >
+          {({ fileTreeRailOpen, onToggleFileTree }) => <>
+            {renderPaneTopbar(fileTreeRailOpen, onToggleFileTree)}
+            {panelBelowMessages}
+          </>}
+        </PaneWorkspace>
       );
     }
 
     return (
-      <div className="app-claude-sessions__pane">
-        {paneCloseButton}
+      <PaneWorkspace
+        paneIndex={absolutePaneIndex}
+        repositoryPath={resolvedRepo.path}
+        repositoryName={resolvedRepo.name}
+        cornerButton={paneCloseButton}
+      >
+        {({ fileTreeRailOpen, onToggleFileTree }) => <>
+        {renderPaneTopbar(fileTreeRailOpen, onToggleFileTree)}
         <SessionEmptyState
           title="窗格执行会话尚未就绪"
           hint="选择仓库后自动创建隔离会话，或点击下方按钮新建。"
@@ -1150,7 +1176,8 @@ const MultiPaneExtraPaneCell = memo(
               : undefined
           }
         />
-      </div>
+        </>}
+      </PaneWorkspace>
     );
   },
   (prev, next) =>

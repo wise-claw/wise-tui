@@ -71,7 +71,8 @@ const MarkdownCopyButton = memo(function MarkdownCopyButton({
       data-copied={copied ? "true" : undefined}
       onClick={handleCopy}
     >
-      <span className="copy-icon">{copied ? <CheckIcon /> : <CopyIcon />}</span>
+      <span className="copy-icon"><CopyIcon /></span>
+      <span className="check-icon"><CheckIcon /></span>
     </button>
   );
 });

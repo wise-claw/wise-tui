@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from "react";
-import { Button, Popover } from "antd";
+import { Popover } from "antd";
 import { ContextDetailPopover } from "./ContextDetailPopover";
 import type { ContextBreakdownSnapshot } from "../../services/claudeContextBreakdown";
 
@@ -67,9 +67,8 @@ function ContextCompactProgressRingImpl({
         />
       }
     >
-      <Button
-        type="text"
-        size="small"
+      <button
+        type="button"
         className={[
           "app-claude-context-compact-ring",
           toneClassName,
@@ -114,7 +113,7 @@ function ContextCompactProgressRingImpl({
         {ctxStatusLine ? (
           <span className="app-claude-context-compact-ring__sr-only">{ctxStatusLine}</span>
         ) : null}
-      </Button>
+      </button>
     </Popover>
   );
 }
