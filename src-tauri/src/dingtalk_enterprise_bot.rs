@@ -2,11 +2,22 @@
 //! 接收用户在钉钉侧发送的内容可由本机 `dingtalk_stream_gateway`（Stream 长连）或自建网关调用 `wise_notification_ingest`；本模块仅负责出向单聊 Markdown。
 
 use std::path::Path;
+use std::time::Duration;
 
 use reqwest::multipart::Part;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+
+/// 出向钉钉 API 超时：不设超时时网络挂起会让调用方永久等待。
+const DINGTALK_HTTP_TIMEOUT: Duration = Duration::from_secs(15);
+
+fn dingtalk_http_client() -> Result<Client, String> {
+    Client::builder()
+        .timeout(DINGTALK_HTTP_TIMEOUT)
+        .build()
+        .map_err(|e| format!("创建钉钉 HTTP 客户端失败: {e}"))
+}
 
 #[derive(Debug, Deserialize)]
 struct GetTokenResp {
@@ -28,7 +39,7 @@ async fn get_internal_access_token(app_key: &str, app_secret: &str) -> Result<St
     let key = urlencoding::encode(app_key);
     let sec = urlencoding::encode(app_secret);
     let url = format!("https://oapi.dingtalk.com/gettoken?appkey={key}&appsecret={sec}");
-    let client = Client::new();
+    let client = dingtalk_http_client()?;
     let resp = client
         .get(&url)
         .send()
@@ -131,7 +142,7 @@ async fn robot_oto_batch_send(
         msg_key: msg_key.to_string(),
         msg_param: msg_param.to_string(),
     };
-    let client = Client::new();
+    let client = dingtalk_http_client()?;
     let resp = client
         .post("https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend")
         .header("x-acs-dingtalk-access-token", token)

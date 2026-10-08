@@ -829,6 +829,78 @@ describe("tryPatchChatMessageListRowsTail", () => {
     ).toBe(true);
     expect(foldChatMessagesForList(nextMessages)).toEqual(patched!.folded);
   });
+
+  test("tool_result 历史续流：合并前缀引用稳定，tail-patch 复用前缀行", () => {
+    // 磁盘回放典型形态：每轮 assistant(tool_use) → user(tool_result) → assistant(小结)，
+    // tool_result 吸收进助手后，相邻助手 coalesce 成合成行。
+    // 修复前每次 fold 都重新克隆这些合成对象，前缀行 msg 引用失配 →
+    // tryPatchChatMessageListRowsTail 返回 null 退化为全量重建；合并结果引用稳定后前缀行整块复用。
+    const turn = (n: number, toolId: string): ClaudeMessage[] => [
+      msg({ id: n * 10 + 1, role: "user", content: `读取 ${n}` }),
+      msg({
+        id: n * 10 + 2,
+        role: "assistant",
+        content: `分析 ${n}`,
+        parts: [
+          { type: "text", text: `分析 ${n}` },
+          {
+            type: "tool_use",
+            id: toolId,
+            name: "Read",
+            input: { file_path: "/a.ts" },
+            status: "completed",
+          },
+        ],
+      }),
+      msg({
+        id: n * 10 + 3,
+        role: "user",
+        parts: [
+          {
+            type: "tool_use",
+            id: toolId,
+            name: "",
+            input: {},
+            output: "file body",
+            status: "completed",
+          },
+        ],
+      }),
+      msg({
+        id: n * 10 + 4,
+        role: "assistant",
+        content: `小结 ${n}`,
+        parts: [{ type: "text", text: `小结 ${n}` }],
+      }),
+    ];
+    const history = [...turn(1, "toolu_1"), ...turn(2, "toolu_2")];
+    const options = { sessionStatus: "running" as const, showListEndThinkingHint: false };
+    const initialRows = buildChatMessageListRows(history, options);
+    const prevFolded = foldChatMessagesForList(history);
+    // 续流：仅末条助手内容增长（等长替换）。
+    const nextMessages = [
+      ...history.slice(0, -1),
+      msg({
+        id: 24,
+        role: "assistant",
+        content: "小结 2 续写",
+        parts: [{ type: "text", text: "小结 2 续写" }],
+      }),
+    ];
+    const patched = tryPatchChatMessageListRowsTail(
+      history,
+      nextMessages,
+      initialRows,
+      options,
+      prevFolded,
+    );
+    // 引用稳定后 tail-patch 成功（修复前为 null → 调用方全量重建整表）。
+    expect(patched).not.toBeNull();
+    // 前两轮折叠行（含被吸收 / 合并的助手）引用稳定，前缀行整块复用。
+    expect(patched!.folded[1]).toBe(prevFolded[1]);
+    expect(patched!.rows[1]).toBe(initialRows[1]);
+    expect(patched!.folded).toEqual(foldChatMessagesForList(nextMessages));
+  });
 });
 
 describe("showThinkingMessages=false：思考消息隐藏（默认配置关闭）", () => {

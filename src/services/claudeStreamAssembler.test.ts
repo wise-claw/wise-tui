@@ -886,4 +886,29 @@ describe("foldToolResultUserMessagesIntoAssistant", () => {
     expect(applyToolResultPartsToMessages([legacy, call], update.parts as ToolUsePart[]).messages)
       .toEqual(folded);
   });
+
+  test("reuses the merged assistant ref for an unchanged prefix across folds", () => {
+    const call = assistantTool("tool", "Read");
+    const update = toolResultUser("tool", "loaded");
+    // 合并是输入的纯函数：同一助手 + 同一批更新引用 → 复用同一对象，保持前缀引用稳定。
+    const first = foldToolResultUserMessagesIntoAssistant([call, update]);
+    const second = foldToolResultUserMessagesIntoAssistant([call, update]);
+    expect(second[0]).toBe(first[0]);
+  });
+
+  test("keeps merged prefix refs stable when a new tail message is appended", () => {
+    const call = assistantTool("tool", "Read");
+    const update = toolResultUser("tool", "loaded");
+    const tail: ClaudeMessage = {
+      id: 3,
+      role: "assistant",
+      content: "完成",
+      timestamp: 3,
+      parts: [{ type: "text", text: "完成" }],
+    };
+    const before = foldToolResultUserMessagesIntoAssistant([call, update]);
+    const after = foldToolResultUserMessagesIntoAssistant([call, update, tail]);
+    expect(after[0]).toBe(before[0]);
+    expect(after[1]).toBe(tail);
+  });
 });

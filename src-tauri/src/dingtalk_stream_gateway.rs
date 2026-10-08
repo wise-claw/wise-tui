@@ -27,6 +27,13 @@ const ROBOT_MESSAGE_FILE_DOWNLOAD: &str =
 /// 钉钉单聊图片常见约 5MB；此处允许到 6MiB 二进制，避免网关侧误拒收。
 const MAX_INGEST_IMAGE_BYTES: usize = 6 * 1024 * 1024;
 
+/// 出向 HTTP 请求超时：不设超时时网络挂起会让调用方永久等待（换取 ticket / 解析下载地址）。
+const DINGTALK_HTTP_TIMEOUT: Duration = Duration::from_secs(15);
+/// 附件下载超时：允许较慢的图片下载，但仍需有界，避免任务悬挂。
+const DINGTALK_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(60);
+/// WebSocket 握手超时：握手悬挂时让重连循环尽快重试，而不是永久卡住。
+const DINGTALK_WS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
+
 pub struct DingTalkStreamGatewayControl {
     join: Mutex<Option<tokio::task::JoinHandle<()>>>,
     runtime: Mutex<DingTalkStreamGatewayRuntime>,
@@ -202,7 +209,7 @@ async fn register_stream_ticket(
     client_id: &str,
     client_secret: &str,
 ) -> Result<(String, String), String> {
-    let client = reqwest::Client::new();
+    let client = dingtalk_http_client(DINGTALK_HTTP_TIMEOUT)?;
     let body = json!({
         "clientId": client_id,
         "clientSecret": client_secret,
@@ -448,7 +455,7 @@ async fn dingtalk_robot_resolve_download_url(
     robot_code: &str,
     download_code: &str,
 ) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = dingtalk_http_client(DINGTALK_HTTP_TIMEOUT)?;
     let resp = client
         .post(ROBOT_MESSAGE_FILE_DOWNLOAD)
         .header("x-acs-dingtalk-access-token", access_token)
@@ -482,7 +489,7 @@ async fn http_get_bytes_limited(
     url: &str,
     max_bytes: usize,
 ) -> Result<(Vec<u8>, Option<String>), String> {
-    let client = reqwest::Client::new();
+    let client = dingtalk_http_client(DINGTALK_DOWNLOAD_TIMEOUT)?;
     let resp = client
         .get(url)
         .send()
@@ -498,14 +505,35 @@ async fn http_get_bytes_limited(
         let t = resp.text().await.unwrap_or_default();
         return Err(format!("下载文件内容 HTTP {}: {}", status, t));
     }
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| format!("读取下载正文失败: {}", e))?;
-    if bytes.len() > max_bytes {
-        return Err(format!("下载文件超过 {} 字节上限", max_bytes));
+    // 先看 Content-Length 快速拒绝；再流式累积、超限即中断，
+    // 避免把不受信任的远端响应整个读进内存后才判定大小。
+    if let Some(len) = resp.content_length() {
+        if len > max_bytes as u64 {
+            return Err(format!("下载文件超过 {} 字节上限", max_bytes));
+        }
     }
-    Ok((bytes.to_vec(), ctype))
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut stream = resp;
+    loop {
+        match stream.chunk().await {
+            Ok(Some(chunk)) => {
+                if bytes.len() + chunk.len() > max_bytes {
+                    return Err(format!("下载文件超过 {} 字节上限", max_bytes));
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            Ok(None) => break,
+            Err(e) => return Err(format!("读取下载正文失败: {}", e)),
+        }
+    }
+    Ok((bytes, ctype))
+}
+
+fn dingtalk_http_client(timeout: Duration) -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(timeout)
+        .build()
+        .map_err(|e| format!("创建钉钉 HTTP 客户端失败: {e}"))
 }
 
 async fn dingtalk_fetch_image_data_url_for_code(
@@ -875,8 +903,9 @@ async fn one_stream_session(app: &tauri::AppHandle) -> Result<(), String> {
     let ws_url = build_ws_url(&endpoint, &ticket)?;
     let ws_str = ws_url.as_str().to_string();
 
-    let (mut ws, _) = connect_async(&ws_str)
+    let (mut ws, _) = tokio::time::timeout(DINGTALK_WS_HANDSHAKE_TIMEOUT, connect_async(&ws_str))
         .await
+        .map_err(|_| "连接钉钉 Stream WebSocket 超时".to_string())?
         .map_err(|e| format!("连接钉钉 Stream WebSocket 失败: {}", e))?;
     if let Some(control) = app.try_state::<DingTalkStreamGatewayControl>() {
         control.mark_connected();

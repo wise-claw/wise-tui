@@ -284,12 +284,26 @@ function toolUsePartHasPayload(part: ToolUsePart): boolean {
  * 也覆盖历史落盘里残留的幽灵）。带 input/output 的真实工具不受影响。
  */
 function dropReasoningPlaceholderToolParts(parts: MessagePart[]): MessagePart[] {
-  const kept = parts.filter((part) => {
-    if (part.type !== "tool_use") return true;
-    if (part.name.trim().toLowerCase() !== "reasoning") return true;
-    return toolUsePartHasPayload(part);
-  });
-  return kept.length === parts.length ? parts : kept;
+  // 绝大多数 parts 不含占位卡：先扫描首个需丢弃项，避免每 tick 全量 fold 时逐条 filter 分配新数组。
+  let cutoff = 0;
+  while (cutoff < parts.length && !isDroppedReasoningPlaceholderToolPart(parts[cutoff]!)) {
+    cutoff += 1;
+  }
+  if (cutoff === parts.length) return parts;
+  const kept = parts.slice(0, cutoff);
+  for (let i = cutoff; i < parts.length; i += 1) {
+    const part = parts[i]!;
+    if (!isDroppedReasoningPlaceholderToolPart(part)) kept.push(part);
+  }
+  return kept;
+}
+
+function isDroppedReasoningPlaceholderToolPart(part: MessagePart): boolean {
+  return (
+    part.type === "tool_use"
+    && part.name.trim().toLowerCase() === "reasoning"
+    && !toolUsePartHasPayload(part)
+  );
 }
 
 export function mergeAssistantParts(
@@ -600,24 +614,56 @@ function indexFirstToolUpdates(updates: readonly ToolUsePart[]): Map<string, Too
   return byId;
 }
 
+/**
+ * tool_result 合并结果按「助手消息引用 + 命中的更新 part 引用序列」缓存。
+ *
+ * 合并是输入的纯函数（只读入参、不原地改消息），因此「同一消息 + 同一批更新引用」必然产出
+ * 同一结果，可安全复用对象引用。前缀未变时复用上次合并对象，使
+ * {@link foldToolResultUserMessagesIntoAssistant} 对未变更消息保持引用稳定；
+ * 列表 tail-patch 以引用判等复用前缀 folded 与行对象，否则每 tick 全量 fold 都要重新克隆
+ * 所有历史合并助手并重拼正文，长会话流式时退化成 O(n)/tick。
+ */
+const mergedToolResultCache = new WeakMap<
+  ClaudeMessage,
+  { updates: readonly ToolUsePart[]; merged: ClaudeMessage }
+>();
+
 function assistantMessageWithMergedToolParts(
   message: ClaudeMessage,
   updates: ReadonlyMap<string, ToolUsePart>,
   matchedIds: Set<string>,
 ): ClaudeMessage | null {
   if (message.role !== "assistant" || !message.parts?.length) return null;
-  let nextParts: MessagePart[] | undefined;
+  // 第一遍只按 parts 顺序收集命中的更新引用（不克隆），用于查缓存 / 建新消息。
+  let appliedUpdates: ToolUsePart[] | null = null;
+  for (const part of message.parts) {
+    if (part.type !== "tool_use") continue;
+    const update = updates.get(part.id);
+    if (!update) continue;
+    (appliedUpdates ??= []).push(update);
+  }
+  if (!appliedUpdates) return null;
+  for (const update of appliedUpdates) matchedIds.add(update.id);
+  // 命中缓存：同一助手消息 + 同一批更新引用 → 合并结果必然相同，直接复用对象引用。
+  const cached = mergedToolResultCache.get(message);
+  if (cached && sameRefSequence(cached.updates, appliedUpdates)) {
+    return cached.merged;
+  }
+  const nextParts: MessagePart[] = [...message.parts];
   for (let i = 0; i < message.parts.length; i += 1) {
     const part = message.parts[i];
     if (part.type !== "tool_use") continue;
     const update = updates.get(part.id);
     if (!update) continue;
-    nextParts ??= [...message.parts];
-    matchedIds.add(part.id);
     nextParts[i] = mergeToolUseWithUpdate(part, update);
   }
-  if (!nextParts) return null;
-  return { ...message, parts: nextParts, content: assistantTextJoinedFromParts(nextParts) };
+  const merged: ClaudeMessage = {
+    ...message,
+    parts: nextParts,
+    content: assistantTextJoinedFromParts(nextParts),
+  };
+  mergedToolResultCache.set(message, { updates: appliedUpdates, merged });
+  return merged;
 }
 
 /** 将 tool_result 更新合并进已有 assistant 消息里对应的 tool_use（按 id）。 */
@@ -701,42 +747,78 @@ export function foldToolResultUserMessagesIntoAssistant(messages: readonly Claud
  * 若按行各建一条消息，UI 会把一行 Markdown 拆成多个气泡（`**` / 词片断裂）。
  * 累积快照走 containment 去重，增量碎片走拼接。
  * 合并时顺带清掉 Codex reasoning 空占位工具卡；仅占位的助手气泡直接丢弃。
+ *
+ * 合并组结果按「成员消息引用序列」缓存：前缀组不变时复用上次的合并对象，
+ * 使 `fold` 结果对前缀保持引用稳定。流式 tail-patch 以引用判等决定前缀行能否复用，
+ * 否则每 tick 都要重建全部前缀合并行并重跑正文拼接。
  */
+const coalesceGroupCache = new WeakMap<
+  ClaudeMessage,
+  { members: readonly ClaudeMessage[]; merged: ClaudeMessage }
+>();
+
+function sameRefSequence<T>(left: readonly T[], right: readonly T[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+}
+
 export function coalesceConsecutiveAssistantMessages(
   messages: readonly ClaudeMessage[],
 ): ClaudeMessage[] {
   if (messages.length === 0) return [];
   const out: ClaudeMessage[] = [];
+  let groupFirst: ClaudeMessage | null = null;
+  let groupMembers: ClaudeMessage[] = [];
   for (const msg of messages) {
     if (msg.role !== "assistant") {
       out.push(msg);
+      groupFirst = null;
+      groupMembers = [];
       continue;
     }
-    const scrubbedParts = dropReasoningPlaceholderToolParts(assistantPartsForCoalesce(msg));
+    const sourceParts = assistantPartsForCoalesce(msg);
+    const scrubbedParts = dropReasoningPlaceholderToolParts(sourceParts);
     if (scrubbedParts.length === 0) continue;
-    const scrubbed: ClaudeMessage = {
-      ...msg,
-      parts: scrubbedParts,
-      content: textContentFromParts(scrubbedParts),
-    };
-    const last = out[out.length - 1];
-    if (last?.role !== "assistant") {
-      out.push(scrubbed);
+    if (groupFirst === null) {
+      // 无相邻 assistant 需合并：归一化无操作时保留原消息引用。
+      // 流式 tail-patch 以「fold 末条 === 原始末条」判定增量快路径；若此处无条件重建对象，
+      // prevFolded 末条恒为新对象，快路径永久失效，退化成每 tick 全量 fold + 全量行重建。
+      const scrubbedContent = textContentFromParts(scrubbedParts);
+      if (scrubbedParts === sourceParts && scrubbedContent === msg.content) {
+        out.push(msg);
+      } else {
+        out.push({ ...msg, parts: scrubbedParts, content: scrubbedContent });
+      }
+      groupFirst = msg;
+      groupMembers = [msg];
+      continue;
+    }
+    groupMembers.push(msg);
+    const cached = coalesceGroupCache.get(groupFirst);
+    if (cached && sameRefSequence(cached.members, groupMembers)) {
+      out[out.length - 1] = cached.merged;
       continue;
     }
     const mergedParts = mergeAssistantParts(
-      assistantPartsForCoalesce(last),
+      assistantPartsForCoalesce(out[out.length - 1]!),
       scrubbedParts,
     );
     if (mergedParts.length === 0) {
       out.pop();
+      groupFirst = null;
+      groupMembers = [];
       continue;
     }
-    out[out.length - 1] = {
-      ...last,
+    const merged: ClaudeMessage = {
+      ...groupMembers[0]!,
       parts: mergedParts,
       content: textContentFromParts(mergedParts),
     };
+    out[out.length - 1] = merged;
+    coalesceGroupCache.set(groupFirst, { members: [...groupMembers], merged });
   }
   return out;
 }

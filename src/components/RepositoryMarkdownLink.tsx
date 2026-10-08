@@ -10,7 +10,8 @@ export function createRepositoryMarkdownLinkComponent(
   fromRelativePath: string,
   onNavigateToFile: (relativePath: string) => void,
 ): NonNullable<Components["a"]> {
-  return function RepositoryMarkdownLink({ href, children, ...props }) {
+  // 剥离 react-markdown 注入的 `node`，避免非法属性落到 DOM。
+  return function RepositoryMarkdownLink({ href, children, node: _node, ...props }) {
     const repositoryPath = href ? resolveRepositoryMarkdownPath(fromRelativePath, href) : null;
 
     if (repositoryPath) {

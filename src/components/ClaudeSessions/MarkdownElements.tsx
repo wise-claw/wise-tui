@@ -80,8 +80,11 @@ const MarkdownCopyButton = memo(function MarkdownCopyButton({
 const MarkdownImage = memo(function MarkdownImage({
   src,
   alt = "",
+  // react-markdown 会给每个自定义组件注入 `node`（hast 节点）。若不剥离会随
+  // `{...props}` 落到 DOM 上，渲染出非法属性 `node="[object Object]"`。
+  node: _node,
   ...props
-}: ComponentPropsWithoutRef<"img">) {
+}: ComponentPropsWithoutRef<"img"> & { node?: unknown }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const sourceKey = src ?? "";
 
@@ -98,7 +101,7 @@ const MarkdownImage = memo(function MarkdownImage({
     );
   }
 
-  return <img {...props} src={src} alt={alt} onError={() => setFailedSrc(sourceKey)} />;
+  return <img src={src} alt={alt} {...props} onError={() => setFailedSrc(sourceKey)} />;
 });
 
 const MarkdownFencedCodeBlock = memo(function MarkdownFencedCodeBlock({
@@ -267,7 +270,7 @@ export function createMarkdownComponents(opts: {
 
   return {
     img: (props) => <MarkdownImage {...props} />,
-    a: ({ href, children, ...props }) => (
+    a: ({ href, children, node: _node, ...props }) => (
       <a
         {...props}
         href={href}
@@ -289,7 +292,7 @@ export function createMarkdownComponents(opts: {
     h1: ({ children }) => <h1 className="app-markdown-h">{children}</h1>,
     h2: ({ children }) => <h2 className="app-markdown-h">{children}</h2>,
     h3: ({ children }) => <h3 className="app-markdown-h">{children}</h3>,
-    pre: ({ children, ...props }) => {
+    pre: ({ children, node: _node, ...props }) => {
       const child = Array.isArray(children) ? children[0] : children;
       let className = "";
       let text = "";
@@ -379,7 +382,7 @@ export function createMarkdownComponents(opts: {
         </code>
       );
     },
-    table: ({ children, ...props }) => (
+    table: ({ children, node: _node, ...props }) => (
       <div className="app-markdown-table-wrap">
         <table {...props}>{children}</table>
       </div>
