@@ -1,4 +1,7 @@
+import { createElement, type ReactNode } from "react";
+import { CodeOutlined, GlobalOutlined } from "@ant-design/icons";
 import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../components/OpenAppMenu/constants";
+import { getKnownOpenAppIcon } from "../components/OpenAppMenu/openAppIcons";
 import { getOpenAppPreferenceSync } from "../services/openAppPreference";
 import type { OpenAppTarget } from "../types";
 
@@ -36,21 +39,31 @@ export function parseOpenAppConfigureMenuKey(key: string): string | null | undef
 export function buildOpenAppConfigureMenuChildren(
   scopeOpenAppId?: string | null,
   openTargets: readonly OpenAppTarget[] = DEFAULT_OPEN_APP_TARGETS,
-): Array<{ key: string; label: string }> {
+): Array<{ key: string; label: string; icon: ReactNode }> {
   const scoped = scopeOpenAppId?.trim() || null;
   const globalId = getOpenAppPreferenceSync().trim() || DEFAULT_OPEN_APP_ID;
   const followGlobalSelected = !scoped;
-  const children: Array<{ key: string; label: string }> = [
+  const children: Array<{ key: string; label: string; icon: ReactNode }> = [
     {
       key: OPEN_APP_MENU_KEY_DEFAULT,
       label: followGlobalSelected ? "✓ 跟随全局默认" : "跟随全局默认",
+      icon: createElement(GlobalOutlined, { style: { fontSize: 12 } }),
     },
   ];
   for (const target of openTargets) {
     const selected = scoped ? scoped === target.id : target.id === globalId;
+    const iconSrc = getKnownOpenAppIcon(target.id);
     children.push({
       key: `${OPEN_APP_MENU_KEY_PREFIX}${target.id}`,
       label: selected ? `✓ ${target.label}` : target.label,
+      icon: iconSrc
+        ? createElement("img", {
+            src: iconSrc,
+            alt: "",
+            "aria-hidden": true,
+            style: { width: 12, height: 12, objectFit: "contain", verticalAlign: "middle" },
+          })
+        : createElement(CodeOutlined, { style: { fontSize: 12 } }),
     });
   }
   return children;

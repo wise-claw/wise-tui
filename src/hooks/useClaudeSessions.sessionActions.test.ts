@@ -168,6 +168,49 @@ describe("session dispatch lifecycle", () => {
     expect(hasActiveSessionTurn("tab")).toBe(false);
     expect(deps.clearStreamStallTimer).toHaveBeenCalledWith("tab");
   });
+  test("send refuses an active turn before changing its signal, nonce, buffers or history", async () => {
+    const { deps, actions } = harness();
+    actions.executeSession("tab", "first");
+    const controller = deps.dispatchAbortByTabRef.current.get("tab");
+    const nonce = deps.expectedTurnNonceByTabIdRef.current.get("tab");
+    deps.assistantStreamTextByTabRef.current.set("tab", "partial reply");
+    await expect(actions.sendMessageToSession("tab", "second")).rejects.toThrow("仍在执行");
+    expect(deps.dispatchAbortByTabRef.current.get("tab")).toBe(controller);
+    expect(controller?.signal.aborted).toBe(false);
+    expect(deps.expectedTurnNonceByTabIdRef.current.get("tab")).toBe(nonce);
+    expect(deps.assistantStreamTextByTabRef.current.get("tab")).toBe("partial reply");
+    expect(deps.sessionsRef.current[0]!.messages.filter((m) => m.role === "user")).toHaveLength(1);
+    expect(deps.runClaudeTurnWithContextGuard).toHaveBeenCalledTimes(1);
+  });
+  test("send uses the synchronous turn gate even before running status is observed", async () => {
+    const { deps, actions } = harness();
+    beginSessionTurn("tab");
+    await expect(actions.sendMessageToSession("tab", "hello")).rejects.toThrow("仍在执行");
+    expect(deps.runClaudeTurnWithContextGuard).not.toHaveBeenCalled();
+  });
+  test("send accepts backend session aliases and dispatches to the stable tab", async () => {
+    const { deps, actions } = harness();
+    deps.sessionsRef.current[0]!.claudeSessionId = "real";
+    await actions.sendMessageToSession("real", "hello");
+    expect(deps.runClaudeTurnWithContextGuard).toHaveBeenCalledWith(expect.objectContaining({ tabSessionId: "tab", resumeClaudeSid: "real" }));
+    expect(hasActiveSessionTurn("tab")).toBe(true);
+    expect(hasActiveSessionTurn("real")).toBe(false);
+  });
+  test("the resolved Gemini engine is rejected even without an options resolver", () => {
+    const { deps } = harness();
+    deps.resolveSessionExecutionEngine = () => "gemini";
+    expect(createSessionActionHandlers(deps).executeSession("tab", "hello")).toBe(false);
+    expect(deps.runClaudeTurnWithContextGuard).not.toHaveBeenCalled();
+    expect(hasActiveSessionTurn("tab")).toBe(false);
+  });
+  test("Gemini follow-up rejects before registering a turn or user bubble", async () => {
+    const { deps } = harness();
+    deps.resolveSessionExecutionEngine = () => "gemini";
+    await expect(createSessionActionHandlers(deps).sendMessageToSession("tab", "hello")).rejects.toThrow("尚未支持");
+    expect(deps.runClaudeTurnWithContextGuard).not.toHaveBeenCalled();
+    expect(hasActiveSessionTurn("tab")).toBe(false);
+    expect(deps.sessionsRef.current[0]!.messages).toHaveLength(0);
+  });
   test("close cancels the host and late startup rejection cannot restore the removed tab", async () => {
     const { deps } = harness();
     const run = deferred();

@@ -151,7 +151,9 @@ export async function attachClaudeInvocationStream(
     onCleaned?.();
   };
   const attach = (event: string, handler: (payload: unknown) => void) =>
-    listen(event, (e) => handler(e.payload));
+    listen(event, (e) => {
+      if (!cleaned) handler(e.payload);
+    });
   const pending = await collectTauriListeners([
     attach(claudeInvocationStreamEvent("output", inv), (payload) => {
       rt.handleOutputForSendTab(stableTabId, payload);
@@ -179,7 +181,10 @@ export async function attachClaudeInvocationStream(
         cleanup();
       }
     }),
-  ]);
+  ]).catch((error) => {
+    cleanup();
+    throw error;
+  });
   if (cleaned) {
     for (const unlisten of pending) {
       safeUnlisten(unlisten);
@@ -217,19 +222,23 @@ export async function attachClaudeSessionStreamForTurn(
   };
   const [uo0, ue0, uc0] = await collectTauriListeners([
     listen(claudeSessionStreamEvent("output", sid), (e) => {
-      rt.handleOutputForSendTab(stableTabId, e.payload);
+      if (!cleaned) rt.handleOutputForSendTab(stableTabId, e.payload);
     }),
     listen(claudeSessionStreamEvent("error", sid), (e) => {
-      rt.handleErrorForSendTab(stableTabId, e.payload);
+      if (!cleaned) rt.handleErrorForSendTab(stableTabId, e.payload);
     }),
     listen(claudeSessionStreamEvent("complete", sid), (e) => {
+      if (cleaned) return;
       const nonce = resolveTurnNonce?.(stableTabId, turnNonce) ?? turnNonce;
       const applied = rt.handleCompleteForSendTab(stableTabId, e.payload, nonce);
       if (applied && !shouldKeepListeningAfterTurnComplete?.(stableTabId)) {
         cleanup();
       }
     }),
-  ]);
+  ]).catch((error) => {
+    cleanup();
+    throw error;
+  });
   if (cleaned) {
     safeUnlisten(uo0);
     safeUnlisten(ue0);

@@ -43,12 +43,10 @@ import {
   appendAssistantPreviewTextMessage,
   appendSystemMessageBySessionOrClaudeId,
   extractLastAssistantPlainText,
-  extractLatestAssistantPlainText,
   finalizeSessionAfterComplete,
 } from "./claudeSessionState";
 import { isTerminalWorkerWiseTab } from "./terminalDispatch";
 import {
-  latestTerminalTurnHasAssistant,
   latestTurnHasVisibleAssistantContent,
   ONESHOT_DEFERRED_COMPLETE_RETRY_DELAYS_MS,
   shouldDeferOneshotTurnComplete,
@@ -918,10 +916,6 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     const noAssistantReply = previewRaw.length === 0;
     const flushedMessages = sessionAfterFlush?.messages ?? [];
     const hasVisibleTextReply = fromAfterFlush.length > 0;
-    const hasStreamProgress = latestTurnHasVisibleAssistantContent(flushedMessages);
-    const isTerminal = session != null && isTerminalWorkerWiseTab(session);
-    const terminalEmptySuccess =
-      isTerminal && payloadSuccess && !hasVisibleTextReply && !hasStreamProgress;
     if (
       !streamingResident &&
       !opts?.force &&
@@ -941,19 +935,6 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         (hasVisibleTextReply &&
           !isClaudeToolCallParseFailureText(previewRaw) &&
           !isClaudeToolCallParseFailureText(fromAfterFlush));
-    if (terminalEmptySuccess) {
-      const shouldTryDiskReload = reloadTranscriptFromDisk != null;
-      if (shouldTryDiskReload) {
-        for (const delay of [400, 1200, 2800]) {
-          window.setTimeout(() => {
-            const live = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
-            if (live && latestTerminalTurnHasAssistant(live.messages)) return;
-            reloadTranscriptForTab(tid);
-          }, delay);
-        }
-      }
-      return false;
-    }
     // 终态必须在后台也同步提交；先消费 nonce，防止完成回调重入导致重复收尾。
     consumeExpectedTurnNonceForTab(tid, turnNonce);
     setSessions((prev) => {
@@ -964,7 +945,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         return { ...s, claudeSessionId: boundCursorAgentId };
       });
       const effectiveNoAssistantReply =
-        extractLatestAssistantPlainText(
+        extractLastAssistantPlainText(
           sessions.find((s) => s.id === tid || s.claudeSessionId === tid),
         ).trim().length === 0;
       const finalized = finalizeSessionAfterComplete({

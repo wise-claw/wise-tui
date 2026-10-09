@@ -4198,11 +4198,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
       const resumePrompt = buildQuestionResumeUserPrompt(qr, answers, customAnswer);
       try {
+        // resume 仅在原执行已结束时派发；先同步宿主状态，再保留可重试的问题直到接单成功。
+        await syncSessionStatusesWithHostRegistry();
+        await sendMessageToSession(tabSession.id, resumePrompt);
         notificationHub.markRequestAnswered(qr.id);
-        notificationHub.clearQuestion(ownerSessionId);
-        const sendPromise = sendMessageToSession(ownerSessionId, resumePrompt);
-        void syncSessionStatusesWithHostRegistry();
-        await sendPromise;
+        if (notificationHub.getDockSlice(ownerSessionId).questionRequest?.id === qr.id) {
+          notificationHub.clearQuestion(ownerSessionId);
+        }
         if (session) {
           const facade = getWorkflowFacade();
           const workflowRunId = (await ensureWorkflowRunId(session)) ?? `session:${session.id}`;

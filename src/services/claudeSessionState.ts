@@ -58,7 +58,7 @@ export function extractLatestAssistantPlainText(session: ClaudeSession | undefin
 }
 
 /**
- * 会话中**最后一条** assistant 消息的可见正文（不回溯更早的 assistant）。
+ * 当前回合**最后一条** assistant 消息的可见正文（不跨过用户消息，也不回溯更早的 assistant）。
  *
  * 与 {@link extractLatestAssistantPlainText} 的区别：后者在末条 assistant 无可见 text 时回溯到
  * 更早的 assistant（用于钉钉通知/团队验收等「取最近有正文的回复」场景）。本函数专用于回合
@@ -72,6 +72,7 @@ export function extractLastAssistantPlainText(session: ClaudeSession | undefined
   }
   for (let i = session.messages.length - 1; i >= 0; i -= 1) {
     const msg = session.messages[i];
+    if (msg.role === "user") return "";
     if (msg.role === "assistant") {
       return assistantMessageVisiblePlainText(msg);
     }
@@ -719,4 +720,3 @@ export function finalizeSessionAfterComplete(params: {
     };
   });
 }
-

@@ -106,6 +106,10 @@ export type ClaudeTurnInvokeParams = ClaudeOneshotInvokeParams & {
   forceNewClaudeConversation?: boolean;
 };
 
+function streamListenerRegistrationError(cause: unknown): Error {
+  return Object.assign(new Error("会话事件监听注册失败，请重试发送。"), { cause });
+}
+
 async function waitForStreamRuntime(
   streamRuntimeRef: MutableRefObject<ClaudeStreamRuntimeHandlers | null>,
   signal?: AbortSignal,
@@ -179,7 +183,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       resumeClaudeSid,
     } = params;
     const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
-    await waitForStreamRuntime(streamRuntimeRef, signal);
+    const rt = await waitForStreamRuntime(streamRuntimeRef, signal);
     assertCanSpawn(tabSessionId, signal);
     // 新一轮子进程会替换或清空 stdin 映射；上一轮的 AskUserQuestion / 权限弹窗再提交必败
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
@@ -187,7 +191,6 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     if (mappedTab && mappedTab !== tabSessionId) {
       notificationHub.invalidateControlRequestsForSession(mappedTab, "已发起新一轮对话");
     }
-    const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;
     const inv = crypto.randomUUID();
     if (rt) {
@@ -205,11 +208,11 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
           keepInvocationStreamAfterTurnComplete,
         );
         claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-      } catch {
-        detach = null;
+      } catch (error) {
+        throw streamListenerRegistrationError(error);
       }
     }
-    // 仅当 invocation 监听已挂载时才传 key：Rust 会抑制共享 stdout；监听失败时必须不传 key，否则前端收不到流式行。
+    // 监听注册成功后才允许启动；独立 invocation 通道避免并行会话共享路由。
     try {
       assertCanSpawn(tabSessionId, signal);
     } catch (error) {
@@ -218,9 +221,6 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       throw error;
     }
     const invocationKey = detach ? inv : undefined;
-    if (rt && !detach) {
-      message.warning("本会话流式监听未建立，已退回全局通道；若多标签同时跑 Claude，输出可能短暂串屏。");
-    }
     const sk = invokeConc?.concurrencyScopeKey;
     const lim = invokeConc?.concurrencyLimit;
     const cliExtras = await resolveSpawnExtrasForClaudePrompt(tabSessionId, prompt).catch((error) => {
@@ -310,13 +310,13 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       forceNewClaudeConversation,
     } = params;
     const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
-    await waitForStreamRuntime(streamRuntimeRef, signal);
+    const rt = await waitForStreamRuntime(streamRuntimeRef, signal);
     assertCanSpawn(tabSessionId, signal);
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
-    const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;
     const inv = crypto.randomUUID();
     if (rt) {
+      detachClaudeInvocationStreamsForTab(tabSessionId);
       try {
         detach = await attachClaudeInvocationStream(
           inv,
@@ -330,8 +330,8 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
           keepInvocationStreamAfterTurnComplete,
         );
         claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-      } catch {
-        detach = null;
+      } catch (error) {
+        throw streamListenerRegistrationError(error);
       }
     }
     try {
@@ -395,13 +395,13 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       codexResumeSessionId,
     } = params;
     const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
-    await waitForStreamRuntime(streamRuntimeRef, signal);
+    const rt = await waitForStreamRuntime(streamRuntimeRef, signal);
     assertCanSpawn(tabSessionId, signal);
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
-    const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;
     const inv = crypto.randomUUID();
     if (rt) {
+      detachClaudeInvocationStreamsForTab(tabSessionId);
       try {
         detach = await attachClaudeInvocationStream(
           inv,
@@ -415,8 +415,8 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
           keepInvocationStreamAfterTurnComplete,
         );
         claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-      } catch {
-        detach = null;
+      } catch (error) {
+        throw streamListenerRegistrationError(error);
       }
     }
     try {
@@ -490,13 +490,13 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     // Composer 选择的模型优先；上下文引擎在 invoke 入口已固定为 opencode。
     void params.contextExecutionEngine;
     const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
-    await waitForStreamRuntime(streamRuntimeRef, signal);
+    const rt = await waitForStreamRuntime(streamRuntimeRef, signal);
     assertCanSpawn(tabSessionId, signal);
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
-    const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;
     const inv = crypto.randomUUID();
     if (rt) {
+      detachClaudeInvocationStreamsForTab(tabSessionId);
       try {
         detach = await attachClaudeInvocationStream(
           inv,
@@ -510,8 +510,8 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
           keepInvocationStreamAfterTurnComplete,
         );
         claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-      } catch {
-        detach = null;
+      } catch (error) {
+        throw streamListenerRegistrationError(error);
       }
     }
     try {
@@ -573,13 +573,13 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       forceNewClaudeConversation,
     } = params;
     const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
-    await waitForStreamRuntime(streamRuntimeRef, signal);
+    const rt = await waitForStreamRuntime(streamRuntimeRef, signal);
     assertCanSpawn(tabSessionId, signal);
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
-    const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;
     const inv = crypto.randomUUID();
     if (rt) {
+      detachClaudeInvocationStreamsForTab(tabSessionId);
       try {
         detach = await attachClaudeInvocationStream(
           inv,
@@ -593,8 +593,8 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
           keepInvocationStreamAfterTurnComplete,
         );
         claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-      } catch {
-        detach = null;
+      } catch (error) {
+        throw streamListenerRegistrationError(error);
       }
     }
     try {
@@ -651,13 +651,13 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       deepseekResumeSessionId,
     } = params;
     const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
-    await waitForStreamRuntime(streamRuntimeRef, signal);
+    const rt = await waitForStreamRuntime(streamRuntimeRef, signal);
     assertCanSpawn(tabSessionId, signal);
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
-    const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;
     const inv = crypto.randomUUID();
     if (rt) {
+      detachClaudeInvocationStreamsForTab(tabSessionId);
       try {
         detach = await attachClaudeInvocationStream(
           inv,
@@ -671,8 +671,8 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
           keepInvocationStreamAfterTurnComplete,
         );
         claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-      } catch {
-        detach = null;
+      } catch (error) {
+        throw streamListenerRegistrationError(error);
       }
     }
     try {
@@ -729,7 +729,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       cursorAttachments,
     } = params;
     const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
-    await waitForStreamRuntime(streamRuntimeRef, signal);
+    const rt = await waitForStreamRuntime(streamRuntimeRef, signal);
     assertCanSpawn(tabSessionId, signal);
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
     streamingTargetIdRef.current = tabSessionId;
@@ -737,10 +737,10 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     commitSessions((prev) =>
       appendSystemMessageBySessionId(prev, tabSessionId, "Cursor Agent 执行中…"),
     );
-    const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;
     const inv = crypto.randomUUID();
     if (rt) {
+      detachClaudeInvocationStreamsForTab(tabSessionId);
       try {
         detach = await attachClaudeInvocationStream(
           inv,
@@ -754,8 +754,8 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
           keepInvocationStreamAfterTurnComplete,
         );
         claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-      } catch {
-        detach = null;
+      } catch (error) {
+        throw streamListenerRegistrationError(error);
       }
     }
     try {
@@ -799,7 +799,7 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     } = params;
 
     const signal = deps.dispatchAbortByTabRef.current.get(tabSessionId)?.signal;
-    await waitForStreamRuntime(streamRuntimeRef, signal);
+    const rt = await waitForStreamRuntime(streamRuntimeRef, signal);
     assertCanSpawn(tabSessionId, signal);
 
     notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
@@ -824,10 +824,10 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         await ensureSessionDisplayLanguageLoaded().catch(() => null),
         prompt,
       );
-      const rt = streamRuntimeRef.current;
       let detachFollowUp: (() => void) | null = null;
       const followInv = crypto.randomUUID();
       if (rt) {
+        detachClaudeInvocationStreamsForTab(tabSessionId);
         try {
           detachFollowUp = await attachClaudeSessionStreamForTurn(
             liveSid,
@@ -850,8 +850,8 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
             tabId: tabSessionId,
             detach: detachFollowUp,
           });
-        } catch {
-          detachFollowUp = null;
+        } catch (error) {
+          throw streamListenerRegistrationError(error);
         }
       }
       try {
@@ -892,10 +892,10 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       tabSessionId,
     );
 
-    const rt = streamRuntimeRef.current;
     let detach: (() => void) | null = null;
     const inv = crypto.randomUUID();
     if (rt) {
+      detachClaudeInvocationStreamsForTab(tabSessionId);
       try {
         detach = await attachClaudeInvocationStream(
           inv,
@@ -909,8 +909,8 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
           keepInvocationStreamAfterTurnComplete,
         );
         claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-      } catch {
-        detach = null;
+      } catch (error) {
+        throw streamListenerRegistrationError(error);
       }
     }
     try {
@@ -921,9 +921,6 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
       throw error;
     }
     const invocationKey = detach ? inv : undefined;
-    if (rt && !detach) {
-      message.warning("本会话流式监听未建立，已退回全局通道；若多标签同时跑 Claude，输出可能短暂串屏。");
-    }
 
     const sk = invokeConc?.concurrencyScopeKey;
     const lim = invokeConc?.concurrencyLimit;
@@ -969,6 +966,9 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     const resolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
     const engine: SessionExecutionEngine =
       session && resolver ? resolver(session) : getCachedDefaultExecutionEngine();
+    if (engine === "gemini") {
+      throw new Error("Gemini CLI 尚未支持主会话执行，请切换其他执行引擎。");
+    }
     // Claude 走 `--append-system-prompt` 注入回复语言；其余引擎把语言要求并入本轮消息。
     const enginePrompt =
       engine === "claude"

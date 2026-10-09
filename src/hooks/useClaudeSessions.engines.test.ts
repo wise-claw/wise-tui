@@ -9,6 +9,8 @@ const invoke = mock(async (command: string) =>
 );
 let releaseListener: (() => void) | undefined;
 let delayListeners = false;
+let failListeners = false;
+const subscriptions: Array<{ event: string; handler: (event: { payload: unknown }) => void; active: boolean }> = [];
 const detached = mock(() => {});
 mock.module("@tauri-apps/api/core", () => ({
   invoke, isTauri: () => false, transformCallback: () => 0,
@@ -16,17 +18,23 @@ mock.module("@tauri-apps/api/core", () => ({
   convertFileSrc: (path: string) => path,
 }));
 mock.module("@tauri-apps/api/event", () => ({
-  listen: async () => {
+  listen: async (event: string, handler: (event: { payload: unknown }) => void) => {
+    if (failListeners && event.startsWith("claude-error")) throw new Error("listen failed");
     if (delayListeners) {
       delayListeners = false;
       await new Promise<void>((resolve) => { releaseListener = resolve; });
     }
-    return detached;
+    const subscription = { event, handler, active: true };
+    subscriptions.push(subscription);
+    return () => { subscription.active = false; detached(); };
   },
 }));
 const { createClaudeEngineHandlers } = await import("./useClaudeSessions.engines");
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
-beforeEach(() => { invoke.mockClear(); detached.mockClear(); releaseListener = undefined; delayListeners = false; });
+beforeEach(() => {
+  invoke.mockClear(); detached.mockClear(); releaseListener = undefined;
+  delayListeners = false; failListeners = false; subscriptions.length = 0;
+});
 function harness() {
   const abort = new AbortController();
   const session: ClaudeSession = {
@@ -43,7 +51,11 @@ function harness() {
     streamingProcessByTabRef: { current: new Map() }, streamingProcessActivityByTabRef: { current: new Map() },
     streamingSessionStreamDetachByTabRef: { current: new Map() }, streamingTargetIdRef: { current: "tab" },
     defaultConnectionKindRef: { current: "oneshot" }, claudeSessionsOptionsRef: { current: undefined },
-    detachClaudeInvocationStreamsForTab: () => {}, keepInvocationStreamAfterTurnComplete: () => false,
+    detachClaudeInvocationStreamsForTab: (tabId) => {
+      for (const [inv, meta] of [...deps.claudeInvocationInflightRef.current]) {
+        if (meta.tabId === tabId) { meta.detach(); deps.claudeInvocationInflightRef.current.delete(inv); }
+      }
+    }, keepInvocationStreamAfterTurnComplete: () => false,
     resolveSpawnExtrasForClaudePrompt: async () => null,
     commitSessions: (update) => { deps.sessionsRef.current = update(deps.sessionsRef.current); },
     scheduleStreamStallTimer: () => {},
@@ -51,6 +63,72 @@ function harness() {
   return { abort, deps };
 }
 const params = { tabSessionId: "tab", turnNonce: 1, invokeConc: null, repositoryPath: "/tmp/repo", prompt: "hello", modelArg: undefined, resumeClaudeSid: null };
+
+test("an unsupported Gemini turn cannot silently execute with Claude", async () => {
+  const { deps } = harness();
+  deps.claudeSessionsOptionsRef.current = { resolveExecutionEngineRef: { current: () => "gemini" } };
+  await expect(createClaudeEngineHandlers(deps).invokeClaudeTurn(params)).rejects.toThrow("尚未支持");
+  expect(invoke).not.toHaveBeenCalled();
+  expect(subscriptions).toHaveLength(0);
+});
+
+function runner(deps: ClaudeEngineHandlersDeps, engine: string) {
+  const handlers = createClaudeEngineHandlers(deps);
+  return engine === "claude" ? handlers.runClaudeOneshotWithInvocation
+    : engine === "codex" ? handlers.runCodexOneshotWithInvocation
+    : engine === "codex-rpc" ? handlers.runCodexRpcOneshotWithInvocation
+    : engine === "opencode" ? handlers.runOpencodeOneshotWithInvocation
+    : engine === "qoder" ? handlers.runQoderOneshotWithInvocation
+    : engine === "deepseek" ? handlers.runDeepseekOneshotWithInvocation
+    : handlers.runCursorOneshotWithInvocation;
+}
+
+for (const engine of ["claude", "codex", "codex-rpc", "opencode", "qoder", "deepseek", "cursor"] as const) {
+  test(`${engine} refuses launch and releases partial listeners if event registration fails`, async () => {
+    const { deps } = harness();
+    failListeners = true;
+    await expect(runner(deps, engine)({ ...params, contextExecutionEngine: engine, cursorAgentId: null })).rejects.toThrow("监听注册失败");
+    expect(invoke).not.toHaveBeenCalled();
+    expect(deps.claudeInvocationInflightRef.current.size).toBe(0);
+    expect(subscriptions.filter((s) => s.active)).toHaveLength(0);
+  });
+
+  test(`${engine} retires old turn listeners and ignores their queued callbacks`, async () => {
+    const { deps } = harness();
+    deps.streamRuntimeRef.current!.handleOutputForSendTab = mock(() => {});
+    deps.streamRuntimeRef.current!.handleCompleteForSendTab = mock(() => true);
+    const run = runner(deps, engine);
+    await run({ ...params, contextExecutionEngine: engine, cursorAgentId: null });
+    const previous = [...subscriptions];
+    for (let nonce = 2; nonce <= 20; nonce += 1) {
+      deps.expectedTurnNonceByTabIdRef.current.set("tab", nonce);
+      await run({ ...params, turnNonce: nonce, contextExecutionEngine: engine, cursorAgentId: null });
+      expect(deps.claudeInvocationInflightRef.current.size).toBe(1);
+      expect(subscriptions.filter((s) => s.active)).toHaveLength(6);
+    }
+    // Tauri may have already queued callbacks when unlisten finishes.
+    for (const old of previous) old.handler({ payload: old.event.startsWith("claude-complete") ? { success: true } : "old output" });
+    expect(deps.streamRuntimeRef.current!.handleOutputForSendTab).not.toHaveBeenCalled();
+    expect(deps.streamRuntimeRef.current!.handleCompleteForSendTab).not.toHaveBeenCalled();
+    for (const meta of deps.claudeInvocationInflightRef.current.values()) meta.detach();
+  });
+}
+
+test("persistent Claude follow-ups keep one session subscription and reject disposed callbacks", async () => {
+  const { deps } = harness();
+  deps.sessionsRef.current[0]!.claudeSessionId = "real";
+  deps.streamingProcessByTabRef.current.set("tab", { claudeSessionId: "real" });
+  deps.streamRuntimeRef.current!.handleOutputForSendTab = mock(() => {});
+  const run = createClaudeEngineHandlers(deps).runClaudeStreamingWithInvocation;
+  await run(params);
+  const previous = [...subscriptions];
+  await run({ ...params, turnNonce: 2 });
+  expect(deps.claudeInvocationInflightRef.current.size).toBe(1);
+  expect(subscriptions.filter((s) => s.active)).toHaveLength(3);
+  for (const old of previous) old.handler({ payload: "old" });
+  expect(deps.streamRuntimeRef.current!.handleOutputForSendTab).not.toHaveBeenCalled();
+  for (const meta of deps.claudeInvocationInflightRef.current.values()) meta.detach();
+});
 
 for (const engine of ["codex", "codex-rpc"] as const) {
   test(`${engine} interactive turns use the steerable app-server transport`, async () => {

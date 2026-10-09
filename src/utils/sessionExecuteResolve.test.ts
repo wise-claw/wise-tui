@@ -33,6 +33,13 @@ describe("preservesWorkerWiseTabId", () => {
 });
 
 describe("resolveSessionForExecuteKey", () => {
+  test("exact tab ids win over another tab's backend session alias", () => {
+    const alias = session({ id: "alias-tab", claudeSessionId: "target" });
+    const target = session({ id: "target" });
+    expect(resolveSessionForExecuteKey([alias, target], "target")).toBe(target);
+    expect(resolveSessionForExecuteKey([alias, target], "legacy", new Map([["legacy", "target"]]))).toBe(target);
+  });
+
   test("finds by wise tab id", () => {
     const worker = session({
       id: "tab-worker-1",

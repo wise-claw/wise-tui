@@ -42,6 +42,44 @@ function harness() {
 }
 
 describe("stream completion lifecycle", () => {
+  test("an empty successful terminal turn settles once while disk recovery remains available", () => {
+    const scheduled: Array<() => void> = [];
+    const originalSetTimeout = window.setTimeout;
+    window.setTimeout = ((callback: () => void) => {
+      scheduled.push(callback);
+      return scheduled.length;
+    }) as typeof window.setTimeout;
+    const { deps, runtime } = harness();
+    runtime.dispose();
+    deps.sessionsRef.current[0]!.repositoryName = "repo/员工:终端01";
+    deps.sessionsRef.current[0]!.messages = [deps.sessionsRef.current[0]!.messages[0]!];
+    const reload = mock(async () => {});
+    const bound = createClaudeStreamRuntime({ ...deps, reloadTranscriptFromDisk: reload });
+    try {
+      expect(bound.handleCompleteForSendTab("tab", { success: true }, 1)).toBe(true);
+      expect(deps.sessionsRef.current[0]!.status).toBe("completed");
+      expect(deps.expectedTurnNonceByTabIdRef!.current.size).toBe(0);
+      expect(bound.handleCompleteForSendTab("tab", { success: true }, 1)).toBe(false);
+      expect(deps.notifyCompletion).toHaveBeenCalledTimes(1);
+      for (const callback of scheduled) callback();
+      expect(reload).toHaveBeenCalledTimes(3);
+    } finally {
+      bound.dispose();
+      window.setTimeout = originalSetTimeout;
+    }
+  });
+
+  test("a failed empty turn cannot reuse the previous reply as its preview or hide the failure hint", () => {
+    const { deps, runtime } = harness();
+    deps.sessionsRef.current[0]!.messages.push({ id: "u2", role: "user", content: "next", timestamp: 3 });
+    try {
+      expect(runtime.handleCompleteForSendTab("tab", { success: false }, 1)).toBe(true);
+      expect(deps.notifyCompletion).toHaveBeenCalledWith(expect.objectContaining({ success: false, previewRaw: "" }));
+      expect(deps.sessionsRef.current[0]!.messages.at(-1)!.content).toContain("未产出可见回复");
+      expect(deps.sessionsRef.current[0]!.messages.filter((m) => m.role === "assistant")).toHaveLength(1);
+    } finally { runtime.dispose(); }
+  });
+
   test("text and reasoning deltas skip history scans while tool updates still publish", () => {
     Object.defineProperty(dom.document, "visibilityState", { configurable: true, value: "visible" });
     const originalRaf = window.requestAnimationFrame;

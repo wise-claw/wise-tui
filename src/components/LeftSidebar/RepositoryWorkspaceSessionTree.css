@@ -308,12 +308,23 @@
   background: var(--ant-color-fill-tertiary);
 }
 
+.app-workspace-session-tree__line {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.app-workspace-session-tree__line > .app-workspace-session-tree__row {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .app-workspace-session-tree__more {
-  display: block;
-  width: 100%;
+  flex: 0 0 auto;
+  width: auto;
   min-height: 22px;
   margin: 0;
-  padding: 0 8px 0 12px;
+  padding: 0 8px 0 4px;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -321,6 +332,7 @@
   font: inherit;
   font-size: var(--app-sidebar-list-secondary-size, 12px);
   line-height: 22px;
+  white-space: nowrap;
   text-align: left;
   cursor: pointer;
 }

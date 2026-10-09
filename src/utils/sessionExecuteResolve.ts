@@ -21,20 +21,21 @@ export function resolveSessionForExecuteKey(
   const raw = sessionKey.trim();
   if (!raw) return undefined;
 
-  const byDirect = sessions.find((s) => s.id === raw || s.claudeSessionId?.trim() === raw);
+  const findByKey = (key: string) =>
+    sessions.find((s) => s.id === key) ??
+    sessions.find((s) => s.claudeSessionId?.trim() === key);
+  const byDirect = findByKey(raw);
   if (byDirect) return byDirect;
 
   if (sessionIdMap) {
     const mapped = sessionIdMap.get(raw)?.trim();
     if (mapped) {
-      const hit = sessions.find((s) => s.id === mapped || s.claudeSessionId?.trim() === mapped);
+      const hit = findByKey(mapped);
       if (hit) return hit;
     }
     for (const [tabId, claudeId] of sessionIdMap.entries()) {
       if (claudeId === raw || tabId === raw) {
-        const hit = sessions.find(
-          (s) => s.id === tabId || s.claudeSessionId?.trim() === claudeId || s.id === claudeId,
-        );
+        const hit = sessions.find((s) => s.id === tabId) ?? findByKey(claudeId);
         if (hit) return hit;
       }
     }

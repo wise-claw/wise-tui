@@ -422,13 +422,16 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
             </span>
           </button>
         );
-      })}
-
-      {hasMoreRows ? (
-        <button type="button" className="app-workspace-session-tree__more" onClick={handleMore}>
-          更多会话
-        </button>
-      ) : null}
+      }).map((rowElement, index) => (
+        <div key={rowElement.key} className="app-workspace-session-tree__line">
+          {rowElement}
+          {hasMoreRows && index === visibleRows.length - 1 ? (
+            <button type="button" className="app-workspace-session-tree__more" onClick={handleMore}>
+              更多会话
+            </button>
+          ) : null}
+        </div>
+      ))}
     </div>
   );
 }

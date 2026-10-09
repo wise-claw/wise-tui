@@ -197,8 +197,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     const claudeSid = forceFreshClaudeSession ? null : claudeSidRaw;
 
     const liveSession = sessionsRef.current.find((s) => s.id === tabSessionId) ?? session;
-    const engineResolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
-    const executionEngine = engineResolver && liveSession ? engineResolver(liveSession) : "claude";
+    const executionEngine = resolveSessionExecutionEngine(liveSession);
     const bubblePrompt = opts?.userBubblePrompt?.trim()
       ? opts.userBubblePrompt
       : opts?.cursorAttachments && opts.cursorAttachments.length > 0
@@ -475,10 +474,17 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     prompt: string,
     opts?: ClaudeComposerExecuteBubbleOptions,
   ): Promise<void> => {
-    const session = sessionsRef.current.find((s) => s.id === sessionId);
+    const session = resolveSessionForExecuteKey(sessionsRef.current, sessionId, sessionIdMapRef.current);
     if (!session) return Promise.reject(new Error("会话已关闭，请重新选择会话。"));
+    sessionId = session.id;
     if (executionTeardownByTabRef.current.has(sessionId)) return Promise.reject(new Error("正在停止上一轮执行，请稍后重试。"));
     if (!prompt.trim()) return Promise.reject(new Error("请输入消息内容。"));
+    if (hasActiveSessionTurn(sessionId) || session.status === "running" || session.status === "connecting") {
+      return Promise.reject(new Error("当前会话仍在执行，请等待完成或停止后再发送。"));
+    }
+    if (resolveSessionExecutionEngine(session) === "gemini") {
+      return Promise.reject(new Error("Gemini CLI 尚未支持主会话执行，请切换其他执行引擎。"));
+    }
     const checker = claudeSessionsOptionsRef.current?.beforeSpawnClaudeRef?.current;
     if (checker) {
       const gate = checker(session);

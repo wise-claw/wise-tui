@@ -346,6 +346,17 @@ describe("assistantMessageVisiblePlainText", () => {
 });
 
 describe("extractLastAssistantPlainText", () => {
+  test("does not use a previous turn's reply when the new turn has no assistant", () => {
+    const base = session([
+      { role: "user", content: "之前的问题", timestamp: 1 },
+      { role: "assistant", content: "旧回复", parts: [{ type: "text", text: "旧回复" }], timestamp: 2 },
+      { role: "user", content: "新的问题", timestamp: 3 },
+      { role: "system", content: "执行中", timestamp: 4 },
+    ]);
+    expect(extractLastAssistantPlainText(base)).toBe("");
+    expect(extractLatestAssistantPlainText(base)).toBe("旧回复");
+  });
+
   test("returns last assistant text without falling back to earlier assistant", () => {
     // 末条 assistant 无可见 text（纯工具）时，不回溯到更早的 assistant（防跨轮正文污染：
     // complete 时 previewRaw 不应取上一轮正文追加到本轮末条）。
