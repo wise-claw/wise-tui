@@ -33,6 +33,14 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
+      # 重跑历史标签时，发布工具取当前工作流版本，应用代码仍取目标标签。
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-tools
+          sparse-checkout: scripts/tauri-release.mjs
+          sparse-checkout-cone-mode: false
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -117,7 +125,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          tauriScript: bun run scripts/tauri-release.mjs
+          tauriScript: bun run release-tools/scripts/tauri-release.mjs
           projectPath: .
           tagName: ${{ inputs.tag || github.ref_name }}
           releaseName: Wise Desktop ${{ inputs.tag || github.ref_name }}
