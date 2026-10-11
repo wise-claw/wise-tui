@@ -1,9 +1,18 @@
 name: Desktop Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "需要构建发布的版本标签"
+        required: true
+        default: "v1.4.1"
   push:
     tags:
       - "v*"
+
+env:
+  NODE_OPTIONS: "--max-old-space-size=6144"
 
 jobs:
   publish:
@@ -17,6 +26,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -103,8 +114,8 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           projectPath: .
-          tagName: ${{ github.ref_name }}
-          releaseName: Wise Desktop ${{ github.ref_name }}
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: Wise Desktop ${{ inputs.tag || github.ref_name }}
           releaseBody: "新增应用内版本检查、自动检查与签名更新；支持多屏按当前仓库选择已有会话继续；优化用户消息折叠高度和会话选择布局。安装包见下方 Assets。"
           releaseDraft: false
           prerelease: false
