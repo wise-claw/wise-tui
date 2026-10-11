@@ -58,7 +58,9 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["$HOME/.wise/**"]
+        "scope": [
+          "$HOME/.wise/**"
+        ]
       }
     }
   },
@@ -104,6 +106,14 @@
           "y": 168
         }
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhEREZGMzI5MEIzQjUwNEUKUldST1VEc0xLZlBmamNVY2w5V0N3STRhTHI5elc2Rk5pcFdaaitYU2xyekNFSTRlMFZsNXVPdEsK",
+      "endpoints": [
+        "https://github.com/wise-claw/wise-tui/releases/latest/download/latest.json"
+      ]
     }
   }
 }

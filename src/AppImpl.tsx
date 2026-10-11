@@ -2297,6 +2297,7 @@ export default function App() {
   const {
     effectiveRightCollapsed,
     handlePaneRepositorySelect,
+    handlePaneSessionSelect,
     handlePaneProjectNewSession,
     handleNewPaneSession,
     handleNewPaneSessionInNextSlot,
@@ -3657,6 +3658,7 @@ export default function App() {
         onChangePaneCount: handleChangePaneCount,
         onClosePaneSlot: handleClosePaneSlot,
         onPaneRepositorySelect: handlePaneRepositorySelect,
+        onPaneSessionSelect: handlePaneSessionSelect,
         onPaneProjectNewSession: handlePaneProjectNewSession,
         onNewPaneSession: handleNewPaneSession,
         onToggleSidebar: () => setCollapsed((c) => !c),

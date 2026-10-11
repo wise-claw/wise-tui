@@ -1,0 +1,11 @@
+{
+  "identifier": "app-update",
+  "description": "主窗口检查、安装签名版本更新并重启",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "updater:default",
+    "process:allow-restart"
+  ]
+}

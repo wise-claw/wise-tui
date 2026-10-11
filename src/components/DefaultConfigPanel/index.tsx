@@ -72,6 +72,7 @@ import {
 import { listEmployees } from "../../services/employees";
 import type { EmployeeItem } from "../../types";
 import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
+import { AppUpdateSection } from "./AppUpdateSection";
 import "./index.css";
 
 function DefaultConfigSection({ title, children }: { title: string; children: ReactNode }) {
@@ -1481,6 +1482,9 @@ export function DefaultConfigPanel() {
 
   return (
     <div className="app-default-config-panel">
+      <DefaultConfigSection title="版本更新">
+        <AppUpdateSection />
+      </DefaultConfigSection>
       {sections.map((section) => (
         <DefaultConfigSection key={section.key} title={section.title}>
           {section.content}

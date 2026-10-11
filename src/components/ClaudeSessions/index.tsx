@@ -180,6 +180,7 @@ export interface ClaudeSessionsProps {
   onChangePaneCount?: (count: PaneCount) => void;
   /** 关闭指定额外窗格（slotIndex 为 extraPanes 下标，2 屏时回到单屏）。 */
   onClosePaneSlot?: (slotIndex: number) => void | Promise<boolean>;
+  onPaneSessionSelect?: (slotIndex: number, sessionId: string) => void;
   onPaneRepositorySelect?: (slotIndex: number, repositoryId: number) => void | Promise<void>;
   onPaneProjectNewSession?: (
     slotIndex: number,
@@ -347,6 +348,7 @@ function ClaudeSessionsShell({
   onUpdatePaneRuntimeOverride,
   onChangePaneCount,
   onClosePaneSlot,
+  onPaneSessionSelect,
   onPaneRepositorySelect,
   onPaneProjectNewSession,
   onNewPaneSession,
@@ -953,6 +955,7 @@ function ClaudeSessionsShell({
           extraPanes={extraPanes}
           primaryPaneRuntimeOverride={primaryPaneRuntimeOverride}
           onUpdatePaneRuntimeOverride={onUpdatePaneRuntimeOverride}
+          onPaneSessionSelect={onPaneSessionSelect}
           onPaneRepositorySelect={onPaneRepositorySelect}
           onPaneProjectNewSession={onPaneProjectNewSession}
           onNewPaneSession={onNewPaneSession}

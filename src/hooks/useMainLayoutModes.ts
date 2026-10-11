@@ -439,6 +439,23 @@ export function useMainLayoutModes({
   const preferCloseMultiPaneRef = useRef(preferCloseMultiPane);
   preferCloseMultiPaneRef.current = preferCloseMultiPane;
 
+  /** 继续已有会话：只改当前槽位，不激活主屏或继承另一会话的执行环境。 */
+  const handlePaneSessionSelect = useCallback((slotIndex: number, sessionId: string) => {
+    const slots = extraPanesLatestRef.current;
+    if (!slots[slotIndex] || slots[slotIndex].sessionId === sessionId) return;
+    const session = sessionsLatestRef.current.find((item) => item.id === sessionId);
+    if (!session) { message.warning("该会话已不可用，请刷新会话列表"); return; }
+    if (isSessionBoundInPanes(sessionId, activeSessionIdLatestRef.current, slots, slotIndex)) {
+      message.warning("该会话已在其他屏中打开");
+      return;
+    }
+    const repo = repositories.find((item) => item.path.trim() === session.repositoryPath.trim());
+    const next = [...slots];
+    next[slotIndex] = assignCompanionSessionToPaneSlot(slots[slotIndex], sessionId, repo?.id ?? null);
+    extraPanesLatestRef.current = next;
+    setExtraPanes(next);
+  }, [repositories, setExtraPanes]);
+
   /** 为指定窗格选择仓库：始终新建隔离执行会话（不复用主会话绑定）。 */
   const handlePaneRepositorySelect = useCallback(
     async (slotIndex: number, repositoryId: number) => {
@@ -922,6 +939,7 @@ export function useMainLayoutModes({
   return {
     effectiveRightCollapsed,
     handlePaneRepositorySelect,
+    handlePaneSessionSelect,
     handlePaneProjectNewSession,
     handleNewPaneSession,
     handleNewPaneSessionInNextSlot,

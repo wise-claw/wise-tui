@@ -170,6 +170,7 @@ export interface ClaudeSessionsChatHostProps {
   onChangePaneCount?: (count: PaneCount) => void;
   /** 关闭指定额外窗格（slotIndex 为 extraPanes 下标，2 屏时回到单屏）。 */
   onClosePaneSlot?: (slotIndex: number) => void | Promise<boolean>;
+  onPaneSessionSelect?: (slotIndex: number, sessionId: string) => void;
   onPaneRepositorySelect?: (paneIndex: number, repositoryId: number) => void;
   onPaneProjectNewSession?: (
     slotIndex: number,
@@ -302,6 +303,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   primaryPaneRuntimeOverride = null,
   onUpdatePaneRuntimeOverride,
   onClosePaneSlot,
+  onPaneSessionSelect,
   onPaneRepositorySelect,
   onPaneProjectNewSession,
   onNewPaneSession,
@@ -730,6 +732,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
           onPickerOpenChange={handlePanePickerOpenChange}
           setCreatingPaneSlots={setCreatingPaneSlots}
           onClosePaneSlot={onClosePaneSlot}
+          onPaneSessionSelect={onPaneSessionSelect}
           onPaneRepositorySelect={onPaneRepositorySelect}
           onPaneProjectNewSession={onPaneProjectNewSession}
           onNewPaneSession={onNewPaneSession}

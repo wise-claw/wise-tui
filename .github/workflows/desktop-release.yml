@@ -84,10 +84,17 @@ jobs:
           CERT_ID=$(echo "$CERT_LINE" | awk -F'"' '{print $2}')
           echo "APPLE_SIGNING_IDENTITY=$CERT_ID" >> "$GITHUB_ENV"
 
+      - name: Configure signed updates
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+        run: bun run scripts/configure-updater.mjs
+
       - name: Build and upload artifacts
         uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
@@ -98,7 +105,7 @@ jobs:
           projectPath: .
           tagName: ${{ github.ref_name }}
           releaseName: Wise Desktop ${{ github.ref_name }}
-          releaseBody: "安装包见下方 Assets；若为草稿 Release，可在 GitHub Release 页面编辑后发布。"
-          releaseDraft: true
+          releaseBody: "新增应用内版本检查、自动检查与签名更新；支持多屏按当前仓库选择已有会话继续；优化用户消息折叠高度和会话选择布局。安装包见下方 Assets。"
+          releaseDraft: false
           prerelease: false
-          uploadUpdaterJson: false
+          uploadUpdaterJson: true

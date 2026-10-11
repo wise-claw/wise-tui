@@ -5100,14 +5100,15 @@
 }
 
 .app-claude-user-message-collapsible__body {
-  max-height: min(18vh, 120px);
+  /* 默认最多三行（正文行高 22px），避免用户消息占据过多会话空间。 */
+  max-height: 66px;
   overflow: hidden;
   word-break: break-word;
 }
 
 .app-claude-user-message-collapsible--truncated .app-claude-user-message-collapsible__body {
-  -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 66.67%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 66.67%, transparent 100%);
 }
 
 .app-claude-user-message-collapsible--expanded .app-claude-user-message-collapsible__body {
@@ -10599,4 +10600,19 @@ button.app-message-part-header:disabled:hover {
   font-size: 12px;
   color: var(--ant-color-text-tertiary);
   font-variant-numeric: tabular-nums;
+}
+
+/* 额外分屏可以独立选择已有会话继续。 */
+.app-claude-pane-session-picker {
+  flex: 0 1 220px;
+  width: 220px;
+  min-width: 0;
+  max-width: 220px;
+}
+
+.app-claude-pane-session-option {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }

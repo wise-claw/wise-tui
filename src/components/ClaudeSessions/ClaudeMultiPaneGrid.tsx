@@ -1,3 +1,4 @@
+import { filterPaneSessionOptions, buildPaneSessionOptions, type PaneSessionOption } from "../../utils/paneSessionOptions";
 import type {
   ClaudeComposerExecuteBubbleOptions,
   ClaudeSession,
@@ -10,7 +11,7 @@ import type {
   WorkflowTemplateItem,
   SessionConversationTaskItem,
 } from "../../types";
-import { Button, Empty, message, Spin, TreeSelect } from "antd";
+import { Button, Empty, message, Spin, TreeSelect, Select } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
 import {
   lazy,
@@ -626,12 +627,14 @@ interface MultiPaneExtraPaneCellProps {
   initialNotificationPanelCollapsed: boolean;
   isCreating: boolean;
   pickerOpen: boolean;
+  sessionOptions: PaneSessionOption[];
   projects: ProjectItem[];
   paneRepoTreeData: PaneRepoTreeNode[];
   projectsById: Map<string, ProjectItem>;
   onCreatePaneSession: (paneIdx: number) => void;
   onPickerOpenChange: (paneIdx: number, open: boolean) => void;
   setCreatingPaneSlots: Dispatch<SetStateAction<Record<number, boolean>>>;
+  onPaneSessionSelect?: (slotIndex: number, sessionId: string) => void;
   onPaneRepositorySelect?: (slotIndex: number, repositoryId: number) => void | Promise<void>;
   onPaneProjectNewSession?: (
     slotIndex: number,
@@ -659,12 +662,14 @@ const MultiPaneExtraPaneCell = memo(
     initialNotificationPanelCollapsed,
     isCreating,
     pickerOpen,
+    sessionOptions,
     projects,
     paneRepoTreeData,
     projectsById,
     onCreatePaneSession,
     onPickerOpenChange,
     setCreatingPaneSlots,
+    onPaneSessionSelect,
     onPaneRepositorySelect,
     onPaneProjectNewSession,
     onNewPaneSession,
@@ -826,10 +831,28 @@ const MultiPaneExtraPaneCell = memo(
       };
     }, [onPaneProjectNewSession, onPaneRepositorySelect, paneIdx, paneSession, projects, resolvedRepo, shared.repositories]);
 
+    const sessionPicker = onPaneSessionSelect ? (
+      <div className="app-claude-pane-session-picker">
+        <Select
+          size="small"
+          showSearch={{ optionFilterProp: "label" }}
+          aria-label="选择会话继续"
+          placeholder="选择会话继续"
+          value={paneSession?.id}
+          options={filterPaneSessionOptions(sessionOptions, paneSession?.repositoryPath?.trim() || resolvedRepo.path).map((option) => ({ ...option, disabled: option.disabled && option.value !== paneSession?.id }))}
+          onChange={(id: string) => { markPaneActive(absolutePaneIndex); onPaneSessionSelect(paneIdx, id); }}
+          style={{ width: "100%" }}
+          popupMatchSelectWidth={320}
+          styles={{ popup: { root: { maxWidth: "calc(100vw - 32px)" } } }}
+          optionRender={(option) => <span className="app-claude-pane-session-option" title={String(option.label ?? "")}>{option.label}</span>}
+        />
+      </div>
+    ) : null;
     const renderPaneTopbar = (fileTreeRailOpen: boolean, onToggleFileTree: () => void) =>
       shared.paneTopbarShared ? (
         <Topbar
           {...shared.paneTopbarShared}
+          sessionSelector={sessionPicker}
           paneFileTreeOpen={fileTreeRailOpen}
           onToggleFileTree={onToggleFileTree}
           onToggleSidebar={undefined}
@@ -913,7 +936,7 @@ const MultiPaneExtraPaneCell = memo(
             activeRepositoryId={shared.activeRepositoryId}
             workspaceMode={shared.workspaceMode}
             initialNotificationPanelCollapsed={initialNotificationPanelCollapsed}
-            onSwitchSession={shared.onSwitchSession}
+            onSwitchSession={onPaneSessionSelect ? (id) => onPaneSessionSelect(paneIdx, id) : shared.onSwitchSession}
             onCreateNewSession={() => onCreatePaneSession(paneIdx)}
             onOpenBuiltinAssistant={shared.onOpenBuiltinAssistant}
             onActivateAssistant={shared.onActivateAssistant}
@@ -1195,6 +1218,8 @@ const MultiPaneExtraPaneCell = memo(
     prev.initialNotificationPanelCollapsed === next.initialNotificationPanelCollapsed &&
     prev.isCreating === next.isCreating &&
     prev.pickerOpen === next.pickerOpen &&
+    prev.sessionOptions === next.sessionOptions &&
+    prev.onPaneSessionSelect === next.onPaneSessionSelect &&
     prev.shared === next.shared &&
     prev.paneRepoTreeData === next.paneRepoTreeData &&
     prev.projectsById === next.projectsById &&
@@ -1230,6 +1255,7 @@ export interface ClaudeMultiPaneGridProps {
   onCreatePaneSession: (paneIdx: number) => void;
   onPickerOpenChange: (paneIdx: number, open: boolean) => void;
   setCreatingPaneSlots: Dispatch<SetStateAction<Record<number, boolean>>>;
+  onPaneSessionSelect?: (slotIndex: number, sessionId: string) => void;
   onPaneRepositorySelect?: (slotIndex: number, repositoryId: number) => void | Promise<void>;
   onPaneProjectNewSession?: (
     slotIndex: number,
@@ -1265,6 +1291,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
   onCreatePaneSession,
   onPickerOpenChange,
   setCreatingPaneSlots,
+  onPaneSessionSelect,
   onPaneRepositorySelect,
   onPaneProjectNewSession,
   onNewPaneSession,
@@ -1272,6 +1299,10 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
   panelBelowMessages,
   resolvePaneAuxLayout,
 }: ClaudeMultiPaneGridProps) {
+  const sessionOptions = useMemo(
+    () => buildPaneSessionOptions(shared.allSessionsForHistory, activeSession.id, extraPanes),
+    [shared.allSessionsForHistory, activeSession.id, extraPanes],
+  );
   const resolveLayout = useCallback(
     (paneIndex: number): PaneAuxLayout => {
       if (resolvePaneAuxLayout) {
@@ -1441,12 +1472,14 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
           }
           isCreating={Boolean(creatingPaneSlots[paneIdx])}
           pickerOpen={Boolean(paneRepoPickerOpenBySlot[paneIdx])}
+          sessionOptions={sessionOptions}
           projects={projects}
           paneRepoTreeData={paneRepoTreeData}
           projectsById={projectsById}
           onCreatePaneSession={onCreatePaneSession}
           onPickerOpenChange={onPickerOpenChange}
           setCreatingPaneSlots={setCreatingPaneSlots}
+          onPaneSessionSelect={onPaneSessionSelect}
           onPaneRepositorySelect={onPaneRepositorySelect}
           onPaneProjectNewSession={onPaneProjectNewSession}
           onNewPaneSession={onNewPaneSession}

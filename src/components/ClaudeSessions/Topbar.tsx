@@ -164,6 +164,8 @@ function TopbarBtn({
 // ── Topbar ──
 
 export interface TopbarProps {
+  /** 分屏会话选择替换仓库标题，避免额外占一行。 */
+  sessionSelector?: ReactNode;
   activeProject?: ProjectItem | null;
   activeWorkspaceFocus?: WorkspaceFocus;
   activeRepository?: Repository;
@@ -246,6 +248,7 @@ export type PaneTopbarSharedProps = Omit<
 };
 
 export const Topbar = memo(function Topbar({
+  sessionSelector,
   activeProject,
   activeWorkspaceFocus = "repository",
   activeRepository,
@@ -386,7 +389,7 @@ export const Topbar = memo(function Topbar({
                 options={centerSwitcherOptions}
               />
             ) : null}
-            {showRepoTitle ? (
+            {sessionSelector ?? (showRepoTitle ? (
               <>
                 <div className="app-topbar-divider" />
                 <HoverHint title="点击复制绝对路径">
@@ -425,7 +428,7 @@ export const Topbar = memo(function Topbar({
                   </HoverHint>
                 ) : null}
               </>
-            ) : null}
+            ) : null)}
             {topbarLabel && topbarChrome.showRemoteEntryTopbar ? (
               <RemoteEntryTopbarStrip onOpenRemoteChannels={onOpenRemoteChannels} />
             ) : null}

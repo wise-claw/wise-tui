@@ -1,3 +1,4 @@
+import { AppUpdateAutoCheck } from "../hooks/useAppUpdateAutoCheck";
 import { repositoryCardFileTreeContext } from "./WorkspaceFileTreeRail/repositoryCardContext";
 import {
   RepositoryFileEditorOpenFileContext,
@@ -1785,6 +1786,7 @@ export function AppWorkspaceLayout({
           <RepositoryFilePreviewModalContext.Provider value={activeLayoutBinaryPreview}>
           <ConfigProvider locale={zhCN} tooltip={{ unique: true }} theme={themeConfig}>
             <AntdApp>
+              <AppUpdateAutoCheck />
               {workspaceWelcomeFullscreen && workspaceWelcomeProps ? (
                 <div className="app-workspace-welcome-fullscreen">
                   <Suspense fallback={<PanelLoadingFallback />}>
