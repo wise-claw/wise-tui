@@ -7,6 +7,10 @@ on:
         description: "需要构建发布的版本标签"
         required: true
         default: "v1.4.1"
+      platform:
+        description: "重跑平台（all 或 macos-latest）"
+        required: true
+        default: "all"
   push:
     tags:
       - "v*"
@@ -21,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, ubuntu-latest, windows-latest]
+        platform: ${{ inputs.platform == 'macos-latest' && fromJSON('["macos-latest"]') || fromJSON('["macos-latest", "ubuntu-latest", "windows-latest"]') }}
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -113,6 +117,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
+          tauriScript: bun run scripts/tauri-release.mjs
           projectPath: .
           tagName: ${{ inputs.tag || github.ref_name }}
           releaseName: Wise Desktop ${{ inputs.tag || github.ref_name }}
