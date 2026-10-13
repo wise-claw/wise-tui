@@ -398,6 +398,11 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
         if (action.type === "send_optimization" && optimizeConfigArtifacts) {
           syncConfigPatchCandidates();
         }
+      } catch (error) {
+        const stopped = stopFeedbackLoop(stateRef.current);
+        stateRef.current = stopped;
+        setState(stopped);
+        message.error(`反馈神经网派发失败：${error instanceof Error ? error.message : String(error)}`);
       } finally {
         processingRef.current = false;
       }
@@ -545,7 +550,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
   }, [finalizeCompletedRun, state]);
 
   useEffect(() => {
-    if (!enabled || !autoStart || !insights || autoStartedRef.current) return;
+    if (!enabled || !autoStart || !insights || !onSendRef.current || insights.overview.turnCount === 0 || autoStartedRef.current) return;
     if (state.phase !== "idle") return;
     const warnings = insights.recommendations.filter(
       (r) => r.severity === "warning" || r.severity === "critical",
@@ -559,7 +564,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
   }, [autoStart, enabled, insights, maxCycles, sessionId, state.phase, tick]);
 
   const start = useCallback(() => {
-    if (!enabled) return;
+    if (!enabled || !onSendRef.current || !insightsRef.current?.overview.turnCount) return;
     autoStartedRef.current = true;
     archivedRunRef.current = null;
     runAppliedPatchIdsRef.current = new Set();

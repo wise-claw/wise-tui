@@ -14,6 +14,7 @@ import type { ProjectItem } from "../../types";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { resolveScheduledTasksRepository } from "../../utils/workspaceSelectionState";
+import { WorkspaceSessionSwitcher } from "./WorkspaceSessionSwitcher";
 import { ProjectRepositoryList } from "./ProjectRepositoryList";
 import { useProjectRepositorySidebarState } from "./useProjectRepositorySidebarState";
 import { useSidebarScheduledTasksMap } from "./useSidebarScheduledTasksMap";
@@ -172,6 +173,7 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
     <>
       {props.showLeftSidebarWorkspaceList ? (
         <ProjectRepositoryList
+          workspaceSessionSummary={<WorkspaceSessionSwitcher sessions={props.sessionsRef.current} activeSessionId={props.activeSessionId ?? null} onSelectSession={props.onSelectSession} />}
           projects={props.projects}
           repositoriesById={projectRepositoryState.repositoriesById}
           floatingRepositories={props.floatingRepositories}

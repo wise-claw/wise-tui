@@ -1,3 +1,6 @@
+import { IconSun } from "../AppearanceThemeToggle";
+import { IconPageMonitor } from "../ChromeDevtoolsMonitor/PageMonitorTopbarTrigger";
+import { IconBrowserAutomation } from "../BrowserAutomation/BrowserAutomationTopbarTrigger";
 import type { ReactNode } from "react";
 import { IconSessionDataLink } from "./SessionDataLinkTopbarTrigger";
 import { IconSessionFeedbackLoop } from "./SessionFeedbackLoopTopbarTrigger";
@@ -10,7 +13,10 @@ export type SessionTopbarOverflowPanel =
   | "sessionDataLink"
   | "sessionFeedbackLoop"
   | "multiPane"
-  | "terminal";
+  | "terminal"
+  | "pageMonitor"
+  | "browserAutomation"
+  | "theme";
 
 function TopbarMenuIconSvg({ children }: { children: ReactNode }) {
   return (
@@ -106,6 +112,9 @@ const OVERFLOW_MENU_ICONS: Record<SessionTopbarOverflowPanel, ReactNode> = {
   sessionFeedbackLoop: <IconSessionFeedbackLoopMenu />,
   multiPane: <IconMultiPaneMenu />,
   terminal: <IconTerminalMenu />,
+  theme: <span className="app-topbar-overflow-menu-icon" aria-hidden><IconSun /></span>,
+  pageMonitor: <span className="app-topbar-overflow-menu-icon" aria-hidden><IconPageMonitor /></span>,
+  browserAutomation: <span className="app-topbar-overflow-menu-icon" aria-hidden><IconBrowserAutomation /></span>,
 };
 
 export function topbarOverflowMenuIcon(panel: SessionTopbarOverflowPanel): ReactNode {

@@ -1,4 +1,4 @@
-import type { MutableRefObject } from "react";
+import type { MutableRefObject, ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { App as AntdApp, Typography } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
@@ -40,6 +40,7 @@ import { projectRepositoryListPropsEqual } from "./projectRepositoryListPropsEqu
 const EMPTY_JOINABLE_PROJECTS: Workspace[] = [];
 
 export interface ProjectRepositoryListProps {
+  workspaceSessionSummary?: ReactNode;
   projects: Workspace[];
   repositoriesById: Map<number, Repository>;
   floatingRepositories: StandaloneRepo[];
@@ -195,6 +196,7 @@ function ProjectRepositoryListInner({
   onSectionCollapsedChange,
   expandedRepositoryIds,
   onToggleRepositoryExpand,
+  workspaceSessionSummary,
   workspaceSessions = [],
   activeSessionId = null,
   showWorkspaceRunItems = true,
@@ -274,7 +276,7 @@ function ProjectRepositoryListInner({
         style={setSectionCollapsed ? { cursor: 'pointer' } : undefined}
       >
         <Typography.Text className="app-repository-header-title">
-          工作区
+          工作区{workspaceSessionSummary}
         </Typography.Text>
         <div
           className="app-repository-header-actions"

@@ -1509,7 +1509,7 @@ export default function App() {
       kind: FeedbackLoopDispatchKind;
       cycleIndex?: number;
     }) => {
-      await dispatchSessionFeedbackLoopAnalysis(
+      const workerId = await dispatchSessionFeedbackLoopAnalysis(
         {
           getSessions: () => sessionsLatestRef.current,
           createSession,
@@ -1517,6 +1517,7 @@ export default function App() {
         },
         input,
       );
+      if (!workerId) throw new Error("反馈神经网任务未能启动");
     },
     [createSession, executeSession],
   );

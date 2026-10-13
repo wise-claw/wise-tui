@@ -878,12 +878,12 @@ function ClaudeSessionsShell({
           activeSessionRepositoryPath={
             activeSession?.repositoryPath?.trim() || chatContextRepository?.path
           }
-          mainSessionForDataLink={mainSessionForDataLink}
+          mainSessionForDataLink={activeSession}
           onSessionInsightsAiAnalysis={
-            mainSessionForDataLink
+            activeSession
               ? async (prompt) => {
-                  onSwitchSession(mainSessionForDataLink.id);
-                  await onExecuteSession(mainSessionForDataLink.id, prompt);
+                  onSwitchSession(activeSession.id);
+                  await onExecuteSession(activeSession.id, prompt);
                 }
               : undefined
           }

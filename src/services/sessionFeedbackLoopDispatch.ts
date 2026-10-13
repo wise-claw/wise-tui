@@ -87,7 +87,13 @@ export async function dispatchSessionFeedbackLoopAnalysis(
     cycleIndex: input.cycleIndex,
     previewText: preview,
   });
-  const spawnOk = deps.executeSession(workerTabId, prompt, { userBubblePrompt: bubble });
+  let spawnOk: boolean;
+  try {
+    spawnOk = deps.executeSession(workerTabId, prompt, { userBubblePrompt: bubble });
+  } catch (error) {
+    updateSessionFeedbackLoopDispatchStatus({ dispatchId, anchorSessionId: anchorSession.id, status: "failed" });
+    throw error;
+  }
   if (spawnOk === false) {
     updateSessionFeedbackLoopDispatchStatus({
       dispatchId,

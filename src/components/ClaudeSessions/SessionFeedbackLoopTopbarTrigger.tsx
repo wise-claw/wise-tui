@@ -1,4 +1,4 @@
-import { Drawer, Empty, Spin, Typography } from "antd";
+import { Alert, Button, Drawer, Empty, Spin, Typography } from "antd";
 import { useCallback, useState } from "react";
 import { HoverHint } from "../shared/HoverHint";
 import type { ClaudeSession } from "../../types";
@@ -6,6 +6,7 @@ import { useSessionFeedbackLoopWorkspace } from "../../hooks/useSessionFeedbackL
 import { SessionFeedbackLoopPanel } from "./SessionFeedbackLoopPanel";
 import type { FeedbackLoopDispatchKind } from "../../utils/sessionFeedbackLoopDispatch";
 import { isFeedbackLoopPhaseActive } from "../../utils/sessionFeedbackLoop";
+import { useClaudeSessionLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
 import "./SessionFeedbackLoopTopbarTrigger.css";
 
 const { Text } = Typography;
@@ -64,6 +65,7 @@ export function SessionFeedbackLoopTopbarTrigger({
 }: SessionFeedbackLoopTopbarTriggerProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
+  const liveSession = useClaudeSessionLiveSnapshot(mainSession?.id) ?? mainSession;
 
   const setOpen = useCallback(
     (next: boolean) => {
@@ -77,7 +79,7 @@ export function SessionFeedbackLoopTopbarTrigger({
   );
 
   const workspace = useSessionFeedbackLoopWorkspace({
-    session: mainSession,
+    session: liveSession,
     drawerOpen: open,
     onDispatchSessionFeedbackLoop,
     getClaudeSessions,
@@ -102,8 +104,8 @@ export function SessionFeedbackLoopTopbarTrigger({
 
   const loopActive = isFeedbackLoopPhaseActive(workspace.loop.state.phase);
   const tooltipTitle = mainSession
-    ? `反馈神经网 · 主会话：${mainSession.repositoryName.trim() || "未命名"}${loopActive ? "（运行中）" : ""}`
-    : "反馈神经网（尚未关联主会话）";
+    ? `反馈神经网 · 当前会话：${mainSession.repositoryName.trim() || "未命名"}${loopActive ? "（运行中）" : ""}`
+    : "反馈神经网（尚未选择会话）";
 
   return (
     <>
@@ -134,9 +136,9 @@ export function SessionFeedbackLoopTopbarTrigger({
               <span className="title-dot" />
               <span className="title-text">反馈神经网</span>
               <span className="title-divider">·</span>
-              <span className="title-session-label">主会话</span>
-              <span className="title-session-name">
-                ({mainSession.repositoryName.trim() || "未命名"})
+              <span className="title-session-label">当前会话</span>
+              <span className="title-session-name" title={`${mainSession.repositoryName} · ${mainSession.id}`}>
+                ({mainSession.threadName?.trim() || mainSession.repositoryName.trim() || "未命名"})
               </span>
             </div>
           ) : (
@@ -150,6 +152,7 @@ export function SessionFeedbackLoopTopbarTrigger({
         onClose={() => setOpen(false)}
         styles={{ body: { padding: "12px 14px", overflow: "auto" } }}
       >
+        {workspace.linkDataError && <Alert type="warning" showIcon title="日志加载失败，使用内存记录分析" description={workspace.linkDataError} action={<Button size="small" onClick={workspace.refreshLinkData}>重试</Button>} />}
         {!mainSession ? (
           <Empty description="请先打开一个会话" />
         ) : workspace.linkDataLoading && !workspace.insights ? (

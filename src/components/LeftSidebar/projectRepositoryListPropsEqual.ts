@@ -3,6 +3,7 @@ import type { ProjectRepositoryListProps } from "./ProjectRepositoryList";
 
 export type ProjectRepositoryListEqualProps = Pick<
   ProjectRepositoryListProps,
+  | "workspaceSessionSummary"
   | "projects"
   | "floatingRepositories"
   | "workspaceRepositoryOrder"
@@ -148,6 +149,7 @@ export function projectRepositoryListPropsEqual(
   ) {
     return false;
   }
+  if (prev.workspaceSessionSummary !== next.workspaceSessionSummary) return false;
   if (prev.activeSessionId !== next.activeSessionId) return false;
   if (prev.showWorkspaceRunItems !== next.showWorkspaceRunItems) return false;
   if (prev.workspaceSessions !== next.workspaceSessions) return false;

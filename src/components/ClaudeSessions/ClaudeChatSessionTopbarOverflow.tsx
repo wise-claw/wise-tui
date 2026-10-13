@@ -1,3 +1,7 @@
+import { WISE_THEME_MODES, WISE_THEME_MODE_LABELS, isWiseThemeMode } from "../../constants/appTheme";
+import { setAppThemeMode, useAppTheme } from "../../stores/appThemeStore";
+import { PageMonitorTopbarTrigger } from "../ChromeDevtoolsMonitor";
+import { BrowserAutomationTopbarTrigger } from "../BrowserAutomation/BrowserAutomationTopbarTrigger";
 import { Dropdown, type MenuProps } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { memo, useCallback, useMemo, useState } from "react";
@@ -31,6 +35,9 @@ function IconMoreGrid() {
 export interface ClaudeChatSessionTopbarOverflowProps {
   /** 与主会话顶栏 OpenApp / LLM 代理一致的仓库目录 */
   repositoryPath: string;
+  repositoryId?: number | null;
+  browserToolsEnabled?: boolean;
+  themeEnabled?: boolean;
   mainSessionForDataLink: ClaudeSession | null;
   onSessionInsightsAiAnalysis?: (prompt: string) => void | Promise<void>;
   onDispatchSessionFeedbackLoop?: SessionFeedbackLoopTopbarTriggerProps["onDispatchSessionFeedbackLoop"];
@@ -44,6 +51,9 @@ export interface ClaudeChatSessionTopbarOverflowProps {
 
 export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTopbarOverflow({
   repositoryPath,
+  repositoryId,
+  browserToolsEnabled = false,
+  themeEnabled = false,
   mainSessionForDataLink,
   onSessionInsightsAiAnalysis,
   onDispatchSessionFeedbackLoop,
@@ -54,12 +64,18 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
   terminalActive = false,
   onToggleTerminal,
 }: ClaudeChatSessionTopbarOverflowProps) {
+  const { mode: themeMode } = useAppTheme();
   const topbarChrome = useWiseTopbarChromeVisibility();
   const [menuOpen, setMenuOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<SessionTopbarOverflowPanel | null>(null);
 
   const overflowItems = useMemo(() => {
     const items: Array<{ key: SessionTopbarOverflowPanel; label: string; disabled?: boolean }> = [];
+    if (themeEnabled) items.push({ key: "theme", label: `主题 · ${WISE_THEME_MODE_LABELS[themeMode]}` });
+    if (browserToolsEnabled) {
+      items.push({ key: "pageMonitor", label: "页面监控" });
+      items.push({ key: "browserAutomation", label: "浏览器自动化" });
+    }
     if (onChangePaneCount) items.push({ key: "multiPane", label: paneChangeInFlight ? "多屏（切换中…）" : `多屏 · ${paneCount}屏`, disabled: paneChangeInFlight });
     if (onToggleTerminal) items.push({ key: "terminal", label: terminalActive ? "收起内置终端" : "打开内置终端" });
     if (!topbarChrome.showFccTopbar) {
@@ -87,7 +103,7 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
       });
     }
     return items;
-  }, [topbarChrome, mainSessionForDataLink, onChangePaneCount, onToggleTerminal, paneChangeInFlight, paneCount, terminalActive]);
+  }, [themeEnabled, themeMode, browserToolsEnabled, topbarChrome, mainSessionForDataLink, onChangePaneCount, onToggleTerminal, paneChangeInFlight, paneCount, terminalActive]);
 
   const handlePanelOpenChange = useCallback((panel: SessionTopbarOverflowPanel, open: boolean) => {
     setActivePanel(open ? panel : null);
@@ -104,6 +120,14 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
         label: count === 1 ? "单屏" : `${count}屏`,
         disabled: count === paneCount || paneChangeInFlight,
       })),
+    } : item.key === "theme" ? {
+      key: item.key,
+      icon: topbarOverflowMenuIcon(item.key),
+      label: <span className="app-topbar-overflow-menu-label">{item.label}</span>,
+      children: WISE_THEME_MODES.map((mode) => ({
+        key: `theme:${mode}`,
+        label: WISE_THEME_MODE_LABELS[mode],
+      })),
     } : {
       key: item.key,
       icon: topbarOverflowMenuIcon(item.key),
@@ -112,7 +136,7 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
     });
   }, [overflowItems, paneChangeInFlight, paneCount]);
 
-  if ((!repositoryPath.trim() && !onChangePaneCount && !onToggleTerminal) || overflowItems.length === 0) {
+  if ((!repositoryPath.trim() && !onChangePaneCount && !onToggleTerminal && !browserToolsEnabled && !themeEnabled) || overflowItems.length === 0) {
     return null;
   }
 
@@ -121,9 +145,16 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
       <Dropdown
         menu={{
           items: menuItems,
+          selectedKeys: [`theme:${themeMode}`],
           className: "app-topbar-overflow-menu-inner",
           onClick: ({ key, domEvent }) => {
             domEvent.stopPropagation();
+            if (key.startsWith("theme:")) {
+              const mode = key.slice(6);
+              if (isWiseThemeMode(mode)) setAppThemeMode(mode);
+              setMenuOpen(false);
+              return;
+            }
             if (key.startsWith("pane:")) {
               const count = Number(key.slice(5)) as PaneCount;
               if (PANE_COUNT_OPTIONS.includes(count) && count !== paneCount) onChangePaneCount?.(count);
@@ -158,6 +189,25 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
           </button>
         </HoverHint>
       </Dropdown>
+
+      {browserToolsEnabled ? (
+        <>
+          <PageMonitorTopbarTrigger
+            repositoryId={repositoryId}
+            repositoryPath={repositoryPath}
+            triggerHidden
+            open={activePanel === "pageMonitor"}
+            onOpenChange={(open) => handlePanelOpenChange("pageMonitor", open)}
+          />
+          <BrowserAutomationTopbarTrigger
+            repositoryId={repositoryId}
+            repositoryPath={repositoryPath}
+            triggerHidden
+            open={activePanel === "browserAutomation"}
+            onOpenChange={(open) => handlePanelOpenChange("browserAutomation", open)}
+          />
+        </>
+      ) : null}
 
       {!topbarChrome.showFccTopbar && activePanel === "fcc" ? (
         <FccTopbarTrigger
@@ -197,13 +247,13 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
           onOpenChange={(open) => handlePanelOpenChange("sessionDataLink", open)}
         />
       ) : null}
-      {!topbarChrome.showSessionFeedbackLoopTopbar && activePanel === "sessionFeedbackLoop" ? (
+      {!topbarChrome.showSessionFeedbackLoopTopbar ? (
         <SessionFeedbackLoopTopbarTrigger
           mainSession={mainSessionForDataLink}
           onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}
           getClaudeSessions={getClaudeSessions}
           triggerHidden
-          open
+          open={activePanel === "sessionFeedbackLoop"}
           onOpenChange={(open) => handlePanelOpenChange("sessionFeedbackLoop", open)}
         />
       ) : null}

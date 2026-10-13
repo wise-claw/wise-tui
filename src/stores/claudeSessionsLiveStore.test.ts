@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
 import {
+  getExecutedSessionIds,
   getClaudeSessionsSnapshot,
   getClaudeSessionsStructureKey,
   getClaudeSessionSnapshot,
@@ -160,4 +161,18 @@ describe("claudeSessionsLiveStore", () => {
       Object.defineProperty(document, "visibilityState", originalDescriptor);
     }
   });
+});
+
+
+test("execution tracking excludes restored completions and survives session list removal", () => {
+  const restored = { ...stubSession("restored-execution-test", 1), status: "completed" as const };
+  const executed = { ...stubSession("new-execution-test", 0), status: "connecting" as const };
+  publishClaudeSessions([restored]);
+  expect(getExecutedSessionIds().has(restored.id)).toBe(false);
+  publishClaudeSessions([restored, executed]);
+  expect(getExecutedSessionIds().has(executed.id)).toBe(true);
+  publishClaudeSessions([{ ...executed, status: "idle" }]);
+  expect(getExecutedSessionIds().has(executed.id)).toBe(true);
+  publishClaudeSessions([]);
+  expect(getExecutedSessionIds().has(executed.id)).toBe(true);
 });

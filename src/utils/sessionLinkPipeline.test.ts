@@ -179,3 +179,21 @@ describe("sessionLinkPipeline", () => {
     clearSessionLinkPipelineCache();
   });
 });
+
+test('pipeline cache isolates equal-size transcripts from different sessions', () => {
+  clearSessionLinkPipelineCache();
+  const make = (content: string): ClaudeMessage[] => [{ id: 1, role: 'user', content, timestamp: 1000, parts: [{ type: 'text', text: content }] }];
+  const first = buildSessionLinkPipeline({ messages: make('session A') });
+  const second = buildSessionLinkPipeline({ messages: make('session B') });
+  expect(second).not.toBe(first);
+  expect(JSON.stringify(second.records)).toContain('session B');
+  expect(JSON.stringify(second.records)).not.toContain('session A');
+});
+
+test('pipeline recomputes when a streaming message changes without changing ID or timestamp', () => {
+  const message: ClaudeMessage = { id: 1, role: 'assistant', content: 'old', timestamp: 1000, parts: [{ type: 'text', text: 'old' }] };
+  const first = buildSessionLinkPipeline({ messages: [message] });
+  const second = buildSessionLinkPipeline({ messages: [{ ...message, content: 'new', parts: [{ type: 'text', text: 'new' }] }] });
+  expect(second).not.toBe(first);
+  expect(JSON.stringify(second.records)).toContain('new');
+});

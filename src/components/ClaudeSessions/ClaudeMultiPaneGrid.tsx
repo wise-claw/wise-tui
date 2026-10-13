@@ -479,6 +479,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
           activeProject={shared.activeProject ?? null}
           activeWorkspaceFocus={shared.activeWorkspaceFocus ?? "repository"}
           mainSessionForDataLink={session}
+          onSessionInsightsAiAnalysis={async prompt => { await shared.onExecute(session.id, prompt); }}
           onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(activeRepository.path)}
           onToggleTerminal={handleToggleTerminalOnPrimary}
           terminalPanelMounted={terminalMounted}
@@ -868,6 +869,7 @@ const MultiPaneExtraPaneCell = memo(
           activeProject={paneProject}
           activeWorkspaceFocus="repository"
           mainSessionForDataLink={paneSession}
+          onSessionInsightsAiAnalysis={paneSession ? async prompt => { await shared.onExecute(paneSession.id, prompt); } : undefined}
           onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(resolvedRepo.path)}
           centerView={centerView}
           onCenterViewChange={handleCenterViewChange}

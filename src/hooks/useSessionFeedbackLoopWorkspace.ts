@@ -1,7 +1,9 @@
+import { sessionAnalysisTraceSinceMs } from "../services/sessionAnalysisTranscript";
 import { message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeSession } from "../types";
-import { loadClaudeSessionJsonl } from "../services/claudeDisk";
+import { getClaudeSessionsSnapshot } from "../stores/claudeSessionsLiveStore";
+import { useSessionAnalysisTranscript } from "./useSessionAnalysisTranscript";
 import { useFccSessionTraces } from "./useFccSessionTraces";
 import { useOpencodeGoSessionTraces } from "./useOpencodeGoSessionTraces";
 import {
@@ -31,8 +33,6 @@ import type { FeedbackLoopDispatchKind } from "../utils/sessionFeedbackLoopDispa
 import type { UseSessionFeedbackLoopResult } from "./useSessionFeedbackLoop";
 import type { SessionInsightsResult } from "../utils/sessionInsights";
 
-const JSONL_TAIL_FULL = 8000;
-const JSONL_TAIL_LIGHT = 1200;
 
 export interface UseSessionFeedbackLoopWorkspaceInput {
   session: ClaudeSession | null;
@@ -52,6 +52,8 @@ export interface UseSessionFeedbackLoopWorkspaceResult {
   loop: UseSessionFeedbackLoopResult;
   insights: SessionInsightsResult | null;
   linkDataLoading: boolean;
+  linkDataError: string | null;
+  refreshLinkData: () => void;
 }
 
 export function useSessionFeedbackLoopWorkspace(
@@ -63,7 +65,7 @@ export function useSessionFeedbackLoopWorkspace(
   const messages = session?.messages ?? [];
   const repositoryPath = session?.repositoryPath?.trim() ?? "";
   const claudeSessionId = session?.claudeSessionId?.trim() ?? "";
-  const canLoadDisk = Boolean(repositoryPath && claudeSessionId);
+
   const sessionId = session?.id?.trim() ?? "";
 
   const storedLoopPhase = useMemo((): FeedbackLoopPhase => {
@@ -83,8 +85,8 @@ export function useSessionFeedbackLoopWorkspace(
     loopPhase: trackedLoopPhase,
   });
 
-  const [jsonlLines, setJsonlLines] = useState<string[] | null>(null);
-  const [jsonlLoading, setJsonlLoading] = useState(false);
+  const transcript = useSessionAnalysisTranscript(session, linkDataActive);
+  const { lines: jsonlLines, loading: jsonlLoading } = transcript;
   const [proxySnap, setProxySnap] = useState(getClaudeLlmProxyStoreSnapshot);
 
   useEffect(() => {
@@ -100,37 +102,7 @@ export function useSessionFeedbackLoopWorkspace(
     };
   }, [linkDataActive, repositoryPath]);
 
-  useEffect(() => {
-    if (!linkDataActive) return;
-    setJsonlLines(null);
-    if (!canLoadDisk) return;
-    const tailLines =
-      session?.diskTranscriptPartial || messages.length < 80 ? JSONL_TAIL_FULL : JSONL_TAIL_LIGHT;
-    let cancelled = false;
-    setJsonlLoading(true);
-    void loadClaudeSessionJsonl(repositoryPath, claudeSessionId, { tailLines })
-      .then((lines) => {
-        if (!cancelled) setJsonlLines(lines);
-      })
-      .catch(() => {
-        if (!cancelled) setJsonlLines([]);
-      })
-      .finally(() => {
-        if (!cancelled) setJsonlLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    linkDataActive,
-    canLoadDisk,
-    repositoryPath,
-    claudeSessionId,
-    session?.diskTranscriptPartial,
-    messages.length,
-  ]);
-
-  const traceSinceMs = session?.createdAt ? session.createdAt - 60_000 : undefined;
+  const traceSinceMs = sessionAnalysisTraceSinceMs(session);
   const { fccAligned, traces: fccTraces } = useFccSessionTraces({
     open: linkDataActive,
     sessionHint: claudeSessionId || undefined,
@@ -274,7 +246,11 @@ export function useSessionFeedbackLoopWorkspace(
 
   useSessionFeedbackLoopDispatchCompletion({
     anchorSessionId: sessionId,
-    getSessions: getClaudeSessions ?? (() => []),
+    getSessions: getClaudeSessions ?? getClaudeSessionsSnapshot,
+    onFailed: (record) => {
+      if (record.kind === "optimization") feedbackLoop.stop();
+      message.error("反馈神经网任务失败或已取消，请查看 worker 会话后重试");
+    },
     onComplete: (record, responseText) => {
       if (record.kind === "optimization" && record.cycleIndex != null) {
         ingestCycleWorkerRef.current(record.cycleIndex, responseText);
@@ -299,5 +275,7 @@ export function useSessionFeedbackLoopWorkspace(
     loop: feedbackLoop,
     insights: loopInsights,
     linkDataLoading: jsonlLoading && linkDataActive,
+    linkDataError: transcript.error,
+    refreshLinkData: transcript.refresh,
   };
 }

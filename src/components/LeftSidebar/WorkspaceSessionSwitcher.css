@@ -1,0 +1,20 @@
+.workspace-session-switcher { display: inline-flex; margin-left: 8px; }
+.workspace-session-switcher-trigger { display: flex; align-items: center; gap: 7px; padding: 1px 5px; border: 1px solid var(--ant-color-border-secondary); border-radius: 5px; background: transparent; font: inherit; font-size: 11px; cursor: pointer; }
+.workspace-session-switcher-running { color: var(--ant-color-primary); }
+.workspace-session-switcher-completed { color: var(--ant-color-success); }
+.workspace-session-switcher-panel { width: min(260px, calc(100vw - 48px)); }
+.workspace-session-switcher-panel-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+.workspace-session-switcher-panel-head button { border: 0; background: transparent; color: var(--ant-color-text); cursor: pointer; padding: 3px 8px; border-radius: 4px; }
+.workspace-session-switcher-panel-head button:disabled { opacity: .35; cursor: default; }
+.workspace-session-switcher-list { max-height: 300px; overflow-y: auto; margin-top: 3px; }
+.workspace-session-switcher-group { display: flex; align-items: center; justify-content: space-between; font-size: 11px; line-height: 18px; color: var(--ant-color-text-secondary); padding: 2px; }
+.workspace-session-switcher-empty { font-size: 11px; color: var(--ant-color-text-tertiary); }
+.workspace-session-switcher-row { width: 100%; display: flex; align-items: center; gap: 6px; padding: 4px; border: 0; border-radius: 5px; text-align: left; background: transparent; color: var(--ant-color-text); cursor: pointer; }
+.workspace-session-switcher-row:hover, .workspace-session-switcher-panel-head button:not(:disabled):hover { background: var(--ant-color-fill-tertiary); }
+.workspace-session-switcher-row[aria-current=true] { background: var(--ant-color-primary-bg); }
+.workspace-session-switcher-row-text { display: flex; align-items: baseline; gap: 6px; flex: 1; min-width: 0; font-size: 12px; line-height: 18px; }
+.workspace-session-switcher-row-text > span, .workspace-session-switcher-row-text > span { flex: 1; min-width: 0; }
+.workspace-session-switcher-row-text small { max-width: 72px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-session-switcher-row-text > span { flex: 1; min-width: 0; }
+.workspace-session-switcher-row-text small { max-width: 72px; flex-shrink: 0; color: var(--ant-color-text-tertiary); font-size: 10px; }
+.workspace-session-switcher-hint { margin-top: 4px; font-size: 10px; color: var(--ant-color-text-tertiary); }

@@ -5,7 +5,7 @@ import { useChromeDevtoolsMonitor } from "../../hooks/useChromeDevtoolsMonitor";
 import { PageMonitorPanel } from "./PageMonitorPanel";
 import "./PageMonitorTopbarTrigger.css";
 
-function IconPageMonitor() {
+export function IconPageMonitor() {
   return (
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
       <rect
@@ -37,6 +37,7 @@ function IconPageMonitor() {
 export type PageMonitorTopbarTriggerProps = {
   repositoryId: number | null | undefined;
   repositoryPath: string;
+  triggerHidden?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 };
@@ -44,6 +45,7 @@ export type PageMonitorTopbarTriggerProps = {
 export function PageMonitorTopbarTrigger({
   repositoryId,
   repositoryPath,
+  triggerHidden = false,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
 }: PageMonitorTopbarTriggerProps) {
@@ -105,32 +107,36 @@ export function PageMonitorTopbarTrigger({
         />
       }
     >
-      <HoverHint
-        title={
-          disabled
-            ? "当前会话未绑定仓库，无法监控页面"
-            : monitor.isActive
-              ? "页面监控进行中（点击查看）"
-              : "页面监控：Chrome DevTools / CDP"
-        }
-        open={open ? false : undefined}
-      >
-        <button
-          type="button"
-          className={
-            "app-topbar-btn app-page-monitor-topbar-btn" +
-            (open || monitor.isActive ? " active" : "")
+      {triggerHidden ? (
+        <span className="app-topbar-overflow-anchor" tabIndex={-1} aria-hidden />
+      ) : (
+        <HoverHint
+          title={
+            disabled
+              ? "当前会话未绑定仓库，无法监控页面"
+              : monitor.isActive
+                ? "页面监控进行中（点击查看）"
+                : "页面监控：Chrome DevTools / CDP"
           }
-          aria-label="页面监控"
-          aria-expanded={open}
-          disabled={disabled}
+          open={open ? false : undefined}
         >
-          <IconPageMonitor />
-          {monitor.isActive ? (
-            <span className="app-page-monitor-topbar-btn__badge" aria-hidden />
-          ) : null}
-        </button>
-      </HoverHint>
+          <button
+            type="button"
+            className={
+              "app-topbar-btn app-page-monitor-topbar-btn" +
+              (open || monitor.isActive ? " active" : "")
+            }
+            aria-label="页面监控"
+            aria-expanded={open}
+            disabled={disabled}
+          >
+            <IconPageMonitor />
+            {monitor.isActive ? (
+              <span className="app-page-monitor-topbar-btn__badge" aria-hidden />
+            ) : null}
+          </button>
+        </HoverHint>
+      )}
     </Popover>
   );
 }

@@ -211,6 +211,13 @@ export function getClaudeSessionsStructureKey(): string {
   return structureKey;
 }
 
+// Runtime-only: restored transcripts are not executions in this application run.
+const executedSessionIds = new Set<string>();
+
+export function getExecutedSessionIds(): ReadonlySet<string> {
+  return executedSessionIds;
+}
+
 export function publishClaudeSessions(next: ClaudeSession[]): void {
   sessionsSnapshot = next;
 
@@ -218,6 +225,9 @@ export function publishClaudeSessions(next: ClaudeSession[]): void {
   const prevById = sessionById;
   const nextById = new Map<string, ClaudeSession>();
   for (const session of next) {
+    if (session.status === "running" || session.status === "connecting") {
+      executedSessionIds.add(session.id);
+    }
     nextById.set(session.id, session);
     if (prevById.get(session.id) !== session) {
       queueSessionLiveNotification(session.id);

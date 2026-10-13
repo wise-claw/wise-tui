@@ -461,7 +461,7 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
       <div className="app-session-feedback-loop__actions">
         <Space size={4} wrap>
           {!isActive ? (
-            <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={handleStart}>
+            <Button size="small" type="primary" icon={<PlayCircleOutlined />} disabled={!insights || !onDispatchSessionFeedbackLoop || insights.overview.turnCount === 0} onClick={handleStart}>
               启动闭环
             </Button>
           ) : (

@@ -7,6 +7,7 @@ import {
   type SessionDataLinkOpenView,
 } from "../../stores/claudeUsageUiStore";
 import { SessionDataLinkDrawer } from "./SessionDataLinkDrawer";
+import { useClaudeSessionLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
 import "./SessionDataLinkTopbarTrigger.css";
 
 /** 全链路分析：三节点拓扑（用户 → Claude Code → 模型/FCC）。 */
@@ -28,7 +29,7 @@ export function IconSessionDataLink() {
 }
 
 export interface SessionDataLinkTopbarTriggerProps {
-  /** 当前项目/仓库主会话（与侧栏「主会话」绑定一致） */
+  /** 当前展示的会话（各窗格跟随各自选择） */
   mainSession: ClaudeSession | null;
   onRequestAiAnalysis?: (prompt: string) => void | Promise<void>;
   open?: boolean;
@@ -52,6 +53,7 @@ export function SessionDataLinkTopbarTrigger({
 
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
+  const liveSession = useClaudeSessionLiveSnapshot(mainSession?.id, open) ?? mainSession;
   const [initialViewMode, setInitialViewMode] = useState<SessionDataLinkOpenView>("list");
 
   const setOpen = useCallback(
@@ -78,7 +80,7 @@ export function SessionDataLinkTopbarTrigger({
     setOpen(true);
   }, [setOpen]);
 
-  const tooltipTitle = `全链路分析${mainSession ? ` · 主会话：${mainSession.repositoryName.trim() || "未命名"}` : "（尚未关联主会话）"}`;
+  const tooltipTitle = `全链路分析${mainSession ? ` · 当前会话：${mainSession.repositoryName.trim() || "未命名"}` : "（尚未选择会话）"}`;
 
   return (
     <>
@@ -100,7 +102,7 @@ export function SessionDataLinkTopbarTrigger({
       <SessionDataLinkDrawer
         open={open}
         onClose={() => setOpen(false)}
-        session={mainSession}
+        session={liveSession}
         initialViewMode={initialViewMode}
         onRequestAiAnalysis={onRequestAiAnalysis}
       />

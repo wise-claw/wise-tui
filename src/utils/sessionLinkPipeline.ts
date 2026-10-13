@@ -63,26 +63,19 @@ const pipelineCache = new Map<
   { events: SequenceEvent[]; records: SessionLinkRecord[] }
 >();
 
+const sourceIds = new WeakMap<object, number>();
+let nextSourceId = 1;
+function sourceIdentity(source: object | null | undefined): number {
+  if (!source) return 0;
+  let id = sourceIds.get(source);
+  if (!id) { id = nextSourceId++; sourceIds.set(source, id); }
+  return id;
+}
+
 function buildPipelineCacheKey(input: BuildSessionLinkRecordsInput): string {
-  const msg = input.messages;
-  const jsonl = input.jsonlLines;
-  const llm = input.llmProxyRecords;
-  const fcc = input.fccTraces;
-  const oc = input.opencodeGoProxyTraces;
-  const lastMsg = msg.length > 0 ? msg[msg.length - 1] : undefined;
-  return [
-    msg.length,
-    lastMsg?.id ?? 0,
-    lastMsg?.timestamp ?? 0,
-    jsonl?.length ?? -1,
-    jsonl && jsonl.length > 0 ? jsonl[jsonl.length - 1]!.length : 0,
-    llm?.length ?? 0,
-    llm && llm.length > 0 ? llm[llm.length - 1]!.id : "",
-    fcc?.length ?? 0,
-    fcc && fcc.length > 0 ? fcc[fcc.length - 1]!.id : "",
-    oc?.length ?? 0,
-    oc && oc.length > 0 ? oc[oc.length - 1]!.id : "",
-  ].join("\0");
+  // Immutable source snapshots: identity distinguishes sessions and streaming edits
+  // even when IDs, timestamps and record counts have not changed.
+  return [input.messages, input.jsonlLines, input.llmProxyRecords, input.fccTraces, input.opencodeGoProxyTraces].map(sourceIdentity).join(":");
 }
 
 /** 测试或会话切换时清空 pipeline 缓存。 */

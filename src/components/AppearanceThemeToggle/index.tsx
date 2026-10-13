@@ -8,7 +8,7 @@ import { setAppThemeMode, toggleAppTheme, useAppTheme } from "../../stores/appTh
  * 顶栏外观切换。沿用顶栏既有约定：左键直接切浅/深，右键选具体模式（含跟随系统）。
  */
 
-function IconSun() {
+export function IconSun() {
   return (
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
       <circle cx="12" cy="12" r="4.2" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />

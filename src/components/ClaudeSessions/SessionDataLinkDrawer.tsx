@@ -1,3 +1,4 @@
+import { sessionAnalysisTraceSinceMs } from "../../services/sessionAnalysisTranscript";
 import {
   Alert,
   Button,
@@ -28,7 +29,7 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeSession } from "../../types";
 import type { SessionLinkRecord } from "../../types/sessionLink";
-import { loadClaudeSessionJsonl } from "../../services/claudeDisk";
+import { useSessionAnalysisTranscript } from "../../hooks/useSessionAnalysisTranscript";
 import { getSessionContextMetrics } from "../../services/claudeSessionContext";
 import { useFccSessionTraces } from "../../hooks/useFccSessionTraces";
 import { useRepositoryUsageBaseline } from "../../hooks/useRepositoryUsageBaseline";
@@ -77,8 +78,6 @@ import "./SessionDataLinkDrawer.css";
 
 const { Text } = Typography;
 
-const JSONL_TAIL_FULL = 8000;
-const JSONL_TAIL_LIGHT = 1200;
 
 const LAYER_LABELS: Record<SessionLinkRecord["layer"], string> = {
   input: "输入",
@@ -248,9 +247,6 @@ export function SessionDataLinkDrawer({
 }: Props) {
   const [viewMode, setViewMode] = useState<"list" | "diagram" | "insights">("list");
   const [filterPreset, setFilterPreset] = useState<SessionLinkFilterPreset>("all");
-  const [jsonlLines, setJsonlLines] = useState<string[] | null>(null);
-  const [jsonlLoading, setJsonlLoading] = useState(false);
-  const [jsonlError, setJsonlError] = useState<string | null>(null);
   const [headerCopied, setHeaderCopied] = useState(false);
   const headerCopyResetTimerRef = useRef<number | null>(null);
   const [turnDiagramTurn, setTurnDiagramTurn] = useState<number | null>(null);
@@ -262,7 +258,7 @@ export function SessionDataLinkDrawer({
   const messages = session?.messages ?? [];
   const repositoryPath = session?.repositoryPath?.trim() ?? "";
   const claudeSessionId = session?.claudeSessionId?.trim() ?? "";
-  const canLoadDisk = Boolean(repositoryPath && claudeSessionId);
+  const { canLoadDisk, lines: jsonlLines, loading: jsonlLoading, error: jsonlError, refresh: refreshTranscript } = useSessionAnalysisTranscript(session, open);
   const repositoryBaseline = useRepositoryUsageBaseline(repositoryPath || null);
 
   useEffect(() => {
@@ -290,30 +286,13 @@ export function SessionDataLinkDrawer({
   }, [open, initialViewMode]);
 
   useEffect(() => {
-    if (!open) return;
-    setJsonlLines(null);
-    setJsonlError(null);
-    if (!canLoadDisk) return;
-    const tailLines =
-      session?.diskTranscriptPartial || messages.length < 80 ? JSONL_TAIL_FULL : JSONL_TAIL_LIGHT;
-    let cancelled = false;
-    setJsonlLoading(true);
-    void loadClaudeSessionJsonl(repositoryPath, claudeSessionId, { tailLines })
-      .then((lines) => {
-        if (!cancelled) setJsonlLines(lines);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setJsonlError(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => {
-        if (!cancelled) setJsonlLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, canLoadDisk, repositoryPath, claudeSessionId, session?.diskTranscriptPartial, messages.length]);
+    setActiveTurnKeys(null);
+    setTurnRange(null);
+    setTurnDiagramTurn(null);
+    setFilterPreset("all");
+  }, [session?.id]);
 
-  const traceSinceMs = session?.createdAt ? session.createdAt - 60_000 : undefined;
+  const traceSinceMs = sessionAnalysisTraceSinceMs(session);
   const { fccAligned, traces: fccTraces, loading: fccLoading } = useFccSessionTraces({
     open,
     sessionHint: claudeSessionId || undefined,
@@ -681,8 +660,8 @@ export function SessionDataLinkDrawer({
             <span className="title-dot" />
             <span className="title-text">全链路分析</span>
             <span className="title-divider">·</span>
-            <span className="title-session-label">主会话</span>
-            <span className="title-session-name">({session.repositoryName.trim() || "未命名"})</span>
+            <span className="title-session-label">当前会话</span>
+            <span className="title-session-name" title={`${session.repositoryName} · ${session.id}`}>({session.threadName?.trim() || session.repositoryName.trim() || "未命名"})</span>
           </div>
         ) : (
           "全链路分析"
@@ -724,6 +703,7 @@ export function SessionDataLinkDrawer({
           <Empty className="app-session-data-link__empty" description="请先打开一个会话" />
         ) : (
           <>
+            {jsonlError && <Alert type="warning" showIcon title="会话日志加载失败，当前展示内存中的记录" description={jsonlError} action={<Button size="small" onClick={refreshTranscript}>重试</Button>} />}
             <div className="app-session-data-link__toolbar">
               <div className="app-session-data-link__toolbar-left">
                 <Segmented

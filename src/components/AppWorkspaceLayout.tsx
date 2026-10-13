@@ -1,3 +1,5 @@
+import { getClaudeSessionSnapshot } from "../stores/claudeSessionsLiveStore";
+import { findSessionByTabOrClaudeId } from "../utils/claudeSessionSelection";
 import { AppUpdateAutoCheck } from "../hooks/useAppUpdateAutoCheck";
 import { repositoryCardFileTreeContext } from "./WorkspaceFileTreeRail/repositoryCardContext";
 import {
@@ -918,16 +920,21 @@ export function AppWorkspaceLayout({
 
   const getClaudeSessionsForTopbar = useCallback(() => claudeSessionsRef.current, []);
 
+  const sessionForDataLink = useMemo(
+    () => getClaudeSessionSnapshot(claudeSessionsProps.activeSessionId ?? "") ?? findSessionByTabOrClaudeId(claudeSessionsRef.current, claudeSessionsProps.activeSessionId) ?? mainSessionForDataLink,
+    [sessionsStructureKey, claudeSessionsProps.activeSessionId, mainSessionForDataLink],
+  );
+
   const onSessionInsightsAiAnalysis = useMemo(
     () =>
-      mainSessionForDataLink
+      sessionForDataLink
         ? async (prompt: string) => {
             const props = claudeSessionsPropsRef.current;
-            props.onSwitchSession(mainSessionForDataLink.id);
-            await props.onExecuteSession(mainSessionForDataLink.id, prompt);
+            props.onSwitchSession(sessionForDataLink.id);
+            await props.onExecuteSession(sessionForDataLink.id, prompt);
           }
         : undefined,
-    [mainSessionForDataLink?.id],
+    [sessionForDataLink?.id],
   );
 
   /** 页面监控 AI 自动修复：指派独立 worker，不占用主窗口。 */
@@ -1006,6 +1013,7 @@ export function AppWorkspaceLayout({
       onChangePaneCount: claudeSessionsPropsRef.current.onChangePaneCount,
       onOpenRemoteChannels,
       onAutoFixRunError,
+      mainSessionForDataLink: sessionForDataLink,
       onSessionInsightsAiAnalysis,
       onDispatchSessionFeedbackLoop: claudeSessionsPropsRef.current.onDispatchSessionFeedbackLoop,
       getClaudeSessions: getClaudeSessionsForTopbar,
@@ -1024,6 +1032,7 @@ export function AppWorkspaceLayout({
       claudeSessionsProps.onReturnToParentRepository,
       onOpenRemoteChannels,
       onAutoFixRunError,
+      sessionForDataLink,
       onSessionInsightsAiAnalysis,
       getClaudeSessionsForTopbar,
     ],

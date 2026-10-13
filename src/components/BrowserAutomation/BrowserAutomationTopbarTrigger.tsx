@@ -6,7 +6,7 @@ import { BrowserAutomationPanel } from "./BrowserAutomationPanel";
 import { startAdaptiveInterval } from "../../utils/adaptivePoll";
 import "./BrowserAutomationTopbarTrigger.css";
 
-function IconBrowserAutomation() {
+export function IconBrowserAutomation() {
   return (
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
       <rect
@@ -43,6 +43,7 @@ function IconBrowserAutomation() {
 export type BrowserAutomationTopbarTriggerProps = {
   repositoryId: number | null | undefined;
   repositoryPath: string;
+  triggerHidden?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 };
@@ -50,6 +51,7 @@ export type BrowserAutomationTopbarTriggerProps = {
 export function BrowserAutomationTopbarTrigger({
   repositoryId,
   repositoryPath,
+  triggerHidden = false,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
 }: BrowserAutomationTopbarTriggerProps) {
@@ -98,29 +100,33 @@ export function BrowserAutomationTopbarTrigger({
         />
       }
     >
-      <HoverHint
-        title={
-          automation.isActive
-            ? `浏览器自动化进行中${automation.pageTitle ? `：${automation.pageTitle}` : ""}`
-            : "浏览器自动化配置（会话输入框使用 wise browse）"
-        }
-        open={open ? false : undefined}
-      >
-        <button
-          type="button"
-          className={
-            "app-topbar-btn app-browser-automation-topbar-btn" +
-            (open || automation.isActive ? " active" : "")
+      {triggerHidden ? (
+        <span className="app-topbar-overflow-anchor" tabIndex={-1} aria-hidden />
+      ) : (
+        <HoverHint
+          title={
+            automation.isActive
+              ? `浏览器自动化进行中${automation.pageTitle ? `：${automation.pageTitle}` : ""}`
+              : "浏览器自动化配置（会话输入框使用 wise browse）"
           }
-          aria-label="浏览器自动化"
-          aria-expanded={open}
+          open={open ? false : undefined}
         >
-          <IconBrowserAutomation />
-          {automation.isActive ? (
-            <span className="app-browser-automation-topbar-btn__badge" aria-hidden />
-          ) : null}
-        </button>
-      </HoverHint>
+          <button
+            type="button"
+            className={
+              "app-topbar-btn app-browser-automation-topbar-btn" +
+              (open || automation.isActive ? " active" : "")
+            }
+            aria-label="浏览器自动化"
+            aria-expanded={open}
+          >
+            <IconBrowserAutomation />
+            {automation.isActive ? (
+              <span className="app-browser-automation-topbar-btn__badge" aria-hidden />
+            ) : null}
+          </button>
+        </HoverHint>
+      )}
     </Popover>
   );
 }

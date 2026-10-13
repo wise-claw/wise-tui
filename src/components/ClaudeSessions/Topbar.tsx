@@ -1,7 +1,6 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../../types";
 import { HoverHint } from "../shared/HoverHint";
 import { WindowChromeDragUnderlay } from "../shared/WindowChromeDragUnderlay";
-import { AppearanceThemeToggle } from "../AppearanceThemeToggle";
 import { IconHud } from "../icons/IconHud";
 import { wiseHudToggle } from "../../services/wiseHud";
 import { useWiseHudModeActive } from "../../stores/wiseHudModeStore";
@@ -29,8 +28,6 @@ import { ClaudeChatSessionTopbarOverflow } from "./ClaudeChatSessionTopbarOverfl
 import { DEFAULT_OPEN_APP_ID } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
 import { useRepositoryRunCommand } from "../../hooks/useRepositoryRunCommand";
-import { PageMonitorTopbarTrigger } from "../ChromeDevtoolsMonitor";
-import { BrowserAutomationTopbarTrigger } from "../BrowserAutomation";
 import { resolveChatTopbarContext } from "../../utils/workspaceSelectionState";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import type { PaneCount } from "../../constants/mainLayoutWidths";
@@ -172,9 +169,9 @@ export interface TopbarProps {
   repositories?: Repository[];
   onReturnToParentRepository?: (id: number) => void;
   activeSessionRepositoryPath?: string;
-  /** 当前项目/仓库主会话；全链路分析固定分析此会话，非活动标签 */
+  /** 当前展示的会话；全链路分析跟随活动标签或所在窗格 */
   mainSessionForDataLink?: ClaudeSession | null;
-  /** 全链路洞察 AI 深度解读：向主会话发送分析 prompt */
+  /** 全链路洞察 AI 深度解读：向当前分析会话发送分析 prompt */
   onSessionInsightsAiAnalysis?: (prompt: string) => void | Promise<void>;
   /** 反馈神经网：派至独立 worker 会话（不在主会话执行/展示） */
   onDispatchSessionFeedbackLoop?: (input: {
@@ -567,18 +564,6 @@ export const Topbar = memo(function Topbar({
             onClick={onSearch}
           />
         )}
-        {topbarToolsReady ? (
-          <PageMonitorTopbarTrigger
-            repositoryId={contextRepository?.id}
-            repositoryPath={topbarOpenPath}
-          />
-        ) : null}
-        {topbarToolsReady ? (
-          <BrowserAutomationTopbarTrigger
-            repositoryId={contextRepository?.id}
-            repositoryPath={topbarOpenPath}
-          />
-        ) : null}
         <Popover
           trigger={[]}
           placement="bottomRight"
@@ -650,10 +635,12 @@ export const Topbar = memo(function Topbar({
             active={hudActive}
           />
         ) : null}
-        {showWindowTopbarControls ? <AppearanceThemeToggle /> : null}
         <div className="app-topbar-divider" />
-        {topbarToolsReady || onChangePaneCount || onToggleTerminal ? (
+        {topbarToolsReady || onChangePaneCount || onToggleTerminal || showWindowTopbarControls ? (
           <ClaudeChatSessionTopbarOverflow
+            repositoryId={contextRepository?.id}
+            browserToolsEnabled={topbarToolsReady}
+            themeEnabled={showWindowTopbarControls}
             repositoryPath={topbarOpenPath}
             mainSessionForDataLink={mainSessionForDataLink}
             onSessionInsightsAiAnalysis={onSessionInsightsAiAnalysis}

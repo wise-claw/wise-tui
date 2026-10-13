@@ -21,17 +21,25 @@ function extractLastAssistantText(session: ClaudeSession): string {
   return "";
 }
 
-function isTerminalStatus(status: ClaudeSession["status"]): boolean {
-  return status === "idle" || status === "error";
+export function resolveFeedbackWorkerCompletion(worker: ClaudeSession, dispatchedAt: number): "completed" | "failed" | null {
+  if (worker.status === "error" || worker.status === "cancelled") return "failed";
+  if (worker.status === "completed") return extractLastAssistantText(worker) ? "completed" : "failed";
+  if (worker.status !== "idle") return null;
+  // Registration happens before executeSession: a newly created idle worker has
+  // not finished a turn. Require an assistant response from this dispatch.
+  return worker.messages.some(message => message.role === "assistant" && message.timestamp >= dispatchedAt && assistantMessageVisiblePlainText(message).trim()) ? "completed" : null;
 }
 
 export function useSessionFeedbackLoopDispatchCompletion(input: {
   anchorSessionId: string;
   getSessions: () => readonly ClaudeSession[];
   onComplete?: (record: SessionFeedbackLoopDispatchRecord, responseText: string) => void;
+  onFailed?: (record: SessionFeedbackLoopDispatchRecord) => void;
 }): void {
   const onCompleteRef = useRef(input.onComplete);
   onCompleteRef.current = input.onComplete;
+  const onFailedRef = useRef(input.onFailed);
+  onFailedRef.current = input.onFailed;
 
   useEffect(() => {
     const anchorSessionId = input.anchorSessionId.trim();
@@ -49,16 +57,15 @@ export function useSessionFeedbackLoopDispatchCompletion(input: {
         if (handled.has(record.dispatchId)) continue;
         const worker = sessions.find((session) => session.id === record.workerSessionId);
         if (!worker) continue;
-        if (!isTerminalStatus(worker.status)) continue;
-
-        const status = worker.status === "error" ? "failed" : "completed";
+        const status = resolveFeedbackWorkerCompletion(worker, record.createdAt);
+        if (!status) continue;
+        handled.add(record.dispatchId);
         updateSessionFeedbackLoopDispatchStatus({
           dispatchId: record.dispatchId,
           anchorSessionId,
           status,
         });
-        handled.add(record.dispatchId);
-
+        if (status === "failed") onFailedRef.current?.(record);
         if (status === "completed") {
           const responseText = extractLastAssistantText(worker);
           if (responseText) {
@@ -86,10 +93,10 @@ export function syncFeedbackLoopDispatchFromSessions(
 ): void {
   for (const session of sessions) {
     const running = findRunningFeedbackLoopDispatchesForWorker(session.id);
-    if (running.length === 0 || !isTerminalStatus(session.status)) continue;
-    const status = session.status === "error" ? "failed" : "completed";
-    const responseText = status === "completed" ? extractLastAssistantText(session) : "";
     for (const record of running) {
+      const status = resolveFeedbackWorkerCompletion(session, record.createdAt);
+      if (!status) continue;
+      const responseText = status === "completed" ? extractLastAssistantText(session) : "";
       updateSessionFeedbackLoopDispatchStatus({
         dispatchId: record.dispatchId,
         anchorSessionId: record.anchorSessionId,
