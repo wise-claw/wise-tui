@@ -79,6 +79,9 @@ alacritty_terminal = { version = "0.25", features = ["serde"] }
 zstd = { version = "0.13", default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# Signed app bundles must not load OpenSSL/libgit2 from the build machine's Homebrew.
+# Keep Git HTTPS/SSH support while linking the native dependencies into the app.
+git2 = { version = "0.20", features = ["vendored-openssl", "vendored-libgit2"] }
 block2 = "0.6"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSApplication", "NSMenu", "NSMenuItem", "NSEvent", "NSPasteboard", "NSBitmapImageRep", "block2"] }
