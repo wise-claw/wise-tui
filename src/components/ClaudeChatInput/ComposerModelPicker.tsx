@@ -17,7 +17,6 @@ import {
 import {
   applyClaudeModelProfile,
   applyClaudeRuntimeModel,
-  applyCodexRuntimeModel,
   clearCodexUserSettings,
   dispatchClaudeUserSettingsChanged,
   dispatchModelProfileStoreChanged,
@@ -1286,25 +1285,13 @@ function ComposerModelPickerImpl({
           });
         }
       }
-      // 选中即写盘：Claude 的 settings.json 模型键、Codex 的 auth.json / config.toml
-      // 立刻对齐所选模型，配置面板与外部 CLI 不再滞后到下一次发送。
+      // Claude 选择同步写盘；Codex 目录模型仅更新会话，本地档案在上方显式应用。
       if (isClaudeEngine) {
         pickQueue.run(pickSeq, async () => {
           const next = await applyClaudeRuntimeModel(modelId);
           if (pickQueue.current() !== pickSeq) return;
           seedModelProfileStoreCache(next);
           setProfileStoreRevision((n) => n + 1);
-        });
-      }
-      if (isCodexEngine) {
-        pickQueue.run(pickSeq, async () => {
-          const next = await applyCodexRuntimeModel(modelId);
-          if (pickQueue.current() !== pickSeq) return;
-          seedModelProfileStoreCache(next);
-          setProfileStoreRevision((n) => n + 1);
-          pickedModelRef.current = modelId;
-          dispatchModelProfileStoreChanged(next, { engine: "codex" });
-          onModelChange(modelId);
         });
       }
       setSelectOnlyMenuOpen(false);

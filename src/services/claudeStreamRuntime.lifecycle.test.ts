@@ -42,6 +42,17 @@ function harness() {
 }
 
 describe("stream completion lifecycle", () => {
+  test("completed turns append elapsed time exactly once", () => {
+    setSystemTime(new Date(50_001));
+    const { deps, runtime } = harness();
+    try {
+      expect(runtime.handleCompleteForSendTab("tab", { success: true }, 1)).toBe(true);
+      expect(deps.sessionsRef.current[0]!.messages.at(-1)?.content).toBe("用时 50秒");
+      runtime.handleCompleteForSendTab("tab", { success: true }, 1);
+      expect(deps.sessionsRef.current[0]!.messages.filter((message) => message.content.startsWith("用时 "))).toHaveLength(1);
+    } finally { runtime.dispose(); }
+  });
+
   test("an empty successful terminal turn settles once while disk recovery remains available", () => {
     const scheduled: Array<() => void> = [];
     const originalSetTimeout = window.setTimeout;
@@ -75,7 +86,7 @@ describe("stream completion lifecycle", () => {
     try {
       expect(runtime.handleCompleteForSendTab("tab", { success: false }, 1)).toBe(true);
       expect(deps.notifyCompletion).toHaveBeenCalledWith(expect.objectContaining({ success: false, previewRaw: "" }));
-      expect(deps.sessionsRef.current[0]!.messages.at(-1)!.content).toContain("未产出可见回复");
+      expect(deps.sessionsRef.current[0]!.messages.some((message) => message.content.includes("未产出可见回复"))).toBe(true);
       expect(deps.sessionsRef.current[0]!.messages.filter((m) => m.role === "assistant")).toHaveLength(1);
     } finally { runtime.dispose(); }
   });

@@ -255,14 +255,20 @@ describe("Codex 模型切换一次点击即生效", () => {
     expect(hostModel()).toBe("deepseek-v4-pro");
   });
 
-  test("目录模型（无 profileId）：一次点击生效", async () => {
-    currentStore = mkStore(null, null, []);
+  test("目录模型（无 profileId）：一次点击生效且不写配置", async () => {
+    currentStore = mkStore("flash", "deepseek-flash");
     await act(async () => root.render(<Host initialModel="deepseek-flash" echo={false} />));
     await act(async () => {
       await sleep(20);
     });
+    const callStart = invokeMock.mock.calls.length;
     await clickModel("GPT-6-Astra");
     expect(hostModel()).toBe("gpt-6-astra");
+    expect(invokeMock.mock.calls.slice(callStart).some(([cmd]) =>
+      cmd === "apply_codex_runtime_model" || cmd === "apply_claude_model_profile",
+    )).toBe(false);
+    expect(currentStore.activeCodexProfileId).toBe("flash");
+    expect(currentStore.effectiveCodexModel).toBe("deepseek-flash");
   });
 
   test("会话模型被外部改动时显式选择让位（不被钉死）", async () => {

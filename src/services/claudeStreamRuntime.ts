@@ -1,3 +1,4 @@
+import { appendTurnDuration } from "../utils/turnDuration";
 import { recordRequirementExecution } from "./requirementExecutionRecords";
 import { startTransition, type MutableRefObject } from "react";
 import { sessionUsesStreamingConnection } from "../constants/claudeConnection";
@@ -959,10 +960,14 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       // finalize 先把 status 置 idle/completed，appendAssistantPreviewTextMessage 的
       // running/connecting 守卫才放行。原顺序（先 append 后 finalize）在会话仍 running 时
       // append 恒被守卫拒绝为 no-op，「防闪空」兜底永不触发。append 移到 finalize 后真正补气泡。
-      if (uiSuccess && previewRaw) {
-        return appendAssistantPreviewTextMessage(finalized, tid, previewRaw);
-      }
-      return finalized;
+      const withReply = uiSuccess && previewRaw
+        ? appendAssistantPreviewTextMessage(finalized, tid, previewRaw)
+        : finalized;
+      return withReply.map((row) =>
+        row.id === tid || row.claudeSessionId === tid
+          ? { ...row, messages: appendTurnDuration(row.messages, Date.now()) }
+          : row,
+      );
     });
     if (uiSuccess && session) {
       finalizeTodosAfterSuccessfulTurn(session.id, session.messages);

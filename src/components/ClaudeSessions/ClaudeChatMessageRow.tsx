@@ -133,6 +133,14 @@ function ClaudeChatMessageRowInner({
     return null;
   }
 
+  if (msg.role === "system" && /^用时 \d/.test(msg.content)) {
+    return (
+      <div data-message-id={String(msg.id)} style={{ color: "var(--ant-color-text-tertiary)", fontSize: 13, padding: "8px 0" }}>
+        {msg.content}
+      </div>
+    );
+  }
+
   return (
     <div
       data-message-id={String(msg.id)}

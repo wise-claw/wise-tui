@@ -4,6 +4,7 @@ import type { CommandPaletteSearchMode } from "./index";
 export interface CommandPaletteComparableProps {
   open: boolean;
   repositoryPath?: string | null;
+  repositoryName?: string;
   /** 当前仓库 id，用于按仓库隔离搜索历史；null/undefined 时禁用历史记录。 */
   repositoryId?: number | null;
   searchMode: CommandPaletteSearchMode;
@@ -21,6 +22,7 @@ export function commandPalettePropsEqual(
 ): boolean {
   if (prev.open !== next.open) return false;
   if (prev.repositoryPath !== next.repositoryPath) return false;
+  if (prev.repositoryName !== next.repositoryName) return false;
   if (prev.repositoryId !== next.repositoryId) return false;
   if (prev.searchMode !== next.searchMode) return false;
   if (prev.initialScopeDir !== next.initialScopeDir) return false;

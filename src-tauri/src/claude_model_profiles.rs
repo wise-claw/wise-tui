@@ -9,11 +9,11 @@ use uuid::Uuid;
 
 use crate::claude_config_dir::user_claude_dir;
 use crate::codex_config_dir::{
-    apply_codex_openai_catalog_envelope, apply_codex_profile_envelope,
+    apply_codex_profile_envelope,
     codex_config_uses_custom_provider, codex_profile_envelope_to_json,
-    effective_codex_model_from_disk, clear_codex_user_config, looks_like_openai_catalog_model,
+    effective_codex_model_from_disk, clear_codex_user_config,
     parse_codex_profile_envelope, patch_codex_disk_model, read_codex_user_settings_pretty,
-    read_effective_codex_model_from_envelope, restore_codex_openai_provider_for_model,
+    read_effective_codex_model_from_envelope,
     user_codex_dir,
 };
 use crate::opencode_config_dir::{
@@ -610,8 +610,7 @@ pub(crate) fn ensure_active_opencode_profile_applied(db: &WiseDb) -> Result<(), 
     apply_profile_to_disk(profile)
 }
 
-/// spawn 前按本次请求的模型选择写入 `~/.codex`。
-/// 目录 GPT 模型不能沿用当前 DeepSeek 等自定义 provider 档案，否则会打到错误的 base_url。
+/// 仅显式命中本地 Codex 档案的模型才写盘；目录模型与 Auto 保留磁盘配置。
 pub(crate) fn ensure_codex_profile_applied_for_model(
     db: &WiseDb,
     requested_model: Option<&str>,
@@ -628,31 +627,8 @@ fn ensure_codex_profile_applied_for_model_inner(
     let store = load_store(db);
     match resolve_codex_runtime_profile(&store, requested_model) {
         CodexRuntimeProfileChoice::DiskProfile(profile) => apply_profile_to_disk(profile),
-        CodexRuntimeProfileChoice::OpenAiProfile { profile, model } => {
-            let envelope = parse_codex_profile_envelope(&profile.settings_json)?;
-            apply_codex_openai_catalog_envelope(&envelope, model)
-        }
-        CodexRuntimeProfileChoice::StripCustomProvider { model } => {
-            restore_codex_openai_provider_for_model(model)
-        }
-        CodexRuntimeProfileChoice::Active => apply_active_codex_profile(&store),
+        CodexRuntimeProfileChoice::KeepDisk => Ok(()),
     }
-}
-
-fn apply_active_codex_profile(store: &ClaudeModelProfileStore) -> Result<(), String> {
-    let active_id = match store.active_codex_profile_id.as_deref() {
-        Some(id) if !id.trim().is_empty() => id.trim().to_string(),
-        _ => return Ok(()),
-    };
-    let profile = store
-        .profiles
-        .iter()
-        .find(|p| p.id == active_id)
-        .ok_or_else(|| format!("未找到 Codex 模型档案: {active_id}"))?;
-    if profile_engine(profile) != "codex" {
-        return Ok(());
-    }
-    apply_profile_to_disk(profile)
 }
 
 /// Persist an API key entered through the Codex login guide in the active
@@ -695,14 +671,7 @@ pub(crate) fn persist_codex_api_key_to_active_openai_profile(
 #[derive(Debug)]
 enum CodexRuntimeProfileChoice<'a> {
     DiskProfile(&'a ClaudeModelProfile),
-    OpenAiProfile {
-        profile: &'a ClaudeModelProfile,
-        model: &'a str,
-    },
-    StripCustomProvider {
-        model: &'a str,
-    },
-    Active,
+    KeepDisk,
 }
 
 fn resolve_codex_runtime_profile<'a>(
@@ -711,20 +680,12 @@ fn resolve_codex_runtime_profile<'a>(
 ) -> CodexRuntimeProfileChoice<'a> {
     let requested = requested_model.map(str::trim).filter(|s| !s.is_empty());
     let Some(model) = requested else {
-        return CodexRuntimeProfileChoice::Active;
+        return CodexRuntimeProfileChoice::KeepDisk;
     };
     if let Some(profile) = find_codex_profile_by_model_id(store, model) {
         return CodexRuntimeProfileChoice::DiskProfile(profile);
     }
-    if looks_like_openai_catalog_model(model) {
-        if let Some(profile) = find_openai_default_codex_profile(store) {
-            return CodexRuntimeProfileChoice::OpenAiProfile { profile, model };
-        }
-        if active_codex_profile_uses_custom_provider(store) {
-            return CodexRuntimeProfileChoice::StripCustomProvider { model };
-        }
-    }
-    CodexRuntimeProfileChoice::Active
+    CodexRuntimeProfileChoice::KeepDisk
 }
 
 fn find_codex_profile_by_model_id<'a>(
@@ -736,23 +697,6 @@ fn find_codex_profile_by_model_id<'a>(
     })
 }
 
-fn find_openai_default_codex_profile(
-    store: &ClaudeModelProfileStore,
-) -> Option<&ClaudeModelProfile> {
-    let mut best: Option<(&ClaudeModelProfile, i32)> = None;
-    for profile in &store.profiles {
-        if !codex_profile_is_openai_default(profile) {
-            continue;
-        }
-        let score = openai_default_profile_score(profile);
-        match best {
-            Some((_, best_score)) if best_score >= score => {}
-            _ => best = Some((profile, score)),
-        }
-    }
-    best.map(|(profile, _)| profile)
-}
-
 fn codex_profile_is_openai_default(profile: &ClaudeModelProfile) -> bool {
     if profile_engine(profile) != "codex" {
         return false;
@@ -761,28 +705,6 @@ fn codex_profile_is_openai_default(profile: &ClaudeModelProfile) -> bool {
         return false;
     };
     !codex_config_uses_custom_provider(&envelope.config)
-}
-
-fn openai_default_profile_score(profile: &ClaudeModelProfile) -> i32 {
-    let blob = format!("{} {}", profile.company, profile.name).to_lowercase();
-    if blob.contains("openai") || blob.contains("chatgpt") {
-        2
-    } else {
-        1
-    }
-}
-
-fn active_codex_profile_uses_custom_provider(store: &ClaudeModelProfileStore) -> bool {
-    let Some(id) = store.active_codex_profile_id.as_deref() else {
-        return false;
-    };
-    let Some(profile) = store.profiles.iter().find(|p| p.id == id) else {
-        return false;
-    };
-    let Ok(envelope) = parse_codex_profile_envelope(&profile.settings_json) else {
-        return false;
-    };
-    codex_config_uses_custom_provider(&envelope.config)
 }
 
 fn sync_llm_proxy_upstream_for_claude_profile(app: &AppHandle, db: &WiseDb, profile: &ClaudeModelProfile) {
@@ -1263,9 +1185,7 @@ pub(crate) fn apply_claude_runtime_model(
     Ok(store_view_after_disk_write(&load_store(&db)))
 }
 
-/// Composer 选中 Codex 模型即写盘：按所选模型决定应生效的档案 / OpenAI 官方 provider
-///（复用执行前的同一套决策），再把 `config.toml` 顶层 `model` 对齐到所选模型。
-/// 目录 GPT 模型会剥掉上一个自定义 provider 与其残留 API Key，避免打到错误的 base_url。
+/// 仅本地 Codex 档案中的模型允许写盘；其余模型仅由会话请求传递。
 #[tauri::command]
 pub(crate) fn apply_codex_runtime_model(
     db: tauri::State<'_, WiseDb>,
@@ -1276,9 +1196,13 @@ pub(crate) fn apply_codex_runtime_model(
         return Err("模型 ID 不能为空".to_string());
     }
     let _guard = profile_apply_guard();
-    ensure_codex_profile_applied_for_model_inner(&db, Some(requested))?;
-    // 档案 config 带的 model 可能不是所选项（同一 provider 下换模型），最后统一对齐。
-    patch_codex_disk_model(requested)?;
+    let store = load_store(&db);
+    if let CodexRuntimeProfileChoice::DiskProfile(profile) =
+        resolve_codex_runtime_profile(&store, Some(requested))
+    {
+        apply_profile_to_disk(profile)?;
+        patch_codex_disk_model(requested)?;
+    }
     Ok(store_view_after_disk_write(&load_store(&db)))
 }
 
@@ -1793,7 +1717,7 @@ mod tests {
     }
 
     #[test]
-    fn catalog_gpt_uses_openai_default_instead_of_active_deepseek() {
+    fn catalog_gpt_keeps_disk_even_with_openai_profile() {
         let store = store_with_codex_profiles(
             "ds",
             vec![
@@ -1814,11 +1738,8 @@ mod tests {
             ],
         );
         match resolve_codex_runtime_profile(&store, Some("gpt-5.6")) {
-            CodexRuntimeProfileChoice::OpenAiProfile { profile, model } => {
-                assert_eq!(profile.id, "oa");
-                assert_eq!(model, "gpt-5.6");
-            }
-            other => panic!("expected OpenAiProfile, got {other:?}"),
+            CodexRuntimeProfileChoice::KeepDisk => {}
+            other => panic!("expected KeepDisk, got {other:?}"),
         }
     }
 
@@ -1841,7 +1762,7 @@ mod tests {
     }
 
     #[test]
-    fn catalog_gpt_without_openai_profile_strips_custom_provider() {
+    fn catalog_gpt_keeps_custom_provider_on_disk() {
         let store = store_with_codex_profiles(
             "ds",
             vec![codex_profile(
@@ -1853,15 +1774,13 @@ mod tests {
             )],
         );
         match resolve_codex_runtime_profile(&store, Some("gpt-5.6")) {
-            CodexRuntimeProfileChoice::StripCustomProvider { model } => {
-                assert_eq!(model, "gpt-5.6");
-            }
-            other => panic!("expected StripCustomProvider, got {other:?}"),
+            CodexRuntimeProfileChoice::KeepDisk => {}
+            other => panic!("expected KeepDisk, got {other:?}"),
         }
     }
 
     #[test]
-    fn missing_model_keeps_active_profile() {
+    fn missing_model_does_not_reapply_active_profile() {
         let store = store_with_codex_profiles(
             "ds",
             vec![codex_profile(
@@ -1872,9 +1791,11 @@ mod tests {
                 "model = \"deepseek-v4-flash\"\nmodel_provider = \"deepseek\"\n",
             )],
         );
-        match resolve_codex_runtime_profile(&store, None) {
-            CodexRuntimeProfileChoice::Active => {}
-            other => panic!("expected Active, got {other:?}"),
+        for model in [None, Some(""), Some("   "), Some("unknown-model")] {
+            match resolve_codex_runtime_profile(&store, model) {
+                CodexRuntimeProfileChoice::KeepDisk => {}
+                other => panic!("expected KeepDisk, got {other:?}"),
+            }
         }
     }
 }

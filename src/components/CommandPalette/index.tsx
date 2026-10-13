@@ -32,6 +32,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   repositoryPath: string | undefined;
+  repositoryName?: string;
   /** 当前仓库 id，用于按仓库隔离搜索历史；null/undefined 时禁用历史记录。 */
   repositoryId?: number | null;
   searchMode: CommandPaletteSearchMode;
@@ -169,7 +170,7 @@ interface ScopeTreeNode {
  */
 function createScopeTreeNode(name: string, value: string): ScopeTreeNode {
   return {
-    title: value || "整个仓库",
+    title: value || name,
     value,
     isLeaf: false,
     icon: (props) => (
@@ -182,10 +183,10 @@ function createScopeTreeNode(name: string, value: string): ScopeTreeNode {
   };
 }
 
-/** 下拉树节点标题：根显示「整个仓库」，其余只显示目录名。 */
-function renderScopeTreeTitle(node: { value?: string | number }) {
+/** 下拉树节点标题：根显示仓库名，其余只显示目录名。 */
+function renderScopeTreeTitle(node: { value?: string | number; title?: ReactNode }) {
   const value = typeof node.value === "string" ? node.value : "";
-  if (!value) return "整个仓库";
+  if (!value) return node.title;
   return scopeFolderName(value);
 }
 
@@ -232,12 +233,14 @@ export const CommandPalette = memo(function CommandPalette({
   open,
   onClose,
   repositoryPath,
+  repositoryName,
   repositoryId,
   searchMode,
   onSearchModeChange,
   initialScopeDir,
   onOpenInApp,
 }: Props) {
+  const scopeRootName = repositoryName?.trim() || scopeFolderName(repositoryPath?.replace(/[\\/]+$/, "")) || "仓库";
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -366,7 +369,7 @@ export const CommandPalette = memo(function CommandPalette({
   useEffect(() => {
     if (!open) return;
     setScopeDir(initialScopeDir ?? "");
-    setScopeTreeData([createScopeTreeNode("整个仓库", "")]);
+    setScopeTreeData([createScopeTreeNode(scopeRootName, "")]);
     let cancelled = false;
     void loadScopeChildren("").then((children) => {
       if (cancelled) return;
@@ -375,7 +378,7 @@ export const CommandPalette = memo(function CommandPalette({
     return () => {
       cancelled = true;
     };
-  }, [open, initialScopeDir, loadScopeChildren]);
+  }, [open, initialScopeDir, loadScopeChildren, scopeRootName]);
 
   useEffect(() => {
     if (!open || !repositoryPath) {
@@ -520,7 +523,7 @@ export const CommandPalette = memo(function CommandPalette({
               onChange={(v) => setScopeDir(typeof v === "string" ? v : "")}
               treeData={scopeTreeData}
               loadData={onLoadScopeTreeData}
-              placeholder="整个仓库"
+              placeholder={scopeRootName}
               showSearch
               treeNodeFilterProp="title"
               allowClear
