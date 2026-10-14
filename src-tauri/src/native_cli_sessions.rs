@@ -484,7 +484,7 @@ fn cursor_editor_preview(path: &Path) -> String {
             .unwrap_or(&text)
             .trim();
         if !preview.is_empty() {
-            return preview.chars().take(160).collect();
+            return preview.to_string();
         }
     }
     String::new()

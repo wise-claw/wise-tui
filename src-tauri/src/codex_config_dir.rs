@@ -244,6 +244,7 @@ fn is_top_level_model_assignment(trimmed: &str) -> bool {
 }
 
 /// Codex 官方目录模型（GPT / o 系列），应走 OpenAI 默认 provider，不能套用 DeepSeek 等自定义档案。
+#[cfg_attr(not(test), expect(dead_code, reason = "保留旧版 OpenAI provider 恢复能力；当前运行路径保留用户选择的 provider，不自动改写配置"))]
 pub(crate) fn looks_like_openai_catalog_model(model: &str) -> bool {
     let m = model.trim().to_lowercase();
     !m.is_empty()
@@ -406,6 +407,7 @@ pub(crate) fn patch_codex_disk_model(model: &str) -> Result<(), String> {
 }
 
 /// 去掉自定义 `model_provider` 并把模型改成目录模型，避免 GPT 请求打到 DeepSeek。
+#[expect(dead_code, reason = "保留旧版 OpenAI provider 恢复能力；当前运行路径保留用户选择的 provider，不自动改写配置")]
 pub(crate) fn restore_codex_openai_provider_for_model(model: &str) -> Result<(), String> {
     apply_codex_openai_catalog_envelope(
         &CodexProfileEnvelope {

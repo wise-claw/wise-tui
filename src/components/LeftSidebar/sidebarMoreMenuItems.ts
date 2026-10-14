@@ -79,6 +79,7 @@ function repositoryOpenMenuItems(input: {
 
   return compactItems([
     onOpenDirectory ? { key: directoryKey, label: "打开目录" } : null,
+    { key: "copy-path", label: "复制路径" },
     onOpenInEditor ? { key: "editor", label: repositoryEditorOpenMenuLabel(scopeOpenAppId) } : null,
     showTerminalOpen ? { key: "open-terminal", label: repositoryTerminalOpenMenuLabel() } : null,
     includeBrowser ? { key: "browser", label: "打开 Git 仓库" } : null,

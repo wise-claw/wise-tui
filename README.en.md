@@ -156,9 +156,13 @@ bun run tauri:dev
 bun test
 
 # Build the frontend and desktop bundle
-bun run build
 bun run tauri:build
 ```
+
+Local packaging reuses verified frontend output when sources, dependencies, and output are unchanged. Use `bun run tauri:build:release` for a full production build.
+
+Local packaging enables parallel code generation and incremental compilation. The first switch rebuilds the Rust cache. Use `bun run tauri:build:release` for production releases.
+
 
 Bundles are emitted under `src-tauri/target/release/bundle/`.
 

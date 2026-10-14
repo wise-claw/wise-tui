@@ -171,11 +171,8 @@ fn scan_jsonl_preview(path: &Path) -> (String, Option<String>) {
         {
             continue;
         }
-        let mut ch = text.chars();
-        preview = ch.by_ref().take(80).collect();
-        if ch.next().is_some() {
-            preview.push_str("...");
-        }
+        // Keep the sent message intact; list surfaces truncate with CSS.
+        preview = text;
         break;
     }
 

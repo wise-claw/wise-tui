@@ -218,6 +218,32 @@ export function getExecutedSessionIds(): ReadonlySet<string> {
   return executedSessionIds;
 }
 
+const executedSessionListeners = new Set<() => void>();
+let executedSessionRevision = 0;
+
+export function clearCompletedSessionRecords(ids: readonly string[]): void {
+  let changed = false;
+  for (const id of ids) {
+    const session = sessionById.get(id);
+    if (session && !session.isSide && (session.status === "completed" || session.status === "idle")) {
+      changed = executedSessionIds.delete(id) || changed;
+    }
+  }
+  if (changed) {
+    executedSessionRevision++;
+    for (const listener of executedSessionListeners) listener();
+  }
+}
+
+export function useExecutedSessionIds(): ReadonlySet<string> {
+  useSyncExternalStore(
+    (listener) => { executedSessionListeners.add(listener); return () => { executedSessionListeners.delete(listener); }; },
+    () => executedSessionRevision,
+    () => executedSessionRevision,
+  );
+  return executedSessionIds;
+}
+
 export function publishClaudeSessions(next: ClaudeSession[]): void {
   sessionsSnapshot = next;
 

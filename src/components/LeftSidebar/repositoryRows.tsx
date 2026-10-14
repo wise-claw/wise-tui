@@ -1,4 +1,5 @@
 import { memo, useRef, useState, type ReactNode } from "react";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
 import { UserOutlined } from "@ant-design/icons";
 import { App as AntdApp, Popconfirm } from "antd";
@@ -450,6 +451,11 @@ function RepositoryRowInner({
   onStopMainSession?: () => void;
   pinnedRunCommandRowActions?: boolean;
 }) {
+  const { copy } = useCopyToClipboard();
+  const { message } = AntdApp.useApp();
+  const copyRepositoryPath = async () => {
+    if (await copy(repository.path)) message.success("仓库路径已复制");
+  };
   const runCommandRunning = useIsRepositoryRunCommandRunning(repository.id);
   const workspaceTrellisEnabled = project.sddMode !== "project_owned" || trellisReady;
   const moreItems = buildProjectRepositoryMoreMenuItems({
@@ -620,6 +626,7 @@ function RepositoryRowInner({
           <SidebarMoreMenuDropdown
             items={moreItems}
             onMenuClick={({ key }) => {
+              if (key === "copy-path") void copyRepositoryPath();
               if (key === "finder") onOpenInFinder(repository);
               if (key === "editor") onOpenRepositoryInEditor(repository);
               if (key === "open-terminal") onOpenInTerminal?.(repository);
@@ -789,6 +796,11 @@ function FloatingRepositoryRowInner({
   repositoryReorder?: RepositoryReorderUi;
   children?: ReactNode;
 }) {
+  const { copy } = useCopyToClipboard();
+  const { message } = AntdApp.useApp();
+  const copyRepositoryPath = async () => {
+    if (await copy(repository.path)) message.success("仓库路径已复制");
+  };
   const runCommandRunning = useIsRepositoryRunCommandRunning(repository.id);
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
   const showActiveRepository = isActiveRepository;
@@ -1010,6 +1022,7 @@ function FloatingRepositoryRowInner({
                 return;
               }
               setMoreMenuOpen(false);
+              if (key === "copy-path") void copyRepositoryPath();
               if (key === "finder") onOpenInFinder(repository);
               if (key === "editor") onOpenRepositoryInEditor(repository);
               if (key === "open-terminal") onOpenInTerminal?.(repository);

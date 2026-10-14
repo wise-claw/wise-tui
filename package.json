@@ -8,11 +8,12 @@
   "scripts": {
     "postinstall": "bun run scripts/patch-antd-modal-confirm-mask-closable.mjs && bun run scripts/patch-antd-scroll-into-view-if-needed.mjs",
     "dev": "vite",
-    "build": "tsc -p tsconfig.app.json && vite build && bun run scripts/check-build-performance.mjs",
+    "build": "bun run scripts/build-frontend.mjs",
     "test": "bun test --parallel=4 ./src",
     "preview": "vite preview",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "tauri:build": "bun run scripts/tauri-build-local.mjs",
+    "tauri:build:release": "tauri build",
     "tauri": "tauri",
     "icon:generate": "tauri icon ./app-icon.png",
     "emit:platform-split-prompt-seed": "bun run scripts/emit-platform-split-prompt-seed.ts"

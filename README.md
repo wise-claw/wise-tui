@@ -156,9 +156,10 @@ bun run tauri:dev
 bun test
 
 # 构建前端与桌面安装包
-bun run build
 bun run tauri:build
 ```
+
+本地打包启用并行代码生成和增量编译；首次切换会重新编译。前端输入、依赖和产物未变时自动复用已验证构建，源码或产物变化后会重建。正式发布使用 `bun run tauri:build:release`。
 
 构建产物位于 `src-tauri/target/release/bundle/`。
 

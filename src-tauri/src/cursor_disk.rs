@@ -122,7 +122,6 @@ pub fn load_cursor_session_jsonl(
 }
 
 const PREVIEW_MAX_LINES: usize = 400;
-const PREVIEW_MAX_CHARS: usize = 80;
 const CURSOR_LIST_MAX: usize = 64;
 
 /// One Wise-owned Cursor transcript under `~/.wise/cursor-runs`.
@@ -234,11 +233,8 @@ fn scan_cursor_run_head(path: &Path) -> (String, Option<String>, Option<String>)
             {
                 continue;
             }
-            let mut chars = text.chars();
-            preview = chars.by_ref().take(PREVIEW_MAX_CHARS).collect();
-            if chars.next().is_some() {
-                preview.push_str("...");
-            }
+            // Keep the sent message intact; list surfaces truncate with CSS.
+            preview = text;
         }
 
         if !preview.is_empty() && resume_session_id.is_some() {

@@ -155,7 +155,6 @@ pub async fn load_codex_rpc_session_jsonl_command(
 }
 
 const PREVIEW_MAX_LINES: usize = 400;
-const PREVIEW_MAX_CHARS: usize = 80;
 const CODEX_RPC_LIST_MAX: usize = 64;
 
 /// One Wise-owned Codex RPC transcript under `~/.wise/codex-runs`.
@@ -268,11 +267,8 @@ fn scan_codex_rpc_head(path: &Path) -> (String, Option<String>, Option<String>) 
             {
                 continue;
             }
-            let mut chars = text.chars();
-            preview = chars.by_ref().take(PREVIEW_MAX_CHARS).collect();
-            if chars.next().is_some() {
-                preview.push_str("...");
-            }
+            // Keep the sent message intact; list surfaces truncate with CSS.
+            preview = text;
         }
 
         if !preview.is_empty() && resume_session_id.is_some() && model_hint.is_some() {

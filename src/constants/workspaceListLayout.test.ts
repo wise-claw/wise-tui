@@ -11,7 +11,7 @@ import {
 
 describe("workspaceListLayout", () => {
   test("normalizeWorkspaceListVisibleRows clamps out-of-range values", () => {
-    expect(normalizeWorkspaceListVisibleRows(99)).toBe(12);
+    expect(normalizeWorkspaceListVisibleRows(99)).toBe(50);
     expect(normalizeWorkspaceListVisibleRows(1)).toBe(2);
     expect(normalizeWorkspaceListVisibleRows("6")).toBe(6);
     expect(normalizeWorkspaceListVisibleRows(undefined)).toBe(WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT);
@@ -26,6 +26,8 @@ describe("workspaceListLayout", () => {
 
   test("workspaceListContentMaxHeightPx scales by row height", () => {
     expect(workspaceListContentMaxHeightPx(5)).toBe(22 * 5);
+    expect(workspaceListContentMaxHeightPx(50)).toBe(22 * 50);
+    expect(normalizeWorkspaceListVisibleRows("30")).toBe(30);
     expect(workspaceListContentMaxHeightPx(0)).toBeNull();
     expect(clampWorkspaceListVisibleRows(5)).toBe(5);
     expect(clampWorkspaceListVisibleRows(0)).toBe(0);

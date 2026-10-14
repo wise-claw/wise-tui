@@ -4,8 +4,8 @@ export const WORKSPACE_LIST_ROW_HEIGHT_PX = 22;
 /** `0` = 不限制高度（与文件树并存时也不封顶）。 */
 export const WORKSPACE_LIST_VISIBLE_ROWS_UNLIMITED = 0;
 export const WORKSPACE_LIST_VISIBLE_ROWS_MIN = 2;
-export const WORKSPACE_LIST_VISIBLE_ROWS_MAX = 12;
-export const WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT = 8;
+export const WORKSPACE_LIST_VISIBLE_ROWS_MAX = 50;
+export const WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT = 16;
 
 export const WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS = [
   WORKSPACE_LIST_VISIBLE_ROWS_UNLIMITED,
@@ -19,6 +19,12 @@ export const WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS = [
   9,
   10,
   12,
+  16,
+  20,
+  24,
+  30,
+  40,
+  50,
 ] as const;
 
 export type WorkspaceListVisibleRows = (typeof WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS)[number];

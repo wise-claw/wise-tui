@@ -13,7 +13,6 @@ import { memo, type Dispatch, type RefObject, type SetStateAction } from "react"
 import type { ClaudeSession } from "../../types";
 import { HistorySessionRestoreButton } from "../ProgressMonitorPanel/HistorySessionRestoreButton";
 import {
-  formatSessionListTitle,
   formatShortQuestionTime,
   getSessionPreview,
 } from "./claudeChatHelpers";
@@ -297,7 +296,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                           }}
                         >
                           <span className="app-claude-session-user-questions-popover__item-text">
-                            {formatSessionListTitle(row.text)}
+                            {row.text}
                           </span>
                           <span className="app-claude-session-user-questions-popover__item-time">
                             {formatShortQuestionTime(row.timestamp)}

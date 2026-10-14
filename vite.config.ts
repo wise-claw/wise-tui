@@ -100,6 +100,8 @@ export default defineConfig(async () => ({
     ],
   },
   build: {
+    // Desktop bundles are loaded locally; gzip size reporting repeats compression work.
+    reportCompressedSize: false,
     modulePreload: {
       /**
        * Tauri 2 的受支持 WebView 均原生支持 modulepreload。关闭 Vite 的兼容 polyfill，

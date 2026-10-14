@@ -1,5 +1,5 @@
 .workspace-session-switcher { display: inline-flex; margin-left: 8px; }
-.workspace-session-switcher-trigger { display: flex; align-items: center; gap: 7px; padding: 1px 5px; border: 1px solid var(--ant-color-border-secondary); border-radius: 5px; background: transparent; font: inherit; font-size: 11px; cursor: pointer; }
+.workspace-session-switcher-trigger { display: flex; align-items: center; gap: 7px; padding: 2px 3px; border: 0; border-radius: 5px; background: transparent; font: inherit; font-size: 11px; cursor: pointer; }
 .workspace-session-switcher-running { color: var(--ant-color-primary); }
 .workspace-session-switcher-completed { color: var(--ant-color-success); }
 .workspace-session-switcher-panel { width: min(260px, calc(100vw - 48px)); }
@@ -18,3 +18,10 @@
 .workspace-session-switcher-row-text > span { flex: 1; min-width: 0; }
 .workspace-session-switcher-row-text small { max-width: 72px; flex-shrink: 0; color: var(--ant-color-text-tertiary); font-size: 10px; }
 .workspace-session-switcher-hint { margin-top: 4px; font-size: 10px; color: var(--ant-color-text-tertiary); }
+
+.workspace-session-switcher { gap: 1px; }
+.workspace-session-switcher-item { display: flex; align-items: center; gap: 3px; }
+.workspace-session-switcher-item .workspace-session-switcher-row { flex: 1; min-width: 0; }
+.workspace-session-switcher-clear { border: 0; border-radius: 4px; background: transparent; color: var(--ant-color-text-secondary); cursor: pointer; padding: 3px 7px; }
+.workspace-session-switcher-clear:hover { background: var(--ant-color-fill-tertiary); color: var(--ant-color-error); }
+.workspace-session-switcher-row-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Popover } from "antd";
 import type { ClaudeSession } from "../../types";
 import { getSessionPreview } from "../ClaudeSessions/claudeChatHelpers";
-import { getExecutedSessionIds } from "../../stores/claudeSessionsLiveStore";
+import { clearCompletedSessionRecords, useExecutedSessionIds } from "../../stores/claudeSessionsLiveStore";
 import "./WorkspaceSessionSwitcher.css";
 
 export function groupOpenedSessions(sessions: readonly ClaudeSession[], executedIds: ReadonlySet<string>) {
@@ -22,60 +22,75 @@ export function nextRunningSession(sessions: readonly ClaudeSession[], activeId:
   return sessions[index < 0 ? (direction > 0 ? 0 : sessions.length - 1) : (index + direction + sessions.length) % sessions.length];
 }
 
+export function sessionSwitchShortcut(event: Pick<KeyboardEvent, "key" | "altKey" | "shiftKey" | "ctrlKey" | "metaKey" | "defaultPrevented" | "isComposing">) {
+  if (event.defaultPrevented || event.isComposing || !event.altKey || event.ctrlKey || event.metaKey) return null;
+  if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return null;
+  return { group: event.shiftKey ? "completed" as const : "running" as const, direction: event.key === "ArrowDown" ? 1 : -1 };
+}
+
 export function WorkspaceSessionSwitcher({ sessions, activeSessionId, onSelectSession }: {
   sessions: readonly ClaudeSession[];
   activeSessionId: string | null;
   onSelectSession?: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const { running, completed } = groupOpenedSessions(sessions, getExecutedSessionIds());
+  const [openGroup, setOpenGroup] = useState<"running" | "completed" | null>(null);
+  const setOpen = (open: boolean) => { if (!open) setOpenGroup(null); };
+  const { running, completed } = groupOpenedSessions(sessions, useExecutedSessionIds());
   const select = (id: string) => { onSelectSession?.(id); setOpen(false); };
-  const cycle = (direction: number) => {
-    const target = nextRunningSession(running, activeSessionId, direction);
+  const cycle = (items: readonly ClaudeSession[], direction: number) => {
+    const target = nextRunningSession(items, activeSessionId, direction);
     if (target) select(target.id);
   };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!onSelectSession || !running.length || event.defaultPrevented || event.isComposing || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+      if (!onSelectSession) return;
+      const shortcut = sessionSwitchShortcut(event);
+      if (!shortcut) return;
+      const items = shortcut.group === "running" ? running : completed;
+      const target = nextRunningSession(items, activeSessionId, shortcut.direction);
+      if (!target) return;
       event.preventDefault();
-      const target = nextRunningSession(running, activeSessionId, event.key === "ArrowDown" ? 1 : -1);
       if (target) { onSelectSession(target.id); setOpen(false); }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [sessions, activeSessionId, onSelectSession]);
+  }, [running, completed, activeSessionId, onSelectSession]);
   return (
     <span className="workspace-session-switcher" onClick={(event) => event.stopPropagation()}>
-      <Popover trigger="click" placement="bottomLeft" open={open} onOpenChange={setOpen} content={
-        <div className="workspace-session-switcher-panel" aria-label="已打开的会话">
-          <div className="workspace-session-switcher-panel-head">
-            <strong>已打开的会话</strong>
-            <span>
-              <button type="button" disabled={!running.length || !onSelectSession} title="上一个运行中会话（Alt + ↑）" aria-label="上一个运行中会话" onClick={() => cycle(-1)}>↑</button>
-              <button type="button" disabled={!running.length || !onSelectSession} title="下一个运行中会话（Alt + ↓）" aria-label="下一个运行中会话" onClick={() => cycle(1)}>↓</button>
-            </span>
-          </div>
-          <div className="workspace-session-switcher-list">
-            {([['运行中', running], ['已完成', completed]] as const).map(([label, items]) => (
-              <section key={label}>
-                <div className="workspace-session-switcher-group"><span>{label} · {items.length}</span>{items.length === 0 && <span className="workspace-session-switcher-empty">暂无会话</span>}</div>
-                {items.map((session) => (
-                  <button type="button" key={session.id} disabled={!onSelectSession} className="workspace-session-switcher-row" title={`${session.threadName?.trim() || getSessionPreview(session) || '新会话'} · ${session.repositoryName || session.repositoryPath}`} aria-current={session.id === activeSessionId || session.claudeSessionId === activeSessionId ? 'true' : undefined} onClick={() => select(session.id)}>
-                    <span className={label === '运行中' ? 'workspace-session-switcher-running' : 'workspace-session-switcher-completed'}>{label === '运行中' ? '●' : '✓'}</span>
-                    <span className="workspace-session-switcher-row-text"><span>{session.threadName?.trim() || getSessionPreview(session) || '新会话'}</span><small>{session.repositoryName || session.repositoryPath}</small></span>
+      {(["running", "completed"] as const).map((group) => {
+        const isRunning = group === "running";
+        const label = isRunning ? "运行中" : "已完成";
+        const items = isRunning ? running : completed;
+        return <Popover key={group} trigger="click" placement="bottomLeft" open={openGroup === group} onOpenChange={(open) => setOpenGroup(open ? group : null)} content={
+          <div className="workspace-session-switcher-panel" aria-label={`${label}会话`}>
+            <div className="workspace-session-switcher-panel-head">
+              <strong>{label} · {items.length}</strong>
+              <span>
+                <button type="button" disabled={!items.length || !onSelectSession} title={`上一个${label}会话（Alt + ${isRunning ? "" : "Shift + "}↑）`} aria-label={`上一个${label}会话`} onClick={() => cycle(items, -1)}>↑</button>
+                <button type="button" disabled={!items.length || !onSelectSession} title={`下一个${label}会话（Alt + ${isRunning ? "" : "Shift + "}↓）`} aria-label={`下一个${label}会话`} onClick={() => cycle(items, 1)}>↓</button>
+                {!isRunning && <button type="button" disabled={!completed.length} onClick={() => clearCompletedSessionRecords(completed.map(session => session.id))}>一键清空</button>}
+              </span>
+            </div>
+            <div className="workspace-session-switcher-list">
+              {items.length === 0 && <div className="workspace-session-switcher-empty">暂无会话</div>}
+              {items.map((session) => (
+                <div className="workspace-session-switcher-item" key={session.id}>
+                  <button type="button" disabled={!onSelectSession} className="workspace-session-switcher-row" title={`${getSessionPreview(session)} · ${session.repositoryName || session.repositoryPath}`} aria-current={session.id === activeSessionId || session.claudeSessionId === activeSessionId ? 'true' : undefined} onClick={() => select(session.id)}>
+                    <span className={`workspace-session-switcher-${group}`}>{isRunning ? '●' : '✓'}</span>
+                    <span className="workspace-session-switcher-row-text"><span>{getSessionPreview(session)}</span><small>{session.repositoryName || session.repositoryPath}</small></span>
                   </button>
-                ))}
-              </section>
-            ))}
+                  {!isRunning && <button type="button" className="workspace-session-switcher-clear" aria-label={`清空已完成会话 ${getSessionPreview(session)}`} title="清空此记录" onClick={() => clearCompletedSessionRecords([session.id])}>×</button>}
+                </div>
+              ))}
+            </div>
+            <div className="workspace-session-switcher-hint">Alt + {isRunning ? "" : "Shift + "}↑ / ↓ 切换{label}会话</div>
           </div>
-          <div className="workspace-session-switcher-hint">Alt + ↑ / ↓ 切换运行中会话</div>
-        </div>
-      }>
-        <button type="button" className="workspace-session-switcher-trigger" aria-label={`运行中 ${running.length}，已完成 ${completed.length}，打开会话列表`} aria-expanded={open} title="已打开的会话">
-          <span className="workspace-session-switcher-running">● {running.length}</span><span className="workspace-session-switcher-completed">✓ {completed.length}</span>
-        </button>
-      </Popover>
+        }>
+          <button type="button" className={`workspace-session-switcher-trigger workspace-session-switcher-${group}`} aria-label={`${label} ${items.length}，打开${label}会话列表`} aria-expanded={openGroup === group} title={`${label}会话`}>
+            {isRunning ? '●' : '✓'} {items.length}
+          </button>
+        </Popover>;
+      })}
     </span>
   );
 }
