@@ -1,5 +1,5 @@
 import { Button, Checkbox, Input, Select, Switch, Typography } from "antd";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
 import {
   encodeAtMentionDefaultSelectValue,
@@ -74,24 +74,12 @@ import { listEmployees } from "../../services/employees";
 import type { EmployeeItem } from "../../types";
 import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
 import { AppUpdateSection } from "./AppUpdateSection";
+import { DefaultConfigBrowser } from "./DefaultConfigBrowser";
 import "./index.css";
-
-function DefaultConfigSection({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="app-default-config-section" aria-label={title}>
-      <h3 className="app-default-config-section__title">{title}</h3>
-      <div className="app-default-config-panel__settings">{children}</div>
-    </section>
-  );
-}
 
 /** 工作台配置 / 运行设置 / 默认配置：全局会话与布局默认值。
  *
- * 弹窗按使用场景分组：
- * - 新建会话 / 引擎 / 终端：开新会话时生效的默认
- * - 左栏 / Git 文件：屏幕上的栏位与显隐
- * - 输入框 / 界面 / 仓库操作快捷键：交互元素自身的默认
- * - 开发实验：反馈神经网
+ * 按会话、Agent 运行、工作台、文件产物、自动化和更新分类，支持跨分类检索。
  */
 export function DefaultConfigPanel() {
   const connection = useClaudeConnectionModeSetting();
@@ -505,7 +493,7 @@ export function DefaultConfigPanel() {
     },
     {
       key: "engines",
-      title: "引擎",
+      title: "引擎与默认权限",
       content: (
         <>
           <DefaultConfigRow
@@ -820,7 +808,7 @@ export function DefaultConfigPanel() {
     // 左栏：工作区、需求、运行面板、预览与快捷入口。
     {
       key: "leftSidebar",
-      title: "左栏",
+      title: "侧栏与工作区",
       content: (
         <>
           <DefaultConfigRow
@@ -1376,7 +1364,7 @@ export function DefaultConfigPanel() {
     // 开发实验：反馈神经网（含全局规则）。
     {
       key: "dev",
-      title: "开发实验",
+      title: "反馈与自我优化",
       content: (
         <>
           <DefaultConfigRow
@@ -1497,15 +1485,14 @@ export function DefaultConfigPanel() {
   ];
 
   return (
-    <div className="app-default-config-panel">
-      <DefaultConfigSection title="版本更新">
-        <AppUpdateSection />
-      </DefaultConfigSection>
-      {sections.map((section) => (
-        <DefaultConfigSection key={section.key} title={section.title}>
-          {section.content}
-        </DefaultConfigSection>
-      ))}
-    </div>
+    <DefaultConfigBrowser sections={[
+      ...sections,
+      {
+        key: "updates",
+        title: "版本更新",
+        keywords: "Wise 版本 自动检查更新 发布页面",
+        content: <AppUpdateSection />,
+      },
+    ]} />
   );
 }
