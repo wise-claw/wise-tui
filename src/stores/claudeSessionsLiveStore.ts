@@ -244,6 +244,15 @@ export function useExecutedSessionIds(): ReadonlySet<string> {
   return executedSessionIds;
 }
 
+type SessionStatusListener = (previous: ReadonlyMap<string, ClaudeSession>, next: readonly ClaudeSession[]) => void;
+const statusListeners = new Set<SessionStatusListener>();
+
+/** 状态提交同步通知，不受 React 合帧、隐藏窗口或流式 UI 节流影响。 */
+export function subscribeClaudeSessionStatusChanges(listener: SessionStatusListener): () => void {
+  statusListeners.add(listener);
+  return () => { statusListeners.delete(listener); };
+}
+
 export function publishClaudeSessions(next: ClaudeSession[]): void {
   sessionsSnapshot = next;
 
@@ -260,6 +269,12 @@ export function publishClaudeSessions(next: ClaudeSession[]): void {
     }
   }
   sessionById = nextById;
+  if (next.some((session) => prevById.get(session.id)?.status !== session.status)) {
+    for (const listener of statusListeners) {
+      try { listener(prevById, next); }
+      catch (error) { console.error("[Sessions] 状态监听失败", error); }
+    }
+  }
 
   if (liveListeners.size > 0 || sessionLiveListeners.size > 0 || pendingSessionLiveIds.size > 0) {
     scheduleLiveListenerFlush();

@@ -1,6 +1,6 @@
 //! Bounded, short-lived ownership of idle native runtimes. No user prompts are cached.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
 pub(crate) const IDLE_TTL: Duration = Duration::from_secs(120);
@@ -18,17 +18,48 @@ struct Entry<T> {
 
 pub(crate) struct IdleSessionPool<T> {
     entries: VecDeque<Entry<T>>,
+    persistent_tabs: HashSet<String>,
 }
 
 impl<T> Default for IdleSessionPool<T> {
     fn default() -> Self {
         Self {
             entries: VecDeque::new(),
+            persistent_tabs: HashSet::new(),
         }
     }
 }
 
 impl<T> IdleSessionPool<T> {
+    /// 仅显式选中的会话常驻；关闭常驻后从当前时刻恢复空闲倒计时。
+    pub fn set_persistent(&mut self, tab: &str, persistent: bool, now: Instant) {
+        if persistent {
+            self.persistent_tabs.insert(tab.to_string());
+        } else if self.persistent_tabs.remove(tab) {
+            if let Some(entry) = self.entries.iter_mut().find(|entry| entry.tab == tab) {
+                entry.parked_at = now;
+            }
+        }
+    }
+
+    pub fn is_persistent(&self, tab: &str) -> bool {
+        self.persistent_tabs.contains(tab)
+    }
+
+    fn enforce_capacity(&mut self) -> Vec<T> {
+        let mut retired = Vec::new();
+        while self.entries.iter().filter(|entry| !self.is_persistent(&entry.tab)).count() > IDLE_CAPACITY {
+            let index = self.entries.iter().enumerate()
+                .filter(|(_, entry)| !self.is_persistent(&entry.tab))
+                .min_by_key(|(_, entry)| entry.parked_at).map(|(index, _)| index).unwrap();
+            retired.push(self.entries.remove(index).unwrap().runtime);
+        }
+        retired
+    }
+
+    pub fn get(&self, tab: &str) -> Option<&T> {
+        self.entries.iter().find(|entry| entry.tab == tab).map(|entry| &entry.runtime)
+    }
     /// Invalid/expired entries are returned to the caller for shutdown outside the lock.
     pub fn take(
         &mut self,
@@ -69,9 +100,7 @@ impl<T> IdleSessionPool<T> {
             parked_at: now,
             runtime,
         });
-        while self.entries.len() > IDLE_CAPACITY {
-            retired.push(self.entries.pop_front().unwrap().runtime);
-        }
+        retired.extend(self.enforce_capacity());
         retired
     }
 
@@ -82,13 +111,14 @@ impl<T> IdleSessionPool<T> {
 
     pub fn expire(&mut self, now: Instant) -> Vec<T> {
         let mut retired = Vec::new();
-        while self
-            .entries
-            .front()
-            .is_some_and(|entry| now.duration_since(entry.parked_at) >= IDLE_TTL)
-        {
-            retired.push(self.entries.pop_front().unwrap().runtime);
+        let mut index = 0;
+        while index < self.entries.len() {
+            let entry = &self.entries[index];
+            if !self.is_persistent(&entry.tab) && now.duration_since(entry.parked_at) >= IDLE_TTL {
+                retired.push(self.entries.remove(index).unwrap().runtime);
+            } else { index += 1; }
         }
+        retired.extend(self.enforce_capacity());
         retired
     }
 
@@ -97,20 +127,27 @@ impl<T> IdleSessionPool<T> {
     }
 
     pub fn next_expiry(&self) -> Option<Instant> {
-        self.entries.front().map(|entry| entry.parked_at + IDLE_TTL)
+        self.entries.iter().filter(|entry| !self.is_persistent(&entry.tab))
+            .map(|entry| entry.parked_at + IDLE_TTL).min()
     }
 
     /// Sample only idle runtimes. Active turns are never evicted for memory use.
     pub fn trim_resident_memory(&mut self, mut measure: impl FnMut(&T) -> Option<u64>) -> Vec<T> {
-        let mut sizes: VecDeque<_> = self.entries.iter()
-            .map(|entry| measure(&entry.runtime).unwrap_or(UNKNOWN_RESIDENT_BYTES)).collect();
-        let mut total = sizes.iter().fold(0_u64, |sum, size| sum.saturating_add(*size));
-        let mut retired = Vec::new();
-        while total > IDLE_RESIDENT_BUDGET {
-            let Some(entry) = self.entries.pop_front() else { break; };
-            total = total.saturating_sub(sizes.pop_front().unwrap_or(0));
-            retired.push(entry.runtime);
+        let mut sizes: Vec<_> = self.entries.iter().enumerate()
+            .filter(|(_, entry)| !self.is_persistent(&entry.tab))
+            .map(|(index, entry)| (index, entry.parked_at, measure(&entry.runtime).unwrap_or(UNKNOWN_RESIDENT_BYTES)))
+            .collect();
+        sizes.sort_by_key(|(_, parked_at, _)| *parked_at);
+        let mut total = sizes.iter().fold(0_u64, |sum, (_, _, size)| sum.saturating_add(*size));
+        let mut indices = Vec::new();
+        for (index, _, size) in sizes {
+            if total <= IDLE_RESIDENT_BUDGET { break; }
+            total = total.saturating_sub(size);
+            indices.push(index);
         }
+        indices.sort_unstable_by(|a, b| b.cmp(a));
+        let mut retired = Vec::new();
+        for index in indices { retired.push(self.entries.remove(index).unwrap().runtime); }
         retired
     }
 }
@@ -191,6 +228,55 @@ pub(crate) fn runtime_fingerprint(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mixed_pool_only_protects_selected_sessions_and_unpin_restores_expiry() {
+        let now = Instant::now();
+        let mut pool = IdleSessionPool::default();
+        pool.set_persistent("resident", true, now);
+        pool.park("resident".into(), "t".into(), 1, 99, now);
+        for n in 0..5 {
+            let retired = pool.park(n.to_string(), "t".into(), 1, n, now);
+            assert_eq!(retired, if n == 4 { vec![0] } else { vec![] });
+        }
+        assert_eq!(pool.expire(now + IDLE_TTL), vec![1, 2, 3, 4]);
+        assert_eq!(pool.get("resident"), Some(&99));
+        let later = now + IDLE_TTL;
+        pool.set_persistent("resident", false, later);
+        assert_eq!(pool.next_expiry(), Some(later + IDLE_TTL));
+        assert!(pool.expire(later + IDLE_TTL - Duration::from_millis(1)).is_empty());
+        assert_eq!(pool.expire(later + IDLE_TTL), vec![99]);
+    }
+
+    #[test]
+    fn ordinary_memory_pressure_does_not_evict_resident_connections() {
+        let now = Instant::now();
+        let mut pool = IdleSessionPool::default();
+        pool.set_persistent("resident", true, now);
+        pool.park("resident".into(), "t".into(), 1, 99, now);
+        pool.park("a".into(), "t".into(), 1, 1, now);
+        pool.park("b".into(), "t".into(), 1, 2, now);
+        assert_eq!(pool.trim_resident_memory(|_| Some(IDLE_RESIDENT_BUDGET)), vec![1]);
+        assert_eq!(pool.get("resident"), Some(&99));
+        assert_eq!(pool.get("b"), Some(&2));
+    }
+
+    #[test]
+    fn persistent_sessions_survive_idle_time_and_pool_pressure_until_explicit_close() {
+        let now = Instant::now();
+        let mut pool = IdleSessionPool::default();
+        for n in 0..10 {
+            pool.set_persistent(&n.to_string(), true, now);
+            assert!(pool.park(n.to_string(), "thread".into(), 1, n, now).is_empty());
+        }
+        assert!(pool.expire(now + Duration::from_secs(86_400)).is_empty());
+        assert!(pool.trim_resident_memory(|_| Some(IDLE_RESIDENT_BUDGET)).is_empty());
+        assert_eq!(pool.next_expiry(), None);
+        assert_eq!(pool.get("0"), Some(&0));
+        assert_eq!(pool.take("0", Some("thread"), 1, now + Duration::from_secs(86_400)), (Some(0), vec![]));
+        assert_eq!(pool.remove("1"), Some(1));
+        assert_eq!(pool.drain().len(), 8);
+    }
 
     #[test]
     fn reuse_requires_same_tab_thread_and_config_and_consumes_ownership() {

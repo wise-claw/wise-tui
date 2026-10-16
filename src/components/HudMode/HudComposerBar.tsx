@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { App } from "antd";
 import { ComposerRegion } from "../ClaudeChatInput/composer-region";
 import {
+  wiseHudSelectSession,
   wiseHudCancel,
   wiseHudExit,
   wiseHudNewSession,
@@ -60,6 +61,7 @@ export interface HudComposerBarProps {
   /** 配置在 HUD 重新激活时会重新读取，用该版本号同步显示状态。 */
   detailsPreferenceRevision?: number;
   toasts?: readonly HudCompletionToastView[];
+  queuedToastCount?: number;
   onDismissToast?: (id: string) => void;
   onOverlayOpenChange?: (mode: HudOverlayMode) => void;
   detailsHeight?: number;
@@ -324,12 +326,14 @@ export function HudComposerBar({
   persistentDetailsEnabled = false,
   detailsPreferenceRevision = 0,
   toasts = [],
+  queuedToastCount = 0,
   onDismissToast,
   onOverlayOpenChange,
   detailsHeight = HUD_DETAILS_HEIGHT_DEFAULT,
   onDetailsHeightChange,
   onDetailsHeightCommit,
 }: HudComposerBarProps) {
+  const { message } = App.useApp();
   const session = useMemo(() => hudComposerSessionToClaudeSession(snapshot), [snapshot]);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [menuOverlay, setMenuOverlay] = useState(false);
@@ -628,9 +632,15 @@ export function HudComposerBar({
           <img src={previewImage.dataUrl} alt={previewImage.filename} />
         </button>
       ) : null}
-      {!detailsRendered ? (
-        <HudCompletionToasts toasts={toasts} onDismiss={onDismissToast ?? (() => undefined)} />
-      ) : null}
+      <HudCompletionToasts toasts={toasts} queuedCount={queuedToastCount} onDismiss={onDismissToast ?? (() => undefined)}
+        onSelect={(toast) => {
+          void wiseHudSelectSession(toast.sessionId).then(() => {
+            cancelDetailsLeave();
+            setDetailsDismissed(false);
+            setDetailsOpen(true);
+            onDismissToast?.(toast.id);
+          }).catch(() => message.error("无法打开会话，请重试"));
+        }} />
       {detailsRendered && !previewImage ? (
         <div
           className={`app-hud-session-details${detailsLeaving ? " app-hud-session-details--leaving" : ""}`}

@@ -50,6 +50,7 @@ describe("collectHudSessionCompletions", () => {
     expect(items.map((item) => item.sessionId)).toEqual(["a", "b"]);
     expect(items[0]).toMatchObject({
       kind: "success",
+      title: "修快捷键",
       message: "已经改成 Option+H",
     });
     expect(items[1]).toMatchObject({
@@ -158,6 +159,24 @@ describe("resolveHudToastMarqueeDurationSec", () => {
 });
 
 describe("hud toast board", () => {
+  it("cycles a single compact island capsule through multiple completions", () => {
+    const board = enqueueHudCompletionToasts(EMPTY_HUD_TOAST_BOARD, [toast("1"), toast("2"), toast("3")], 1);
+    expect(board.visible.map((item) => item.id)).toEqual(["1"]);
+    expect(board.queued).toHaveLength(2);
+    const next = removeHudToast(beginHudToastLeave(board, "1"), "1", 1);
+    expect(next.visible.map((item) => item.id)).toEqual(["2"]);
+    expect(next.queued.map((item) => item.id)).toEqual(["3"]);
+  });
+
+  it("deduplicates delivery and keeps leaving cards within the visible limit", () => {
+    const board = enqueueHudCompletionToasts(EMPTY_HUD_TOAST_BOARD, [toast("1"), toast("2"), toast("3"), toast("1")]);
+    const leaving = beginHudToastLeave(board, "1");
+    const updated = enqueueHudCompletionToasts(leaving, [toast("2"), toast("4"), toast("4")]);
+    expect(updated.visible).toHaveLength(3);
+    expect(updated.queued.map((item) => item.id)).toEqual(["4"]);
+    expect(removeHudToast(updated, "1").visible.map((item) => item.id)).toEqual(["2", "3", "4"]);
+  });
+
   it("shows three and queues the rest when many finish at once", () => {
     const board = enqueueHudCompletionToasts(EMPTY_HUD_TOAST_BOARD, [
       toast("1"),
@@ -189,8 +208,8 @@ describe("hud toast board", () => {
 describe("hudToastStackExtraHeight", () => {
   it("grows by slot plus gap per rendered toast", () => {
     expect(hudToastStackExtraHeight(0)).toBe(0);
-    expect(hudToastStackExtraHeight(1)).toBe(44);
-    expect(hudToastStackExtraHeight(3)).toBe(132);
+    expect(hudToastStackExtraHeight(1)).toBe(56);
+    expect(hudToastStackExtraHeight(3)).toBe(168);
   });
 });
 

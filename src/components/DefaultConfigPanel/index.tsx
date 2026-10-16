@@ -40,6 +40,7 @@ import { EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS } from "../../consta
 import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useComposerFooterChromeDefaultSetting } from "./useComposerFooterChromeDefaultSetting";
 import { useFeaturePanelChromeDefaultSetting } from "./useFeaturePanelChromeDefaultSetting";
+import { useDynamicIslandNotificationsSetting } from "./useDynamicIslandNotificationsSetting";
 import { useHudDetailsSetting } from "./useHudDetailsSetting";
 import { useShowThinkingMessagesSetting } from "./useShowThinkingMessagesSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
@@ -102,6 +103,7 @@ export function DefaultConfigPanel() {
   const composerFooterChrome = useComposerFooterChromeDefaultSetting();
   const featurePanelChrome = useFeaturePanelChromeDefaultSetting();
   const hudDetails = useHudDetailsSetting();
+  const islandNotifications = useDynamicIslandNotificationsSetting();
   const thinkingMessages = useShowThinkingMessagesSetting();
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
   const monitorPanel = useMonitorPanelSetting();
@@ -1284,6 +1286,20 @@ export function DefaultConfigPanel() {
                 disabled={featurePanelChrome.loading || featurePanelChrome.saving}
                 options={featurePanelOptions}
                 onToggle={handleFeaturePanelToggle}
+              />
+            }
+          />
+          <DefaultConfigRow
+            title="灵动岛通知"
+            detail="普通模式下，会话完成后在屏幕顶部展示通知；HUD 模式的通知显示在输入条上方"
+            control={
+              <Switch
+                size="small"
+                aria-label="灵动岛通知"
+                checked={islandNotifications.enabled}
+                loading={islandNotifications.saving}
+                disabled={islandNotifications.loading || islandNotifications.saving}
+                onChange={(checked) => { void islandNotifications.save(checked).catch(() => {}); }}
               />
             }
           />

@@ -1,6 +1,6 @@
 import { Dropdown, type MenuProps } from "antd";
 import { HoverHint } from "../shared/HoverHint";
-import { memo, useEffect, useMemo, useState } from "react";
+import { type ReactNode, memo, useEffect, useMemo, useState } from "react";
 import {
   CLAUDE_CONNECTION_KIND_LABELS,
   CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
@@ -37,6 +37,7 @@ import {
 import { useComposerActiveProxyRoute } from "../../hooks/useComposerActiveProxyRoute";
 
 interface Props {
+  codexPersistentControl?: ReactNode;
   engine: SessionExecutionEngine;
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
@@ -99,6 +100,7 @@ function isConnectionKindKey(key: string): key is ClaudeSessionConnectionKind {
 
 function ComposerRuntimeSettingsTriggerImpl({
   engine: engineProp,
+  codexPersistentControl,
   codexAvailable = true,
   cursorAvailable = true,
   geminiAvailable = false,
@@ -433,6 +435,11 @@ function ComposerRuntimeSettingsTriggerImpl({
             />
           ) : null}
           {menu ?? null}
+          {(effectiveEngine === "codex" || effectiveEngine === "codex-rpc") && codexPersistentControl ? (
+            <div style={{ padding: "8px 12px", borderTop: "1px solid var(--ant-color-border-secondary)" }}>
+              {codexPersistentControl}
+            </div>
+          ) : null}
         </div>
       )}
     >

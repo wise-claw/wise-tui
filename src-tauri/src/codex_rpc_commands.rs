@@ -107,6 +107,28 @@ pub(crate) struct CodexRpcSessionStore {
     idle_reaper: Arc<TokioMutex<RpcBackgroundTasks>>,
 }
 
+/// 查询真实进程连接；不持有 store 锁等待正在发送/响应的会话锁。
+#[tauri::command]
+pub(crate) async fn get_codex_rpc_runtime_status(app: AppHandle, session_id: String) -> &'static str {
+    let store = app.state::<CodexRpcSessionStore>();
+    let active = store.sessions.lock().await.get(&session_id).cloned();
+    // 活动轮次的事件接收器由通知循环持有，不能用空闲连接的 receiver 检测。
+    // 通知循环在断线/完成时移除此记录；查询不等待会话锁。
+    if active.is_some() { return "running"; }
+    let idle = store.idle.lock().await;
+    if idle.get(&session_id).is_some_and(CodexRpcSession::is_connected) {
+        if idle.is_persistent(&session_id) { "resident" } else { "ready" }
+    } else { "disconnected" }
+}
+
+#[tauri::command]
+pub(crate) async fn set_codex_rpc_persistent(app: AppHandle, session_id: String, persistent: bool) {
+    let store = app.state::<CodexRpcSessionStore>();
+    store.idle.lock().await.set_persistent(&session_id, persistent, Instant::now());
+    // 取消常驻后重新唤醒回收任务，按原有容量、内存及超时策略清理。
+    store.wake_idle_reaper().await;
+}
+
 impl CodexRpcSessionStore {
     /// 该会话是否应展示这条宿主提示（相同提示只展示一次，避免每轮重复回放）。
     async fn should_show_host_notice(&self, session_id: &str, notice_key: &str) -> bool {

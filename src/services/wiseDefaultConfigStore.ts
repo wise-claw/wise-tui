@@ -352,6 +352,8 @@ export interface WiseDefaultConfigV1 {
   showFeaturePanelScheduledTasks: boolean;
   /** 进入 HUD 后在输入条上方显示当前会话的两行常驻详情。 */
   showHudPersistentDetails: boolean;
+  /** 会话完成后在屏幕顶部展示灵动岛通知。 */
+  showDynamicIslandNotifications: boolean;
   /** 会话消息中的「思考」卡片（reasoning 过程）；默认不显示。 */
   showThinkingMessages: boolean;
 }
@@ -420,6 +422,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showFeaturePanelHistoryMessages: true,
   showFeaturePanelScheduledTasks: true,
   showHudPersistentDetails: false,
+  showDynamicIslandNotifications: true,
   showThinkingMessages: false,
   openInTerminalShortcut: "",
   openInEditorShortcut: "",
@@ -793,6 +796,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.showFeaturePanelScheduledTasks === undefined
           ? DEFAULT_CONFIG.showFeaturePanelScheduledTasks
           : normalizeBoolean(parsed.showFeaturePanelScheduledTasks),
+      showDynamicIslandNotifications:
+        parsed.showDynamicIslandNotifications === undefined
+          ? DEFAULT_CONFIG.showDynamicIslandNotifications
+          : normalizeBoolean(parsed.showDynamicIslandNotifications, true),
       showHudPersistentDetails:
         parsed.showHudPersistentDetails === undefined
           ? DEFAULT_CONFIG.showHudPersistentDetails
@@ -982,6 +989,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showFeaturePanelHistoryMessages: DEFAULT_CONFIG.showFeaturePanelHistoryMessages,
     showFeaturePanelScheduledTasks: DEFAULT_CONFIG.showFeaturePanelScheduledTasks,
     showHudPersistentDetails: DEFAULT_CONFIG.showHudPersistentDetails,
+    showDynamicIslandNotifications: DEFAULT_CONFIG.showDynamicIslandNotifications,
     showThinkingMessages: DEFAULT_CONFIG.showThinkingMessages,
     openInTerminalShortcut: DEFAULT_CONFIG.openInTerminalShortcut,
     openInEditorShortcut: DEFAULT_CONFIG.openInEditorShortcut,
@@ -1306,6 +1314,7 @@ export async function saveWiseDefaultConfig(
       | "showFeaturePanelHistoryMessages"
       | "showFeaturePanelScheduledTasks"
       | "showHudPersistentDetails"
+      | "showDynamicIslandNotifications"
       | "showThinkingMessages"
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceTodosPanel"
@@ -1467,6 +1476,8 @@ export async function saveWiseDefaultConfig(
       patch.showFeaturePanelScheduledTasks ?? current.showFeaturePanelScheduledTasks,
     showHudPersistentDetails:
       patch.showHudPersistentDetails ?? current.showHudPersistentDetails,
+    showDynamicIslandNotifications:
+      patch.showDynamicIslandNotifications ?? current.showDynamicIslandNotifications,
     showThinkingMessages: patch.showThinkingMessages ?? current.showThinkingMessages,
     openInTerminalShortcut:
       patch.openInTerminalShortcut !== undefined
@@ -2698,4 +2709,14 @@ export async function registerRepositoryActionGlobalShortcuts(bindings: {
   lastRegisteredRepositoryActionShortcutsJson = serialized;
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("cmd_register_repository_action_shortcuts", { bindings });
+}
+
+export async function loadDynamicIslandNotificationsFromStore(): Promise<boolean> {
+  return (await loadWiseDefaultConfig()).showDynamicIslandNotifications;
+}
+
+export async function saveDynamicIslandNotificationsToStore(enabled: boolean): Promise<void> {
+  await saveWiseDefaultConfig({ showDynamicIslandNotifications: enabled });
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("wise_island_refresh_settings");
 }

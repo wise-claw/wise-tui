@@ -64,7 +64,7 @@ function HudApp() {
   const overlayModeRef = useRef(overlayMode);
   overlayModeRef.current = overlayMode;
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { toasts, renderedCount, dismiss } = useHudCompletionToasts();
+  const { toasts, queuedCount, renderedCount, dismiss } = useHudCompletionToasts();
   const toastCountRef = useRef(renderedCount);
   toastCountRef.current = renderedCount;
   useHudClickThrough();
@@ -190,6 +190,7 @@ function HudApp() {
       persistentDetailsEnabled={persistentDetailsEnabled}
       detailsPreferenceRevision={detailsPreferenceRevision}
       toasts={toasts}
+      queuedToastCount={queuedCount}
       onDismissToast={dismiss}
       onOverlayOpenChange={setOverlayMode}
       detailsHeight={detailsHeight}

@@ -9,7 +9,7 @@ use crate::{
     code_review_commands, cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands,
     main_window, mcp, my_extensions, native_cli_sessions,
     openspec_bootstrap, project_relative_files, remote_channels, repository_files, skills, skills_sh, system_resource,
-    composer_image_gc, wise_data_cleanup, wise_db, wise_hud, wise_mascot, wise_paths, wise_push,
+    composer_image_gc, wise_data_cleanup, wise_db, wise_hud, wise_island, wise_mascot, wise_paths, wise_push,
     wise_db::WiseDb,
     workspace_commands,
     workspace_inspector_commands,
@@ -302,6 +302,7 @@ pub fn run() {
 
             Ok(())
         })
+        .manage(Mutex::new(wise_island::IslandCompletionDelivery::default()))
         .manage(Mutex::new(workspace_commands::GitWatcherState::new()))
         .manage(Mutex::new(claude_commands::TerminalManager::new()))
         .manage(claude_commands::ClaudeProcessState::default())
@@ -737,6 +738,8 @@ pub fn run() {
             codex_models::codex_list_models,
             codex_rpc_commands::interrupt_codex_rpc,
             codex_rpc_commands::shutdown_codex_rpc,
+            codex_rpc_commands::get_codex_rpc_runtime_status,
+            codex_rpc_commands::set_codex_rpc_persistent,
             codex_rpc_commands::respond_codex_rpc_approval,
             codex_rpc_commands::list_codex_rpc_mcp_servers,
             codex_rpc_commands::call_codex_rpc_mcp_tool,
@@ -916,6 +919,11 @@ pub fn run() {
             wise_mascot::wise_mascot_show,
             wise_mascot::wise_mascot_hide,
             wise_mascot::wise_mascot_save_position,
+            wise_island::wise_island_refresh_settings,
+            wise_island::wise_island_notify_completion,
+            wise_island::wise_island_completion_ready,
+            wise_island::wise_island_completion_hide,
+            wise_island::wise_island_open_session,
             wise_hud::wise_hud_toggle,
             wise_hud::wise_hud_enter,
             wise_hud::wise_hud_exit,

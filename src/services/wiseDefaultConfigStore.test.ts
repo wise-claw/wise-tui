@@ -15,6 +15,7 @@ mock.module("./appSettingsStore", () => ({
 
 import {
   loadWiseDefaultConfig,
+  loadDynamicIslandNotificationsFromStore,
   loadHudDetailsDefaultsFromStore,
   loadShowThinkingMessagesFromStore,
   saveHudDetailsDefaultsToStore,
@@ -620,6 +621,24 @@ describe("wiseDefaultConfigStore", () => {
     );
     const config = await loadWiseDefaultConfig();
     expect(config.workspaceSidebarRowPreviewLimit).toBe(3);
+  });
+
+  test("灵动岛通知默认开启，可独立保存关闭和重新开启", async () => {
+    let persisted = JSON.stringify({ version: 1, connectionKind: "streaming" });
+    setAppSetting.mockImplementation(async (key: string, raw: string) => {
+      if (key === WISE_DEFAULT_CONFIG_KEY) persisted = raw;
+    });
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) return persisted;
+      return null;
+    });
+    expect(await loadDynamicIslandNotificationsFromStore()).toBe(true);
+    await saveWiseDefaultConfig({ showDynamicIslandNotifications: false });
+    expect(JSON.parse(String(setAppSetting.mock.calls.at(-1)?.[1]))).toMatchObject({ showDynamicIslandNotifications: false });
+    expect(await loadDynamicIslandNotificationsFromStore()).toBe(false);
+    await saveWiseDefaultConfig({ showDynamicIslandNotifications: true });
+    expect(await loadDynamicIslandNotificationsFromStore()).toBe(true);
   });
 
   test("HUD 常驻详情默认关闭，保存后可读取", async () => {

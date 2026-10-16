@@ -34,6 +34,14 @@ test("Claude writes steering to the live session without starting another invoca
   });
 });
 
+test("Codex sends instantaneous input to the active turn without queueing", async () => {
+  await sendSessionSteering({ transport: "codex", sessionId: "wise-tab" }, "补充要求");
+  expect(invoke).toHaveBeenCalledTimes(1);
+  expect(invoke).toHaveBeenCalledWith("steer_codex_rpc_turn", {
+    params: { sessionId: "wise-tab", turnId: undefined, input: "补充要求" },
+  });
+});
+
 test("a closed turn rejects without fallback so the composer can recover its draft", async () => {
   invoke.mockImplementationOnce(async () => { throw new Error("turn ended"); });
   await expect(sendSessionSteering({ transport: "claude-streaming", sessionId: "closed" }, "保留内容"))

@@ -2,9 +2,9 @@ import type { ClaudeMessage, ClaudeSession } from "../types";
 import { isHudSessionBusyStatus, resolveHudAssistantPreview } from "./wiseHudSnapshot";
 
 export const HUD_COMPLETION_TOAST_MAX_VISIBLE = 3;
-export const HUD_COMPLETION_TOAST_DURATION_MS = 4200;
+export const HUD_COMPLETION_TOAST_DURATION_MS = 6000;
 export const HUD_COMPLETION_TOAST_LEAVE_MS = 240;
-export const HUD_COMPLETION_TOAST_HEIGHT = 36;
+export const HUD_COMPLETION_TOAST_HEIGHT = 48;
 export const HUD_COMPLETION_TOAST_GAP = 8;
 /** 通知展示会话最后一条助手总结；过长时由 UI 横向滚动，不在此处截断。 */
 export const HUD_COMPLETION_TOAST_MESSAGE_MAX_LEN = 2000;
@@ -27,6 +27,7 @@ export interface HudCompletionToastItem {
   sessionId: string;
   kind: HudCompletionToastKind;
   message: string;
+  title?: string;
 }
 
 export type HudCompletionToastPhase = "visible" | "leaving";
@@ -46,6 +47,8 @@ export const EMPTY_HUD_TOAST_BOARD: HudToastBoard = {
 };
 
 export type HudCompletionSessionProbe = Pick<ClaudeSession, "id" | "status"> & {
+  threadName?: string;
+  repositoryName?: string;
   messages?: readonly ClaudeMessage[];
 };
 
@@ -79,6 +82,7 @@ export function formatHudCompletionToast(session: HudCompletionSessionProbe): Hu
     id: nextToastId(session.id),
     sessionId: session.id,
     kind,
+    title: clipLabel(session.threadName || session.repositoryName || "会话", 80),
     message,
   };
 }
@@ -108,14 +112,6 @@ export function sessionStatusMap(
   return next;
 }
 
-function occupyingCount(visible: readonly HudCompletionToastView[]): number {
-  let count = 0;
-  for (const toast of visible) {
-    if (toast.phase !== "leaving") count += 1;
-  }
-  return count;
-}
-
 export function refillHudToastBoard(
   board: HudToastBoard,
   maxVisible = HUD_COMPLETION_TOAST_MAX_VISIBLE,
@@ -123,7 +119,7 @@ export function refillHudToastBoard(
   const visible = [...board.visible];
   const queued = [...board.queued];
   const cap = Math.max(1, Math.floor(maxVisible));
-  while (occupyingCount(visible) < cap && queued.length > 0) {
+  while (visible.length < cap && queued.length > 0) {
     const item = queued.shift()!;
     visible.push({ ...item, phase: "visible" });
   }
@@ -136,10 +132,16 @@ export function enqueueHudCompletionToasts(
   maxVisible = HUD_COMPLETION_TOAST_MAX_VISIBLE,
 ): HudToastBoard {
   if (incoming.length === 0) return board;
+  const knownIds = new Set([...board.visible, ...board.queued].map((item) => item.id));
+  const fresh = incoming.filter((item) => {
+    if (knownIds.has(item.id)) return false;
+    knownIds.add(item.id);
+    return true;
+  });
   return refillHudToastBoard(
     {
       visible: board.visible,
-      queued: [...board.queued, ...incoming],
+      queued: [...board.queued, ...fresh],
     },
     maxVisible,
   );
@@ -186,6 +188,7 @@ export function parseHudCompletionToastPayload(raw: unknown): HudCompletionToast
       sessionId: value.sessionId.trim(),
       kind: value.kind,
       message,
+      ...(typeof value.title === "string" ? { title: clipLabel(value.title, 80) } : {}),
     });
   }
   return items;

@@ -1,3 +1,10 @@
+.app-workspace-session-tree__resident {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+  white-space: nowrap;
+}
+
 .app-workspace-session-tree {
   display: flex;
   flex-direction: column;

@@ -1,4 +1,5 @@
-import { shouldSteerComposer } from "./composerSteering";
+import { handleComposerTabKeyDown } from "./composerSteering";
+import { useCodexPersistentSession } from "../../hooks/useCodexPersistentSession";
 import { resolveSessionSteeringTarget, sendSessionSteering } from "../../services/sessionSteering";
 import { useComposerModelSelection } from "../../hooks/useComposerModelSelection";
 import { createComposerSendScope, requireComposerDispatchAccepted } from "./composerSendScope";
@@ -122,7 +123,7 @@ import {
   selectCollabComposerAgent,
 } from "../../stores/collabComposerStore";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
-import { Button, message, Popover, Select, Tabs, Tag } from "antd";
+import { Button, Checkbox, message, Popover, Select, Tabs, Tag } from "antd";
 import { buildWorkspaceRepositoryFlatSelectOptions } from "../../utils/workspaceRepositoryTreeSelect";
 import { HUD_SELECT_BUILTIN_PLACEMENTS, HUD_SELECT_POPUP_ALIGN, hudSelectPopupContainer } from "../../utils/hudSelectPopup";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
@@ -1251,6 +1252,8 @@ function ComposerInner({
     pendingExecutionTaskCount,
   });
   const isSessionBusy = composerBusy.isBusy;
+  const { persistent: codexPersistent, pending: codexPersistentPending, setPersistent: setCodexPersistent } =
+    useCodexPersistentSession(session.id, isCodexEngineFamily);
   const steeringTarget = useMemo(
     () => resolveSessionSteeringTarget(sessionExecutionEngine, session, defaultConnectionKind),
     [sessionExecutionEngine, session.id, session.claudeSessionId, session.connectionKind, defaultConnectionKind],
@@ -1262,25 +1265,21 @@ function ComposerInner({
   onCancelRef.current = _onCancel;
   const handleSendRef = useRef<(plain?: string, mode?: "steer") => void | Promise<void>>(() => undefined);
 
-  /** Tab 优先补全；支持的执行通道发送瞬时消息。 */
-  useEffect(() => {
-    const shell = shellRef.current;
-    if (!shell) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Tab") return;
-      const active = document.activeElement;
-      if (!active || !shell.contains(active)) return;
-      const editor = shell.querySelector(".ProseMirror");
-      if (!editor || (active !== editor && !editor.contains(active))) return;
-      e.preventDefault();
-      if (canSteerSession && shouldSteerComposer(e, sessionExecutionEngine, isSessionBusy, Boolean(triggerRef.current.mode), canSteerSession)) {
-        e.stopPropagation();
-        void handleSendRef.current(undefined, "steer");
-      }
-    };
-    shell.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => shell.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [session.id, sessionExecutionEngine, isSessionBusy, canSteerSession]);
+  /** 在实际渲染的输入区域捕获，避免依赖 WebView 的 activeElement 或旧 DOM 监听器。 */
+  const handleComposerTabCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const livePlain = readSemiEditorPlain(aiChatRef.current?.getEditor?.());
+    handleComposerTabKeyDown(event.nativeEvent, {
+      root: event.currentTarget,
+      shell: shellRef.current,
+      engine: sessionExecutionEngine,
+      busy: isSessionBusy,
+      completing: Boolean(triggerRef.current.mode),
+      canSteer: canSteerSession,
+      canSend: Boolean(livePlain.trim()) || canSendComposerRef.current,
+      send: (mode) => { void handleSendRef.current(livePlain || undefined, mode === "steer" ? "steer" : undefined); },
+      focusEditor: () => aiChatRef.current?.focusEditor?.("end"),
+    });
+  };
 
   const { prefs: speechPrefs, update: updateSpeechPrefs } = useComposerSpeechPreferences();
   const speechPolishProjectPath =
@@ -3687,6 +3686,14 @@ function ComposerInner({
         {composerFooterChrome.showComposerFooterRuntimeSettings ? (
           <ComposerRuntimeSettingsTrigger
             engine={sessionExecutionEngine}
+            codexPersistentControl={
+              <Checkbox checked={codexPersistent} disabled={codexPersistentPending}
+                onChange={(event) => {
+                  void setCodexPersistent(event.target.checked).catch(() => message.error("切换常驻模式失败，请重试"));
+                }}>
+                常驻
+              </Checkbox>
+            }
             codexAvailable={codexAvailable}
             cursorAvailable={cursorAvailable}
             geminiAvailable={geminiAvailable}
@@ -3734,6 +3741,9 @@ function ComposerInner({
     ),
     [
       isSessionBusy,
+      codexPersistent,
+      codexPersistentPending,
+      setCodexPersistent,
       session.connectionKind,
       defaultConnectionKind,
       onSessionConnectionKindChange,
@@ -3843,6 +3853,7 @@ function ComposerInner({
     <div
       ref={composerEscapeRootRef}
       className={`app-claude-composer${hudChrome ? " app-claude-composer--hud" : ""}${showQuestionChrome ? " app-claude-composer--pending-question" : ""}${showPermissionChrome || showCodexApprovalChrome ? " app-claude-composer--pending-permission" : ""}`}
+      onKeyDownCapture={handleComposerTabCapture}
       data-wise-composer-root=""
       data-session-id={session.id}
       onFocusCapture={() => noteComposerScreenshotFocus(session.id)}
@@ -4002,7 +4013,13 @@ function ComposerInner({
                   ref={aiChatRef}
                   extensions={SEMI_COMPOSER_TOKEN_HIGHLIGHT_EXTENSIONS}
                   placeholder={
-                    hudChrome
+                    canSteerSession && isSessionBusy
+                      ? "Enter 排队发送，Tab 立即发送，Shift+Enter 换行"
+                      : isSessionBusy
+                        ? "Enter 排队发送，Shift+Enter 换行，@ 文件，/ 命令"
+                      : sessionExecutionEngine === "codex" || sessionExecutionEngine === "codex-rpc"
+                        ? "Enter 发送，Tab 立即发送，Shift+Enter 换行，@ 文件，/ 命令"
+                      : hudChrome
                       ? "@ 仓库/文件，/ 命令，Enter 发送"
                       : "@ 仓库/终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条"
                   }

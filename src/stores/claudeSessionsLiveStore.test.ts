@@ -7,6 +7,7 @@ import {
   getClaudeSessionSnapshot,
   publishClaudeSessions,
   subscribeClaudeSessionLive,
+  subscribeClaudeSessionStatusChanges,
   subscribeClaudeSessionsStructure,
 } from "./claudeSessionsLiveStore";
 
@@ -175,4 +176,25 @@ test("execution tracking excludes restored completions and survives session list
   expect(getExecutedSessionIds().has(executed.id)).toBe(true);
   publishClaudeSessions([]);
   expect(getExecutedSessionIds().has(executed.id)).toBe(true);
+});
+
+
+test("completion observers see every committed status without waiting for React or animation frames", () => {
+  publishClaudeSessions([]);
+  const transitions: string[] = [];
+  const unsubscribe = subscribeClaudeSessionStatusChanges((previous, next) => {
+    for (const session of next) {
+      const before = previous.get(session.id)?.status;
+      if (before === "running" && session.status === "completed") transitions.push(session.id);
+    }
+  });
+  // 同一 JS turn 内完成，不依赖结构订阅或浏览器可见性。
+  publishClaudeSessions([stubSession("instant", 1)]);
+  publishClaudeSessions([{ ...stubSession("instant", 2), status: "completed" }]);
+  publishClaudeSessions([{ ...stubSession("instant", 3), status: "completed" }]);
+  expect(transitions).toEqual(["instant"]);
+  unsubscribe();
+  publishClaudeSessions([stubSession("after-unsubscribe", 1)]);
+  publishClaudeSessions([{ ...stubSession("after-unsubscribe", 1), status: "completed" }]);
+  expect(transitions).toEqual(["instant"]);
 });

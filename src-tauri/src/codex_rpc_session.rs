@@ -1398,8 +1398,12 @@ done
         assert!(session.current_turn_id().is_none());
         let mut pool = crate::codex_rpc_reuse::IdleSessionPool::default();
         let now = std::time::Instant::now();
+        pool.set_persistent("tab", true, now);
         assert!(pool.park("tab".into(), "native-thread".into(), 1, session, now).is_empty());
-        let (cached, retired) = pool.take("tab", Some("native-thread"), 1, now);
+        let later = now + std::time::Duration::from_secs(86_400);
+        assert!(pool.expire(later).is_empty());
+        assert!(pool.get("tab").unwrap().is_connected());
+        let (cached, retired) = pool.take("tab", Some("native-thread"), 1, later);
         assert!(retired.is_empty());
         let mut session = cached.unwrap();
         assert!(session.is_connected());

@@ -301,44 +301,73 @@
 }
 
 .app-hud-toasts {
-  position: relative;
-  z-index: 2;
-  flex: 0 0 auto;
-  align-self: flex-start;
+  position: absolute;
+  bottom: 62px;
+  left: 12px;
+  z-index: 20;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  align-items: flex-start;
   gap: 8px;
-  max-width: min(360px, calc(100% - 24px));
-  margin: 0 0 0 8px;
-  padding: 0 0 8px;
+  width: min(360px, calc(100% - 24px));
   pointer-events: none;
 }
 
 .app-hud-toast {
-  appearance: none;
-  -webkit-appearance: none;
   pointer-events: auto;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   width: 100%;
-  max-width: min(360px, calc(100% - 24px));
-  height: 36px;
-  margin: 0;
-  padding: 0 12px;
+  height: 48px;
+  padding: 0 6px 0 10px;
   border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #fff;
   color: #1f2328;
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 10px 24px rgba(15, 23, 42, 0.12);
-  cursor: pointer;
-  text-align: left;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.12);
   animation: app-hud-toast-in 0.28s ease both;
 }
+
+.app-hud-toast__open, .app-hud-toast__close {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.app-hud-toast__open {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+.app-hud-toast__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: color-mix(in srgb, #22c55e 14%, transparent);
+  color: #16a34a;
+  font-size: 14px;
+  font-weight: 700;
+}
+.app-hud-toast--error .app-hud-toast__icon { color: #ef4444; background: #ef44441a; }
+.app-hud-toast__body { flex: 1; min-width: 0; }
+.app-hud-toast__heading { display: flex; align-items: center; gap: 8px; line-height: 17px; }
+.app-hud-toast__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
+.app-hud-toast__pending { flex-shrink: 0; font-size: 10px; color: #3b82f6; }
+.app-hud-toast__state { flex-shrink: 0; opacity: .5; font-size: 10px; }
+.app-hud-toast__summary { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 16px; opacity: .65; }
+.app-hud-toast__arrow { opacity: .4; font-size: 14px; }
+.app-hud-toast__close { flex: 0 0 24px; height: 28px; margin-left: 3px; font-size: 16px; opacity: .5; }
+.app-hud-toast__close:hover { background: #80808020; opacity: 1; }
+.app-hud-toast__open:hover .app-hud-toast__arrow { opacity: 1; }
+.app-hud-toast button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
 
 .app-hud-toast--leaving {
   animation: app-hud-toast-out 0.24s ease forwards;

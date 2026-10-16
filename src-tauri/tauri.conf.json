@@ -52,6 +52,22 @@
         "alwaysOnTop": true,
         "focus": false,
         "maximizable": false
+      },
+      {
+        "label": "dynamic-island",
+        "title": "Wise 灵动岛",
+        "url": "island.html",
+        "width": 384,
+        "height": 96,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "visible": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "focus": false,
+        "maximizable": false
       }
     ],
     "security": {

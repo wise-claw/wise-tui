@@ -1,8 +1,21 @@
 import { expect, test } from "bun:test";
-import { shouldSteerComposer } from "./composerSteering";
+import { getComposerTabSendMode, shouldSteerComposer } from "./composerSteering";
 
 const tab = { key: "Tab", shiftKey: false, ctrlKey: false, metaKey: false,
   altKey: false, isComposing: false, repeat: false };
+
+test("Codex Tab sends idle input and steers running input", () => {
+  for (const engine of ["codex", "codex-rpc"] as const) {
+    expect(getComposerTabSendMode(tab, engine, false, false, true)).toBe("send");
+    expect(getComposerTabSendMode(tab, engine, true, false, true)).toBe("steer");
+    expect(getComposerTabSendMode(tab, engine, true, false, false)).toBeNull();
+    expect(getComposerTabSendMode(tab, engine, false, true, true)).toBeNull();
+    for (const key of ["shiftKey", "ctrlKey", "metaKey", "altKey", "isComposing", "repeat"]) {
+      expect(getComposerTabSendMode({ ...tab, [key]: true }, engine, false, false, true)).toBeNull();
+    }
+  }
+  expect(getComposerTabSendMode(tab, "cursor", false, false, false)).toBeNull();
+});
 
 test("Tab steers either Codex environment only while running", () => {
   for (const engine of ["codex", "codex-rpc"] as const) {

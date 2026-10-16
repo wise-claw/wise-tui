@@ -20,6 +20,7 @@ import {
   NATIVE_CLI_ENGINE_SHORT_LABELS,
 } from "../../utils/nativeCliDiskSessions";
 import { WorkspaceSessionRowStatusSlot } from "./WorkspaceSessionRowStatus";
+import { CodexResidentSessionStatus } from "./CodexResidentSessionStatus";
 import "./RepositoryWorkspaceSessionTree.css";
 
 export type RepositoryWorkspaceSessionTreeProps = {
@@ -389,6 +390,7 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
             <span className="app-workspace-session-tree__title" title={title}>
               {title}
             </span>
+            <CodexResidentSessionStatus session={session} />
             <span className="app-workspace-session-tree__meta">
               <span className="app-workspace-session-tree__time">
                 {formatWorkspaceSidebarRelativeTime(updatedAt)}

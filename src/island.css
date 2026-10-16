@@ -1,0 +1,23 @@
+html, body, #root { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; pointer-events: none; }
+.app-island-window { box-sizing: border-box; padding: 12px; height: 100%; user-select: none; -webkit-font-smoothing: antialiased; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+.app-island-stack { display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+.app-island-card { box-sizing: border-box; display: flex; align-items: center; width: 100%; height: 48px; padding: 0 8px 0 12px; border: 1px solid #ffffff18; border-radius: 25px; background: #111113; color: #fafafa; box-shadow: 0 4px 12px #0004; pointer-events: auto; transform-origin: top center; animation: island-arrive 280ms cubic-bezier(.16,1,.3,1) both; }
+.app-island-card button { appearance: none; border: 0; color: inherit; background: transparent; cursor: pointer; font: inherit; }
+.app-island-card button:focus-visible { outline: 2px solid #70c6ff; outline-offset: 2px; }
+.app-island-card__open { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; height: 100%; padding: 0; border-radius: 16px; text-align: left; }
+.app-island-card__icon { display: grid; place-items: center; flex: 0 0 25px; height: 25px; border-radius: 50%; background: #39d8871f; color: #61e6a0; }
+.app-island-card--error .app-island-card__icon { background: #ff83701c; color: #ff9d87; }
+.app-island-card__body { flex: 1; min-width: 0; }
+.app-island-card__heading { display: flex; align-items: center; gap: 7px; line-height: 17px; }
+.app-island-card__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
+.app-island-card__status { flex-shrink: 0; color: #ffffff70; font-size: 10px; }
+.app-island-card__count { flex-shrink: 0; padding: 0 5px; border-radius: 8px; color: #fff; background: #ffffff24; font-size: 10px; }
+.app-island-card__summary { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #a1a1aa; font-size: 11px; line-height: 16px; }
+.app-island-card__arrow { color: #ffffff50; font-size: 14px; transition: color 150ms; }
+.app-island-card__open:hover .app-island-card__arrow { color: #fff; }
+.app-island-card__close { flex: 0 0 22px; height: 26px; margin-left: 3px; border-radius: 50%; opacity: .45; }
+.app-island-card__close:hover { background: #ffffff1a; opacity: 1; }
+.app-island-card--leaving { pointer-events: none; animation: island-leave 240ms ease both; }
+@keyframes island-arrive { from { opacity: 0; transform: translateY(-12px) scale(.92); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes island-leave { to { opacity: 0; transform: translateY(-8px) scale(.95); } }
+@media (prefers-reduced-motion: reduce) { .app-island-card, .app-island-card--leaving { animation-duration: 1ms; } }

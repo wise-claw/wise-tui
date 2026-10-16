@@ -1,5 +1,6 @@
 /** 这些区域要接鼠标；其余透明区穿透到后面的桌面。 */
 export const HUD_HIT_TARGET_SELECTOR = [
+  ".app-island-stack",
   ".app-hud-bar",
   ".app-hud-session-details",
   ".app-hud-toasts",

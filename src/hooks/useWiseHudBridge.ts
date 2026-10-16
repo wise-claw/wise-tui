@@ -16,10 +16,7 @@ import {
   toggleRepositoryRunCommand,
 } from "../stores/repositoryRunCommandRuntimeStore";
 import { openRepositoryRunCommandModal } from "../stores/repositoryRunCommandModalStore";
-import {
-  collectHudSessionCompletions,
-  sessionStatusMap,
-} from "../utils/hudCompletionToast";
+import { subscribeSessionCompletionNotifications } from "../services/sessionCompletionNotifications";
 import {
   buildWiseHudSessionSnapshot,
   countHudRunningSessions,
@@ -42,7 +39,6 @@ import {
   WISE_HUD_REQUEST_STATE_EVENT,
   WISE_HUD_SELECT_REPOSITORY_EVENT,
   WISE_HUD_SELECT_SESSION_EVENT,
-  WISE_HUD_SESSION_COMPLETE_EVENT,
   WISE_HUD_ACTIVATE_ASSISTANT_EVENT,
   WISE_HUD_SET_DETAILS_OPEN_EVENT,
   WISE_HUD_SET_ENGINE_EVENT,
@@ -132,7 +128,6 @@ export function useWiseHudBridge({
   const lastKeyRef = useRef("");
   const publishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hadRunningInHudRef = useRef(false);
-  const prevStatusByIdRef = useRef<Map<string, string>>(new Map());
   const detailsOpenRef = useRef(false);
   const repositoryRunStatusRef = useRef(repositoryRunStatus);
 
@@ -198,16 +193,9 @@ export function useWiseHudBridge({
   };
 
   useEffect(() => {
-    const completions = collectHudSessionCompletions(prevStatusByIdRef.current, sessions);
-    prevStatusByIdRef.current = sessionStatusMap(sessions);
-    if (
-      completions.length > 0 &&
-      getWiseHudModeActive() &&
-      isCurrentPrimaryMainWorkspaceWindowSync()
-    ) {
-      void emit(WISE_HUD_SESSION_COMPLETE_EVENT, { items: completions });
-    }
-  }, [sessions]);
+    if (!isCurrentPrimaryMainWorkspaceWindowSync()) return;
+    return subscribeSessionCompletionNotifications();
+  }, []);
 
   useEffect(() => {
     publishSoon();

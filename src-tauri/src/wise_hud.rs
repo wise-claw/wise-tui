@@ -408,6 +408,7 @@ pub fn hud_enter(app: &AppHandle, db: &WiseDb) -> Result<(), String> {
     let _ = hud.set_skip_taskbar(true);
     let _ = hud.unminimize();
     hud.show().map_err(|e| e.to_string())?;
+    crate::wise_island::dismiss_for_hud(app)?;
     hide_main_workspace_windows(app);
     let _ = hud.set_focus();
     emit_active(app, true);

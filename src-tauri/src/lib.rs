@@ -107,6 +107,7 @@ mod sherpa_sensevoice;
 mod wise_data_cleanup;
 mod wise_db;
 mod wise_hud;
+mod wise_island;
 mod wise_mascot;
 mod wise_paths;
 mod wise_push;
