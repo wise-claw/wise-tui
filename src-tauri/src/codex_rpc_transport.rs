@@ -149,6 +149,8 @@ pub enum JsonRpcMessage {
 pub struct CodexRpcTransport {
     /// Handle to the child process (kept so we can kill it on shutdown).
     child: Child,
+    /// Private process group owns MCP/tool descendants as well as app-server.
+    process_group: Option<i32>,
     /// Buffered writer for the child's stdin.
     stdin: Mutex<tokio::process::ChildStdin>,
     /// Receiver for notifications dispatched by the reader task.
@@ -165,12 +167,24 @@ pub struct CodexRpcTransport {
 
 impl Drop for CodexRpcTransport {
     fn drop(&mut self) {
-        let _ = self.child.start_kill();
+        self.start_kill_tree();
         self.pending_requests.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 }
 
 impl CodexRpcTransport {
+    fn start_kill_tree(&mut self) {
+        #[cfg(unix)]
+        if let Some(group) = self.process_group.take() {
+            // The group was created exclusively for this runtime at spawn. Never
+            // signal Wise's own group, and consume it before PID reuse is possible.
+            if group > 1 && group != unsafe { libc::getpgrp() } {
+                unsafe { libc::killpg(group, libc::SIGKILL); }
+            }
+        }
+        let _ = self.child.start_kill();
+    }
+
     pub(crate) fn resident_bytes(&self) -> Option<u64> {
         crate::codex_rpc_reuse::process_resident_bytes(self.child.id()?)
     }
@@ -194,6 +208,8 @@ impl CodexRpcTransport {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
         cmd.kill_on_drop(true);
+        #[cfg(unix)]
+        cmd.process_group(0);
 
         // Apply the same env enrichment used by the existing codex integration.
         let path_env = tokio::task::spawn_blocking(crate::codex_binary::codex_merged_path_env)
@@ -278,8 +294,10 @@ impl CodexRpcTransport {
             });
         }
 
+        let process_group = child.id().and_then(|pid| i32::try_from(pid).ok());
         Ok(Self {
             child,
+            process_group,
             stdin: Mutex::new(stdin),
             notification_rx,
             server_request_rx,
@@ -449,8 +467,10 @@ impl CodexRpcTransport {
         Ok(())
     }
 
-    /// Gracefully shut down the child process.
+    /// Terminate the owned process group and drain transport resources.
     pub async fn shutdown(&mut self) -> Result<()> {
+        // Stop the entire runtime before waiting for reader/forwarder cleanup.
+        self.start_kill_tree();
         self.pending_requests.lock().unwrap_or_else(|e| e.into_inner()).clear();
         self.background_tasks.shutdown().await;
         self.notification_rx.close();
@@ -543,6 +563,7 @@ mod request_lifecycle_tests {
         let stdin = child.stdin.take().unwrap();
         let mut transport = CodexRpcTransport {
             child,
+            process_group: None,
             stdin: Mutex::new(stdin),
             notification_rx: mpsc::unbounded_channel().1,
             server_request_rx: mpsc::unbounded_channel().1,
@@ -563,5 +584,53 @@ mod request_lifecycle_tests {
         // Broken-pipe errors must not strand the sender registered before writing.
         assert!(transport.send_request("test", None).await.is_err());
         assert!(transport.pending_requests.lock().unwrap_or_else(|e| e.into_inner()).is_empty());
+    }
+}
+
+#[cfg(all(test, unix))]
+mod process_tree_shutdown_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn shutdown_and_drop_close_descendants_inherited_pipes() {
+        for explicit in [true, false] {
+            let mut child = Command::new("/bin/sh")
+                .args(["-c", "sleep 120 & printf '%s\\n' \"$!\"; wait"])
+                .process_group(0)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .kill_on_drop(true)
+                .spawn().unwrap();
+            let group = i32::try_from(child.id().unwrap()).unwrap();
+            // Even a failed assertion must not leave the test's child behind.
+            struct Cleanup(i32);
+            impl Drop for Cleanup {
+                fn drop(&mut self) { unsafe { libc::killpg(self.0, libc::SIGKILL); } }
+            }
+            let _cleanup = Cleanup(group);
+            let mut output = BufReader::new(child.stdout.take().unwrap());
+            let stdin = child.stdin.take().unwrap();
+            let mut runtime = CodexRpcTransport {
+                child, process_group: Some(group), stdin: Mutex::new(stdin),
+                notification_rx: mpsc::unbounded_channel().1,
+                server_request_rx: mpsc::unbounded_channel().1,
+                pending_requests: Arc::default(), next_id: AtomicU64::new(1),
+                background_tasks: RpcBackgroundTasks::default(),
+            };
+            let mut line = String::new();
+            tokio::time::timeout(std::time::Duration::from_secs(2), output.read_line(&mut line))
+                .await.expect("fixture did not start").unwrap();
+            assert!(line.trim().parse::<u32>().unwrap() > 1);
+            if explicit {
+                runtime.shutdown().await.unwrap();
+                assert!(runtime.process_group.is_none());
+                assert!(runtime.child.try_wait().unwrap().is_some());
+            }
+            drop(runtime);
+            line.clear();
+            let bytes = tokio::time::timeout(std::time::Duration::from_secs(2), output.read_line(&mut line))
+                .await.expect("a descendant survived and kept the pipe open").unwrap();
+            assert_eq!(bytes, 0);
+        }
     }
 }

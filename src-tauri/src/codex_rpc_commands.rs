@@ -175,10 +175,13 @@ impl CodexRpcSessionStore {
                     let Some(pool) = idle.upgrade() else { break; };
                     let (expired, deadline) = {
                         let mut pool = pool.lock().await;
-                        let mut retired = pool.expire(Instant::now());
+                        let now = Instant::now();
+                        let mut retired = pool.retire_where(|runtime| !runtime.is_connected());
+                        retired.extend(pool.expire(now));
                         retired.extend(pool.trim_resident_memory(CodexRpcSession::resident_bytes));
-                        let deadline = pool.next_expiry().map(|expiry|
-                            expiry.min(Instant::now() + std::time::Duration::from_secs(15)));
+                        // Even a resident-only pool needs health checks: a dead
+                        // app-server must not retain channels and queued events forever.
+                        let deadline = idle_reaper_deadline(&pool, now);
                         (retired, deadline)
                     };
                     drop(pool);
@@ -197,8 +200,21 @@ impl CodexRpcSessionStore {
     }
 }
 
+fn idle_reaper_deadline<T>(pool: &IdleSessionPool<T>, now: Instant) -> Option<Instant> {
+    if pool.is_empty() { return None; }
+    let health_check = now + std::time::Duration::from_secs(15);
+    Some(pool.next_expiry().map_or(health_check, |expiry| expiry.min(health_check)))
+}
+
 async fn shutdown_idle_runtimes(runtimes: Vec<CodexRpcSession>) {
-    for mut session in runtimes { let _ = session.shutdown().await; }
+    // Bound concurrent cleanup, so a slow child does not serialize every other
+    // eviction. JoinSet owns the work and aborts it if the reaper is cancelled.
+    let mut tasks = tokio::task::JoinSet::new();
+    for mut session in runtimes {
+        if tasks.len() >= 4 { let _ = tasks.join_next().await; }
+        tasks.spawn(async move { let _ = session.shutdown().await; });
+    }
+    while tasks.join_next().await.is_some() {}
 }
 
 // ---------------------------------------------------------------------------
@@ -1896,6 +1912,19 @@ pub(crate) async fn respond_codex_rpc_dynamic_tool(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn resident_only_pool_still_schedules_health_checks_and_empty_pool_sleeps() {
+        let now = std::time::Instant::now();
+        let mut pool = crate::codex_rpc_reuse::IdleSessionPool::default();
+        assert_eq!(super::idle_reaper_deadline(&pool, now), None);
+        pool.set_persistent("resident", true, now);
+        pool.park("resident".into(), "thread".into(), 1, (), now);
+        assert_eq!(pool.next_expiry(), None);
+        assert_eq!(super::idle_reaper_deadline(&pool, now), Some(now + std::time::Duration::from_secs(15)));
+        pool.drain();
+        assert_eq!(super::idle_reaper_deadline(&pool, now), None);
+    }
+
     use super::{codex_rpc_resume_should_start_fresh, is_codex_rpc_thread_id};
     use crate::codex_config_dir::codex_provider_switched;
 

@@ -122,7 +122,22 @@ impl<T> IdleSessionPool<T> {
         retired
     }
 
+    /// Disconnected runtimes are never protected by the resident preference.
+    pub fn retire_where(&mut self, mut stale: impl FnMut(&T) -> bool) -> Vec<T> {
+        let mut retired = Vec::new();
+        let mut index = 0;
+        while index < self.entries.len() {
+            if stale(&self.entries[index].runtime) {
+                retired.push(self.entries.remove(index).unwrap().runtime);
+            } else { index += 1; }
+        }
+        retired
+    }
+
+    pub fn is_empty(&self) -> bool { self.entries.is_empty() }
+
     pub fn drain(&mut self) -> Vec<T> {
+        self.persistent_tabs.clear();
         self.entries.drain(..).map(|entry| entry.runtime).collect()
     }
 
@@ -228,6 +243,23 @@ pub(crate) fn runtime_fingerprint(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn disconnected_residents_are_retired_but_live_residents_keep_their_preference() {
+        let now = Instant::now();
+        let mut pool = IdleSessionPool::default();
+        pool.set_persistent("dead", true, now);
+        pool.set_persistent("live", true, now);
+        pool.park("dead".into(), "t".into(), 1, false, now);
+        pool.park("live".into(), "t".into(), 1, true, now);
+        assert!(!pool.is_empty());
+        assert_eq!(pool.retire_where(|connected| !*connected), vec![false]);
+        assert_eq!(pool.get("live"), Some(&true));
+        assert!(pool.is_persistent("dead"), "next connection should still be resident");
+        assert_eq!(pool.drain(), vec![true]);
+        assert!(pool.is_empty());
+        assert!(!pool.is_persistent("live"));
+    }
 
     #[test]
     fn mixed_pool_only_protects_selected_sessions_and_unpin_restores_expiry() {

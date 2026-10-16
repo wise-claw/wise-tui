@@ -46,7 +46,7 @@ import {
   clampTwoPaneSplitRatio,
   DEFAULT_TWO_PANE_SPLIT_RATIO,
   formatTwoPaneSplitGridTemplateColumnsPx,
-  resolveTwoPaneLeftWidthPx,
+  resolveTwoPaneWorkspaceLeftWidthPx,
 } from "../../utils/twoPaneSplitRatio";
 import { ClaudeSessionChatWithDock } from "./ClaudeSessionChatWithDock";
 import { MultiPaneOffscreenRunningPane } from "./MultiPaneOffscreenRunningPane";
@@ -67,7 +67,7 @@ import {
 } from "../../stores/terminalCenterPanelStore";
 import { WORKSPACE_MEMO_PANEL_NODE, WORKSPACE_QUICK_ACTIONS_PANEL_NODE } from "../workspaceAuxPanelNodes";
 import type { CenterView } from "./ClaudeChat";
-import { PaneWorkspace } from "./PaneWorkspace";
+import { PaneFileTreeWidthContext, PaneWorkspace } from "./PaneWorkspace";
 
 const TerminalPanelLazy = lazy(() =>
   import("../TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
@@ -1323,6 +1323,12 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
   const [twoPaneSplitRatio, setTwoPaneSplitRatio] = useState(DEFAULT_TWO_PANE_SPLIT_RATIO);
   const [twoPaneContainerWidthPx, setTwoPaneContainerWidthPx] = useState(0);
   const prevPaneCountRef = useRef(paneCount);
+  const [treeWidths, setTreeWidths] = useState<Record<number, number>>({});
+  const reportTreeWidth = useCallback((index: number, width: number) => {
+    setTreeWidths((current) => current[index] === width ? current : { ...current, [index]: width });
+  }, []);
+  const leftTreeWidth = treeWidths[0] ?? 0;
+  const rightTreeWidth = treeWidths[1] ?? 0;
 
   // 卸载清理：ClaudeSessionsChatHost 以 paneCount > 1 门控本组件，屏数 2→1（或关闭多屏）
   // 时组件直接卸载，[paneCount] effect 不再执行，activePaneIndex 残留旧索引会让
@@ -1335,10 +1341,12 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
 
   const twoPaneLeftWidthPx =
     paneCount === 2 && twoPaneContainerWidthPx > 0
-      ? resolveTwoPaneLeftWidthPx(
+      ? resolveTwoPaneWorkspaceLeftWidthPx(
           twoPaneSplitRatio,
           twoPaneContainerWidthPx,
           TWO_PANE_MIN_WIDTH_PX,
+          leftTreeWidth,
+          rightTreeWidth,
         )
       : null;
 
@@ -1359,8 +1367,9 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
       const onMove = (moveEvent: PointerEvent) => {
         const rect = container.getBoundingClientRect();
         if (rect.width <= 0) return;
-        const ratio = (moveEvent.clientX - rect.left) / rect.width;
-        setTwoPaneSplitRatio(clampTwoPaneSplitRatio(ratio, rect.width, TWO_PANE_MIN_WIDTH_PX));
+        const contentWidth = Math.max(0, rect.width - leftTreeWidth - rightTreeWidth);
+        const ratio = (moveEvent.clientX - rect.left - leftTreeWidth) / contentWidth;
+        setTwoPaneSplitRatio(clampTwoPaneSplitRatio(ratio, contentWidth, TWO_PANE_MIN_WIDTH_PX));
       };
       const finish = () => {
         document.body.style.userSelect = previousUserSelect;
@@ -1380,7 +1389,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
       window.addEventListener("pointerup", onUp, { once: true });
       window.addEventListener("pointercancel", onUp, { once: true });
     },
-    [paneCount],
+    [paneCount, leftTreeWidth, rightTreeWidth],
   );
 
   useEffect(() => {
@@ -1405,9 +1414,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
     const syncContainerWidth = (width: number) => {
       if (width <= 0) return;
       setTwoPaneContainerWidthPx(width);
-      setTwoPaneSplitRatio((current) =>
-        clampTwoPaneSplitRatio(current, width, TWO_PANE_MIN_WIDTH_PX),
-      );
+
     };
 
     syncContainerWidth(el.clientWidth);
@@ -1433,74 +1440,76 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
       : `repeat(${cols}, minmax(0, 1fr))`;
 
   return (
-    <div
-      ref={multiPanesRef}
-      className={`app-claude-sessions__multi-panes${
-        paneCount === 2 ? " app-claude-sessions__multi-panes--two-pane" : ""
-      }`}
-      style={{
-        gridTemplateColumns: twoPaneGridColumns,
-        gridTemplateRows: rows > 1 ? `repeat(${rows}, 1fr)` : undefined,
-      }}
-    >
-      <MultiPanePrimaryPane
-        session={activeSession}
-        activeSessionId={activeSession.id}
-        activeRepository={activeRepository}
-        workflowTasks={activeSessionWorkflowTasks}
-        shared={shared}
-        paneCount={paneCount}
-        primaryPaneRuntimeOverride={primaryPaneRuntimeOverride}
-        initialNotificationPanelCollapsed={
-          pendingCollapseNotificationForSessionId === activeSession.id
-        }
-        onCreateNewSession={onCreatePrimarySession}
-        paneAuxLayout={primaryPaneAuxLayout}
-      />
-      {extraPanes.map((slot, paneIdx) => (
-        <MultiPaneExtraPaneCell
-          key={slot.slotId}
-          slot={slot}
-          paneIdx={paneIdx}
-          paneCount={paneCount}
+    <PaneFileTreeWidthContext.Provider value={reportTreeWidth}>
+      <div
+        ref={multiPanesRef}
+        className={`app-claude-sessions__multi-panes${
+          paneCount === 2 ? " app-claude-sessions__multi-panes--two-pane" : ""
+        }`}
+        style={{
+          gridTemplateColumns: twoPaneGridColumns,
+          gridTemplateRows: rows > 1 ? `repeat(${rows}, 1fr)` : undefined,
+        }}
+      >
+        <MultiPanePrimaryPane
+          session={activeSession}
           activeSessionId={activeSession.id}
-          paneSession={resolvedPaneSessions[paneIdx] ?? null}
-          paneRepo={resolvedPaneRepositories[paneIdx] ?? activeRepository}
           activeRepository={activeRepository}
-          workflowTasks={paneWorkflowTasks[paneIdx] ?? []}
+          workflowTasks={activeSessionWorkflowTasks}
           shared={shared}
+          paneCount={paneCount}
+          primaryPaneRuntimeOverride={primaryPaneRuntimeOverride}
           initialNotificationPanelCollapsed={
-            resolvedPaneSessions[paneIdx]?.id === pendingCollapseNotificationForSessionId
+            pendingCollapseNotificationForSessionId === activeSession.id
           }
-          isCreating={Boolean(creatingPaneSlots[paneIdx])}
-          pickerOpen={Boolean(paneRepoPickerOpenBySlot[paneIdx])}
-          sessionOptions={sessionOptions}
-          projects={projects}
-          paneRepoTreeData={paneRepoTreeData}
-          projectsById={projectsById}
-          onCreatePaneSession={onCreatePaneSession}
-          onPickerOpenChange={onPickerOpenChange}
-          setCreatingPaneSlots={setCreatingPaneSlots}
-          onPaneSessionSelect={onPaneSessionSelect}
-          onPaneRepositorySelect={onPaneRepositorySelect}
-          onPaneProjectNewSession={onPaneProjectNewSession}
-          onNewPaneSession={onNewPaneSession}
-          onClosePaneSlot={onClosePaneSlot}
-          paneAuxLayout={resolveLayout(paneIdx + 1)}
+          onCreateNewSession={onCreatePrimarySession}
+          paneAuxLayout={primaryPaneAuxLayout}
         />
-      ))}
-      {paneCount === 2 && twoPaneLeftWidthPx != null ? (
-        <div
-          className="app-claude-sessions__two-pane-resizer"
-          style={{ left: `${twoPaneLeftWidthPx}px` }}
-          onPointerDown={handleStartTwoPaneResize}
-          onDoubleClick={handleResetTwoPaneSplit}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="调整双屏分栏宽度"
-        />
-      ) : null}
-    </div>
+        {extraPanes.map((slot, paneIdx) => (
+          <MultiPaneExtraPaneCell
+            key={slot.slotId}
+            slot={slot}
+            paneIdx={paneIdx}
+            paneCount={paneCount}
+            activeSessionId={activeSession.id}
+            paneSession={resolvedPaneSessions[paneIdx] ?? null}
+            paneRepo={resolvedPaneRepositories[paneIdx] ?? activeRepository}
+            activeRepository={activeRepository}
+            workflowTasks={paneWorkflowTasks[paneIdx] ?? []}
+            shared={shared}
+            initialNotificationPanelCollapsed={
+              resolvedPaneSessions[paneIdx]?.id === pendingCollapseNotificationForSessionId
+            }
+            isCreating={Boolean(creatingPaneSlots[paneIdx])}
+            pickerOpen={Boolean(paneRepoPickerOpenBySlot[paneIdx])}
+            sessionOptions={sessionOptions}
+            projects={projects}
+            paneRepoTreeData={paneRepoTreeData}
+            projectsById={projectsById}
+            onCreatePaneSession={onCreatePaneSession}
+            onPickerOpenChange={onPickerOpenChange}
+            setCreatingPaneSlots={setCreatingPaneSlots}
+            onPaneSessionSelect={onPaneSessionSelect}
+            onPaneRepositorySelect={onPaneRepositorySelect}
+            onPaneProjectNewSession={onPaneProjectNewSession}
+            onNewPaneSession={onNewPaneSession}
+            onClosePaneSlot={onClosePaneSlot}
+            paneAuxLayout={resolveLayout(paneIdx + 1)}
+          />
+        ))}
+        {paneCount === 2 && twoPaneLeftWidthPx != null ? (
+          <div
+            className="app-claude-sessions__two-pane-resizer"
+            style={{ left: `${twoPaneLeftWidthPx}px` }}
+            onPointerDown={handleStartTwoPaneResize}
+            onDoubleClick={handleResetTwoPaneSplit}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整双屏分栏宽度"
+          />
+        ) : null}
+      </div>
+    </PaneFileTreeWidthContext.Provider>
   );
 });
 

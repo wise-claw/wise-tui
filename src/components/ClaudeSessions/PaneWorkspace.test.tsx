@@ -18,7 +18,7 @@ mock.module("../WorkspaceFileTreeRail", () => ({
   ),
 }));
 
-const { PaneWorkspace } = await import("./PaneWorkspace");
+const { PaneWorkspace, PaneFileTreeWidthContext } = await import("./PaneWorkspace");
 const globals = globalThis as unknown as Record<string, unknown>;
 const previousGlobals = new Map<string, unknown>();
 let renderer: ReactTestRenderer | null = null;
@@ -67,6 +67,25 @@ describe("PaneWorkspace", () => {
     expect(renderer!.root.findByProps({ title: "toggle-0" }).props["aria-pressed"]).toBe(false);
     act(() => renderer!.root.findByProps({ title: "close" }).props.onClick());
     expect(renderer!.root.findAllByType("aside")).toHaveLength(0);
+  });
+
+  test("reports tree width on toggle, resize and unmount for shared layout", () => {
+    const widths: number[] = [];
+    act(() => { renderer = create(
+      <PaneFileTreeWidthContext.Provider value={(_index, width) => widths.push(width)}>
+        <RepositoryFileEditorOpenFileContext.Provider value={() => {}}>
+          {pane(1, "/repo/second")}
+        </RepositoryFileEditorOpenFileContext.Provider>
+      </PaneFileTreeWidthContext.Provider>,
+    ); });
+    expect(widths.at(-1)).toBe(0);
+    act(() => renderer!.root.findByProps({ title: "toggle-1" }).props.onClick());
+    expect(widths.at(-1)).toBe(261);
+    act(() => renderer!.root.findByType(MainLayoutResizeHandle).props.onWidthChange(300));
+    expect(widths.at(-1)).toBe(301);
+    act(() => renderer!.unmount());
+    renderer = null;
+    expect(widths.at(-1)).toBe(0);
   });
 
   test("same-repository panes keep file and Git opens in the originating pane", () => {

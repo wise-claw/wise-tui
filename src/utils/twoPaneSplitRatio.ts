@@ -43,3 +43,15 @@ export function formatTwoPaneSplitGridTemplateColumnsPx(
 ): string {
   return `${Math.max(0, leftWidthPx)}px minmax(0, 1fr)`;
 }
+
+/** 分栏比例作用于聊天区；文件树所占空间由两屏共同承担。 */
+export function resolveTwoPaneWorkspaceLeftWidthPx(
+  ratio: number,
+  containerWidthPx: number,
+  minContentWidthPx: number,
+  leftTreeWidthPx: number,
+  rightTreeWidthPx: number,
+): number {
+  const contentWidth = Math.max(0, containerWidthPx - leftTreeWidthPx - rightTreeWidthPx);
+  return leftTreeWidthPx + resolveTwoPaneLeftWidthPx(ratio, contentWidth, minContentWidthPx);
+}

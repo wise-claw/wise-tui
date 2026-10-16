@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { createContext, useContext, useCallback, useEffect, useRef, useState, type ReactNode, type Ref } from "react";
 import { markPaneActive } from "../../stores/activePaneIndexStore";
 import {
   clampWorkspaceFileTreeRailWidthPx,
@@ -9,6 +9,8 @@ import { MainLayoutResizeHandle } from "../MainLayoutResizeHandle";
 import { useRepositoryFileEditorOpenFile } from "../RepositoryFileEditorOpenFileContext";
 import { WorkspaceFileTreeRail } from "../WorkspaceFileTreeRail";
 import "./PaneWorkspace.css";
+
+export const PaneFileTreeWidthContext = createContext<((paneIndex: number, width: number) => void) | null>(null);
 
 interface PaneFileTreeControls {
   fileTreeRailOpen: boolean;
@@ -49,6 +51,12 @@ export function PaneWorkspace({
     return () => observer.disconnect();
   }, []);
   const displayedWidthPx = paneWidthPx == null ? widthPx : Math.min(widthPx, paneWidthPx * 0.45);
+  const reportTreeWidth = useContext(PaneFileTreeWidthContext);
+  const treeWidth = open && repositoryPath ? displayedWidthPx + 1 : 0;
+  useEffect(() => {
+    reportTreeWidth?.(paneIndex, treeWidth);
+  }, [reportTreeWidth, paneIndex, treeWidth]);
+  useEffect(() => () => reportTreeWidth?.(paneIndex, 0), [reportTreeWidth, paneIndex]);
   const openFile = useRepositoryFileEditorOpenFile();
   const toggle = useCallback(() => setOpen((value) => !value), []);
   const close = useCallback(() => setOpen(false), []);
