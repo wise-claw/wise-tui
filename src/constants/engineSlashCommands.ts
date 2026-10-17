@@ -19,7 +19,7 @@ export const CODEX_BUILTIN_SLASH_COMMANDS: readonly EngineBuiltinSlashCommand[] 
   { label: "approve", description: "重试被自动审查拒绝的上一个动作" },
   { label: "apps", description: "浏览 App Connectors 并插入 $app 提及" },
   { label: "archive", description: "归档当前会话并退出（v0.136+）" },
-  { label: "clear", description: "清空上下文并开新对话（Wise：新建标签）" },
+  { label: "clear", description: "清空当前会话的历史与上下文" },
   { label: "compact", description: "压缩对话历史释放上下文（Codex agent 原生命令）" },
   { label: "copy", description: "复制最近一次完成的 Codex 输出到剪贴板" },
   { label: "debug-config", description: "打印配置层级与 requirements 诊断" },
@@ -76,7 +76,7 @@ export const CURSOR_BUILTIN_SLASH_COMMANDS: readonly EngineBuiltinSlashCommand[]
   { label: "add-dir", description: "添加本会话可访问的工作目录" },
   { label: "ask", description: "切换到 Ask（只读问答）模式" },
   { label: "auto-review", description: "开启自动审查（Smart Auto）" },
-  { label: "clear", description: "清空上下文并开新对话（Wise：新建标签）" },
+  { label: "clear", description: "清空当前会话的历史与上下文" },
   { label: "compact", description: "压缩会话上下文（别名 /compress /summarize）" },
   { label: "compress", description: "压缩会话上下文（/compact 别名）" },
   { label: "context", description: "查看上下文占用" },
@@ -91,7 +91,7 @@ export const CURSOR_BUILTIN_SLASH_COMMANDS: readonly EngineBuiltinSlashCommand[]
  * 参考：https://opencode.ai/docs/tui
  */
 export const OPENCODE_BUILTIN_SLASH_COMMANDS: readonly EngineBuiltinSlashCommand[] = [
-  { label: "clear", description: "新建会话（/new 别名；Wise：新建标签）" },
+  { label: "clear", description: "清空当前会话的历史与上下文" },
   { label: "compact", description: "压缩当前会话（别名 /summarize）" },
   { label: "connect", description: "添加/配置模型提供商（交互式选择并填入 API Key）" },
   { label: "details", description: "切换工具执行详情显示" },

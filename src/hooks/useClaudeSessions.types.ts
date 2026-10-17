@@ -209,6 +209,7 @@ export interface UseClaudeSessionsReturn {
   /** 渐进加载更早 jsonl 尾部（未达上限前不读全文件） */
   loadMoreTranscriptFromDisk: (sessionKey: string) => Promise<void>;
   /** 手动触发 Claude Code `/compact` 压缩会话历史；`prompt` 默认为 `/compact`，可传 `/compact 聚焦说明`。 */
+  clearSessionHistory: (sessionId: string) => Promise<void>;
   compactSessionHistory: (sessionId: string, prompt?: string) => Promise<void>;
   /**
    * 结束指定标签对应的本机长驻/逐轮子进程（不关标签、不删绑定）。

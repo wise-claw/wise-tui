@@ -1,3 +1,4 @@
+import { useSidebarSessionPreferences } from "../../stores/sidebarSessionPreferencesStore";
 import { filterPaneSessionOptions, buildPaneSessionOptions, type PaneSessionOption } from "../../utils/paneSessionOptions";
 import type {
   ClaudeComposerExecuteBubbleOptions,
@@ -333,6 +334,7 @@ export interface MultiPaneSharedChatProps {
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
+  onClearSessionHistory?: (sessionId: string) => void | Promise<void>;
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
   paneCount: PaneCount;
   primaryPaneRuntimeOverride?: import("../../types/paneRuntimeOverride").PaneRuntimeOverride | null;
@@ -467,12 +469,11 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
       repositoryPath={session.repositoryPath?.trim() || activeRepository.path}
       repositoryName={activeRepository.name}
     >
-      {({ fileTreeRailOpen, onToggleFileTree }) => <>
+      {() => <>
       {shared.paneTopbarShared ? (
         <Topbar
           {...shared.paneTopbarShared}
-          paneFileTreeOpen={fileTreeRailOpen}
-          onToggleFileTree={onToggleFileTree}
+          onToggleFileTree={undefined}
           activeRepository={activeRepository}
           activeSessionRepositoryPath={session.repositoryPath?.trim() || activeRepository.path}
           repositories={shared.repositories}
@@ -586,6 +587,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onReloadFullDiskTranscript={shared.onReloadFullDiskTranscript}
         onLoadMoreTranscriptFromDisk={shared.onLoadMoreTranscriptFromDisk}
         onCompactSessionHistory={shared.onCompactSessionHistory}
+        onClearSessionHistory={shared.onClearSessionHistory}
         paneIndex={0}
         paneCount={paneCount}
         paneRuntimeOverride={primaryPaneRuntimeOverride}
@@ -1017,6 +1019,7 @@ const MultiPaneExtraPaneCell = memo(
             onReloadFullDiskTranscript={shared.onReloadFullDiskTranscript}
             onLoadMoreTranscriptFromDisk={shared.onLoadMoreTranscriptFromDisk}
             onCompactSessionHistory={shared.onCompactSessionHistory}
+            onClearSessionHistory={shared.onClearSessionHistory}
             dualPaneRepositoryPicker={dualPaneRepositoryPicker}
             deferHeavySubtree={deferHeavySubtree}
             messageListProfile="companion"
@@ -1301,9 +1304,10 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
   panelBelowMessages,
   resolvePaneAuxLayout,
 }: ClaudeMultiPaneGridProps) {
+  const sessionPreferences = useSidebarSessionPreferences();
   const sessionOptions = useMemo(
-    () => buildPaneSessionOptions(shared.allSessionsForHistory, activeSession.id, extraPanes),
-    [shared.allSessionsForHistory, activeSession.id, extraPanes],
+    () => buildPaneSessionOptions(shared.allSessionsForHistory, activeSession.id, extraPanes, sessionPreferences),
+    [shared.allSessionsForHistory, activeSession.id, extraPanes, sessionPreferences],
   );
   const resolveLayout = useCallback(
     (paneIndex: number): PaneAuxLayout => {

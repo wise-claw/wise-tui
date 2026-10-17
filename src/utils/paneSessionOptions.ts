@@ -1,19 +1,30 @@
+import { buildWorkspaceSidebarTreeRows } from "./repositoryWorkspaceTree";
+import { getSessionPreview } from "../components/ClaudeSessions/claudeChatHelpers";
+import { sidebarSessionPreferenceKey, type SidebarSessionPreference } from "../stores/sidebarSessionPreferencesStore";
 import { normalizeRepositoryPathKey } from "./repositoryMainSessionBinding";
 import type { ClaudeSession } from "../types";
 import type { PaneSlot } from "../constants/mainLayoutWidths";
 
 export interface PaneSessionOption { value: string; label: string; repositoryPath: string; disabled: boolean }
 
-export function buildPaneSessionOptions(sessions: readonly ClaudeSession[], primaryId: string, slots: readonly PaneSlot[]): PaneSessionOption[] {
+export function buildPaneSessionOptions(
+  sessions: readonly ClaudeSession[], primaryId: string, slots: readonly PaneSlot[],
+  preferences: Readonly<Record<string, SidebarSessionPreference>> = {},
+): PaneSessionOption[] {
   const bound = new Set([primaryId, ...slots.map((slot) => slot.sessionId).filter(Boolean)]);
-  const unique = new Map(sessions.map((session) => [session.id, session]));
-  return [...unique.values()]
-    .sort((a, b) => (b.diskUpdatedAtMs ?? b.createdAt) - (a.diskUpdatedAtMs ?? a.createdAt))
-    .map((session) => {
-      const firstInput = session.messages.find((msg) => msg.role === "user")?.content;
-      const title = session.threadName?.trim() || session.diskPreview?.trim() || firstInput?.trim() || "新会话";
-      return { value: session.id, repositoryPath: session.repositoryPath, label: title.replace(/\s+/g, " ").slice(0, 80), disabled: bound.has(session.id) };
-    });
+  const paths = new Set(sessions.map((session) => normalizeRepositoryPathKey(session.repositoryPath)).filter(Boolean));
+  return [...paths].flatMap((repositoryPath) => {
+    const rows = buildWorkspaceSidebarTreeRows({ sessions, repositoryPath, showRunItems: false });
+    return rows.filter((row) => row.kind === "session")
+      .sort((a, b) => Number(Boolean(preferences[sidebarSessionPreferenceKey(repositoryPath, b.item)]?.pinned))
+        - Number(Boolean(preferences[sidebarSessionPreferenceKey(repositoryPath, a.item)]?.pinned)))
+      .map(({ item: session }) => ({
+        value: session.id,
+        repositoryPath,
+        label: preferences[sidebarSessionPreferenceKey(repositoryPath, session)]?.title || getSessionPreview(session),
+        disabled: bound.has(session.id),
+      }));
+  });
 }
 
 /** 仅按仓库根路径匹配，不将同名仓库或子仓库混入当前分屏。 */

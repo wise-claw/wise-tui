@@ -240,6 +240,7 @@ export interface ClaudeSessionsChatHostProps {
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
+  onClearSessionHistory?: (sessionId: string) => void | Promise<void>;
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
   chatContextRepository: Repository | undefined;
   paneRepoTreeData: PaneRepoTreeNode[];
@@ -346,6 +347,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   onReloadFullDiskTranscript,
   onLoadMoreTranscriptFromDisk,
   onCompactSessionHistory,
+  onClearSessionHistory,
   onStopSessionConversationTask,
   chatContextRepository,
   paneRepoTreeData,
@@ -654,6 +656,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
     onReloadFullDiskTranscript,
     onLoadMoreTranscriptFromDisk,
     onCompactSessionHistory,
+    onClearSessionHistory,
     onStopSessionConversationTask,
     paneCount,
     primaryPaneRuntimeOverride,
@@ -843,6 +846,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
           onReloadFullDiskTranscript={onReloadFullDiskTranscript}
           onLoadMoreTranscriptFromDisk={onLoadMoreTranscriptFromDisk}
           onCompactSessionHistory={onCompactSessionHistory}
+          onClearSessionHistory={onClearSessionHistory}
         />
       )}
     </Suspense>

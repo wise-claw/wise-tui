@@ -224,7 +224,8 @@ export function useChatMessageListWindow({
     const prevScrollHeight = sc?.scrollHeight ?? 0;
     const prevScrollTop = sc?.scrollTop ?? 0;
 
-    setVisibleCount((current) => nextChatMessageVisibleCount(current, rows.length, loadStep, maxVisible));
+    // 用户主动上翻不能被自动尾窗预算截断；回到底部后仍按原策略回收 DOM。
+    setVisibleCount((current) => nextChatMessageVisibleCount(current, rows.length, loadStep, Number.POSITIVE_INFINITY));
 
     // 清除上一次未完成的视口保持回调，防止叠加。
     if (loadMoreRafRef.current !== 0) window.cancelAnimationFrame(loadMoreRafRef.current);
@@ -254,12 +255,9 @@ export function useChatMessageListWindow({
   }, [loadStep, maxVisible, rows.length, scrollContainerRef, slice.hiddenRowCount, slice.windowActive]);
 
   useEffect(() => {
-    // 窗口未激活（rows ≤ 阈值）时不监听；窗口激活但已耗尽时，仅当提供 onWindowExhausted
-    // 才继续监听以衔接磁盘全量重载，否则不订阅（monitor 变体行为不变）。
-    if (
-      !slice.windowActive ||
-      (slice.hiddenRowCount <= 0 && onWindowExhaustedRef.current === null)
-    ) {
+    // 内存仅有少量消息也可能是磁盘尾窗；有耗尽回调时仍监听顶部滚动，
+    // 避免 rows ≤ 阈值时永远无法衔接更早历史（monitor 无回调时保持原行为）。
+    if (slice.hiddenRowCount <= 0 && onWindowExhaustedRef.current === null) {
       return;
     }
     const sc = scrollContainerRef.current;

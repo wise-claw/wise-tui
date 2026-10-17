@@ -10,7 +10,7 @@
 //! 与既有 `list_claude_disk_sessions` 路径保持一致。
 
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -698,23 +698,29 @@ fn codex_rollout_files_for_session(session_id: &str) -> Vec<PathBuf> {
     found.into_iter().map(|(_, _, path)| path).collect()
 }
 
-fn read_codex_transcript(session_id: &str) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for path in codex_rollout_files_for_session(session_id) {
+fn read_codex_transcript(session_id: &str, tail: Option<usize>) -> Vec<String> {
+    read_codex_transcript_files(codex_rollout_files_for_session(session_id), tail)
+}
+
+fn read_codex_transcript_files(paths: Vec<PathBuf>, tail: Option<usize>) -> Vec<String> {
+    let limit = tail.filter(|count| *count > 0);
+    let mut out: VecDeque<String> = VecDeque::new();
+    for path in paths {
         let Ok(file) = fs::File::open(&path) else {
             continue;
         };
         for line in BufReader::new(file).lines() {
             let Ok(line) = line else { break };
-            if out.len() >= TRANSCRIPT_MAX_LINES {
-                return out;
-            }
+            // 完整历史不能在前 20,000 行提前停止，否则长线程尾部与历史分页都会缺失。
             for mapped in map_codex_rollout_line(&line) {
-                out.push(mapped);
+                out.push_back(mapped);
+                if limit.is_some_and(|count| out.len() > count) {
+                    out.pop_front();
+                }
             }
         }
     }
-    out
+    out.into_iter().collect()
 }
 
 fn read_dsh_transcript(project_path: &str, session_id: &str) -> Vec<String> {
@@ -828,7 +834,7 @@ pub(crate) async fn load_native_cli_session_transcript(
     }
     tokio::task::spawn_blocking(move || {
         let lines = match engine {
-            NativeEngine::Codex => read_codex_transcript(&session_id),
+            NativeEngine::Codex => read_codex_transcript(&session_id, tail_lines),
             NativeEngine::DeepSeek => read_dsh_transcript(&project, &session_id),
             NativeEngine::Cursor => read_cursor_acp_transcript(&project, &session_id),
         };
@@ -841,6 +847,27 @@ pub(crate) async fn load_native_cli_session_transcript(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codex_transcript_reads_past_legacy_line_limit_and_bounds_tail() {
+        use std::io::Write;
+        let path = std::env::temp_dir().join(format!("wise-long-rollout-{}.jsonl", uuid::Uuid::new_v4()));
+        let mut file = fs::File::create(&path).unwrap();
+        for index in 0..20_010 {
+            writeln!(file, "{}", serde_json::json!({
+                "timestamp": "2026-10-17T10:00:00Z", "type": "event_msg",
+                "payload": { "type": "user_message", "message": format!("turn-{index}") }
+            })).unwrap();
+        }
+        drop(file);
+        let full = read_codex_transcript_files(vec![path.clone()], None);
+        assert_eq!(full.len(), 20_010);
+        assert!(full.last().unwrap().contains("turn-20009"));
+        let tail = read_codex_transcript_files(vec![path.clone()], Some(10));
+        assert_eq!(tail.len(), 10);
+        assert_eq!(tail, full[20_000..]);
+        fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn cursor_editor_nested_and_flat_transcripts_are_listed_and_read() {

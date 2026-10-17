@@ -158,7 +158,7 @@ describe("parseComposerLocalSlashCommand", () => {
   });
 
   test("cursor and opencode keep shared local commands", () => {
-    expect(parseComposerLocalSlashCommand("/new", "cursor")?.kind).toBe("clear");
+    expect(parseComposerLocalSlashCommand("/new", "cursor")?.kind).toBe("new");
     expect(parseComposerLocalSlashCommand("/models", "opencode")?.kind).toBe("models");
     expect(parseComposerLocalSlashCommand("/compact", "cursor")?.kind).toBe("redirect");
     expect(parseComposerLocalSlashCommand("/diff", "cursor")?.kind).toBe("redirect");

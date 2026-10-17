@@ -1,4 +1,7 @@
 import { memo, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Dropdown, Input, Modal, message } from "antd";
+import { MoreOutlined, PushpinFilled, PushpinOutlined, EditOutlined, CopyOutlined, InboxOutlined } from "@ant-design/icons";
+import { sidebarSessionPreferenceKey, updateSidebarSessionPreference, useSidebarSessionPreferences } from "../../stores/sidebarSessionPreferencesStore";
 import type {
   ClaudeSession,
   EmployeeMonitorItem,
@@ -114,6 +117,9 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
     activeSessionId,
     showRunItems = true,
   } = props;
+  const preferences = useSidebarSessionPreferences();
+  const [renaming, setRenaming] = useState<{ key: string; title: string } | null>(null);
+  const [savingName, setSavingName] = useState(false);
   const previewLimit = useWorkspaceSidebarRowPreviewLimit();
   const [rowLimit, setRowLimit] = useState(previewLimit);
 
@@ -141,7 +147,11 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
     ],
   );
 
-  const visibleRows = allRows.slice(0, rowLimit);
+  const sortedRows = useMemo(() => [...allRows].sort((a, b) => {
+    const pinned = (row: typeof a) => row.kind === "session" && preferences[sidebarSessionPreferenceKey(repositoryPath, row.item)]?.pinned ? 1 : 0;
+    return pinned(b) - pinned(a);
+  }), [allRows, preferences, repositoryPath]);
+  const visibleRows = sortedRows.slice(0, rowLimit);
   const hasMoreRows = allRows.length > rowLimit;
   const hasAny = allRows.length > 0;
 
@@ -166,6 +176,23 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
 
   return (
     <div className="app-repository-sessions app-workspace-session-tree" aria-label="会话与运行">
+      <Modal title="重命名会话" open={Boolean(renaming)} destroyOnHidden
+        okText="保存" cancelText="取消" confirmLoading={savingName}
+        okButtonProps={{ disabled: !renaming?.title.trim() }}
+        onCancel={() => { if (!savingName) setRenaming(null); }}
+        onOk={async () => {
+          if (!renaming?.title.trim() || savingName) return;
+          setSavingName(true);
+          try {
+            await updateSidebarSessionPreference(renaming.key, { title: renaming.title.trim() });
+            setRenaming(null);
+          } catch { message.error("保存会话名称失败"); }
+          finally { setSavingName(false); }
+        }}>
+        <Input autoFocus aria-label="侧栏会话名称" maxLength={200} value={renaming?.title ?? ""}
+          disabled={savingName} placeholder="输入左侧显示的会话名称"
+          onChange={(event) => setRenaming((current) => current ? { ...current, title: event.target.value } : null)} />
+      </Modal>
       {visibleRows.map((row) => {
         if (row.kind === "employee") {
           const item = row.item;
@@ -360,7 +387,9 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
         // 落盘数据可能被改坏，取不到标签就不渲染，避免出现空徽标。
         const nativeCliEngine = session.nativeCliSource;
         const nativeCliBadgeLabel = nativeCliEngine ? NATIVE_CLI_ENGINE_LABELS[nativeCliEngine] : "";
-        const title = getSessionPreview(session);
+        const preferenceKey = sidebarSessionPreferenceKey(repositoryPath, session);
+        const preference = preferences[preferenceKey];
+        const title = preference?.title || getSessionPreview(session);
         const updatedAt = workspaceSidebarSessionUpdatedAt(session);
         const activeKey = activeSessionId?.trim() ?? "";
         const isActive =
@@ -390,37 +419,50 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
             <span className="app-workspace-session-tree__title" title={title}>
               {title}
             </span>
+            {preference?.pinned ? <PushpinFilled className="app-workspace-session-tree__pin" aria-label="已置顶" /> : null}
             <CodexResidentSessionStatus session={session} />
             <span className="app-workspace-session-tree__meta">
               <span className="app-workspace-session-tree__time">
                 {formatWorkspaceSidebarRelativeTime(updatedAt)}
               </span>
-              {props.onArchiveSession ? (
-                <span
-                  className="app-workspace-session-tree__archive"
-                  role="button"
-                  tabIndex={0}
-                  aria-label="归档会话"
-                  title="归档"
-                  onPointerDown={(event) =>
-                    handleNestedActionPointerDown(event, () => {
-                      props.onArchiveSession?.(session.id);
-                    })
-                  }
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    props.onArchiveSession?.(session.id);
-                  }}
+              <Dropdown classNames={{ root: "app-workspace-session-actions-dropdown" }} trigger={["click"]} menu={{
+                items: [
+                  { key: "pin", icon: preference?.pinned ? <PushpinFilled /> : <PushpinOutlined />, label: preference?.pinned ? "取消置顶" : "置顶" },
+                  { key: "rename", icon: <EditOutlined />, label: "重命名" },
+                  { key: "copy", icon: <CopyOutlined />, label: "复制会话 ID" },
+                  ...(props.onArchiveSession ? [{ type: "divider" as const }, { key: "archive", icon: <InboxOutlined />, label: "归档会话" }] : []),
+                ],
+                onClick: ({ key, domEvent }) => {
+                  domEvent.stopPropagation();
+                  if (key === "pin") {
+                    void updateSidebarSessionPreference(preferenceKey, { pinned: !preference?.pinned })
+                      .catch(() => message.error("保存置顶状态失败"));
+                  } else if (key === "rename") {
+                    setRenaming({ key: preferenceKey, title });
+                  } else if (key === "copy") {
+                    void (async () => {
+                      try {
+                        await navigator.clipboard.writeText(session.claudeSessionId?.trim() || session.id);
+                        message.success("已复制会话 ID");
+                      } catch { message.error("复制会话 ID 失败"); }
+                    })();
+                  } else if (key === "archive") props.onArchiveSession?.(session.id);
+                },
+              }}>
+                <span className="app-workspace-session-tree__archive" role="button" tabIndex={0}
+                  aria-label="更多会话操作" title="更多"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
                   onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return;
-                    event.preventDefault();
                     event.stopPropagation();
-                    props.onArchiveSession?.(session.id);
-                  }}
-                >
-                  归档
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      event.currentTarget.click();
+                    }
+                  }}>
+                  <MoreOutlined />
                 </span>
-              ) : null}
+              </Dropdown>
             </span>
           </button>
         );

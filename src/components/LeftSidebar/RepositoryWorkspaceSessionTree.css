@@ -384,3 +384,54 @@
 .app-repository-item--repo-active .app-repository-split-session-btn {
   opacity: 1;
 }
+
+.app-workspace-session-tree__pin {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--ant-color-primary);
+}
+
+.app-workspace-session-tree__row:focus-within .app-workspace-session-tree__archive {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-workspace-session-tree__row:focus-within .app-workspace-session-tree__meta > .app-workspace-session-tree__time {
+  visibility: hidden;
+}
+
+/* 覆盖组件库固定菜单行高，避免仅缩小字体后仍保留高行。 */
+.app-workspace-session-actions-dropdown .ant-dropdown-menu {
+  min-width: 120px;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+.app-workspace-session-actions-dropdown .ant-dropdown-menu .ant-dropdown-menu-item {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 22px !important;
+  min-height: 22px !important;
+  margin: 0;
+  padding: 0 6px !important;
+  border-radius: 3px;
+  font-size: 12px;
+  line-height: 18px !important;
+}
+
+.app-workspace-session-actions-dropdown .ant-dropdown-menu-item > .ant-dropdown-menu-title-content {
+  min-height: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.app-workspace-session-actions-dropdown .ant-dropdown-menu .ant-dropdown-menu-item-divider {
+  margin: 2px 0;
+}
+
+.app-workspace-session-actions-dropdown .ant-dropdown-menu-item > .ant-dropdown-menu-item-icon {
+  flex: 0 0 12px;
+  font-size: 12px;
+  margin-inline-end: 6px;
+}

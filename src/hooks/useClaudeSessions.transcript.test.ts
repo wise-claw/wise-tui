@@ -1244,3 +1244,60 @@ describe("reloadFullDiskTranscriptByKey running protection", () => {
     expect(recovered?.messages).toEqual([{ role: "user", content: "刚发送的新任务", timestamp: 9 }]);
   });
 });
+
+describe("Codex CLI updates in an existing Wise tab", () => {
+  const threadId = "019fb8a4-4a38-77c0-a390-cfd7f1b9edfc";
+  test("Wise-created Codex tabs probe the bound native thread before local logs", () => {
+    const candidates = resolveDiskTranscriptCandidates({ id: "session_existing", claudeSessionId: threadId }, "codex-rpc");
+    expect(candidates[0]).toEqual({ source: "native_codex", key: threadId });
+    expect(candidates).toContainEqual({ source: "codex_rpc", key: "session_existing" });
+    expect(resolveDiskTranscriptCandidates({ id: "session_existing", claudeSessionId: null }, "codex-rpc")
+      .some((candidate) => candidate.source === "native_codex")).toBe(false);
+  });
+  test("refreshes populated tabs from CLI while preserving tab identity and resume binding", async () => {
+    let sessions: ClaudeSession[] = [{
+      id: "session_existing", claudeSessionId: threadId, repositoryPath: "/repo", repositoryName: "repo",
+      model: "gpt", status: "idle", createdAt: 1, pendingPrompt: "", executionEngine: "codex-rpc",
+      messages: [{ id: 1, role: "user", content: "before", parts: [], timestamp: 1 }],
+    }];
+    const lines = ["before", "from CLI"].map((content, index) => JSON.stringify({
+      type: "user", timestamp: new Date(1000 + index * 1000).toISOString(), message: { role: "user", content },
+    }));
+    await reloadFullDiskTranscriptByKey({
+      sessionKey: "session_existing", sessions, setSessions: (update) => { sessions = update(sessions); },
+      diskTailLinesBySession: new Map(), resolveSessionExecutionEngine: () => "codex-rpc",
+      loadSessionTranscriptLines: async (_session, key, _tail, source) => {
+        expect(source).toBe("native_codex");
+        expect(key).toBe(threadId);
+        return lines;
+      },
+    });
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]!.id).toBe("session_existing");
+    expect(sessions[0]!.claudeSessionId).toBe(threadId);
+    expect(sessions[0]!.nativeCliSource).toBe("codex");
+    expect(sessions[0]!.messages.map((message) => message.content)).toEqual(["before", "from CLI"]);
+  });
+});
+
+describe("progressive history loading", () => {
+  test("retains more than 64 messages when loading an older disk page", async () => {
+    const session: ClaudeSession = {
+      id: "history-tab", claudeSessionId: "claude-history", repositoryPath: "/repo", repositoryName: "repo",
+      model: "sonnet", status: "idle", createdAt: 1, pendingPrompt: "", messages: [], diskTranscriptPartial: true,
+    };
+    let sessions = [session];
+    const lines = Array.from({ length: 120 }, (_, index) => JSON.stringify({
+      type: "user", timestamp: new Date(1000 + index * 1000).toISOString(),
+      message: { role: "user", content: `message-${index}` },
+    }));
+    await applyDiskTranscriptTail({
+      session, tailLines: 550, setSessions: (update) => { sessions = update(sessions); },
+      diskTailLinesBySession: new Map(), resolveSessionExecutionEngine: () => "claude",
+      loadSessionTranscriptLines: async () => lines,
+    });
+    expect(sessions[0]!.messages).toHaveLength(120);
+    expect(sessions[0]!.messages[0]!.content).toBe("message-0");
+    expect(sessions[0]!.transcriptMemoryUnlimited).toBe(true);
+  });
+});

@@ -1,3 +1,4 @@
+import { getSessionPreview } from "./claudeChatHelpers";
 import type { TopbarProps } from "./Topbar";
 import { sessionChatChromeStructureKey } from "../../utils/sessionConversationTasks";
 import { arePropsEqualSkipping } from "../../utils/reactPropsEqual";
@@ -8,7 +9,8 @@ function mainSessionForDataLinkEqual(
 ): boolean {
   if (prev === next) return true;
   if (!prev || !next) return !prev && !next;
-  return sessionChatChromeStructureKey(prev) === sessionChatChromeStructureKey(next);
+  return getSessionPreview(prev) === getSessionPreview(next)
+    && sessionChatChromeStructureKey(prev) === sessionChatChromeStructureKey(next);
 }
 
 /** Topbar memo：App 壳层每帧新建回调时不重绘顶栏 chrome。 */

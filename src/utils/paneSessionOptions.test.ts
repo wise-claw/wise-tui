@@ -34,3 +34,20 @@ test("只显示当前仓库会话，排除同名其他仓库及子仓库，并�
   expect(filterPaneSessionOptions(options, "/repo/b").map((option) => option.value)).toEqual(["b"]);
   expect(filterPaneSessionOptions(options, "")).toEqual([]);
 });
+
+test("多屏与侧栏使用相同标题、置顶和运行状态排序", () => {
+  const sessions = [
+    session("renamed", 1),
+    session("running", 2, { status: "running" }),
+    session("recent", 3),
+  ];
+  const preferences = { '["/repo","renamed"]': { title: "测试", pinned: true } };
+  const options = buildPaneSessionOptions(sessions, "main", [], preferences);
+  expect(options.map(({ value }) => value)).toEqual(["renamed", "running", "recent"]);
+  expect(options[0].label).toBe("测试");
+  const unpinned = buildPaneSessionOptions(sessions, "main", [], {
+    '["/repo","renamed"]': { title: "已改名", pinned: false },
+  });
+  expect(unpinned.map(({ value }) => value)).toEqual(["running", "recent", "renamed"]);
+  expect(unpinned[2].label).toBe("已改名");
+});

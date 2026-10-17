@@ -356,6 +356,7 @@ interface Props {
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   /** 手动执行 Claude Code `/compact` 压缩会话历史 */
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
+  onClearSessionHistory?: (sessionId: string) => void | Promise<void>;
   /** 双栏右侧主会话：输入框底栏仓库选择（由父级仅在右侧注入） */
   dualPaneRepositoryPicker?: DualPaneComposerRepositoryPickerProps;
   activeProject?: ProjectItem | null;
@@ -482,6 +483,7 @@ export function ClaudeChatInner({
   omcBatchPipelineActive = false,
   onReloadFullDiskTranscript,
   onCompactSessionHistory: _onCompactSessionHistory,
+  onClearSessionHistory: _onClearSessionHistory,
   dualPaneRepositoryPicker,
   activeProject,
   activeWorkspaceFocus = "repository",
@@ -2223,6 +2225,7 @@ export function ClaudeChatInner({
               onAppendSystemMessage={onAppendSystemMessage}
               onAppendUserMessage={onAppendUserMessage}
               onCompactSessionHistory={_onCompactSessionHistory}
+              onClearSessionHistory={_onClearSessionHistory}
               onCreateNewSession={onCreateNewSession}
               dualPaneRepositoryPicker={dualPaneRepositoryPicker}
             />

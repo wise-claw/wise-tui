@@ -364,3 +364,20 @@ describe("sessionMessagesMemory", () => {
     expect(next[0]?.diskPreview).toBe("首条用户标题应被保留");
   });
 });
+
+
+describe("cleared conversation history boundary", () => {
+  test("reload excludes old messages while retaining turns after clear", () => {
+    const boundary = Date.parse("2026-10-17T10:00:00Z");
+    const lines = [
+      ["2026-10-17T09:59:00Z", "old"],
+      ["2026-10-17T10:00:00Z", "clear"],
+      ["2026-10-17T10:01:00Z", "new"],
+    ].map(([timestamp, content]) => JSON.stringify({ type: "user", timestamp, message: { role: "user", content } }));
+    const result = sessionMessagesFromJsonlLines(lines, {
+      tailRequestLines: 100, fullTranscript: true, afterTimestamp: boundary,
+    });
+    expect(result.messages.map((message) => message.content)).toEqual(["new"]);
+    expect(sessionMessagesFromJsonlLines(lines, { tailRequestLines: 100 }).messages).toHaveLength(3);
+  });
+});

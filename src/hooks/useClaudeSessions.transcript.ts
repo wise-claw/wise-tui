@@ -1,3 +1,4 @@
+import { isLikelyCodexRpcResumeId } from "../utils/codexSessionId";
 import type { ClaudeSession } from "../types";
 import {
   CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
@@ -109,7 +110,11 @@ export function resolveDiskTranscriptCandidates(
   const seen = new Set<string>();
   // 原生会话优先读 CLI 自己的转录：它包含加入 Wise 之前的完整历史，
   // 且 Wise 侧 `*-runs` 只会记录 Wise 跑过的那些回合。
-  const nativeCandidate = resolveNativeCliTranscriptSource(session);
+  const nativeCandidate = resolveNativeCliTranscriptSource(session) ?? (
+    (engine === "codex" || engine === "codex-rpc") && isLikelyCodexRpcResumeId(session.claudeSessionId)
+      ? { source: "native_codex" as const, key: session.claudeSessionId!.trim() }
+      : null
+  );
   if (nativeCandidate) {
     seen.add(`${nativeCandidate.source}:${nativeCandidate.key}`);
     out.push(nativeCandidate);
@@ -132,7 +137,7 @@ async function loadSessionTranscriptLinesWithKeyFallback(
   engine: SessionExecutionEngine,
   tailLines: number | null,
   loadSessionTranscriptLines: LoadSessionTranscriptLines,
-): Promise<{ lines: string[]; diskKey: string }> {
+): Promise<{ lines: string[]; diskKey: string; diskSource?: DiskTranscriptSource }> {
   const candidates = resolveDiskTranscriptCandidates(session, engine);
   if (candidates.length === 0) return { lines: [], diskKey: "" };
   let lastLines: string[] = [];
@@ -153,7 +158,7 @@ async function loadSessionTranscriptLinesWithKeyFallback(
     }
     lastLines = lines;
     if (lines.length > 0) {
-      return { lines, diskKey: candidate.key };
+      return { lines, diskKey: candidate.key, diskSource: candidate.source };
     }
   }
   return { lines: lastLines, diskKey: lastKey };
@@ -510,7 +515,7 @@ export async function reloadFullDiskTranscriptByKey(params: {
   const repositoryPath = session.repositoryPath?.trim();
   const engine = params.resolveSessionExecutionEngine(session);
   if (!repositoryPath) return false;
-  const { lines, diskKey } = await loadSessionTranscriptLinesWithKeyFallback(
+  const { lines, diskKey, diskSource } = await loadSessionTranscriptLinesWithKeyFallback(
     session,
     engine,
     null,
@@ -518,6 +523,7 @@ export async function reloadFullDiskTranscriptByKey(params: {
   );
   if (!diskKey) return false;
   const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
+    afterTimestamp: session.historyClearedAt,
     tailRequestLines: Math.max(lines.length, 1),
     fullTranscript: true,
     unlimitedMessageCount: true,
@@ -537,7 +543,7 @@ export async function reloadFullDiskTranscriptByKey(params: {
   let applied = false;
   params.setSessions((prev) =>
     prev.map((row) => {
-      if (row.id !== tabId) return row;
+      if (row.id !== tabId || row.historyClearedAt !== session.historyClearedAt) return row;
       // 读取磁盘期间会话可能已开始新一轮（刚发送的用户气泡 / 流式增量领先磁盘）：
       // 对最新 row 复判运行态保护，避免用略旧的磁盘快照覆盖进行中的回合。
       if (shouldSkipFullDiskReloadForRunningSession(row, sanitizedDisk)) {
@@ -563,6 +569,7 @@ export async function reloadFullDiskTranscriptByKey(params: {
         return {
           ...row,
           messages: recoveredMessages,
+          ...(diskSource === "native_codex" ? { nativeCliSource: "codex" as const } : {}),
           diskPreview: previewFromMessages || row.diskPreview,
           diskTranscriptPartial,
           transcriptMemoryUnlimited: true,
@@ -575,6 +582,7 @@ export async function reloadFullDiskTranscriptByKey(params: {
       return {
         ...row,
         messages: recoveredMessages,
+        ...(diskSource === "native_codex" ? { nativeCliSource: "codex" as const } : {}),
         // 全量落盘后对齐侧栏标题，避免旧 diskPreview 与当前 messages 长期不一致。
         diskPreview: previewFromMessages || row.diskPreview,
         diskTranscriptPartial,
@@ -601,7 +609,7 @@ export async function applyDiskTranscriptTail(params: {
   const repositoryPath = params.session.repositoryPath?.trim();
   const engine = params.resolveSessionExecutionEngine(params.session);
   if (!repositoryPath) return false;
-  const { lines, diskKey } = await loadSessionTranscriptLinesWithKeyFallback(
+  const { lines, diskKey, diskSource } = await loadSessionTranscriptLinesWithKeyFallback(
     params.session,
     engine,
     params.tailLines,
@@ -609,6 +617,8 @@ export async function applyDiskTranscriptTail(params: {
   );
   if (!diskKey) return false;
   const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
+    afterTimestamp: params.session.historyClearedAt,
+    unlimitedMessageCount: params.tailLines > CLAUDE_DISK_JSONL_TAIL_LINES_LAZY || params.session.transcriptMemoryUnlimited,
     tailRequestLines: params.tailLines,
   });
   if (messages.length === 0) return false;
@@ -651,7 +661,7 @@ export async function applyDiskTranscriptTail(params: {
   let applied = false;
   params.setSessions((prev) =>
     prev.map((row) => {
-      if (row.id !== params.session.id) return row;
+      if (row.id !== params.session.id || row.historyClearedAt !== params.session.historyClearedAt) return row;
       // setSessions 时再读最新 row，避免 hydrate 竞态用陈旧 session 覆盖刚发出的用户气泡。
       // 读取磁盘期间会话可能已开始新一轮 / 流式增量领先磁盘：按最新 row 复判运行态保护。
       if (!isTerminalWorker) {
@@ -670,9 +680,10 @@ export async function applyDiskTranscriptTail(params: {
         return {
           ...row,
           messages: sanitizedDisk,
+          ...(diskSource === "native_codex" ? { nativeCliSource: "codex" as const } : {}),
           diskPreview: previewFromMessages || row.diskPreview,
           diskTranscriptPartial,
-          transcriptMemoryUnlimited: false,
+          transcriptMemoryUnlimited: params.tailLines > CLAUDE_DISK_JSONL_TAIL_LINES_LAZY || params.session.transcriptMemoryUnlimited,
         };
       }
       // terminal：await 期间内存可能已有流式助手；对最新 row 再合并，禁止用启动快照抹掉增量。
@@ -687,7 +698,7 @@ export async function applyDiskTranscriptTail(params: {
         messages: merged,
         diskPreview: previewFromMessages || row.diskPreview,
         diskTranscriptPartial,
-        transcriptMemoryUnlimited: false,
+        transcriptMemoryUnlimited: params.tailLines > CLAUDE_DISK_JSONL_TAIL_LINES_LAZY || params.session.transcriptMemoryUnlimited,
       };
     }),
   );

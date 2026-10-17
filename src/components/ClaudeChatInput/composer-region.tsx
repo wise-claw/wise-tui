@@ -1,3 +1,4 @@
+import { updateComposerFooterLayout } from "./composerFooterLayout";
 import { handleComposerTabKeyDown } from "./composerSteering";
 import { useCodexPersistentSession } from "../../hooks/useCodexPersistentSession";
 import { resolveSessionSteeringTarget, sendSessionSteering } from "../../services/sessionSteering";
@@ -397,7 +398,8 @@ interface ComposerInnerProps {
   onAppendUserMessage?: (sessionId: string, text: string) => void;
   /** 本地斜杠：/compact */
   onCompactSessionHistory?: (sessionId: string, prompt?: string) => void | Promise<void>;
-  /** 本地斜杠：/clear /reset /new */
+  onClearSessionHistory?: (sessionId: string) => void | Promise<void>;
+  /** 本地斜杠：/new */
   onCreateNewSession?: () => void | Promise<void>;
   paneIndex?: number;
   paneCount?: import("../../constants/mainLayoutWidths").PaneCount;
@@ -714,6 +716,7 @@ function ComposerInner({
   onAppendSystemMessage,
   onAppendUserMessage,
   onCompactSessionHistory,
+  onClearSessionHistory,
   onCreateNewSession,
   paneIndex = 0,
   paneCount = 1,
@@ -732,18 +735,24 @@ function ComposerInner({
   const composerFooterChrome = useWiseComposerFooterChromeVisibility();
   /** 含题卡/待办/底栏等整块输入 chrome，用于 Esc 命中判定（仅 shellRef 会漏掉模型选择、停止等） */
   const composerEscapeRootRef = useRef<HTMLDivElement>(null);
-  // 使用每个输入区的实际宽度，多屏展开或拖动分隔线后同步恢复文字。
-  const [footerHasRoomForLabels, setFooterHasRoomForLabels] = useState(false);
   useLayoutEffect(() => {
     const root = composerEscapeRootRef.current;
     if (!root || paneCount <= 1) return;
-    const updateWidth = () => setFooterHasRoomForLabels(root.getBoundingClientRect().width >= 720);
-    updateWidth();
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(root);
-    return () => observer.disconnect();
+    const measure = () => {
+      updateComposerFooterLayout(root);
+    };
+    measure();
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(root);
+    // 编辑器延迟挂载、模型/环境名称和工具按钮变化时也重新测量。
+    const mutationObserver = new MutationObserver(measure);
+    mutationObserver.observe(root, { childList: true, subtree: true, characterData: true });
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      root.removeAttribute("data-footer-labels-compact");
+    };
   }, [paneCount]);
-  const multiPaneFooterIconOnly = paneCount > 1 && !footerHasRoomForLabels;
   const shellRef = useRef<HTMLDivElement>(null);
   const aiChatRef = useRef<InstanceType<typeof AIChatInput> | null>(null);
   /** Semi Tiptap 在首帧 commit 时会 emit onContentChange；延迟挂载 AIChatInput 避免「未挂载就 setState」。 */
@@ -2075,7 +2084,7 @@ function ComposerInner({
         }
         const userText = logicalSnap.trim();
         clearComposerSurfaceSync(userText);
-        onAppendUserMessage?.(session.id, userText);
+        if (localSlashCommand.kind !== "clear") onAppendUserMessage?.(session.id, userText);
         const pendingLabel = composerLocalSlashPendingMessage(localSlashCommand);
         if (pendingLabel) {
           onAppendSystemMessage?.(session.id, pendingLabel);
@@ -2086,6 +2095,7 @@ function ComposerInner({
           repositoryName: session.repositoryName,
           session,
           compactSessionHistory: onCompactSessionHistory,
+          clearSessionHistory: onClearSessionHistory,
           createNewSession: onCreateNewSession,
         })
           .then((result) => {
@@ -2845,6 +2855,7 @@ function ComposerInner({
       onAppendSystemMessage,
       onAppendUserMessage,
       onCompactSessionHistory,
+      onClearSessionHistory,
       onCreateNewSession,
       composerDefaultInstruction,
     ],
@@ -3726,7 +3737,6 @@ function ComposerInner({
             onUpdatePaneRuntimeOverride={paneCount > 1 ? onUpdatePaneRuntimeOverride : undefined}
             iconOnly={
               compactFooterChrome ||
-              multiPaneFooterIconOnly ||
               composerFooterChrome.composerFooterTriggerDisplayMode === "icon"
             }
           />
@@ -3741,7 +3751,6 @@ function ComposerInner({
             disabled={isSessionBusy}
             iconOnly={
               compactFooterChrome ||
-              multiPaneFooterIconOnly ||
               composerFooterChrome.composerFooterTriggerDisplayMode === "icon"
             }
           />
@@ -3787,7 +3796,6 @@ function ComposerInner({
       paneRuntimeOverride,
       onUpdatePaneRuntimeOverride,
       compactFooterChrome,
-      multiPaneFooterIconOnly,
       hudChrome,
       hudLeadingActions,
       hudBeforeSendActions,
@@ -4214,7 +4222,8 @@ export interface ComposerRegionProps {
   onAppendUserMessage?: (sessionId: string, text: string) => void;
   /** 本地斜杠：/compact */
   onCompactSessionHistory?: (sessionId: string, prompt?: string) => void | Promise<void>;
-  /** 本地斜杠：/clear /reset /new */
+  onClearSessionHistory?: (sessionId: string) => void | Promise<void>;
+  /** 本地斜杠：/new */
   onCreateNewSession?: () => void | Promise<void>;
   paneIndex?: number;
   paneCount?: import("../../constants/mainLayoutWidths").PaneCount;

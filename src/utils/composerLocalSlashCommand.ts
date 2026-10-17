@@ -34,6 +34,7 @@ export type ComposerLocalSlashKind =
   | "plugin"
   | "compact"
   | "clear"
+  | "new"
   | "mcp"
   | "skills"
   | "doctor"
@@ -70,7 +71,7 @@ export interface ComposerLocalSlashCommand {
 const PLUGIN_SLASH_RE = /^\/plugin(?:\s+(.+))?$/i;
 const COMPACT_SLASH_RE = /^\/compact(?:\s+(.+))?$/i;
 const CONTEXT_SLASH_RE = /^\/context(?:\s+(all))?$/i;
-const CLEAR_ALIASES = new Set(["clear", "reset", "new"]);
+const CLEAR_ALIASES = new Set(["clear", "reset"]);
 const CONFIG_ALIASES = new Set(["config", "settings"]);
 
 const PLUGIN_VERB_ALIASES: Record<string, ComposerPluginSlashAction> = {
@@ -280,7 +281,7 @@ export function parseComposerLocalSlashCommand(
       return redirectCommand(
         trimmed,
         "当前引擎不支持 Claude 式 /compact。\n" +
-          "可新建会话标签（/clear）释放上下文，或用自然语言请助手总结历史。",
+          "可清空当前会话（/clear）释放上下文，或用自然语言请助手总结历史。",
       );
     }
     const engineLabel =
@@ -313,6 +314,7 @@ export function parseComposerLocalSlashCommand(
     };
   }
 
+  if (head === "new" && trimmed === "/new") return { kind: "new", raw: trimmed };
   if (CLEAR_ALIASES.has(head) && trimmed === `/${head}`) {
     return { kind: "clear", raw: trimmed };
   }
@@ -456,7 +458,7 @@ export const COMPOSER_LOCAL_SLASH_HELP = [
   "• /plugin marketplace add <源> — 添加插件市场（直接执行并显示 CLI 输出）",
   "• /plugin marketplace update — 刷新市场缓存",
   "• /compact [聚焦说明] — 压缩会话历史",
-  "• /clear、/reset、/new — 新建空白会话标签",
+  "• /clear、/reset — 清空当前会话的历史与上下文\n• /new — 新建空白会话标签",
   "• /context、/context all — 上下文占用（Wise 估算）",
   "• /mcp、/mcp list — MCP 配置与连接状态",
   "• /skills — 用户级与项目级 Skills",

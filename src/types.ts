@@ -800,6 +800,8 @@ export interface ClaudeSession {
   pendingPrompt: string; // buffered input after session ID detected
   /** First user-line preview from ~/.claude/projects JSONL before messages are loaded */
   diskPreview?: string;
+  /** 清空历史的时间边界；磁盘恢复时忽略此前的消息。 */
+  historyClearedAt?: number;
   /** 磁盘索引的最后活跃时间（毫秒），独立于创建时间和内存转录窗口。 */
   diskUpdatedAtMs?: number;
   /**

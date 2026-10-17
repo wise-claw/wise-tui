@@ -1,3 +1,4 @@
+import { SessionTitleTrigger } from "./SessionTitleTrigger";
 import type { ClaudeSession, ProjectItem, Repository } from "../../types";
 import { HoverHint } from "../shared/HoverHint";
 import { WindowChromeDragUnderlay } from "../shared/WindowChromeDragUnderlay";
@@ -426,6 +427,7 @@ export const Topbar = memo(function Topbar({
                 ) : null}
               </>
             ) : null)}
+            {!sessionSelector && mainSessionForDataLink ? <SessionTitleTrigger session={mainSessionForDataLink} /> : null}
             {topbarLabel && topbarChrome.showRemoteEntryTopbar ? (
               <RemoteEntryTopbarStrip onOpenRemoteChannels={onOpenRemoteChannels} />
             ) : null}

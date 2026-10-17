@@ -334,6 +334,7 @@ export function sessionMessagesFromJsonlLines(
   lines: readonly string[],
   options: {
     tailRequestLines: number;
+    afterTimestamp?: number;
     memoryMax?: number;
     /** 全量 jsonl（非尾部窗口）时不因行数饱和标记 partial */
     fullTranscript?: boolean;
@@ -341,7 +342,8 @@ export function sessionMessagesFromJsonlLines(
     unlimitedMessageCount?: boolean;
   },
 ): { messages: ClaudeMessage[]; diskTranscriptPartial: boolean } {
-  const parsed = parseClaudeSessionJsonlLines(lines as string[]);
+  const all = parseClaudeSessionJsonlLines(lines as string[]);
+  const parsed = options.afterTimestamp ? all.filter((message) => message.timestamp > options.afterTimestamp!) : all;
   const unlimited = options.unlimitedMessageCount === true;
   const messages = unlimited
     ? trimMessagePartsForMemory(parsed)

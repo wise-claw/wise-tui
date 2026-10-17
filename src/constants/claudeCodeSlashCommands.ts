@@ -33,7 +33,7 @@ export const CLAUDE_BUILTIN_SLASH_COMMANDS: readonly ClaudeBuiltinSlashCommand[]
     description:
       "审查 diff 的正确性 bug 与简化/复用/效率（Skill；--fix/--comment；ultra 云端深审，v2.1.154+）",
   },
-  { label: "clear", description: "清空上下文开新对话，旧会话可在 /resume 找回（别名 /reset /new）" },
+  { label: "clear", description: "清空当前会话的历史与上下文（别名 /reset）" },
   { label: "color", description: "设置提示栏颜色（remote-control 时会同步）" },
   { label: "compact", description: "压缩对话历史释放上下文，可附带聚焦说明" },
   { label: "config", description: "打开设置（主题、模型、输出风格等，别名 /settings）" },

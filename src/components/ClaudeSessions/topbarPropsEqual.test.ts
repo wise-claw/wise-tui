@@ -14,3 +14,9 @@ test('global topbar updates analysis when a selected session becomes available',
 test('switching sessions in the same repository updates analysis target', () => {
   expect(topbarPropsEqual(props(session('first')), props(session('second')))).toBe(false);
 });
+
+test('session title changes refresh the primary topbar', () => {
+  const before = session('selected');
+  expect(topbarPropsEqual(props(before), props({ ...before, threadName: '新标题' }))).toBe(false);
+  expect(topbarPropsEqual(props(before), props({ ...before, diskPreview: '首条消息' }))).toBe(false);
+});

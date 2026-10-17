@@ -1074,3 +1074,32 @@
   padding-top: 2px !important;
   padding-bottom: 4px !important;
 }
+
+/* 多屏底栏按完整内容的实际宽度收起，测量不受 flex 压缩及文字省略影响。 */
+.app-claude-sessions__multi-panes .app-composer-runtime-settings-btn--with-engine,
+.app-claude-sessions__multi-panes .app-composer-model-picker,
+.app-claude-sessions__multi-panes .app-composer-model-picker__select {
+  max-width: none;
+  flex-shrink: 0;
+}
+
+.app-claude-composer[data-footer-labels-measuring] .app-claude-semi-footer-toolbar-left,
+.app-claude-composer[data-footer-labels-measuring] .app-claude-semi-footer-toolbar-right {
+  width: max-content;
+  flex: none;
+}
+
+.app-claude-composer[data-footer-labels-compact] .app-composer-runtime-settings-btn__engine-label,
+.app-claude-composer[data-footer-labels-compact] .app-composer-runtime-settings-btn__proxy-badge,
+.app-claude-composer[data-footer-labels-compact] .app-composer-model-picker-bar-label,
+.app-claude-composer[data-footer-labels-compact] .app-composer-model-picker__chevron {
+  display: none;
+}
+
+.app-claude-composer[data-footer-labels-compact] .app-composer-runtime-settings-btn--with-engine,
+.app-claude-composer[data-footer-labels-compact] .app-composer-model-picker__select {
+  width: 24px;
+  max-width: 24px;
+  gap: 0;
+  padding: 0;
+}

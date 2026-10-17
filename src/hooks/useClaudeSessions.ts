@@ -1185,6 +1185,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       try {
         let lines = await loadSessionTranscriptLines(s, diskKey, CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD);
         let { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
+          afterTimestamp: s.historyClearedAt,
           tailRequestLines: CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
         });
         // 旧版 Codex RPC 逐 token 落盘时，320 行尾窗常丢掉用户回显或从助手中段切入；升级全量。
@@ -1198,6 +1199,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         ) {
           lines = await loadSessionTranscriptLines(s, diskKey, null);
           ({ messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
+            afterTimestamp: s.historyClearedAt,
             tailRequestLines: Math.max(lines.length, 1),
             fullTranscript: true,
             unlimitedMessageCount: true,
@@ -1208,7 +1210,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           prev.map((sess) => {
             const match =
               sess.id === tab || sess.claudeSessionId === cc || sess.id === cc || sess.claudeSessionId === tab;
-            if (!match) return sess;
+            if (!match || sess.historyClearedAt !== s.historyClearedAt) return sess;
             const isTerminalWorker = isTerminalWorkerWiseTab(sess);
             const sanitizedDisk = isTerminalWorker
               ? sanitizeTerminalWorkerTranscriptMessages(messages)
@@ -2684,6 +2686,43 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     };
   }, [activeSessionId, sessionsStructureKey, requestDiskTranscriptHydration, scheduleBackgroundContextCompact]);
 
+  // CLI resume 会继续写原生 rollout；不能只在空会话首次 hydrate 时读取。
+  useEffect(() => {
+    if (!tabsHydrated || !activeSessionId) return;
+    let disposed = false;
+    let syncing = false;
+    let lastIndexRefresh = 0;
+    const sync = async () => {
+      if (disposed || syncing || document.visibilityState === "hidden") return;
+      const session = sessionsRef.current.find((item) => item.id === activeSessionId);
+      if (!session) return;
+      const engine = resolveSessionExecutionEngine(session);
+      if (engine !== "codex" && engine !== "codex-rpc") return;
+      if (session.historyClearedAt && !session.claudeSessionId) return;
+      // Wise 本地正在生成时由流式事件负责更新，避免磁盘快照覆盖未落盘 token。
+      if (session.status === "running" || session.status === "connecting") return;
+      syncing = true;
+      try {
+        if (Date.now() - lastIndexRefresh >= 30_000) {
+          lastIndexRefresh = Date.now();
+          await refreshDiskSessionsForRepository(session.repositoryPath, session.repositoryName);
+        }
+        if (!disposed) await reloadFullDiskTranscript(session.id);
+      } finally { syncing = false; }
+    };
+    const run = () => { void sync().catch(() => {}); };
+    run();
+    const timer = window.setInterval(run, 3_000);
+    window.addEventListener("focus", run);
+    document.addEventListener("visibilitychange", run);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", run);
+      document.removeEventListener("visibilitychange", run);
+    };
+  }, [activeSessionId, tabsHydrated, refreshDiskSessionsForRepository, reloadFullDiskTranscript, resolveSessionExecutionEngine]);
+
   /** 窗口重新可见时，为仍为空且未成功补全的当前标签重试磁盘加载。 */
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -3992,6 +4031,37 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [clearStreamStallTimer, commitSessions, detachClaudeInvocationsForSessionKey, purgeStreamSidecarsForSession],
   );
 
+  const clearSessionHistory = useCallback(async (sessionId: string) => {
+    const session = sessionsRef.current.find((item) => item.id === sessionId);
+    if (!session) throw new Error("找不到当前会话");
+    if (session.status === "running" || session.status === "connecting") {
+      throw new Error("请先停止当前轮次，再清空会话");
+    }
+    await releaseSessionHostProcess(sessionId);
+    const latest = sessionsRef.current.find((item) => item.id === sessionId);
+    if (!latest || latest.status === "running" || latest.status === "connecting") {
+      throw new Error("会话状态已变化，请停止当前轮次后再清空");
+    }
+    purgeStreamSidecarsForSession(sessionId, session.claudeSessionId);
+    sessionIdMapRef.current.delete(sessionId);
+    notificationHub.clearTodos(sessionId);
+    notificationHub.clearFollowups(sessionId);
+    notificationHub.clearRevertItems(sessionId);
+    commitSessions((previous) => previous.map((item) => item.id === sessionId ? {
+      ...item,
+      messages: [],
+      claudeSessionId: null,
+      pendingPrompt: "",
+      diskPreview: retainSessionListPreviewOnMessageDrop(item),
+      historyClearedAt: Date.now(),
+      diskTranscriptPartial: false,
+      transcriptMemoryUnlimited: false,
+      nativeCliSource: undefined,
+      executionEngine: resolveSessionExecutionEngine(item),
+      status: "idle" as const,
+    } : item));
+  }, [commitSessions, purgeStreamSidecarsForSession, releaseSessionHostProcess, resolveSessionExecutionEngine]);
+
   const deleteSession = useCallback(
     async (sessionId: string) => {
       const target = sessionsRef.current.find((s) => s.id === sessionId);
@@ -4929,6 +4999,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     reloadFullDiskTranscript,
     loadMoreTranscriptFromDisk,
     compactSessionHistory,
+    clearSessionHistory,
     releaseSessionHostProcess,
   };
 }

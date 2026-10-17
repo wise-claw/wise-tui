@@ -56,6 +56,7 @@ export interface ComposerLocalSlashDeps {
   repositoryName?: string;
   session?: ClaudeSession | null;
   compactSessionHistory?: (sessionId: string, prompt?: string) => void | Promise<void>;
+  clearSessionHistory?: (sessionId: string) => void | Promise<void>;
   createNewSession?: () => void | Promise<void>;
 }
 
@@ -430,7 +431,7 @@ function pendingLabelFor(command: ComposerLocalSlashCommand): string {
     case "compact":
       return "正在执行 /compact 压缩会话历史…";
     case "clear":
-      return "正在新建空白会话…";
+      return "正在清空当前会话…";
     case "mcp":
       return "正在读取 MCP 配置…";
     case "skills":
@@ -471,6 +472,8 @@ export function composerLocalSlashPendingMessage(command: ComposerLocalSlashComm
     command.kind === "help" ||
     command.kind === "config" ||
     command.kind === "compact" ||
+    command.kind === "clear" ||
+    command.kind === "new" ||
     command.kind === "redirect" ||
     command.kind === "models"
   ) {
@@ -502,11 +505,15 @@ export async function executeComposerLocalSlashCommand(
     }
 
     case "clear": {
-      if (!deps.createNewSession) {
-        throw new Error("当前环境不支持 /clear");
-      }
+      if (!deps.clearSessionHistory) throw new Error("当前环境不支持 /clear");
+      await deps.clearSessionHistory(sessionId);
+      return null;
+    }
+
+    case "new": {
+      if (!deps.createNewSession) throw new Error("当前环境不支持 /new");
       await deps.createNewSession();
-      return "已新建空白会话标签（等同 /clear）。旧会话仍可在标签栏或 /resume 找回。";
+      return null;
     }
 
     case "mcp":

@@ -283,6 +283,7 @@ export interface ClaudeSessionsProps {
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   /** 手动执行 `/compact` 压缩指定标签会话历史 */
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
+  onClearSessionHistory?: (sessionId: string) => void | Promise<void>;
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
   /** 多屏下每个 pane 顶栏共享的回调与状态（窗口级 + 会话级 + per-pane 搜索入口）。
    *  由 AppWorkspaceLayout 组装，经 ClaudeSessionsChatHost 透传到 ClaudeMultiPaneGrid 各 pane。 */
@@ -397,6 +398,7 @@ function ClaudeSessionsShell({
   onReloadFullDiskTranscript,
   onLoadMoreTranscriptFromDisk,
   onCompactSessionHistory,
+  onClearSessionHistory,
   onStopSessionConversationTask,
   paneTopbarShared,
 }: ClaudeSessionsProps) {
@@ -999,6 +1001,7 @@ function ClaudeSessionsShell({
           onReloadFullDiskTranscript={onReloadFullDiskTranscript}
           onLoadMoreTranscriptFromDisk={onLoadMoreTranscriptFromDisk}
           onCompactSessionHistory={onCompactSessionHistory}
+          onClearSessionHistory={onClearSessionHistory}
           onStopSessionConversationTask={onStopSessionConversationTask}
           chatContextRepository={chatContextRepository}
           paneRepoTreeData={paneRepoTreeData}

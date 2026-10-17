@@ -149,3 +149,14 @@ describe("resolveWindowSizing", () => {
     expect(resolveWindowSizing("companion", undefined, true).maxVisible).toBe(Number.POSITIVE_INFINITY);
   });
 });
+
+test("explicit older-history expansion can pass the automatic DOM budget and reach the first row", () => {
+  const rows = Array.from({ length: 500 }, (_, index) => msgRow(index));
+  let count = CHAT_MESSAGE_LIST_MAX_VISIBLE;
+  for (let step = 0; step < 20; step++) {
+    count = nextChatMessageVisibleCount(count, rows.length, 28, Number.POSITIVE_INFINITY);
+  }
+  const slice = sliceChatMessageListRows(rows, count);
+  expect(slice.hiddenRowCount).toBe(0);
+  expect(slice.visibleRows[0]!.key).toBe("0");
+});

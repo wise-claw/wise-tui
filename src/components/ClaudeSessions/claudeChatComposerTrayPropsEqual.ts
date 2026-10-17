@@ -93,6 +93,7 @@ export function claudeChatComposerTrayPropsEqual(
     "onAppendSystemMessage",
     "onAppendUserMessage",
     "onCompactSessionHistory",
+    "onClearSessionHistory",
     "onCreateNewSession",
   ] as const satisfies ReadonlyArray<keyof ClaudeChatComposerTrayProps>;
 
