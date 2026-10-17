@@ -4101,9 +4101,23 @@
   /* 不用 layout/paint contain：在 flex 子项上会算成极窄宽度，中文会逐字竖排 */
 }
 
+/* 仅空会话使用弹性布局，保留正常消息流的滚动计算。 */
+.app-claude-messages--empty {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0;
+  padding: 16px 12px;
+}
+
 .app-claude-messages-empty {
+  flex: 0 0 auto;
+  width: 100%;
+  margin-block: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
-  padding: 40px 0;
+  padding: 0;
   color: var(--ant-color-text-tertiary);
   font-size: 13px;
 }
@@ -10617,4 +10631,44 @@ button.app-message-part-header:disabled:hover {
 .app-topbar-session-title:focus-visible {
   background: var(--ant-color-fill-tertiary);
   color: var(--ant-color-text);
+}
+
+.app-claude-messages-empty__title {
+  margin: 0 0 18px;
+  color: var(--ant-color-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.app-claude-messages-empty__shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 14px;
+  max-width: 100%;
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.app-claude-messages-empty__shortcuts > span {
+  white-space: nowrap;
+}
+
+.app-claude-messages-empty__shortcut-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.app-claude-messages-empty__shortcut-link:hover,
+.app-claude-messages-empty__shortcut-link:focus-visible {
+  text-decoration: underline;
+  color: var(--ant-color-text-secondary);
 }

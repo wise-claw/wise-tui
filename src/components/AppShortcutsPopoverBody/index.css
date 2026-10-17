@@ -189,3 +189,37 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* 紧凑弹层需要独立约束尺寸，避免长说明撑开整张浮层。 */
+.app-shortcuts-popover--compact {
+  min-width: 0;
+  max-height: min(480px, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__row {
+  display: grid;
+  grid-template-columns: minmax(100px, 140px) minmax(0, 1fr);
+  align-items: start;
+  min-width: 0;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__kbd,
+.app-shortcuts-popover--compact .app-shortcuts-popover__desc {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 420px) {
+  .app-shortcuts-popover--compact .app-shortcuts-popover__row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+.app-chat-shortcuts-modal .app-shortcuts-popover--compact {
+  max-height: none;
+  overflow: visible;
+}

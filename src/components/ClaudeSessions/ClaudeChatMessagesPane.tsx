@@ -1,8 +1,11 @@
+import { Modal } from "antd";
+import { AppShortcutsPopoverBody } from "../AppShortcutsPopoverBody";
 import {
   memo,
   useCallback,
   useEffect,
   useRef,
+  useState,
   type FocusEvent,
   type RefObject,
   useSyncExternalStore,
@@ -109,6 +112,7 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
   companionMessageListWindow,
   sessionExecutionEngine = "claude",
 }: ClaudeChatMessagesPaneProps) {
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const streamingActive = isClaudeChatSessionStreaming(session.status);
   const transcriptHydrating = useSyncExternalStore(
     subscribeSessionTranscriptHydrating,
@@ -157,7 +161,7 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
   return (
     <div
       ref={messagesScrollRef}
-      className="app-claude-messages"
+      className={`app-claude-messages${session.messages.length === 0 ? " app-claude-messages--empty" : ""}`}
       tabIndex={-1}
       role="log"
       aria-label="对话消息"
@@ -172,11 +176,27 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
     >
       {session.messages.length === 0 ? (
         <div className="app-claude-messages-empty">
-          <p>
+          <p className={transcriptHydrating ? undefined : "app-claude-messages-empty__title"}>
             {transcriptHydrating
               ? "正在加载对话历史…"
               : buildSessionEmptyChatPrompt(sessionExecutionEngine)}
           </p>
+          {!transcriptHydrating ? (
+            <div className="app-claude-messages-empty__shortcuts" aria-label="常用快捷键">
+              <span title="聚焦会话输入框（Alt+Z）">⌥Z 聚焦输入</span>
+              <span title="切换 HUD 模式（Alt+H）">⌥H HUD</span>
+              <span title="新建会话（Ctrl+N）">⌘N 新会话</span>
+              <span title="切换终端面板（Ctrl+`）">⌃` 终端</span>
+              <span title="搜索文件内容（Ctrl+J）">⌘J 搜索</span>
+              <button type="button" className="app-claude-messages-empty__shortcut-link"
+                onClick={() => setShortcutsOpen(true)}>全部快捷键</button>
+              <Modal className="app-chat-shortcuts-modal" title="全部快捷键" open={shortcutsOpen} centered footer={null} width={560}
+                onCancel={() => setShortcutsOpen(false)}
+                styles={{ body: { maxHeight: "calc(100dvh - 160px)", overflowY: "auto", overflowX: "hidden" } }}>
+                <AppShortcutsPopoverBody />
+              </Modal>
+            </div>
+          ) : null}
         </div>
       ) : (
         <ClaudeVirtualMessageList
