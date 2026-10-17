@@ -732,6 +732,18 @@ function ComposerInner({
   const composerFooterChrome = useWiseComposerFooterChromeVisibility();
   /** 含题卡/待办/底栏等整块输入 chrome，用于 Esc 命中判定（仅 shellRef 会漏掉模型选择、停止等） */
   const composerEscapeRootRef = useRef<HTMLDivElement>(null);
+  // 使用每个输入区的实际宽度，多屏展开或拖动分隔线后同步恢复文字。
+  const [footerHasRoomForLabels, setFooterHasRoomForLabels] = useState(false);
+  useLayoutEffect(() => {
+    const root = composerEscapeRootRef.current;
+    if (!root || paneCount <= 1) return;
+    const updateWidth = () => setFooterHasRoomForLabels(root.getBoundingClientRect().width >= 720);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [paneCount]);
+  const multiPaneFooterIconOnly = paneCount > 1 && !footerHasRoomForLabels;
   const shellRef = useRef<HTMLDivElement>(null);
   const aiChatRef = useRef<InstanceType<typeof AIChatInput> | null>(null);
   /** Semi Tiptap 在首帧 commit 时会 emit onContentChange；延迟挂载 AIChatInput 避免「未挂载就 setState」。 */
@@ -3714,7 +3726,7 @@ function ComposerInner({
             onUpdatePaneRuntimeOverride={paneCount > 1 ? onUpdatePaneRuntimeOverride : undefined}
             iconOnly={
               compactFooterChrome ||
-              paneCount > 1 ||
+              multiPaneFooterIconOnly ||
               composerFooterChrome.composerFooterTriggerDisplayMode === "icon"
             }
           />
@@ -3729,7 +3741,7 @@ function ComposerInner({
             disabled={isSessionBusy}
             iconOnly={
               compactFooterChrome ||
-              paneCount > 1 ||
+              multiPaneFooterIconOnly ||
               composerFooterChrome.composerFooterTriggerDisplayMode === "icon"
             }
           />
@@ -3775,6 +3787,7 @@ function ComposerInner({
       paneRuntimeOverride,
       onUpdatePaneRuntimeOverride,
       compactFooterChrome,
+      multiPaneFooterIconOnly,
       hudChrome,
       hudLeadingActions,
       hudBeforeSendActions,

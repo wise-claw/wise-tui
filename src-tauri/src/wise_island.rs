@@ -49,7 +49,8 @@ fn show_completion_window(app: &AppHandle) -> Result<(), String> {
     }
     let _ = win.set_always_on_top(true);
     let _ = win.set_visible_on_all_workspaces(true);
-    // 通知只展示，不聚焦、不隐藏主工作区。
+    // focusable: false 在窗口配置中禁止通知成为键盘焦点窗口；
+    // focus: false 仅影响初始化，不能阻止 show() 抢走会话输入焦点。
     win.show().map_err(|e| e.to_string())
 }
 
@@ -138,6 +139,15 @@ pub fn wise_island_completion_hide(
 #[cfg(test)]
 mod completion_delivery_tests {
     use super::*;
+
+    #[test]
+    fn island_window_never_takes_keyboard_focus() {
+        let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let island = config["app"]["windows"].as_array().unwrap().iter()
+            .find(|window| window["label"] == COMPLETION_WINDOW_LABEL).unwrap();
+        assert_eq!(island["focus"], false);
+        assert_eq!(island["focusable"], false);
+    }
 
     #[test]
     fn hud_completions_stay_near_hud_regardless_of_island_setting() {

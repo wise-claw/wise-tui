@@ -67,6 +67,7 @@
         "skipTaskbar": true,
         "alwaysOnTop": true,
         "focus": false,
+        "focusable": false,
         "maximizable": false
       }
     ],
